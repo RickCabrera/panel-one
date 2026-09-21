@@ -130,6 +130,10 @@ de esto se ha visto en una instalación real; cada punto es una
   y no queda ningún error. Antes de F1-022 hay que confirmar contra una instalación real
   qué columna de SR es realmente única, y si no la hay, armar la llave compuesta con la
   fecha o con la serie.
+  **Desde F1-024 depende de esto también la cola del agente:** `ColaLocal` (columna
+  `clave` de `cola.db`) deja un solo pendiente por `folioSr`, así que un folio repetido
+  descartaría en la cola un cheque *distinto* aún no enviado, antes de llegar al API. Si
+  la llave cambia, se cambian juntos el upsert del API y la `clave` de la cola.
 - ⚠️ **SUPUESTO — un cheque puede no tener fecha de cierre** (por ejemplo, uno cancelado).
   `cerrado_at` admite nulo. Los agregados de F1-032 filtran por `cerrado_at`, así que un
   nulo no entra en ningún rango.

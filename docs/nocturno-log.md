@@ -1852,7 +1852,8 @@ reales de un restaurante**.
 - **`backlog.md`**: notas "cómo encolar" en F1-022 y F1-023, y en F1-025 una nota que también
   es "Listo cuando" (encolar el heartbeat antes de enviar, `tamanoCola`, reportar rechazos y la
   falla vigente en `ultimoError`, rate limit).
-- **`docs/esquema-sr.md`: sin cambios.** La tarea no lee SoftRestaurant; no hubo hallazgos.
+- **`docs/esquema-sr.md`:** la tarea no lee SoftRestaurant y no hubo hallazgos. Sólo se
+  anotó en la decisión abierta de folios repetidos que la cola también depende de ella.
 
 **Qué se probó y qué NO.**
 - `dotnet build -c Release`: 0 advertencias. `dotnet test`: **222/222, 0 omitidos** (eran 173).
@@ -1919,7 +1920,15 @@ reales de un restaurante**.
      en el test del AC;
   7. fechas de ancho fijo, `e_sqlite3` dentro del exe (verificado), `cola.db` corrupto en el
      README y el rate limit anotado.
-- **Entregable:** ver abajo.
+- **Entregable: APROBADO CON OBSERVACIONES** en la primera pasada, sin bloqueo. Las cuatro
+  eran documentales y quedaron en la rama:
+  1. La decisión abierta "¿SR reinicia folios?" (`docs/esquema-sr.md`) ahora dice que la
+     `clave` de la cola depende de ella, igual que el upsert del API.
+  2. Un evento siempre `reintentable: true` frena la cola (~99 eventos cada 10 min): nota
+     en F1-025.
+  3. La bisección por 413 no respeta el tope de peticiones (hasta ~199 en un ciclo; un 429
+     es falla con backoff): nota en F1-025.
+  4. La limpieza de la base local de desarrollo va también en el PR.
 
 **Trampas que encontré.**
 - **Otra vez las barras invertidas en un heredoc**: un `python - <<EOF` (sin comillas) con

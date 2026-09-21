@@ -377,6 +377,12 @@ heartbeat.
 > - **Rate limit:** el envío usa como máximo `min(intervaloSegundos, 20)` lotes por ciclo, o
 >   sea ≤ 60 peticiones por minuto. El heartbeat viaja en el mismo lote, no suma peticiones.
 >   Si F1-025 manda algo por fuera de la cola, recalcular contra los 120 por minuto del API.
+>   Excepción conocida: partir un lote por 413 no cuenta contra ese tope (un lote de 100
+>   puede volverse ~199 peticiones en un ciclo). Si provoca un 429 no se pierde nada: es una
+>   falla más, con backoff.
+> - **Un evento que el API rechaza siempre como `reintentable: true` frena la cola**: queda
+>   primero en cada lote y dispara el backoff cada vez, así que el resto avanza unos 99
+>   eventos cada 10 min. No se pierde nada, pero tiene que verse en `ultimoError`.
 
 ## 21 · F1-026 · Instalador y guía de instalación
 `[ ]` **Epic 2 — Agente Windows (.NET 8)**
