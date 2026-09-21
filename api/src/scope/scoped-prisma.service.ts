@@ -31,15 +31,17 @@ type OperacionPermitida = (typeof OPERACIONES_PERMITIDAS)[number];
  * Una escritura con scope no mueve una fila a otra empresa ni a otra sucursal.
  *
  * Es una lista de PROHIBIDAS, no de permitidas: si un modelo futuro trae otra
- * columna de pertenencia (p. ej. `sucursalId` en `Cheque`, F1-030), ya está
- * aquí; cualquier otra que aparezca se agrega aquí con su test.
+ * columna de pertenencia, se agrega aquí con su test. F1-030 agregó `chequeId`
+ * / `cheque`: una partida o un pago no se mueven a otro cheque.
  */
 const COLUMNAS_INTOCABLES: readonly string[] = [
   'id',
   'empresaId',
   'sucursalId',
+  'chequeId',
   'empresa',
   'sucursal',
+  'cheque',
 ];
 
 /**

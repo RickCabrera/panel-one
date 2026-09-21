@@ -62,6 +62,39 @@ mirando una instalación real y que no está en ningún otro lado.**
 -- pendiente: F1-022
 ```
 
+**Lo que el modelo de Postgres (F1-030, tabla `cheques`) ya supone de esta sección.** Nada
+de esto se ha visto en una instalación real; cada punto es una
+`DECISION PROVISIONAL (nocturno)` en `api/prisma/schema.prisma` y se valida en F1-090.
+
+- ⚠️ **SUPUESTO — hay un identificador estable del cheque dentro de SR, y no se repite
+  dentro de una misma sucursal.** Es `cheques.folio_sr` y, junto con `sucursal_id`, es la
+  llave única de la ingesta (F1-031 hace upsert por ahí). Se guarda como **texto** para
+  no suponer si en SR es entero o alfanumérico y para no perder ceros a la izquierda.
+  Aparte se guarda `folio`, el folio que ve el cliente en el ticket, también como texto.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — ¿SR reinicia folios?** Si esta versión de SR
+  reinicia la numeración (por año, por turno, por reinstalación o por cambio de serie), el
+  mismo `folio_sr` va a aparecer en dos cheques distintos de la misma sucursal. El upsert
+  de F1-031 **sobrescribiría en silencio el cheque viejo con el nuevo**: se pierde una venta
+  y no queda ningún error. Antes de F1-022 hay que confirmar contra una instalación real
+  qué columna de SR es realmente única, y si no la hay, armar la llave compuesta con la
+  fecha o con la serie.
+- ⚠️ **SUPUESTO — un cheque puede no tener fecha de cierre** (por ejemplo, uno cancelado).
+  `cerrado_at` admite nulo. Los agregados de F1-032 filtran por `cerrado_at`, así que un
+  nulo no entra en ningún rango.
+- ⚠️ **SUPUESTO — SR puede no reportar comensales.** `comensales` admite nulo y no tiene
+  default: un 0 inventado contaminaría "comensales totales" y el promedio por comensal.
+- ⚠️ **SUPUESTO — los importes pueden venir negativos** (devoluciones o ajustes). No hay
+  CHECK de signo en ningún importe: uno que rechazara datos reales tumbaría la ingesta de
+  ese cheque.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — cortesías.** F1-032 pide "descuentos y cortesías",
+  pero el modelo sólo tiene `descuentos`: no hay forma de distinguir una cortesía. Falta
+  saber cómo las marca SR (¿un descuento del 100 %?, ¿una forma de pago?, ¿un flag en la
+  partida?) antes de decidir la columna.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — cancelaciones parciales.** Sólo existe
+  `cheques.cancelado`, que vale para el cheque completo. Si SR cancela partidas sueltas
+  dentro de un cheque que sigue vivo, hoy no hay dónde guardarlo. Hay que saber cómo lo
+  representa SR.
+
 ---
 
 ## 3. Partidas de cuentas cerradas
@@ -76,6 +109,22 @@ mirando una instalación real y que no está en ningún otro lado.**
 
 **Cómo se representan los modificadores:** _(pendiente — incluidos los de $0.00, que sí se
 muestran en el detalle)_
+
+**Lo que el modelo de Postgres (F1-030, tabla `cheque_partidas`) ya supone de esta sección:**
+
+- ⚠️ **SUPUESTO — las cantidades pueden ser fraccionarias** (kg, litros). Por eso
+  `cantidad` es `NUMERIC(12,3)`, no un entero. No es dinero.
+- ⚠️ **SUPUESTO — SR guarda importes con más de 2 decimales** (el tipo `money` de SQL Server
+  lleva 4). Nuestro `NUMERIC(12,2)` **redondea sin avisar**: `0.125` se guarda como `0.13`,
+  y hay un test que deja fijo ese comportamiento (`api/prisma/ventas.spec.ts`). Si cada
+  partida se redondea por separado, la suma de las partidas puede no dar el total del
+  cheque. Por eso **el total del cheque se guarda tal como lo reporta SR y nunca se
+  recalcula sumando partidas** (regla para F1-031 y F1-032). Hay que confirmar la precisión
+  real en F1-090.
+- ⚠️ **SUPUESTO — el orden de las partidas importa** para mostrar el ticket. Se guarda
+  `orden` (0..n, la posición en que llegan en el lote), único dentro de cada cheque.
+- Los modificadores se guardan como una lista JSON (`jsonb`, `[]` por defecto) con la forma
+  que les dé la ingesta. Su forma en SR sigue pendiente.
 
 ---
 
@@ -97,6 +146,12 @@ guardamos en `forma_raw` y su mapeo a nuestro ENUM `efectivo/tarjeta/transferenc
 | | | |
 
 **Cuentas con pago mixto:** _(pendiente — cómo se reparten los montos)_
+
+**Lo que el modelo de Postgres (F1-030, tabla `cheque_pagos`) ya supone de esta sección:**
+un cheque puede tener varios pagos, uno por fila. `forma_raw` guarda siempre el texto crudo
+de SR, y `forma` es el ENUM `forma_pago` (`efectivo/tarjeta/transferencia/otro`) que se
+deriva de ese texto con el catálogo de F1-032. ⚠️ **SUPUESTO:** que SR nombra la forma de
+pago con un texto que se puede mapear.
 
 ---
 

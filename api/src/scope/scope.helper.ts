@@ -13,6 +13,10 @@ export const LLAVE_EMPRESA = {
   Sucursal: 'empresaId',
   Usuario: 'empresaId',
   AgenteEstado: 'empresaId',
+  Cheque: 'empresaId',
+  ChequePartida: 'empresaId',
+  ChequePago: 'empresaId',
+  MesaSnapshot: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

@@ -385,3 +385,86 @@ heredocs y python desde bash: perdí dos vueltas con encoding y parseo.
 
 **Qué haría distinto.** Escribir todo con Write desde el primer archivo. Me costó una vuelta
 volver a caer en la trampa del heredoc que F1-011 ya había dejado anotada.
+
+## 2026-09-20 21:32 — F1-030 · Esquema de ventas en Postgres
+**Estado:** CERRADA (PR de `feat/F1-030`, squash a main)
+
+**Qué quedó hecho.**
+- Modelos `Cheque`, `ChequePartida`, `ChequePago` y `MesaSnapshot`, más el enum `forma_pago`,
+  en `api/prisma/schema.prisma`. Migración `20260921032708_esquema_ventas`, generada por
+  Prisma, sin SQL a mano.
+- Índice único `cheques_sucursal_id_folio_sr_key` e índice `cheques_empresa_id_cerrado_at_idx`.
+  Todo importe es `NUMERIC(12,2)` y todo timestamp `timestamptz(3)`.
+- Los 4 modelos quedaron registrados en `LLAVE_EMPRESA`. `chequeId`/`cheque` entraron a
+  `COLUMNAS_INTOCABLES`.
+- Tests: `api/prisma/ventas.spec.ts` (37, contra Postgres real) y un bloque nuevo en
+  `scoped-prisma.service.spec.ts` que prueba el scope sobre las tablas de ventas.
+- Verificado en local: lint, typecheck, `prisma validate` y build limpios; `migrate status`
+  al día; `npm test` 146/146 con 0 skips. El revisor aprobó el plan y el entregable, los dos
+  con observaciones no bloqueantes, que están todas aquí abajo.
+
+**Decisiones que tomé y por qué.**
+- **Cada tabla hija lleva su propio `empresa_id`** (también partidas y pagos) con **FK
+  compuesta** `(padre_id, empresa_id) → padre(id, empresa_id)`, el mismo patrón que
+  `agente_estado`. Así se cierra el punto 4 del log de F1-011: un `include` no puede salirse
+  de la empresa, porque la base no deja que una hija diverja de su padre. `cheques` tiene
+  `@@unique([id, empresaId])` como destino. Partidas y pagos **no** llevan `sucursal_id`.
+- `DECISION PROVISIONAL (nocturno)` en `api/prisma/schema.prisma`, todas anotadas en
+  `docs/esquema-sr.md` §2 y §3:
+  - `folio` y `folio_sr` son texto;
+  - `cerrado_at` admite nulo;
+  - `comensales` es `Int?` sin default (lo pidió el revisor: un 0 inventado ensucia los
+    promedios);
+  - `cantidad` es `NUMERIC(12,3)`;
+  - no hay CHECK de signo en los importes (podrían venir devoluciones negativas).
+- `cheque_partidas.orden` es único por cheque: guarda la posición de la partida en el ticket,
+  porque las UUID no ordenan. F1-031 lo llena con el índice de cada partida en el array.
+- **Snapshots con histórico, NO una sola fila por sucursal.** El backlog de F1-031 dice
+  "upsert del último por sucursal", pero F1-030 pide también "histórico 24 h para depurar".
+  Por eso `mesa_snapshots` tiene varias filas por sucursal y un único
+  `(sucursal_id, capturado_at)`: reenviar el mismo snapshot no lo duplica, y "el último" es
+  el de mayor `capturado_at`. **F1-031: no lo conviertas en una sola fila** por leer el
+  backlog al pie de la letra. El upsert va por `(sucursal_id, capturado_at)`, más la purga.
+- `ChequePago.forma` es NOT NULL. F1-031 tiene que derivarlo de `forma_raw` al ingerir: si no
+  hay catálogo todavía, que ponga `otro`, que es lo conservador, y deje el crudo.
+
+**Trampas que encontré.**
+- **El Postgres local responde en español.** Los mensajes de error salen traducidos
+  ("desbordamiento de campo numeric", "viola la llave foránea «…»"), así que un
+  `toContain('numeric field overflow')` pasa en CI y falla en local. Hay que comparar sólo el
+  SQLSTATE y el nombre de la constraint, que no se traducen.
+- `test/fixtures-auth.ts#limpiarFixtures` borra las sucursales de A/B/C. Con FK Restrict,
+  cualquier test que cuelgue ventas de esas sucursales rompe la limpieza. Ahora borra antes
+  partidas, pagos, cheques y snapshots de esas empresas. Si agregas otra tabla colgada de una
+  sucursal, agrégala ahí también.
+- `npx prettier --check` marca en `test/` y en `src/scope/empresa-scope.ts` archivos que no
+  toqué. Es el CRLF de siempre; con `--end-of-line auto` pasan.
+
+**Qué quedó abierto** (nada es tarea nueva):
+- **La idempotencia NO está probada aquí.** Sólo existe la constraint. La prueba de reenviar
+  el lote 3 veces, con el upsert reemplazando partidas y pagos en vez de acumularlos, es de
+  **F1-031** y es obligatoria. Este `[x]` no quiere decir "idempotencia resuelta".
+- **F1-031 necesita escrituras con scope** (create, upsert, deleteMany para reemplazar
+  partidas y pagos), y `ScopedPrismaService` todavía no las tiene. Siguen vigentes dos cosas:
+  - `scopeDeAgente()` acota a la EMPRESA, no a la sucursal. El filtro por sucursal en partidas
+    y pagos tiene que pasar por el cheque.
+  - Un `where` con puros `undefined` en `updateMany` actualizaría todo el scope (ver la
+    entrada de F1-012).
+- **F1-031, total del cheque:** se guarda tal como lo reporta SR y **nunca se recalcula
+  sumando partidas**. `NUMERIC(12,2)` redondea en silencio (0.125 → 0.13, hay un test que lo
+  fija), así que la suma de partidas redondeadas puede no dar el total.
+- **La purga de snapshots de más de 24 h no existe**: es de F1-031. Hasta entonces la tabla
+  crece sin límite.
+- **F1-032, cortesías:** el modelo no tiene cómo distinguirlas (sólo `descuentos`), y
+  tampoco hay cancelaciones de partidas sueltas. Las dos están como DECISIÓN ABIERTA para
+  Ricardo en `docs/esquema-sr.md` §2. Ahí mismo está el riesgo más serio: si SR reinicia
+  folios, el upsert pisa un cheque viejo en silencio.
+- **F1-032, índice por sucursal:** para "ventas de hoy de una sucursal" sólo sirve
+  `(empresa_id, cerrado_at)` más un filtro. Si hace falta, que F1-032 agregue
+  `(sucursal_id, cerrado_at)` en su propia migración.
+- **F1-060:** las FK compuestas llevan `ON UPDATE CASCADE` (lo que Prisma pone por defecto).
+  Cambiar la empresa de una sucursal con historial movería sus ventas a otro cliente. El CRUD
+  de sucursales debería prohibir ese cambio.
+
+**Qué haría distinto.** Nada relevante. Escribir los tests de errores comparando SQLSTATE
+desde el principio me habría ahorrado una vuelta.
