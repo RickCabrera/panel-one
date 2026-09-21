@@ -12,15 +12,18 @@
 #     }
 #
 # Y la API detrás de este proxy arranca con TRUST_PROXY_SALTOS=1 (api/.env.example):
-# sin eso todos los usuarios comparten la IP de Caddy y el login admite 5 intentos
-# por minuto PARA TODO EL SISTEMA. Caddy, por su lado, NO debe confiar en el
+# sin eso todos los usuarios comparten la IP de Caddy: el login admite 5 intentos
+# por minuto PARA TODO EL SISTEMA y el refresh silencioso (30/min) se agota en hora
+# pico y saca a usuarios legítimos al login. NO es opcional. Caddy, por su lado, NO debe confiar en el
 # X-Forwarded-For que manda el cliente: es su comportamiento por defecto mientras no
 # se configure `trusted_proxies`, así que no lo configures sobre el origen público.
 
 # Para TODA respuesta del sitio (SPA y API).
 (cabeceras_seguridad) {
 	# Con un borrado (`-Server`) el bloque entero se aplica al FINAL de la respuesta:
-	# pisa (no duplica) las cabeceras que ya manda la API.
+	# pisa (no duplica) las cabeceras que ya manda la API. A propósito, en /api/* el
+	# `Referrer-Policy: no-referrer` de la API queda como `strict-origin-when-cross-origin`:
+	# un JSON no navega a ningún lado, así que da igual y el sitio queda con una sola.
 	header {
 		# HSTS de 1 año SIN includeSubDomains ni preload: los dos afectan a subdominios
 		# del dominio de Ricardo que todavía no conocemos, y preload no tiene vuelta
@@ -65,8 +68,8 @@
 		encode zstd gzip
 		# CSP estricta, sin 'unsafe-inline' ni 'unsafe-eval': el build de Vite no trae
 		# scripts ni estilos inline, y los estilos que pone React (y Recharts) van por
-		# CSSOM (`element.style`), que la CSP no bloquea. Probado en Chrome sobre las
-		# vistas con gráficas (docs/nocturno-log.md, F1-092). web/src/seguridad/csp.test.ts
+		# CSSOM (`element.style`), que la CSP no bloquea. Probado con Lighthouse (Chrome
+		# headless) contra este snippet en local, sobre las vistas con gráficas (docs/nocturno-log.md, F1-092). web/src/seguridad/csp.test.ts
 		# vigila que siga así.
 		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		# Los assets llevan hash en el nombre: caché de un año. index.html (y todo lo
@@ -75,7 +78,13 @@
 		header @assets Cache-Control "public, max-age=31536000, immutable"
 		@noAssets not path /assets/*
 		header @noAssets Cache-Control "no-cache"
-		try_files {path} /index.html
+		# Las rutas de la SPA caen en index.html; un asset que no existe (un chunk viejo
+		# pedido tras un deploy) NO: da 404 en vez de un index.html disfrazado de JS.
+		@rutaSpa {
+			not path /assets/*
+			not file
+		}
+		rewrite @rutaSpa /index.html
 		file_server
 	}
 }
