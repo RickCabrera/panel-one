@@ -1251,3 +1251,85 @@ cara que la consulta.
 - **Hallazgos sobre SoftRestaurant: ninguno visto en SR real.** §5 y §13 de esquema-sr.md ganaron los supuestos de esta tarea, marcados como tales.
 
 **Qué haría distinto.** Arrancar por `edadEfectiva`: la regla "la última respuesta también envejece" es la que hace honesto al banner, y es la que un test de "llega un snapshot viejo" no ve.
+
+## 2026-09-21 01:55 — F1-051 · Detalle de consumo (modal)
+**Estado:** CERRADA (PR en esta rama; el número lo da `gh pr create`)
+
+**Qué quedó hecho.**
+- **Clic en una tarjeta del Monitor abre el detalle** (`web/src/paginas/mesas/Detalle.tsx`).
+  - Encabezado: mesa, sucursal (sólo con "Todas"), mesero, folio, comensales, tiempo abierta y total.
+  - Partidas: cantidad, producto, categoría, precio c/u y total de la partida.
+  - Modificadores anidados en listas dentro de su padre; los de $0.00 se ven como "$0.00".
+  - "Total de la cuenta" al pie.
+- **La tarjeta es un `<li>` con un botón "estirado"** (`absolute inset-0`, nombre "Ver consumo de Mesa N[ · Sucursal]"). Un `<button>` no puede contener la `<ul>` de partidas, por eso no envuelve el contenido. El `aria-label` del `<li>` no cambió, así que los tests de F1-050 siguen igual.
+- **Lectura** (`mesa.ts`): la partida ahora lee `categoria`, `precioUnit`, `total` y `modificadores`.
+  - Los modificadores son recursivos y se leen hasta 4 niveles (`PROFUNDIDAD_MAX_MODIFICADORES`); lo que queda más abajo sale como "Más modificadores no mostrados".
+  - `importeDe` salió de `inicio/ventaEnVivo.ts#totalDe` sin cambiar su comportamiento: la misma regla para todos los importes.
+- **Identidad de la cuenta entre polls** (`seleccion.ts`). El modal no guarda una copia de la mesa: la vuelve a buscar en cada respuesta, y así sigue en vivo.
+  - Si una cuenta desaparece o su sucursal se desconecta, el modal dice "ya no aparece" y no se cierra solo.
+  - Al cambiar de alcance, la selección se descarta.
+- **Abrir o cerrar el modal no pide nada al API** y el grid es el mismo nodo del DOM (hay test).
+  - El modal se cierra con Cerrar, Escape o un clic en el fondo.
+  - El foco vuelve a la tarjeta que lo abrió. Si esa tarjeta ya no existe, va al contenedor de la vista (`tabIndex=-1`).
+  - Tab queda atrapado dentro del modal, también después de un clic sobre texto (el panel es `tabIndex=-1`). `body` pierde el scroll y lo recupera con su valor previo.
+- **/api:** sólo cambió la descripción de `mesas` en `mesas.dto.ts`, con `openapi.json` regenerado (cambia sólo ese texto). No hay endpoint, migración ni seed nuevos.
+- **Checks:**
+  - /web: build y lint limpios, **262/262, 0 skips** (25 tests nuevos).
+  - /api: lint y typecheck limpios, **511/511**.
+  - CI: no hay carril nuevo que encender.
+- **Revisor:**
+  - Plan aprobado con 11 observaciones, todas atendidas.
+  - Entregable aprobado con 6 observaciones. La #4 (el foco se escapaba) se corrigió en código; las demás están abajo.
+
+**El "Listo cuando": qué se probó y qué NO.**
+- **"Modificadores anidados se muestran correctamente": sólo con datos SINTÉTICOS y una forma SUPUESTA.** Nadie ha visto cómo guarda SR un modificador de modificador. El test comprueba 3 niveles por su lugar en el árbol (cada `<li>` dentro del de su padre), no sólo por el texto.
+- **El seed (`npm run seed:mesas`) NO genera anidados.** Sí trae categoría, precios y modificadores planos, uno de ellos de $0.00. Con el seed, el modal se ve pero sin anidación.
+- **"Cerrar/abrir no dispara refetch":** el test abre y cierra por los 3 caminos sin avanzar el reloj (sólo `Date` es falso). Cuenta las llamadas a `/mesas/abiertas`, que siguen en 1, y compara el nodo del grid.
+- **No se probó en un navegador real**, ni a 390 px (igual que F1-040..050).
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` en `web/src/paginas/mesas/mesa.ts` (comentario de `leerMesa`): **modificadores anidados con la misma llave**, `modificadores: [{ nombre, precio, modificadores?: [...] }]`.
+  - Si `modificadores` falta, no hay modificadores (misma regla que el contrato de ingesta).
+  - Si está presente pero no es una lista, sale "Sin dato".
+  - Un modificador que llega como texto se toma como su nombre, sin precio.
+  - Todo esto está en esquema-sr.md §5.
+- **Ni el total de la partida ni el de la cuenta se calculan.** Si falta el total de una partida, sale "Sin dato", nunca `cantidad × precioUnit`. Hay test.
+- **Importes del snapshot a 2 decimales como máximo.** Un `"12.5000"` sale "Sin dato". Es requisito para F1-023: el snapshot no pasa por el redondeo del API como los cheques cerrados. Está en §5.
+- **Identidad de la cuenta:**
+  - En la misma respuesta, se identifica por `clave`.
+  - En una respuesta nueva, por sucursal + folio. Un folio repetido es ambiguo y da "ya no aparece".
+  - Sin folio, tienen que coincidir la posición, la mesa y `abiertoAt`.
+  - **Consecuencia visible (obs. #6 del revisor):** una cuenta sin folio ni `abiertoAt` sale "ya no aparece" a los 20 s aunque siga abierta. Si F1-023 descubre que SR no da folio en las cuentas abiertas, el modal casi no sirve: hay que buscar otra llave estable.
+- **Modal propio, no `<dialog>.showModal()`**, porque jsdom no lo implementa bien.
+- **`TEXTO_SEMAFORO` y `nombreMesa` se movieron a `mesas/textos.ts`**, porque `react-refresh/only-export-components` no deja exportarlos desde `Monitor.tsx`.
+
+**Trampas que encontré.**
+- **`npx prettier --write src/paginas` reescribe ~40 archivos que NO tocaste.** El checkout de Windows los tiene en CRLF y prettier los pasa a LF. Git los marca como modificados sin diff de contenido, y `prettier --check` los marca aunque no sean tuyos. Pasa a prettier sólo tus archivos, o restaura los demás con `git checkout -- <archivo>`.
+- **`git checkout -- <archivo>` para deshacer una mutación también borra tus cambios sin commitear.** Me pasó con `Detalle.tsx` y tuve que reaplicar el arreglo. Para las mutaciones, usa una copia (`cp` a /tmp y de vuelta).
+- **Tab desde el panel enfocado cae en el botón Cerrar por orden del DOM, aunque no haya trampa.** La mutación que quitaba esa rama sobrevivía. Lo que sí escapa es Shift+Tab, y ése es el test que la atrapa.
+- **`python` escribiendo a la consola de Windows revienta con caracteres como "§" o "×"** (cp1252). Usa `PYTHONIOENCODING=utf-8`.
+- **Los heredocs largos en la herramienta Bash fallan** ("unexpected EOF while looking for matching `''"), incluso con el delimitador entre comillas. Para textos largos (tests, esta nota): escríbelos a un archivo en el scratchpad y agrégalos con `cat >>`.
+- **Una corrida intermedia de vitest dio 2 fallos en 2 archivos** y no capturé cuáles. No se reprodujo en las 7 corridas siguientes (2 de ellas concurrentes). Si vuelve en CI, los primeros sospechosos son los tests con reloj falso y `shouldAdvanceTime`: "sigue al poll" y "sucursal se desconecta".
+
+**Prueba de mutación** (todo quedó restaurado y la suite otra vez en verde). Qué se cambió y qué test la atrapó:
+- sin folio, sin verificar mesa/hora → 2 de `seleccion.test`;
+- folio repetido → el primero: 1;
+- $0.00 como "Sin dato": el de anidados;
+- sin recursión: el de anidados;
+- `refetch()` al abrir: el de abrir/cerrar y el de "sigue al poll";
+- modal dentro del condicional del grid: el de "sucursal se desconecta";
+- el foco no vuelve: el de abrir/cerrar;
+- overflow restaurado a `''`: el de foco/scroll;
+- sin tope de profundidad: 1;
+- modificadores ausentes = null: 4;
+- sin reset de la selección al cambiar de alcance: el de "cambiar de sucursal" (tuve que agregarle el regreso a "Todas"; antes la mutación sobrevivía);
+- panel sin `tabIndex`: el de foco/scroll;
+- sin la rama Tab/Shift+Tab desde el panel: el de foco/scroll (con Shift+Tab).
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **Decisión abierta para Ricardo (F1-022/F1-090):** los cheques cerrados siguen con modificadores PLANOS (`ModificadorDto`, `jsonb` de `cheque_partidas`, vista Tickets). Si SR los anida, esas tres cosas cambian. Está en §3 y §13.
+- **Accesibilidad, para F1-092:** los `<li>` de partidas y modificadores del modal llevan `aria-label` = sólo el nombre del producto. Un lector de pantalla podría leer "Refresco" sin cantidad ni precio. Los tests se apoyan en ese nombre: si se cambia, hay que ajustarlos.
+- Las mismas de F1-050 para F1-092 siguen en pie (cifras de Inicio frente al Monitor, KPI "Última lectura").
+- **Hallazgos sobre SoftRestaurant: ninguno visto en SR real.** §3, §5 y §13 de esquema-sr.md ganaron los supuestos de esta tarea, marcados como tales.
+
+**Qué haría distinto.** Probar primero la trampa de foco con un clic sobre texto: es el camino real de un usuario con mouse, y fue el hueco que encontró el revisor.
