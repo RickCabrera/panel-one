@@ -1955,3 +1955,114 @@ reales de un restaurante**.
 **Qué haría distinto.** Hacer la cuenta del rate limit con el intervalo **mínimo** desde el
 plan, no sólo con el de 30 s. Y buscar desde el principio qué servicios hay en la máquina
 (Postgres local) para planear la prueba contra el API real.
+
+## 2026-09-21 05:05 — F1-025 · Heartbeat y auto-diagnóstico
+**Estado:** CERRADA (el número de PR lo da `gh pr create`). Sin PARCIAL. **Ojo:** "última
+lectura" hoy es una **sonda**, no una lectura de ventas (ver Decisiones).
+
+**Qué quedó hecho.**
+- **Agente, ciclo nuevo** (`Worker.UnCicloAsync`), al arrancar y en cada tick:
+  `ConsultarSrAsync` (detectar si falta; con reader, sonda) → `EncolarHeartbeat` →
+  `envio.CicloAsync`. Sale **un lote por ciclo aunque no haya cheques** (nota de F1-061).
+- **`SoftRestaurant/SondeoSr.cs` + `Sql/Consultas/sr_sondeo.sql`**: `SELECT TOP (1) 1 FROM
+  dbo.parametros2 WITH (NOLOCK)`, timeout corto, mide la ejecución (sin el Open) en ms. La
+  cancelación a media consulta sale como `OperationCanceledException` (la observación
+  pendiente de F1-021, aplicada aquí; **el detector sigue sin ese arreglo**).
+- **`EstadoSoftRestaurant`**: ahora con lock; `RegistrarSondeo`, `UltimaLecturaAt` (no
+  retrocede si la sonda falla), `LatenciaQueryMs`, `ErrorLectura`.
+- **`Salud/ArmadorHeartbeat.cs`** (puro): arma el `datos`. `ultimoError` = hasta 3 partes,
+  ` | `, en orden **rechazos definitivos → envío → SR**, cada parte ≤ 600 y total ≤ 2000, sin
+  partir pares sustitutos. `versionAgente` = informational version con hash de 7
+  (`1.0.0+1a99dc7`).
+- **`EnviadorCola.Estado`** (`EstadoEnvio`): falla vigente con la hora de la PRIMERA falla y
+  las fallas seguidas; al recuperar, `UltimoIncidente` (desde/hasta), que el heartbeat reporta
+  durante 1 h ("falló de … a …"). `ICicloEnvio` ahora expone `Cola` y `Estado`.
+- **`ColaLocal`**: `ContarPendientesSinHeartbeat()` y `ResumenRechazados()` (total, cheques,
+  el último con folio/motivo/fecha; lo que sigue en `cola.db`, o sea 7 días).
+- **`CargadorConfiguracion`**: aviso si `intervaloSegundos > 30` (el panel usa 90 s fijos).
+- **API**: `agente_estado.latencia_query_ms` (migración `20260921103313_latencia_query`, CHECK
+  ≥ 0 a mano), `DatosHeartbeatDto.latenciaQueryMs`, `mismoEstado`, y el campo en
+  `GET /agentes/estado`. `openapi.json` regenerado.
+- **Web**: sólo `latenciaQueryMs` en `tipos.ts` y en dos fixtures de tests (contrato). La vista
+  NO la muestra.
+- **Docs**: `agent/README.md` (sección F1-025), `docs/esquema-sr.md` §1 (la sonda),
+  `backlog.md` notas en F1-022 y F1-061.
+
+**Qué se probó y qué NO.**
+- `/agent`: build Release 0 advertencias; `dotnet test` **262/262** (eran 222), 0 omitidos,
+  estable 3 corridas. Mutación: encolar el heartbeat DESPUÉS de enviar → 4 tests rojos.
+- `/api`: lint, typecheck, `npm test` **637/637**, `prisma migrate dev` + `validate` limpios.
+- `/web`: build, lint, test 294 verdes.
+- **Manual, de punta a punta** (api con `PORT=3999` + `JWT_*_SECRET` sintéticos en la línea de
+  comando porque el `.env` local no los trae; `agente.exe` publicado con `ARKON_AGENTE_DIR` en
+  el scratchpad, `intervaloSegundos: 5`; key sintética de "Sucursal Centro" rotada con
+  `hashApiKey` directo en la base local):
+  - SR 10 local (`.\NATIONALSOFT/softrestaurant10`): `versionSr 10.021800`, `latenciaQueryMs 1`,
+    `ultimaLecturaAt` a 1-3 s, `tamanoCola 0`, `ultimoError null`.
+  - `Database=master`: `ultimoError` = el error de detección con las 3 causas.
+  - API detenida 40 s con el agente vivo y levantada otra vez: al reconectar,
+    `"El envío al API falló de 10:51:28 a 10:52:02: No se pudo conectar con el API (ConnectionError)."`.
+  - Agente matado: a los 97 s, edad de contacto 97 (> 90 → "Desconectado" por la regla de
+    F1-061, que no se tocó). **La vista web no se abrió**; la regla está probada en F1-061.
+- **NO probado:** el servicio instalado (`sc create`, sigue F1-020b); la sonda con un usuario
+  `db_datareader` (sólo sysadmin, igual que §1); ningún test prueba que una falla de SQLite en
+  `EncolarHeartbeat` termine con código 1 (se razona igual que en el envío; observación 2 del
+  revisor, pendiente).
+
+**Decisiones que tomé y por qué.**
+- **`DECISION PROVISIONAL (nocturno)` en `SondeoSr.cs`: sonda ≠ lectura de ventas.** El
+  backlog pide "última lectura" y "latencia de query" y el agente no lee ventas (F1-022/023
+  bloqueadas). El panel puede decir "última lectura hace 10 s" sin un solo cheque. **F1-022 la
+  reemplaza** (nota en su ficha). Obligatoria del revisor.
+- **`tamanoCola` NO cuenta el heartbeat**, a propósito, aunque la nota de F1-024 decía
+  `ContarPendientes()`: el heartbeat se colapsa y viaja en el mismo lote. No "corregir".
+- **Una excepción en detección o sonda ya NO mata el proceso** (observación obligatoria del
+  revisor): si cortara el ciclo, no saldría el heartbeat y el panel diría "desconectado" con el
+  agente vivo. Por eso **se reemplazó el test `Una_excepcion_al_detectar_es_falla_interna_y_
+  termina_con_codigo_1`** por `Una_excepcion_al_detectar_no_corta_el_ciclo_el_heartbeat_sale_
+  con_el_error` (más estricto). Config ilegible y SQLite siguen terminando con código 1.
+- **Sonda sólo con reader elegido.** Antes, la detección es la que habla.
+- **Con la sonda fallando, `latenciaQueryMs` va null** (no la última buena) y
+  `ultimaLecturaAt` se queda en la última buena.
+- **`DECISION PROVISIONAL (nocturno)` en `CargadorConfiguracion`: umbral de 90 s fijo**; no
+  se manda el intervalo en el heartbeat. Decisión abierta para Ricardo, en la ficha de F1-061.
+- **Namespace `ArkonAgente.Salud`**, no `ArkonAgente.Heartbeat`: ese nombre tapaba la constante
+  `Heartbeat` de `ColaLocalTests` (CS0118).
+
+**Observaciones del revisor y cómo quedaron.**
+- **Plan: APROBADO CON OBSERVACIONES**, las 8 atendidas (4 obligatorias: sonda documentada,
+  heartbeat pase lo que pase con test, `tamanoCola` anotado, contrato en `tipos.ts`).
+- **Entregable: APROBADO CON OBSERVACIONES** en la primera pasada, sin bloqueo:
+  1. (oblig.) esta entrada.
+  2. Sin test de "SQLite falla en `EncolarHeartbeat` → código 1": **pendiente**, anotado arriba.
+  3. `SondearDeVerdad` usa `TimeProvider.System` y no `_dep.Reloj`: **deuda**, sin cambio (en
+     producción da igual).
+  4. `ResumenRechazados` parseaba con un formato copiado: **arreglado**, constante única
+     `ColaLocal.FormatoFecha`.
+
+**Trampas que encontré.**
+- **La base local de desarrollo guarda estado de sesiones anteriores.** Una fila
+  `agente_estado` de "Sucursal Centro" (`versionAgente 0.0.0-e2e`) dejada por la prueba manual
+  de F1-024 hacía fallar **localmente** `prisma/esquema.spec.ts` con P2002 (en CI no, la base es
+  nueva). La borré, y al terminar borré también las filas `agente_estado`/`agente_contacto` que
+  dejó esta prueba. **Si haces pruebas manuales, limpia al final.** La key de "Sucursal Centro"
+  quedó rotada (sintética, no se guardó).
+- **El `.env` local del api no trae `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET`**: `node dist/main.js`
+  truena al arrancar. Pásalos sintéticos por variable de entorno. Leer `.env` lo niega el permiso.
+- **`dist` del api no tiene `src/`**: es `dist/agentes/api-key.js`, no `dist/src/...`.
+- **`git checkout -- archivo` para deshacer una mutación revierte a HEAD**, y el archivo tenía
+  cambios SIN commitear: perdí `Worker.cs` y lo salvé de un respaldo en `/tmp`. **Commitea antes
+  de mutar**, o restaura desde copia, nunca con checkout.
+- **Heredocs otra vez**: un `python - <<'PYEOF'` largo falló con "unexpected EOF". Script con
+  Write, siempre.
+- `sleep` en primer plano está bloqueado: la prueba de caída se orquestó con un `.ps1`
+  (`Start-Process`/`Start-Sleep`/`Stop-Process`).
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **Ricardo:** umbral por intervalo (ficha F1-061); mostrar `latenciaQueryMs` en la vista.
+- **F1-022:** reemplazar la sonda por la lectura real (nota en su ficha).
+- **F1-026:** el instalador debería dejar `intervaloSegundos` en 30 (o sin poner).
+- Arreglo de cancelación a media query en `DetectorVersionSr` (de F1-021): sigue pendiente.
+
+**Qué haría distinto.** Commitear antes de cualquier mutación. Y revisar la base local
+(`agente_estado`) antes de correr la suite del api.

@@ -64,6 +64,8 @@ export interface DatosEstado {
   ultimoError: string | null;
   /** Eventos en la cola local del agente (F1-061). `null` = no lo reportó. */
   tamanoCola: number | null;
+  /** Latencia de la consulta a SR del ciclo, en ms (F1-025). `null` = sin medición. */
+  latenciaQueryMs: number | null;
 }
 
 /** Cuánto histórico de snapshots se conserva además del último (F1-030). */

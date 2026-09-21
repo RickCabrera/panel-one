@@ -269,6 +269,17 @@ tamaño de cola reportado, último error. Badge de alerta en sidebar si alguna s
 > (F1-020 en adelante, y una máquina Windows). De noche se cierra probando la lógica de
 > frescura con `AgenteEstado` manipulado en base — que es donde vive el bug real — y se
 > anota el resto como pendiente. Di qué se probó.
+>
+> **Nota de F1-025 — decisión abierta para Ricardo: el umbral de 90 s es fijo.** La web
+> marca "desconectado" a los 90 s (3 × 30 s) sin importar el `intervaloSegundos` de cada
+> agente, y la config permite de 5 a 3600 s. Con un intervalo mayor a 30 s la sucursal sale
+> desconectada en falso; con uno menor, tarda más de 3 intervalos. Hoy el agente sólo avisa
+> al cargar la config (`DECISION PROVISIONAL (nocturno)` en `CargadorConfiguracion`). Si se
+> quiere "3 intervalos" de verdad: mandar `intervaloSegundos` en el heartbeat, guardarlo en
+> `AgenteEstado`, devolverlo en `GET /agentes/estado` y usarlo en `reglasAgentes.ts` (y
+> decidir si el Monitor de Mesas lo sigue). Es tarea nueva, no va de pasada.
+> F1-025 también agregó `latenciaQueryMs` a `GET /agentes/estado` (y al tipo de la web),
+> pero **la vista no la muestra todavía**.
 
 ## 17 · F1-020 · Esqueleto del servicio + configuración
 `[x]` **Epic 2 — Agente Windows (.NET 8)** · **PARCIAL:** falta verificar con `sc create` en consola elevada el arranque con Windows y el reinicio tras caída (proceso matado y falla interna); el resto está en F1-020b (Diurnas).
@@ -574,6 +585,17 @@ debe reenviar en bucle).
 > que sí conviene es no re-encolar un cheque que no cambió, para no reenviarlo en cada ciclo.
 > Se encola en `Worker.CicloAsync`, **antes** de `envio.CicloAsync`. El cursor incremental
 > puede vivir en el mismo `cola.db` (tabla propia), nunca en SR.
+>
+> **Nota de F1-025 — la "última lectura" hoy es una sonda.** El heartbeat saca
+> `ultimaLecturaAt` y `latenciaQueryMs` de `SondeoSr` (`sr_sondeo.sql`, una fila de
+> `parametros2`), porque todavía no se leen ventas. Es `DECISION PROVISIONAL (nocturno)`:
+> cuando esta tarea lea cheques, **su lectura reemplaza a la sonda** como fuente de las dos
+> cifras (registrarla con `EstadoSoftRestaurant.RegistrarSondeo` o un método hermano) y la
+> sonda se quita o se deja sólo cuando no hay lectura. El ciclo ya está armado:
+> `Worker.UnCicloAsync` = `ConsultarSrAsync` → `EncolarHeartbeat` → `envio.CicloAsync`. Los
+> cheques se encolan dentro de `ConsultarSrAsync` (antes del heartbeat, para que
+> `tamanoCola` los cuente). Una excepción ahí **no corta el ciclo** (se registra y va a
+> `ultimoError`); no la dejes escapar.
 
 ## F1-023 · Lectura de cuentas abiertas (mesas en vivo)
 `[ ]` **Epic 2** · 🔒 **Razón: bloqueada por F1-090.** Mismo caso que F1-022: las tablas

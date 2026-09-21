@@ -29,7 +29,7 @@ public partial class ConsultasEmbebidasTests
     public void Existen_las_consultas_esperadas()
     {
         var nombres = ConsultasEmbebidas.Nombres();
-        foreach (var esperada in new[] { "diagnostico", "sr_estructura", "sr_version" })
+        foreach (var esperada in new[] { "diagnostico", "sr_estructura", "sr_version", "sr_sondeo" })
         {
             Assert.Contains(esperada, nombres);
             Assert.StartsWith("--", ConsultasEmbebidas.Leer(esperada));

@@ -12,7 +12,28 @@ namespace ArkonAgente.Cola;
 /// <summary>Lo que el worker hace con la cola en cada ciclo; los tests lo sustituyen.</summary>
 internal interface ICicloEnvio : IDisposable
 {
+    /// <summary>La cola que vacía: el worker encola aquí el heartbeat (F1-025).</summary>
+    ColaLocal Cola { get; }
+
+    /// <summary>Cómo va el envío, para el <c>ultimoError</c> del heartbeat (F1-025).</summary>
+    EstadoEnvio Estado { get; }
+
     Task CicloAsync(CancellationToken cancelacion);
+}
+
+/// <summary>Una racha de fallas de envío que ya terminó.</summary>
+internal sealed record IncidenteEnvio(string Mensaje, DateTimeOffset Desde, DateTimeOffset Hasta);
+
+/// <summary>
+/// El envío visto desde el heartbeat (F1-025). <see cref="FallaVigente"/> es el último
+/// mensaje de la racha en curso (null = el envío va bien), <see cref="Desde"/> la hora
+/// de su PRIMERA falla. <see cref="UltimoIncidente"/> es la última racha ya cerrada:
+/// mientras dura una caída no llega ningún heartbeat, así que al reconectar es lo que
+/// le dice al panel qué pasó.
+/// </summary>
+internal sealed record EstadoEnvio(string? FallaVigente, DateTimeOffset? Desde, int FallasSeguidas, IncidenteEnvio? UltimoIncidente)
+{
+    public static readonly EstadoEnvio Sano = new(null, null, 0, null);
 }
 
 /// <summary>
@@ -71,6 +92,8 @@ internal sealed class EnviadorCola : ICicloEnvio
     private int _fallasSeguidas;
     private DateTimeOffset _proximoIntento = DateTimeOffset.MinValue;
     private string? _ultimaFalla;
+    private DateTimeOffset? _fallaDesde;
+    private IncidenteEnvio? _ultimoIncidente;
 
     public EnviadorCola(
         ColaLocal cola,
@@ -95,6 +118,8 @@ internal sealed class EnviadorCola : ICicloEnvio
     }
 
     public ColaLocal Cola => _cola;
+
+    public EstadoEnvio Estado => new(_ultimaFalla, _ultimaFalla is null ? null : _fallaDesde, _fallasSeguidas, _ultimoIncidente);
 
     /// <summary>Cuándo se permite el siguiente envío (MinValue = ya).</summary>
     public DateTimeOffset ProximoIntento => _proximoIntento;
@@ -335,14 +360,21 @@ internal sealed class EnviadorCola : ICicloEnvio
                 "Cola: se restableció el envío al API. Pendientes: {Pendientes}.", _cola.ContarPendientes());
         }
 
+        if (_ultimaFalla is not null && _fallaDesde is { } desde)
+        {
+            _ultimoIncidente = new IncidenteEnvio(_ultimaFalla, desde, _reloj.GetUtcNow());
+        }
+
         _fallasSeguidas = 0;
         _proximoIntento = DateTimeOffset.MinValue;
         _ultimaFalla = null;
+        _fallaDesde = null;
     }
 
     /// <summary>Cada falla distinta se registra una vez, no en cada reintento.</summary>
     private void RegistrarFalla(string mensaje)
     {
+        _fallaDesde ??= _reloj.GetUtcNow();
         if (mensaje == _ultimaFalla)
         {
             return;

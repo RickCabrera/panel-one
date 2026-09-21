@@ -224,6 +224,8 @@ export interface EstadoAgenteSucursal {
   versionAgente: string | null;
   versionSr: string | null;
   tamanoCola: number | null;
+  /** Latencia de la consulta a SR del último heartbeat, en ms (F1-025). */
+  latenciaQueryMs: number | null;
   ultimoError: string | null;
 }
 

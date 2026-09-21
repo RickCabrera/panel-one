@@ -20,6 +20,8 @@ export interface EstadoAgenteSucursal {
   versionAgente: string | null;
   versionSr: string | null;
   tamanoCola: number | null;
+  /** Latencia de la consulta a SR del último heartbeat, en ms (F1-025). */
+  latenciaQueryMs: number | null;
   ultimoError: string | null;
 }
 
@@ -71,6 +73,7 @@ export class EstadoAgentesService {
         versionAgente: estado?.versionAgente ?? null,
         versionSr: estado?.versionSr ?? null,
         tamanoCola: estado?.tamanoCola ?? null,
+        latenciaQueryMs: estado?.latenciaQueryMs ?? null,
         ultimoError: estado?.ultimoError ?? null,
       };
     });

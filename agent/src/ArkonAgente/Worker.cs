@@ -1,6 +1,7 @@
 using ArkonAgente.Cola;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
+using ArkonAgente.Salud;
 using ArkonAgente.SoftRestaurant;
 using ArkonAgente.Sql;
 
@@ -12,16 +13,20 @@ internal sealed record DependenciasWorker(
     Func<string, ResultadoConfiguracion> CargarConfig,
     Func<ConfiguracionAgente, IReadOnlyList<IVerificacion>> CrearVerificaciones,
     Func<ConfiguracionAgente, CancellationToken, Task<ResultadoDeteccion>> DetectarSr,
+    Func<ConfiguracionAgente, CancellationToken, Task<ResultadoSondeo>> SondearSr,
     EstadoSoftRestaurant EstadoSr,
     Func<ConfiguracionAgente, ILogger, ICicloEnvio> CrearEnvio,
+    TimeProvider Reloj,
+    string VersionAgente,
     TimeSpan ReintentoConfig,
     Action<int> TerminarProceso)
 {
     public static readonly TimeSpan ReintentoConfigPorDefecto = TimeSpan.FromSeconds(60);
 
     public static DependenciasWorker Reales(RutasAgente rutas, EstadoSoftRestaurant estadoSr) =>
-        new(rutas, CargadorConfiguracion.Cargar, Diagnosticador.VerificacionesPara, DetectarDeVerdad, estadoSr,
-            (config, logger) => CrearEnvioDeVerdad(rutas, config, logger), ReintentoConfigPorDefecto, TerminarDeVerdad);
+        new(rutas, CargadorConfiguracion.Cargar, Diagnosticador.VerificacionesPara, DetectarDeVerdad, SondearDeVerdad,
+            estadoSr, (config, logger) => CrearEnvioDeVerdad(rutas, config, logger), TimeProvider.System,
+            ArmadorHeartbeat.VersionAgente(), ReintentoConfigPorDefecto, TerminarDeVerdad);
 
     /// <summary>La cola real: <c>cola.db</c> en la carpeta del agente, y el envío al API.</summary>
     internal static EnviadorCola CrearEnvioDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger) =>
@@ -29,6 +34,9 @@ internal sealed record DependenciasWorker(
 
     private static Task<ResultadoDeteccion> DetectarDeVerdad(ConfiguracionAgente config, CancellationToken cancelacion) =>
         new DetectorVersionSr(new ConexionSoftRestaurant(config.ConnectionString)).DetectarAsync(cancelacion);
+
+    private static Task<ResultadoSondeo> SondearDeVerdad(ConfiguracionAgente config, CancellationToken cancelacion) =>
+        new SondeoSr(new ConexionSoftRestaurant(config.ConnectionString), TimeProvider.System).SondearAsync(cancelacion);
 
     /// <summary>
     /// Mata el proceso con código distinto de cero, como indica la guía de Microsoft
@@ -47,9 +55,9 @@ internal sealed record DependenciasWorker(
 /// <summary>
 /// El servicio. Carga la config, deja en el log un diagnóstico de las dos
 /// conexiones, detecta la versión de SoftRestaurant y elige el reader (F1-021), y
-/// entra al ciclo cada <c>intervaloSegundos</c>, donde vacía la cola local hacia el
-/// API (F1-024). Leer ventas y encolarlas llega en F1-022 / F1-023; el heartbeat, en
-/// F1-025.
+/// entra al ciclo cada <c>intervaloSegundos</c>: sonda a SR, heartbeat a la cola
+/// (F1-025) y la cola hacia el API (F1-024). Leer ventas y encolarlas llega en
+/// F1-022 / F1-023.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -69,6 +77,8 @@ internal sealed class Worker : BackgroundService
     private readonly ILogger<Worker> _logger;
     private readonly DependenciasWorker _dep;
     private string? _ultimoMensajeDeteccion;
+    private string? _ultimoErrorSondeo;
+    private string? _ultimaFallaInterna;
 
     public Worker(ILogger<Worker> logger, DependenciasWorker dependencias)
     {
@@ -179,19 +189,114 @@ internal sealed class Worker : BackgroundService
         // Una falla de la cola (disco lleno, cola.db corrupto) no se atrapa: es falla
         // interna, el proceso muere con código 1 y `sc failure` lo levanta.
         using var envio = _dep.CrearEnvio(config, _logger);
-        await DetectarSiFaltaAsync(config, stoppingToken);
-        // Lo que quedó pendiente de antes de un reinicio sale sin esperar al primer tick.
-        await envio.CicloAsync(stoppingToken);
+        // El primer ciclo corre al arrancar: lo pendiente de antes de un reinicio sale
+        // sin esperar al primer tick, y el panel ve al agente de inmediato.
+        await UnCicloAsync(config, envio, stoppingToken);
 
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
-            await DetectarSiFaltaAsync(config, stoppingToken);
-
-            // F1-022 / F1-023 / F1-025: leer SR con el reader elegido y encolar
-            // (cheques, snapshot, heartbeat) aquí, ANTES de enviar.
-            await envio.CicloAsync(stoppingToken);
+            await UnCicloAsync(config, envio, stoppingToken);
         }
+    }
+
+    /// <summary>
+    /// Un ciclo: consultar SR, encolar el heartbeat y vaciar la cola. El heartbeat se
+    /// encola SIEMPRE, antes de enviar: así sale un lote por ciclo aunque no haya cheques,
+    /// que es lo que el panel lee como "conectado" (F1-061). F1-022 / F1-023 encolan
+    /// cheques y snapshot aquí, también antes de enviar.
+    /// </summary>
+    private async Task UnCicloAsync(ConfiguracionAgente config, ICicloEnvio envio, CancellationToken stoppingToken)
+    {
+        await ConsultarSrAsync(config, stoppingToken);
+        EncolarHeartbeat(envio);
+        await envio.CicloAsync(stoppingToken);
+    }
+
+    /// <summary>
+    /// Detección (mientras no haya reader) y sonda (con reader). Una excepción de aquí que
+    /// no sea la parada del servicio NO corta el ciclo: si lo cortara, no saldría el
+    /// heartbeat y el panel vería "desconectado" cuando el agente está vivo y el problema es
+    /// otro. Queda en el log y en el <c>ultimoError</c> del heartbeat.
+    /// </summary>
+    private async Task ConsultarSrAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await DetectarSiFaltaAsync(config, stoppingToken);
+            if (_dep.EstadoSr.Reader is not null)
+            {
+                await SondearAsync(config, stoppingToken);
+            }
+
+            _ultimaFallaInterna = null;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Sólo el tipo en el heartbeat: el mensaje podría citar la cadena de conexión.
+            var mensaje = $"Falla interna del agente al consultar SoftRestaurant ({ex.GetType().Name}); " +
+                          "el detalle está en el log del agente.";
+            if (_dep.EstadoSr.Reader is null)
+            {
+                _dep.EstadoSr.Registrar(ResultadoDeteccion.SinConexion(mensaje));
+            }
+            else
+            {
+                _dep.EstadoSr.RegistrarSondeo(ResultadoSondeo.Falla(_dep.Reloj.GetUtcNow(), mensaje));
+            }
+
+            if (ex.GetType().FullName != _ultimaFallaInterna)
+            {
+                _ultimaFallaInterna = ex.GetType().FullName;
+                _logger.LogError(ex, "{Mensaje} El agente sigue y lo vuelve a intentar en el siguiente ciclo.", mensaje);
+            }
+        }
+    }
+
+    private async Task SondearAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
+    {
+        var resultado = await _dep.SondearSr(config, stoppingToken);
+        _dep.EstadoSr.RegistrarSondeo(resultado);
+
+        if (resultado.Error == _ultimoErrorSondeo)
+        {
+            return;
+        }
+
+        if (resultado.Error is { } error)
+        {
+            _logger.LogWarning("{Error} Se vuelve a intentar cada {Segundos} s.", error, config.IntervaloSegundos);
+        }
+        else
+        {
+            _logger.LogInformation("SoftRestaurant vuelve a responder ({Ms} ms).", resultado.LatenciaMs);
+        }
+
+        _ultimoErrorSondeo = resultado.Error;
+    }
+
+    /// <summary>
+    /// El heartbeat del ciclo (F1-025). Una falla de SQLite aquí no se atrapa: es falla
+    /// interna, código 1 y <c>sc failure</c>, igual que en el envío.
+    /// </summary>
+    private void EncolarHeartbeat(ICicloEnvio envio)
+    {
+        var sr = _dep.EstadoSr;
+        var entrada = new EntradaHeartbeat(
+            _dep.VersionAgente,
+            sr.VersionSr,
+            sr.Reader is null ? sr.UltimoError : sr.ErrorLectura,
+            sr.UltimaLecturaAt,
+            sr.Reader is null ? null : sr.LatenciaQueryMs,
+            envio.Cola.ContarPendientesSinHeartbeat(),
+            envio.Estado,
+            envio.Cola.ResumenRechazados(),
+            _dep.Reloj.GetUtcNow());
+        envio.Cola.Encolar(TipoEvento.Heartbeat, ArmadorHeartbeat.ArmarJson(entrada));
     }
 
     /// <summary>

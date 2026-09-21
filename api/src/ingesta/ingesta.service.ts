@@ -215,6 +215,7 @@ function mismoEstado(
     a.versionSr === b.versionSr &&
     a.ultimoError === b.ultimoError &&
     a.tamanoCola === b.tamanoCola &&
+    a.latenciaQueryMs === b.latenciaQueryMs &&
     (a.ultimaLecturaAt?.getTime() ?? null) === (b.ultimaLecturaAt?.getTime() ?? null)
   );
 }
@@ -347,6 +348,7 @@ function normalizarHeartbeat(d: DatosHeartbeatDto): EventoNormalizado {
       ultimaLecturaAt: d.ultimaLecturaAt ? fechaUtc(d.ultimaLecturaAt) : null,
       ultimoError: d.ultimoError ?? null,
       tamanoCola: d.tamanoCola ?? null,
+      latenciaQueryMs: d.latenciaQueryMs ?? null,
     },
   };
 }

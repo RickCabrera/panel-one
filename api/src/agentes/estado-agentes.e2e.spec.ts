@@ -53,6 +53,7 @@ interface Fila {
   versionAgente: string | null;
   versionSr: string | null;
   tamanoCola: number | null;
+  latenciaQueryMs: number | null;
   ultimoError: string | null;
 }
 
@@ -227,6 +228,7 @@ describe('Estado de agentes (e2e, F1-061)', () => {
         versionAgente: null,
         versionSr: null,
         tamanoCola: null,
+        latenciaQueryMs: null,
         ultimoError: null,
       });
       expect(filas.some((f) => f.sucursalId === SUCURSAL_A_INACTIVA)).toBe(false);
@@ -241,6 +243,7 @@ describe('Estado de agentes (e2e, F1-061)', () => {
             ultimaLecturaAt: '2026-09-21T17:59:50Z',
             ultimoError: 'timeout sintético',
             tamanoCola: 7,
+            latenciaQueryMs: 42,
           }),
         ],
       });
@@ -257,6 +260,7 @@ describe('Estado de agentes (e2e, F1-061)', () => {
         versionAgente: '0.3.0',
         versionSr: '11.2',
         tamanoCola: 7,
+        latenciaQueryMs: 42,
         ultimoError: 'timeout sintético',
       });
     });

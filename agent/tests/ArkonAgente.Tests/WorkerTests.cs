@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ArkonAgente.Tests;
 
-public class WorkerTests
+public partial class WorkerTests
 {
     private static readonly TimeSpan Reintento = TimeSpan.FromMilliseconds(20);
 
@@ -21,8 +21,11 @@ public class WorkerTests
             _ => { Interlocked.Increment(ref lecturas); return new ResultadoConfiguracion(null, ["Falta el campo 'apiKey'."], []); },
             _ => throw new InvalidOperationException("no debe diagnosticar sin config"),
             DetectaSr10,
+            SondeoOk,
             new EstadoSoftRestaurant(),
             SinEnvio,
+            TimeProvider.System,
+            VersionDePrueba,
             Reintento,
             NoTermina);
         var worker = new Worker(log, dep);
@@ -54,8 +57,11 @@ public class WorkerTests
                 : new ResultadoConfiguracion(Datos.Config(), [], []),
             _ => [sql, api],
             DetectaSr10,
+            SondeoOk,
             new EstadoSoftRestaurant(),
             SinEnvio,
+            TimeProvider.System,
+            VersionDePrueba,
             Reintento,
             NoTermina);
         var worker = new Worker(log, dep);
@@ -79,8 +85,8 @@ public class WorkerTests
         var log = new LogEnMemoria();
         var api = new VerificacionFija("API", true);
         var dep = new DependenciasWorker(
-            carpeta.Rutas, _ => new ResultadoConfiguracion(Datos.Config(), [], []), _ => [api], DetectaSr10, new EstadoSoftRestaurant(),
-            SinEnvio,
+            carpeta.Rutas, _ => new ResultadoConfiguracion(Datos.Config(), [], []), _ => [api], DetectaSr10, SondeoOk,
+            new EstadoSoftRestaurant(), SinEnvio, TimeProvider.System, VersionDePrueba,
             Reintento, NoTermina);
         var worker = new Worker(log, dep);
 
@@ -99,8 +105,11 @@ public class WorkerTests
             _ => new ResultadoConfiguracion(Datos.Config() with { IntervaloSegundos = 1 }, [], []),
             _ => [],
             (_, _) => Task.FromResult(detectar()),
+            SondeoOk,
             estado,
             SinEnvio,
+            TimeProvider.System,
+            VersionDePrueba,
             Reintento,
             NoTermina);
 
@@ -215,27 +224,43 @@ public class WorkerTests
     }
 
     [Fact]
-    public async Task Una_excepcion_al_detectar_es_falla_interna_y_termina_con_codigo_1()
+    public async Task Una_excepcion_al_detectar_no_corta_el_ciclo_el_heartbeat_sale_con_el_error()
     {
+        // F1-025 (observación obligatoria del revisor): si una excepción de la detección
+        // cortara el ciclo, no saldría el heartbeat y el panel vería "desconectado" con el
+        // agente vivo. Antes de F1-025 esto terminaba el proceso con código 1.
         using var carpeta = new CarpetaTemporal();
         var log = new LogEnMemoria();
-        int? codigo = null;
-        var dep = ConDeteccion(carpeta, () => throw new InvalidOperationException("bug"), new EstadoSoftRestaurant())
-            with { TerminarProceso = c => codigo = c };
+        var envio = new EnvioFalso();
+        var dep = ConDeteccion(carpeta, () => throw new InvalidOperationException("bug con " + Datos.Password),
+            new EstadoSoftRestaurant()) with { CrearEnvio = (_, _) => envio };
         var worker = new Worker(log, dep);
 
         await worker.StartAsync(CancellationToken.None);
-        await Esperar(() => codigo is not null);
+        await Esperar(() => envio.Ciclos >= 3);
         await worker.StopAsync(CancellationToken.None);
 
-        Assert.Equal(1, codigo);
-        Assert.Contains(log.De(LogLevel.Critical), m => m.Contains("código 1"));
+        Assert.True(worker.ExecuteTask!.IsCompletedSuccessfully);
+        Assert.All(envio.HeartbeatsPorCiclo, n => Assert.Equal(1, n));
+        var hb = envio.Heartbeats[^1];
+        Assert.Contains("Falla interna del agente al consultar SoftRestaurant (InvalidOperationException)",
+            hb.GetProperty("ultimoError").GetString());
+        Assert.DoesNotContain(Datos.Password, hb.GetRawText());
+        Assert.Single(log.De(LogLevel.Error)); // una vez, no en cada ciclo
+        Assert.Empty(log.De(LogLevel.Critical));
     }
 
     private static Task<ResultadoDeteccion> DetectaSr10(ConfiguracionAgente config, CancellationToken cancelacion) =>
         Task.FromResult(ResultadoDeteccion.Soportada(new SrV11Reader(new VersionSr("10.021800", 10))));
 
     private static ICicloEnvio SinEnvio(ConfiguracionAgente config, ILogger logger) => new EnvioFalso();
+
+    internal const string VersionDePrueba = "9.9.9+abcdef0";
+
+    internal static readonly DateTimeOffset InstanteSondeo = new(2026, 9, 21, 12, 0, 0, TimeSpan.Zero);
+
+    private static Task<ResultadoSondeo> SondeoOk(ConfiguracionAgente config, CancellationToken cancelacion) =>
+        Task.FromResult(ResultadoSondeo.Exito(InstanteSondeo, 7));
 
     private static void NoTermina(int codigo) => Assert.Fail($"El worker no debía terminar el proceso (código {codigo}).");
 
@@ -252,8 +277,11 @@ public class WorkerTests
             _ => throw new IOException("disco lleno"),
             _ => [],
             DetectaSr10,
+            SondeoOk,
             new EstadoSoftRestaurant(),
             SinEnvio,
+            TimeProvider.System,
+            VersionDePrueba,
             Reintento,
             c => codigo = c);
         var worker = new Worker(log, dep);

@@ -91,6 +91,17 @@ versión; no se copió ningún dato de negocio):
 
 **Diferencias conocidas entre versiones:** ninguna todavía. Sólo se ha visto la 10.
 
+**Sonda de salud por ciclo (F1-025).** Con la versión ya detectada, el agente corre en cada
+ciclo `sr_sondeo.sql`: `SELECT TOP (1) 1 FROM dbo.parametros2 WITH (NOLOCK)`. Es una fila de
+una tabla de configuración que el POS casi no escribe, no toca las tablas de operación.
+- ✅ **VALIDADO** 2026-09-21 contra la SR 10 local (`.\NATIONALSOFT`, `softrestaurant10`),
+  con login sysadmin: responde en ~1 ms.
+- ⚠️ **Una sonda que responde ≠ una lectura de ventas.** Dice que la base contesta, no que
+  los cheques estén llegando. Mientras F1-022 no exista, la "última lectura" del panel sale
+  de aquí.
+- ⚠️ **SUPUESTO:** que un usuario `db_datareader` pueda leer `parametros2`. No probado (igual
+  que el resto de §1).
+
 ---
 
 ## 2. Cuentas cerradas (cheques)
