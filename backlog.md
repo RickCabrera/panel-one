@@ -237,7 +237,7 @@ en lugar de datos viejos como si fueran vivos.
 > F1-091. No marques el AC como cumplido entero: di exactamente qué se probó.
 
 ## 14 · F1-051 · Detalle de consumo (modal)
-`[ ]` **Epic 5 — Frontend: Monitor de mesas**
+`[x]` **Epic 5 — Frontend: Monitor de mesas**
 
 Modal al clickear mesa: encabezado (mesa, mesero, folio, total, tiempo abierta,
 comensales), lista de partidas con cantidad, categoría, modificadores ($0.00 incluidos) y
