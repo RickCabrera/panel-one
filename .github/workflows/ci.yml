@@ -14,9 +14,9 @@ name: CI
 # de la tarea que lo habilita, no un "ya luego".
 #
 # F1-001 creó el monorepo y encendió los tres carriles con su gate mínimo (lint,
-# typecheck y build). Lo que sigue comentado es SÓLO el paso de test del agente,
-# con la tarea que lo enciende anotada encima: F1-021. F1-011 encendió los del
-# carril api (servicio postgres, migrate deploy y npm test) y F1-040 el de web.
+# typecheck y build). F1-011 encendió los del carril api (servicio postgres,
+# migrate deploy y npm test), F1-040 el de web y F1-020 el `dotnet test` del
+# agente (el backlog se lo asignaba a F1-021). Ya no queda ningún paso comentado.
 #
 # El job `guardia` sí corre desde el minuto cero. No es de adorno: es lo que hace
 # que el CI exista, se vea en verde en cada PR y falle si alguien commitea un
@@ -170,9 +170,10 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # CARRIL /agent (.NET 8 Worker Service)
-  # ACTIVO desde F1-001: corre restore + build. El paso `test` sigue comentado
-  # hasta F1-021, que es la primera tarea del agente con lógica testeable
-  # (selección de reader por versión de SR).
+  # ACTIVO desde F1-001: corre restore + build. El paso `test` lo encendió F1-020
+  # (el backlog se lo asignaba a F1-021): la config, la redacción de secretos y
+  # el diagnóstico de `agente test` ya son lógica que no puede quedar sin gate.
+  # Los tests no necesitan Windows, SQL Server ni red.
   # ---------------------------------------------------------------------------
   agent:
     name: Agente (.NET 8)
@@ -189,5 +190,4 @@ jobs:
       # El agente se publica single-file self-contained x64 para Windows, pero
       # compila en Linux de sobra para el gate del PR.
       - run: dotnet build --no-restore --configuration Release
-      # DESCOMENTAR EN F1-021.
-      # - run: dotnet test --no-build --configuration Release --verbosity normal
+      - run: dotnet test --no-build --configuration Release --verbosity normal

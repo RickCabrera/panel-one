@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <!--
-    Esqueleto del agente. Lo que de verdad hace (Serilog con rotacion, config en
-    C:\ProgramData\ArkonAgente\config.json, `sc create`, publish single-file
-    self-contained x64, el comando `agente test`) es F1-020.
+    El agente: servicio de Windows (`sc create`, ver agent/README.md) con config en
+    C:\ProgramData\ArkonAgente\config.json, logs rotativos de Serilog en la misma
+    carpeta y el comando `agente test` (F1-020).
 
     TargetFramework, Nullable, ImplicitUsings y LangVersion vienen de
     ../../Directory.Build.props: no se repiten aqui.
@@ -12,10 +12,49 @@
   <PropertyGroup>
     <RootNamespace>ArkonAgente</RootNamespace>
     <AssemblyName>agente</AssemblyName>
+    <!--
+      DECISION PROVISIONAL (nocturno): globalizacion completa en el exe, contra el
+      InvariantGlobalization=true del Directory.Build.props. SoftRestaurant guarda
+      texto en varchar con collation en espanol (codepage 1252, SUPUESTO sin
+      instalacion real, ver docs/esquema-sr.md §11) y SqlClient decodifica esos
+      varchar con la cultura/codepage del collation. En modo invariante eso no se
+      ha podido probar contra un SQL Server real, y un texto mal decodificado es un
+      nombre de producto con signos raros en el panel. En Windows no cuesta nada.
+    -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!--
+    Publicacion: `dotnet publish src/ArkonAgente -c Release -r win-x64` deja un
+    solo agente.exe self-contained (no hace falta instalar .NET en la PC del
+    restaurante). Va condicionado al RID para no fijarlo en el csproj: el CI
+    compila y prueba en Linux sin RID.
+  -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.3" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+  </ItemGroup>
+
+  <!--
+    Las queries contra SQL Server van en archivos .sql embebidos, nunca en strings
+    inline (regla del revisor). Las lee Sql/ConsultasEmbebidas.cs por nombre.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Sql\Consultas\*.sql" LogicalName="ArkonAgente.Sql.%(Filename).sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ArkonAgente.Tests" />
   </ItemGroup>
 
 </Project>

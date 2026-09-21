@@ -420,8 +420,49 @@ _(pendiente — no se toca hasta que F1-091 cierre)_
 
 - Queries que resultaron caras y por qué: _(pendiente)_
 - Índices que existen en la base de SR y se pueden aprovechar: _(pendiente)_
-- Timeout que se quedó como bueno: _(pendiente)_
+- Timeout que se quedó como bueno: ⚠️ **SUPUESTO (F1-020), no validado** — 5 s de
+  `Connect Timeout` (si la cadena no trae uno; tope 15 s) y 5 s de `CommandTimeout`
+  (`ConexionSoftRestaurant.TimeoutComandoSegundos`). Nadie los ha medido contra un POS con
+  carga: F1-090 / F1-091 dicen si alcanzan en hora pico.
 - Horas pico del restaurante en las que conviene espaciar la lectura: _(pendiente)_
+
+### Conexión al SQL Server del POS (F1-020)
+
+Nada de esto se ha visto en una instalación real: son los supuestos con los que F1-020
+escribió la plantilla (`infra/config.example.json`) y el diagnóstico de `agente test`.
+
+- **`agente test` no toca tablas de SR.** Su única query, `Sql/Consultas/diagnostico.sql`,
+  lee funciones de sistema: versión y edición del servidor, base, login, `IS_SRVROLEMEMBER`,
+  `IS_ROLEMEMBER` y `HAS_PERMS_BY_NAME`. Si el usuario puede escribir, `test` marca FALLA.
+  **Límite conocido:** revisa roles de servidor y de base, permisos sobre la base y
+  permisos sobre el esquema `dbo`. Un `GRANT INSERT ON dbo.<tabla>` sobre una tabla suelta
+  (permiso por objeto) **no se detecta**. La defensa real sigue siendo crear el usuario
+  sólo con `db_datareader` (script de F1-026). Si en F1-090 las tablas de SR resultan vivir
+  en otro esquema, hay que agregarlo a la query.
+- ⚠️ **SUPUESTO — SR corre sobre un SQL Server Express local con certificado autofirmado.**
+  `Microsoft.Data.SqlClient` 5 cifra por defecto (`Encrypt=True`) y valida el certificado:
+  sin `TrustServerCertificate=True` la conexión falla con un error de "certificate chain".
+  La plantilla lo trae puesto y `test` lo sugiere cuando ve ese error.
+  `DECISION PROVISIONAL (nocturno)`: la conexión va cifrada sin validar el certificado. Es
+  aceptable en la misma PC o en la LAN del restaurante, no por internet.
+- ⚠️ **SUPUESTO — un SQL Express viejo (2008 / 2008 R2 / 2012 sin parches) puede no hablar
+  TLS 1.2.** Síntoma: error de SSL/TLS al abrir la conexión aunque el servidor responda.
+  `test` lo reporta como "falló el cifrado" y sugiere actualizar o, si la base está en la
+  misma PC, `Encrypt=False`. No se sabe qué versión de SQL Server instala cada versión de SR
+  (§1 sigue pendiente).
+- ⚠️ **SUPUESTO — en los SQL Express viejos, `NT AUTHORITY\SYSTEM` es sysadmin.** El servicio
+  corre como LocalSystem. Con `Integrated Security=True`, el agente entraría a la base del
+  POS con permisos de todo, justo lo que la regla de solo lectura prohíbe. Por eso la
+  plantilla usa autenticación SQL, y `test` y el log avisan si la cadena usa la de Windows.
+- ⚠️ **SUPUESTO — el texto de SR vive en `varchar` con collation en español (codepage 1252,
+  p. ej. `Modern_Spanish_CI_AS`).** Por eso el agente corre con `InvariantGlobalization=false`
+  (`DECISION PROVISIONAL (nocturno)` en `agent/src/ArkonAgente/ArkonAgente.csproj`): en
+  modo invariante no se pudo comprobar que SqlClient decodifique bien acentos y eñes, porque
+  no hay SQL Server en la máquina donde se escribió. F1-090 lo confirma leyendo un producto
+  con acento.
+- ⚠️ **SUPUESTO — la instancia se llama `.\SQLEXPRESS` o algo como `.\NATIONALSOFT`.** Es
+  sólo el ejemplo de la plantilla y del mensaje de `test`. El nombre real se anota aquí
+  cuando se vea.
 
 ---
 

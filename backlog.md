@@ -304,6 +304,14 @@ si la versión no está soportada, log claro + heartbeat con error, sin crashear
 > **Y además:** descomentar el paso `dotnet test` del carril `agent` en
 > `.github/workflows/ci.yml`. La selección de reader por versión es la primera lógica
 > testeable del agente.
+>
+> **Nota de F1-020:** el paso `dotnet test` **ya lo encendió F1-020**, que trajo la primera
+> lógica testeable (validación de config, redacción de secretos, clasificación de fallas).
+> Aquí no hay que descomentar nada. Lo que F1-021 hereda: `Sql/ConsultasEmbebidas.cs`
+> (lee los `.sql` de `Sql/Consultas/`) y el test de guardia `ConsultasEmbebidasTests`, que
+> truena si una consulta embebida contiene `INSERT`/`UPDATE`/`DELETE`/`EXEC`/`INTO`...
+> fuera de comentarios y textos. `ConexionSoftRestaurant.TimeoutComandoSegundos` (5 s) es el
+> timeout corto para las queries.
 
 ## 19 · F1-024 · Cola local resiliente + envío
 `[ ]` **Epic 2 — Agente Windows (.NET 8)**
@@ -354,6 +362,14 @@ obtener API key del panel, checklist de firewall.
 >
 > El script T-SQL **sólo otorga `db_datareader`** sobre la base de SR. Si otorga más, el
 > revisor bloquea: es la regla de oro del proyecto convertida en permisos.
+>
+> **Nota de F1-020:** `agente test` ya marca **FALLA** si el usuario SQL puede escribir
+> (sysadmin, db_owner, db_datawriter, db_ddladmin o INSERT/UPDATE/DELETE/ALTER/CREATE TABLE),
+> así que el script T-SQL se puede comprobar con el propio `test`. Pendientes que F1-020
+> dejó para aquí: (1) cuenta del servicio — hoy LocalSystem; considerar la cuenta virtual
+> `NT SERVICE\ArkonAgente` con ACLs sobre `C:\ProgramData\ArkonAgente`; (2) el `icacls` de
+> esa carpeta (el `config.json` trae secretos) va en `instalar.ps1`, no sólo en el README;
+> (3) los comandos `sc` que documenta `agent/README.md` son los que el script debe correr.
 
 ## 22 · F1-092 · Hardening y pulido final
 `[ ]` **Epic 7 — Validación contra SoftRestaurant real y cierre de fase**
@@ -388,6 +404,23 @@ La máquina donde se cerró no puede arrancar el engine de Docker, así que sól
 **Listo cuando:** `docker compose up -d` en `/infra` deja el contenedor `monitor-sr-postgres`
 en estado `healthy`; `psql` con las credenciales de `infra/.env.example` conecta y la base
 `monitor` está vacía (sin tablas); `docker compose down` lo detiene limpio.
+
+## F1-020b · Verificar el servicio del agente instalado con `sc create`
+`[ ]` **Epic 2** · 🔒 **Razón: necesita una consola elevada (administrador) y reiniciar la
+máquina.** Resto del corte de F1-020: el código, `agente test` y los comandos de instalación
+están entregados y probados en consola (ver `docs/nocturno-log.md`), pero la sesión nocturna
+no tiene elevación para `sc create` ni puede reiniciar la máquina.
+
+**Listo cuando:** siguiendo `agent/README.md` en una consola de administrador: `sc create`
++ `sc failure` + `sc start` dejan el servicio `ArkonAgente` en `RUNNING`; tras reiniciar
+Windows arranca solo (`sc query` = `RUNNING` sin tocar nada) y escribe en
+`C:\ProgramData\ArkonAgente\logs\agente-AAAAMMDD.log`; matando el proceso
+(`taskkill /F /IM agente.exe`) el administrador de servicios lo levanta de nuevo en ≤ 1 min;
+una **falla interna** también lo levanta: con un build de prueba que lance una excepción
+dentro del ciclo del worker (hoy no hay manera de provocarla desde afuera, porque el ciclo
+todavía no tiene trabajo), el log registra `Critical` + "código 1" y el servicio vuelve a
+`RUNNING` en ≤ 1 min;
+`sc stop` lo detiene limpio y el log dice "Agente detenido.".
 
 ## F1-002 · Docker Compose de producción + Caddy
 `[ ]` **Epic 0** · 🔒 **Razón: necesita el VPS contratado y el dominio con DNS apuntando.**

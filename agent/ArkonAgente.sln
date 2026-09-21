@@ -7,6 +7,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A356E1D8-416
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArkonAgente", "src\ArkonAgente\ArkonAgente.csproj", "{7087B61D-51B1-4E88-BD72-3AE1A5DE640A}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{8A140DFE-1BCE-4227-81B8-280DB8249135}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ArkonAgente.Tests", "tests\ArkonAgente.Tests\ArkonAgente.Tests.csproj", "{AD3056A4-1043-417F-B19F-41E887523F21}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,8 +24,13 @@ Global
 		{7087B61D-51B1-4E88-BD72-3AE1A5DE640A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7087B61D-51B1-4E88-BD72-3AE1A5DE640A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7087B61D-51B1-4E88-BD72-3AE1A5DE640A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD3056A4-1043-417F-B19F-41E887523F21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD3056A4-1043-417F-B19F-41E887523F21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD3056A4-1043-417F-B19F-41E887523F21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD3056A4-1043-417F-B19F-41E887523F21}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{7087B61D-51B1-4E88-BD72-3AE1A5DE640A} = {A356E1D8-4162-4CC5-960B-8899883B51DD}
+		{AD3056A4-1043-417F-B19F-41E887523F21} = {8A140DFE-1BCE-4227-81B8-280DB8249135}
 	EndGlobalSection
 EndGlobal

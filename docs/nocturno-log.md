@@ -1511,3 +1511,131 @@ cara que la consulta.
 - Hallazgos sobre SoftRestaurant: ninguno (la tarea no lee SR).
 
 **Qué haría distinto.** Leer primero cómo se escribe `agente_estado` (el "si nada cambió, no escribe") antes de diseñar la frescura. Ahí estaba el bug que el backlog anunciaba, y cambia todo el diseño.
+
+## 2026-09-21 03:50 — F1-020 · Esqueleto del servicio + configuración
+**Estado:** CERRADA PARCIAL (el número de PR lo da `gh pr create`). Falta verificar con
+`sc create` elevado el arranque con Windows y el reinicio tras una caída: eso es
+**F1-020b**, en **Diurnas**.
+
+**Qué quedó hecho.**
+- **Servicio** (`agent/src/ArkonAgente`, exe `agente`):
+  - `AddWindowsService(ServiceName="ArkonAgente")`.
+  - Serilog configurado en código: consola + `C:\ProgramData\ArkonAgente\logs\agente-AAAAMMDD.log`, diario, 14 archivos. Override de `Microsoft`/`System.Net.Http` a Warning.
+  - `appsettings.json` borrado: ya no lo leía nadie.
+  - Publicación con `dotnet publish src/ArkonAgente -c Release -r win-x64`: queda un solo `agente.exe` self-contained de 79 MB. Va con un PropertyGroup condicionado al RID, así que el CI en Linux compila sin RID.
+- **Config** (`Configuracion/`):
+  - `CargadorConfiguracion` lee `config.json` `{apiUrl, apiKey, connectionString, intervaloSegundos}`. Tolera comentarios y comas finales.
+  - Da un error por campo, en español, y ninguno repite la key ni el password: nunca se usa `ex.Message` de JSON ni de SqlClient.
+  - `http://` sólo se acepta en loopback. `intervaloSegundos` es opcional (30 por defecto) y va de 5 a 3600. La cadena debe traer servidor y base.
+  - `RutasAgente` recibe la carpeta inyectada. La variable `ARKON_AGENTE_DIR` sólo se lee en `Program.cs`, así los tests corren en paralelo sin tocar el entorno.
+- **`agente test`** (`LineaDeComandos.cs`, `Diagnostico/`):
+  - Corre SIEMPRE las dos verificaciones, aunque falle la primera. La última línea dice cuál falla ("FALLA la conexión a X. La otra funciona." / "FALLAN las dos").
+  - Códigos de salida: 0 OK, 1 falla alguna conexión, 2 config inválida (no prueba nada), 64 comando desconocido.
+  - SQL: `Sql/Consultas/diagnostico.sql`, un solo SELECT de funciones de sistema con `CommandTimeout=5`. **Un usuario que puede escribir es FALLA** aunque conecte: sysadmin, db_owner, db_datawriter, db_ddladmin, INSERT/UPDATE/DELETE/ALTER/CREATE TABLE sobre la base, o INSERT/UPDATE/DELETE/ALTER sobre el esquema dbo.
+  - API: `GET {apiUrl}/agente/yo` con `X-Api-Key` y timeout de 10 s. Distingue DNS, TLS, red, timeout, 401, 404 y 5xx.
+  - `HttpClient` a mano, sin `IHttpClientFactory`, para que la key no llegue a un log.
+- **Conexión** (`Sql/ConexionSoftRestaurant.cs`):
+  - Fuerza `Application Name=ArkonAgente` y `ApplicationIntent=ReadOnly`. Es sólo una pista, **no un control de seguridad**.
+  - `Connect Timeout` de 5 s si no viene en la cadena; tope 15 s.
+  - `Resumen()` no incluye el password.
+- **Worker**:
+  - Con config inválida no se cae: registra el error una vez por cada cambio y la relee cada 60 s.
+  - Con config válida registra el diagnóstico y entra a un `PeriodicTimer` vacío, donde F1-021/F1-024 meterán el trabajo.
+  - **Una excepción no prevista termina el proceso con `Environment.Exit(1)`** después de `LogCritical`.
+- **Tests** `agent/tests/ArkonAgente.Tests` (xUnit, en el `.sln`): **104/104, 0 omitidos**.
+- **CI**: **encendí `dotnet test` en el carril agent** (el backlog se lo daba a F1-021). La ficha de F1-021 lo dice. Se actualizaron el encabezado y el comentario del carril.
+- **Otros archivos**:
+  - Plantilla `infra/config.example.json`. Un test la pasa por el cargador.
+  - `agent/README.md`: build, publish, config, `icacls`, `agente test`, `sc create/failure/failureflag/start/delete`.
+  - `backlog.md`: F1-020b en Diurnas y notas en F1-021 y F1-026.
+  - `esquema-sr.md` §11: supuestos de conexión.
+
+**Qué se probó y qué NO.**
+- **Probado:** build Release sin warnings y tests 104/104.
+- **Prueba de mutación** (todo restaurado). Qué se cambió y cuántos tests fallaron:
+  - cortar tras la primera falla: 4;
+  - `Evaluar` sin permisos: 9;
+  - `ToString` con secretos: 1;
+  - worker que registra el error en cada reintento: 2;
+  - http aceptado fuera de loopback: 3.
+- **Probado a mano con el exe publicado**, contra el api local en :3999. Le puse una key sintética a "Sucursal Centro" en la base de desarrollo; **después la dejé en null otra vez**. Resultados:
+  - key buena: `[OK] API ... 'Sucursal Centro'` + `[FALLA] SQL` (puerto cerrado) → "FALLA la conexión a SQL Server (SoftRestaurant). La otra funciona.", exit 1;
+  - key mala: 401 → "FALLAN las dos", exit 1;
+  - config inválida: exit 2, con los 4 errores juntos;
+  - sin config: exit 2.
+- **Modo servicio en consola:**
+  - con config inválida no se cae y escribe `logs\agente-20260921.log`, con el error una sola vez;
+  - con config válida registra el diagnóstico, y un grep de la key y del password en el log da 0.
+- **NO probado. Que nadie lo lea como hecho:**
+  - **El camino exitoso de `VerificacionSql` nunca corrió contra un SQL Server** (no hay ninguno en esta máquina). Quedan sin probar:
+    - `FilaDiagnostico.Leer` sobre un resultado real;
+    - los tipos que devuelven `IS_SRVROLEMEMBER`/`HAS_PERMS_BY_NAME` (se leen con `Convert.ToInt32`);
+    - la clasificación de 18456 / 4060 / certificado / TLS;
+    - el efecto de `InvariantGlobalization=false`.
+    
+    Todo eso se probó con filas armadas a mano o contra el puerto cerrado. F1-090/F1-091 lo validan.
+  - **`sc create`, el arranque con Windows y el reinicio tras una caída**: la sesión no tenía consola elevada. Queda en F1-020b, con su "Listo cuando".
+  - El `icacls` del README no se corrió, por la misma razón.
+
+**Decisiones que tomé y por qué.**
+- **DECISION ABIERTA para Ricardo: ¿el agente debe NEGARSE a leer SR si el usuario SQL puede escribir?**
+  - Hoy `test` marca FALLA (exit 1). El servicio sólo registra Warning y sigue: `DECISION PROVISIONAL (nocturno)` en `Worker.cs`, `DiagnosticarAsync`.
+  - En F1-020 no lee SR, así que no había nada que negarle. F1-021 debería decidirlo, o preguntar.
+- **`Environment.Exit(1)` ante una falla interna** (`DependenciasWorker.TerminarDeVerdad`). Es la guía de Microsoft para BackgroundService en servicios.
+  - Con el default de .NET 8 (`StopHost`) el servicio se reportaría detenido sin error y `sc failure` no lo levantaría.
+  - En los tests va inyectado como `TerminarProceso`.
+- **Config inválida = el proceso sigue vivo y reintenta.** Si terminara, `sc failure` lo reiniciaría en bucle sin arreglar nada. La aprobó el revisor.
+- `DECISION PROVISIONAL (nocturno)` **`InvariantGlobalization=false`** en el exe y en los tests (los csproj). El texto de SR probablemente viene en codepage 1252 y no se pudo comprobar en modo invariante. Está en §11.
+- `DECISION PROVISIONAL (nocturno)` **`TrustServerCertificate=True` en la plantilla** (SQL Express con certificado autofirmado). Está en §11.
+- **La plantilla usa autenticación SQL.** Con `Integrated Security` el servicio (LocalSystem) entraría como SYSTEM, que en los Express viejos suele ser sysadmin. `test` y el log avisan si la cadena la usa.
+- **Logs en `logs\`**, dentro de la misma carpeta del config.
+- **LocalSystem** como cuenta del servicio. La cuenta virtual `NT SERVICE\ArkonAgente` queda anotada en F1-026.
+- **`icacls` por SID** (`*S-1-5-18`, `*S-1-5-32-544`). En un Windows en español, "Administrators" no existe.
+
+**Observaciones del revisor y cómo quedaron.**
+- **Plan: APROBADO CON OBSERVACIONES**, 12 observaciones, todas atendidas:
+  - permisos de escritura como FALLA;
+  - query con sysadmin/ddladmin/UPDATE/DELETE/ALTER/CREATE TABLE;
+  - auth SQL en la plantilla y aviso de Integrated Security;
+  - `InvariantGlobalization` conservador;
+  - cierre PARCIAL + F1-020b;
+  - supuestos en §11;
+  - test de guardia de las `.sql`;
+  - rutas inyectadas;
+  - `tcp:` en el test del puerto cerrado;
+  - forma exacta de `AgenteYoDto`;
+  - sin factory de HttpClient;
+  - test del worker con config inválida.
+- **Entregable: APROBADO CON OBSERVACIONES** en la primera pasada, sin bloqueo. Lo que se corrigió:
+  1. Una falla interna ahora mata el proceso con código 1. Agregué `sc failureflag 1` al README, el caso nuevo al "Listo cuando" de F1-020b y un test (`Falla_interna_se_registra_como_critica...`).
+  2. `icacls` por SID, en dos pasos: primero `grant`, luego `/inheritance:r`.
+  3. Permisos sobre el esquema `dbo`: 4 columnas nuevas y 4 casos en el Theory. El texto de OK ahora dice lo que de verdad comprueba: "sin permisos de escritura a nivel servidor, base ni esquema dbo". El límite por objeto quedó anotado en §11 y en el `.sql`.
+  4. Esta nota dice con claridad qué no se probó.
+  5. (menor) El test del puerto cerrado baja de 20 a 10 s.
+
+**Trampas que encontré.**
+- **La herramienta Bash colapsa `\\` a `\` dentro de un heredoc**, aunque el delimitador vaya entre comillas (`<<'EOF'`). Por eso:
+  - un `.cs` salió con `"127.0.0.1\SQLEXPRESS"` (error CS1009);
+  - un script de Python metió un carácter BEL (`\a`) en `backlog.md` (`logs\agente` → `logs<BEL>gente`).
+  
+  Para escribir texto con barras invertidas usa la herramienta Write/Edit, no un heredoc. Si ya usaste uno, busca `chr(7)` en el archivo.
+- **Un heredoc largo con `'apiUrl'` adentro se cortó a medias** y dejó un archivo truncado sin avisar (sólo un warning de "here-document delimited by end-of-file"). Revisa el final del archivo, o usa Write.
+- **La consola de Windows arranca en la página OEM**: los acentos del reporte salían como `�`. Se arregló con `Console.OutputEncoding = UTF8`, pero sólo en modo `test`. En modo servicio no hay consola, y el archivo de log ya sale bien en UTF-8.
+- **El api no carga `.env` solo.** Para levantarlo a mano: `PORT=3999 JWT_ACCESS_SECRET=... JWT_REFRESH_SECRET=... node -r dotenv/config dist/main.js`, con secretos de relleno de 32 o más caracteres.
+- **Contra `tcp:127.0.0.1,1` en Windows, SqlClient da el error 258 (timeout)** y no "connection refused". Cae en la rama genérica "No se pudo llegar", que es correcta.
+- En los tests, un `public` Theory no puede recibir un tipo `internal` (`FilaDiagnostico`): CS0051. Se pasa el nombre del permiso y la fila se arma adentro.
+
+**Qué quedó abierto** (nada es tarea nueva de la cola, salvo F1-020b, que va en Diurnas):
+- **F1-020b** (Diurnas): `sc create` real, reinicio de Windows, `taskkill`, falla interna y el `icacls`.
+- **F1-021**:
+  - decidir si el agente se niega a leer con un usuario que escribe;
+  - la guardia `ConsultasEmbebidasTests` no revisa `NOLOCK` ni timeouts: agregar eso cuando haya queries sobre tablas;
+  - si las tablas de SR no están en `dbo`, agregar ese esquema a `diagnostico.sql`;
+  - ya existen `ConsultasEmbebidas` y `TimeoutComandoSegundos`.
+- **F1-026**: cuenta virtual del servicio, `icacls` dentro de `instalar.ps1` y los comandos `sc` del README. El T-SQL sólo con `db_datareader` se puede comprobar con el propio `agente test`.
+- **F1-090**: validar todos los supuestos de §11 (certificado, TLS, SYSTEM sysadmin, collation, nombre de instancia y timeouts).
+- **Hallazgos reales sobre SoftRestaurant: ninguno.** La tarea no lee SR; todo lo de §11 es SUPUESTO.
+
+**Qué haría distinto.** Escribir el archivo de apoyo de tests con Write desde el principio y
+no con heredoc. Y pensar desde el plan qué pasa con el código de salida del proceso ante
+`sc failure`. Lo encontró el revisor, y es justo el AC ("sobrevive reinicios").
