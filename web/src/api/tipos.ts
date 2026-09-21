@@ -108,3 +108,64 @@ export interface MesasSucursal {
   zonaHoraria: string;
   snapshot: SnapshotMesas | null;
 }
+
+/** `ModificadorDto`: como los guardó la ingesta (esquema-sr.md §13). */
+export interface Modificador {
+  nombre: string;
+  precio: Importe;
+}
+
+/** `PartidaTicketDto`. */
+export interface PartidaTicket {
+  producto: string;
+  categoria: string | null;
+  /** 3 decimales, en texto (`"2.000"`). */
+  cantidad: string;
+  precioUnit: Importe;
+  total: Importe;
+  modificadores: Modificador[];
+}
+
+/** `PagoTicketDto`. */
+export interface PagoTicket {
+  /** Texto de SR. */
+  formaRaw: string;
+  /** Derivada al leer con el catálogo de la empresa; sin entrada = `otro`. */
+  forma: FormaPago;
+  monto: Importe;
+}
+
+/** `TicketDto`: un cheque de `GET /ventas/tickets`, con su detalle inline. */
+export interface Ticket {
+  id: string;
+  sucursalId: string;
+  folio: string;
+  mesa: string | null;
+  mesero: string | null;
+  /** Null = SR no lo reportó. */
+  comensales: number | null;
+  /** UTC. */
+  abiertoAt: string;
+  /** UTC. Null en un cancelado que nunca se cerró. */
+  cerradoAt: string | null;
+  /** Se lista pero NO suma: ni en un total ni en un export. */
+  cancelado: boolean;
+  subtotal: Importe;
+  impuestos: Importe;
+  descuentos: Importe;
+  propina: Importe;
+  total: Importe;
+  /** En el orden del POS. */
+  partidas: PartidaTicket[];
+  pagos: PagoTicket[];
+}
+
+/** `PaginaTicketsDto`. */
+export interface PaginaTickets {
+  /** Del más reciente al más viejo. Vacío si la página pasa del final. */
+  items: Ticket[];
+  /** Tickets del filtro completo, no de esta página (no es una foto exacta). */
+  total: number;
+  pagina: number;
+  porPagina: number;
+}

@@ -939,3 +939,90 @@ por escapado en Bash costaron más que todo el layout.
   3. Que cuadre peso a peso contra los reportes nativos de SR no se puede probar sin una instalación real: queda para la validación en campo.
 
 **Qué haría distinto.** Empezar las pruebas de mutación por el dinero. Un test de "0.1 + 0.2" parece que protege contra el float, y no protege contra el float con redondeo.
+
+## 2026-09-21 00:45 — F1-042 · Vista Tickets
+**Estado:** CERRADA (PR de `feat/F1-042`, squash a main)
+
+**Qué quedó hecho.**
+- `/tickets` ya es la vista de verdad: `web/src/paginas/Tickets.tsx` y `web/src/paginas/tickets/`.
+  - Tabla paginada **en el servidor de 50 en 50** con `GET /ventas/tickets`. Columnas: folio, fecha/hora, sucursal (sólo con "Todas"), mesa, mesero, comensales, total y forma de pago.
+  - Cada fila se expande con sus partidas (cantidad, producto, precio unitario y total), los modificadores (**también los de $0.00**), los pagos y el desglose subtotal/impuestos/descuentos/propina/total.
+  - Filtros: el periodo es el mismo `SelectorPeriodo` de F1-041, la sucursal es la del topbar, y hay búsqueda por prefijo de folio (Enter o "Buscar", más "Limpiar").
+  - **Export CSV** del filtro actual, generado en el navegador, con progreso ("Exportando x de N") y botón Cancelar.
+- **Todo el filtro vive en la URL:** `?periodo&desde&hasta&folio&pagina`. Cambiar el periodo, el folio o la sucursal vuelve a la página 1. Un deep-link a `?pagina=3` abre la página 3.
+- **Paginación fluida:**
+  - Al cambiar de página se queda visible la anterior, atenuada, y la siguiente se pide de antemano.
+  - Eso se hace SÓLO entre páginas del mismo filtro. Con otro periodo, sucursal o folio salen skeletons, nunca los tickets viejos (la misma regla de F1-041, con test).
+- **CSV:**
+  - BOM UTF-8, CRLF, comillas RFC 4180 y una fila por ticket, **sin fila de totales**. Los cancelados van con la columna `Cancelado = Sí` y no se suman en ningún lado.
+  - Importes como `1234.50` (sin `$` ni miles) y fecha en ISO `YYYY-MM-DD` más hora `hh:mm`, **en la zona de la sucursal de cada ticket**.
+  - Protección contra inyección de fórmulas (`= + - @ tab CR` → `'`) sólo en los textos de SR, no en los importes.
+- `useHoy` pasó de `Inicio.tsx` a `web/src/filtros/useHoy.ts` sin cambios, para compartirlo. Los tests de Inicio siguen verdes sin tocarlos.
+- Tipos nuevos (`Ticket`, `PartidaTicket`, `PagoTicket`, `Modificador`, `PaginaTickets`) en `web/src/api/tipos.ts`, escritos campo por campo contra `api/openapi.json`. **No se tocó la API, ni el OpenAPI, ni el CI.**
+- Tests: `npm test` en /web da **170/170, 0 skips** (47 nuevos). Build, lint y prettier limpios en lo tocado.
+
+**Verificación de "Listo cuando", hecha.**
+- **10k cheques:**
+  - Un script TEMPORAL (no se commitea) metió 10,000 cheques sintéticos (`folio_sr` con prefijo `CARGA-`) en la sucursal Centro del Postgres LOCAL. Más los 500 del seed, suman 10,500. Nunca se tocó SR.
+  - Con la API real y Vite, **pasando por el proxy y con el código real de la SPA** (`pedir`, `exportarTickets`, `ticketsACsv`, desde un test temporal en entorno node), las páginas 1, 2, 3, 50, 100, 150, 200 y 210 de 50 tardaron **102–113 ms cada una**. La búsqueda por folio tardó 53 ms.
+  - **El export de las 10,500 tardó ~14 s** (105 requests de 100) y dio 10,501 líneas.
+  - Al terminar borré los `CARGA-`: la base quedó con el seed de siempre.
+- **Excel (hay Excel instalado en esta máquina), abierto por COM:**
+  - El CSV de 10k abre con 10,501 filas y 14 columnas.
+  - Un CSV con casos difíciles también abre bien:
+    - Ñ, é, ü e í llegan como Unicode correcto (el BOM funciona).
+    - La fecha es fecha, la hora es hora y los importes son número (`-12.5`, `1234567.89`).
+    - El mesero con coma, comillas y salto de línea queda en UNA celda.
+    - `=1+1`, `+5` y `@SUM(A1)` quedan como texto con `'`.
+- **No lo probé en el navegador:** para entrar habría que teclear la contraseña, y eso está prohibido (lo mismo que en F1-040 y F1-041). Tampoco medí 390 px en un navegador real.
+  - Lo que sí está: la tabla va en un contenedor `overflow-x-auto` y en móvil se esconden mesero, comensales, forma de pago y sucursal (siguen en el detalle).
+  - La medida queda pendiente, como la de F1-041.
+- No se puede comparar contra los reportes nativos de SR sin una instalación real: queda para la validación en campo (F1-090/091).
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` en `web/src/paginas/tickets/exportar.ts`: **si los tickets cambian durante el export, no se entrega archivo.**
+  - Qué cuenta como cambio: que el `total` varíe entre páginas, o que los ids únicos no cuadren con él.
+  - Por qué: el conteo y las páginas de la API no son una foto (log de F1-033), y un CSV al que le falta o le sobra un cheque sin avisar es peor que pedir que se repita.
+  - La API ordena por `momento DESC, id DESC`, así que la paginación es estable. La deduplicación por id es sólo defensa.
+- `DECISION PROVISIONAL (nocturno)`, también en `exportar.ts`: **tope de 50,000 tickets por export.** Todo se junta en memoria antes de armar el archivo. Por encima del tope se pide acotar el rango o elegir sucursal, y no se baja nada más.
+- `DECISION PROVISIONAL (nocturno)` en `web/src/paginas/tickets/formato.ts` (`formasDePago`): **la forma de pago se muestra con el texto crudo de SR** (`formaRaw`, sin repetir, unidos con " + "), no con el ENUM del catálogo.
+  - Es lo que el gerente ve en el POS, y un texto sin catálogo saldría como "otro", que no dice nada.
+  - **Para Ricardo:** si prefiere el ENUM, sólo cambia esa función.
+- **Sucursal que no está en `/sucursales`:** en la tabla, la fecha/hora y el nombre dicen "Sin dato", y **el CSV se niega a generarse**. Nunca se cae a la zona del navegador ni a UTC. Hay test.
+- **Página y alcance:** el selector del topbar (F1-040) no sabe de páginas, y no lo toqué.
+  - `useAlcanceEstable` (en `Tickets.tsx`) detecta el cambio de empresa o sucursal **durante el render** (patrón de "ajustar estado cuando cambia una prop") y, mientras la URL no se corrige a la página 1, **no consulta**.
+  - Así nunca sale un request con la página 3 del alcance anterior, ni un "esta página no existe" fugaz. Hay test que lo prueba.
+  - Va en render porque el lint de React 19 (`react-hooks/set-state-in-effect`) no deja hacerlo con un `setState` dentro de un efecto.
+  - Efecto secundario conocido: "atrás" desde B/página 1 hacia A/página 3 cae en A/página 1.
+- Sin auto-refresco en Tickets: la lista se movería bajo el dedo. Queda el refetch al volver a la pestaña (default de F1-040).
+- Cancelados: fila atenuada, etiqueta "Cancelado" y total tachado. No hay pie de tabla con sumas: el backlog no lo pide y así no hay dónde sumar un cancelado por error.
+- Un importe inválido se muestra como "Importe inválido" en la tabla, nunca $0.00, y en el CSV detiene el export.
+
+**Trampas que encontré.**
+- **`@prisma/client` está en el `node_modules` de la RAÍZ** (workspaces), no en `api/node_modules`. Un script suelto tiene que hacer `require` de la raíz.
+- **`vi.stubGlobal('URL', ...)` rompe el constructor `URL`** y tumba el router. Para capturar la descarga, reemplaza sólo `URL.createObjectURL` y `URL.revokeObjectURL`, y restáuralos en `afterEach` (así está en `Tickets.test.tsx`).
+- **`toEqual` entre dos `Uint8Array` falla en jsdom** aunque tengan los mismos bytes (son de realms distintos). Compara `[...bytes]`.
+- **El prefetch de la página siguiente sale DESPUÉS de la página actual**, así que "el último request" de la API falsa suele ser la página 2. Los tests que revisan qué se pidió filtran por parámetros, no toman el último.
+- **La primera mutación del `placeholderData` sobrevivió:** ningún test miraba la ventana en que la respuesta nueva todavía no llega. Agregué uno con una respuesta retenida por una promesa.
+- `vitest` se traga los `console.log` de un test que pasa. Para medir, escribe a un archivo.
+- **Un heredoc largo con backticks volvió a romper el Bash tool** (ya lo dijeron F1-033 y F1-040). Este log se escribió con Write.
+- `npx prettier --check src` reporta 45 archivos (CRLF, la trampa que ya contó F1-033). Formatea sólo lo que tocaste.
+
+**Prueba de mutación** (hecha; el código quedó restaurado y la suite otra vez en 170/170):
+- Sin BOM → fallan 4.
+- Sin anti-inyección → falla 1.
+- Hora en UTC → fallan 8.
+- `placeholderData` sin comparar la llave → falla 1, después del test nuevo.
+- Sin la guardia de alcance → falla 1.
+- Sin revisar el `total` entre páginas → falla 1.
+- Cancelado sin tachar → falla 1.
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **Exportar "Hoy" en hora pico va a fallar seguido:** 10k tickets tardan ~14 s, y un cheque nuevo en ese lapso aborta el export (a propósito). Para F1-092: fijar un corte (`hastaInstante` exacto en la API, o exportar desde el servidor en streaming).
+- **Excel y los folios numéricos:** `000123` se abre como `123`, y un folio muy largo saldría en notación científica. La protección con `'` sólo cubre los que empiezan con `- + = @`. Si SR usa folios con ceros a la izquierda, habría que escribirlos como texto. Para F1-092 o F1-090.
+- **Del revisor de F1-041, sigue sin tocar** (era "de pasada" aquí): `aCentavos(x) ?? 0n` en `inicio/Tarjetas.tsx` (`TarjetaFormasPago`) y en `inicio/puntosHora.ts` convierte un importe inválido en $0.00 sin aviso. Para F1-092.
+- La decisión de la forma de pago (texto crudo o ENUM), para Ricardo.
+- La medida de 390 px en un navegador real, pendiente.
+- **Sin hallazgos nuevos sobre SoftRestaurant:** esta tarea sólo consume nuestra API. `docs/esquema-sr.md` no cambió.
+
+**Qué haría distinto.** Escribir el test de "el filtro viejo nunca se ve" antes que el `placeholderData`. Es la clase de regla que un test normal (esperar a que aparezca lo nuevo) no puede detectar.
