@@ -235,7 +235,7 @@ internal sealed class ColaLocal
             fila.IsDBNull(1) ? null : fila.GetString(1),
             fila.IsDBNull(2) ? "sin motivo" : fila.GetString(2),
             DateTimeOffset.ParseExact(
-                fila.GetString(3), "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture,
+                fila.GetString(3), FormatoFecha, CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal));
         return new ResumenRechazos(total, cheques, rechazo);
     }
@@ -316,8 +316,14 @@ internal sealed class ColaLocal
 
     private string Ahora() => Formatear(_reloj.GetUtcNow());
 
+    /// <summary>
+    /// El único formato de fecha de la cola: lo escribe <see cref="Formatear"/> y lo lee
+    /// <see cref="ResumenRechazados"/>. Si divergieran, leer un rechazo tronaría en cada ciclo.
+    /// </summary>
+    private const string FormatoFecha = "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'";
+
     internal static string Formatear(DateTimeOffset instante) =>
-        instante.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture);
+        instante.UtcDateTime.ToString(FormatoFecha, CultureInfo.InvariantCulture);
 
     private static string? ValidarPayload(TipoEvento tipo, string payloadJson)
     {
