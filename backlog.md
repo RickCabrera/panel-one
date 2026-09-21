@@ -422,7 +422,7 @@ obtener API key del panel, checklist de firewall.
 > (3) los comandos `sc` que documenta `agent/README.md` son los que el script debe correr.
 
 ## 22 · F1-092 · Hardening y pulido final
-`[ ]` **Epic 7 — Validación contra SoftRestaurant real y cierre de fase**
+`[x]` **Epic 7 — Validación contra SoftRestaurant real y cierre de fase**
 
 Revisión: headers de seguridad en Caddy (HSTS, CSP básica), rate limits afinados, tamaño de
 bundle < 400 kB gzip, lighthouse móvil > 85, textos y formatos de moneda/fecha MX
