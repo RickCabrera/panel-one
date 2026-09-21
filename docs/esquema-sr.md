@@ -176,6 +176,13 @@ muestran en el detalle)_
 - Los modificadores se guardan como una lista JSON (`jsonb`, `[]` por defecto) con la forma
   que les dé la ingesta: `[{ nombre, precio }]`, con `precio` en texto a 2 decimales
   (F1-031, supuesto, ver §13). Su forma en SR sigue pendiente.
+- ❓ **DECISIÓN ABIERTA para Ricardo (la resuelve F1-022/F1-090): modificadores anidados en
+  cuentas CERRADAS.** El Detalle de consumo de mesas (F1-051) ya acepta modificadores de
+  modificadores en el snapshot (§5), pero el contrato de cheques cerrados sigue **plano**:
+  `ModificadorDto` es `{ nombre, precio }`, el `jsonb` de `cheque_partidas` no tiene
+  hijos y la vista Tickets (F1-042) pinta un solo nivel. Si SR resulta tener modificadores
+  anidados, cambian el contrato de ingesta, el `jsonb` y Tickets. No está resuelto: sólo
+  se dejó de asumir en el panel de mesas.
 
 ---
 
@@ -287,7 +294,8 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
   **más** lo que lleva la respuesta en el navegador. Los minutos se truncan a enteros
   antes del semáforo: < 40 ok, 40–60 alerta, > 60 rojo. Una apertura posterior a la
   captura es un dato inconsistente y sale como "Sin dato".
-- ⚠️ **`comensales` y `folio`** se leen, pero sólo los va a mostrar el modal de F1-051.
+- ⚠️ **`comensales` y `folio`** se muestran en el modal de detalle (F1-051). El `folio` es
+  además lo que identifica la cuenta entre un poll y otro (ver "Detalle de consumo", abajo).
 - ⚠️ **Una fila = una cuenta.** Si en SR una mesa puede tener varias cuentas abiertas, cada
   una sale como una tarjeta distinta con el mismo número de mesa.
 - `DECISION PROVISIONAL (nocturno)` — **la sucursal está "desconectada" cuando la edad de
@@ -302,6 +310,34 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
   vivo" de Inicio (F1-041) suma **todas** las sucursales que tienen snapshot, también las
   desconectadas. El Monitor excluye las desconectadas. Con una sucursal desconectada, las
   dos cifras no coinciden. Queda anotado para F1-092.
+- **Lo que el Detalle de consumo (F1-051, modal) supone.** Todo es ⚠️ **SUPUESTO no
+  validado**, igual que lo de arriba. Código: `web/src/paginas/mesas/mesa.ts` (lectura,
+  `DECISION PROVISIONAL (nocturno)`), `Detalle.tsx` (modal), `seleccion.ts`.
+  - **Modificadores anidados con la misma llave:** `modificadores: [{ nombre, precio,
+    modificadores?: [...] }]`. Nadie ha visto cómo guarda SR un modificador de modificador
+    (grupo, cantidad, tabla aparte…): esto es la forma que el agente (F1-023) tendría que
+    mandar, no lo que SR tiene. Si SR trae más estructura, se amplía aquí y en `mesa.ts`.
+  - **Tope de 4 niveles** (`PROFUNDIDAD_MAX_MODIFICADORES`). Lo de más abajo no se lee y
+    el modal dice "Más modificadores no mostrados". Si F1-023 ve más niveles en SR, se sube
+    la constante y esta nota.
+  - `modificadores` **ausente = sin modificadores** (misma regla que el contrato de
+    ingesta, §13); presente pero no lista = "Sin dato". Un modificador que llega como texto
+    (`"Sin cebolla"`) es su nombre, sin precio ("Sin dato"). Los de **$0.00 se muestran**.
+  - **Importes del snapshot con 2 decimales como máximo** (requisito para F1-023). El panel
+    usa la misma regla que el `total` de la mesa: texto de hasta 2 decimales o número
+    finito. Un `"12.5000"` (el `money` de SR con 4 decimales, §3) sale "Sin dato". **Es
+    distinto del contrato de cheques cerrados**, que acepta 4 decimales y redondea en el
+    API (§13): el snapshot no pasa por esa normalización, así que el agente debe redondear
+    antes de mandarlo.
+  - **Ni el total de la partida ni el de la cuenta se calculan.** El total de la partida
+    se muestra como llega; si falta, "Sin dato", nunca `cantidad × precioUnit`. El total de
+    la cuenta es el `total` de la mesa, nunca la suma de sus partidas (§3).
+  - **Identidad de la cuenta entre polls** (el modal sigue vivo con cada lectura): por
+    sucursal + `folio`. Un folio repetido en el mismo snapshot se trata como ambiguo y el
+    modal dice "ya no aparece". Sin folio, sólo se sigue si coinciden posición, número de
+    mesa y `abiertoAt`; sin folio **ni** `abiertoAt` no hay forma de confirmarla y el modal
+    dice "ya no aparece" en el siguiente poll. Si F1-023 descubre que las cuentas abiertas
+    de SR no traen folio, hay que buscar otra llave estable.
 - El seed de desarrollo `api/prisma/seed-mesas.ts` (`npm run seed:mesas`) genera snapshots
   **sintéticos** con esta forma: la sucursal Centro en vivo y la Norte desconectada hace 2 h.
   Marca los suyos con `payload.origen = 'seed'` y sólo borra ésos.
@@ -413,7 +449,9 @@ _(pendiente)_
   en texto. No se redondean; más decimales se rechazan.
 - ⚠️ **SUPUESTO — un modificador de SR se reduce a `{ nombre, precio }`**, incluidos los de
   $0.00. Si en SR resulta tener más estructura (cantidad, grupo, modificador de
-  modificador), el contrato cambia en la tarea que lo descubra y se amplía aquí.
+  modificador), el contrato cambia en la tarea que lo descubra y se amplía aquí. El panel de
+  mesas (F1-051) ya **lee** modificadores anidados en el snapshot (§5), que el API no
+  valida; el contrato de cheques cerrados sigue plano y es decisión abierta (§3).
 - `DECISION PROVISIONAL (nocturno)` — **la forma de pago se guarda como `otro`** siempre
   (`api/src/ingesta/normalizar.ts#derivarFormaPago`). Sin catálogo de ninguna instalación
   (§4), adivinar por el texto metería errores silenciosos en el desglose. El texto crudo
