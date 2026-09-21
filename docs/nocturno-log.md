@@ -2103,3 +2103,99 @@ lectura" hoy es una **sonda**, no una lectura de ventas (ver Decisiones).
 puede ponerse verde.** F1-092, la única que queda en la cola, va a chocar con lo mismo y se
 va a saltar igual. Antes de construir nada, revisa `gh run list --limit 3`. Si el último run
 dice "*job was not started ... payments*", la tarea no se va a poder cerrar esta noche.
+
+## 2026-09-21 11:58 — F1-092 · Hardening y pulido final
+**Estado:** entregable completo y aprobado por el revisor (plan y entregable APROBADOS CON
+OBSERVACIONES, sin bloqueos). Rama `feat/F1-092`. **El cierre depende del CI**, que a las 11:32 UTC
+seguía sin arrancar jobs por la facturación de GitHub Actions (re-verificado con `gh run rerun`
+antes de construir). Si el CI sigue rojo tras 2 intentos, la tarea se SALTA como F1-026: el PR queda
+cerrado y restaurable, con todo esto dentro.
+
+**Qué se hizo.**
+- **API** (`configurarApp`, así los e2e prueban lo que corre):
+  - cabeceras en toda respuesta: `nosniff`, `X-Frame-Options: DENY`,
+    `Referrer-Policy: no-referrer`, `Cache-Control: no-store`;
+  - sin `X-Powered-By`;
+  - `trust proxy` con `TRUST_PROXY_SALTOS` (default 0; valor inválido truena);
+  - throttler nuevo `refresh`, 30/min por IP, en `POST /auth/refresh`. Constantes en
+    `api/src/auth/throttlers.ts`.
+  - **Cada ruta con `ThrottlerGuard` salta explícitamente los cubos que no son suyos:**
+    login, refresh, `cuenta/password` y `@AutenticacionAgente()`. Si agregas un throttler, toca las
+    cuatro. El test de 120/min de agentes es el que detecta que un cubo nuevo se coló en la ingesta.
+  - OpenAPI regenerado (429 en refresh).
+- **Caddy** (`infra/caddy/seguridad.caddy`): snippets `cabeceras_seguridad`, `api` y `spa`, que
+  importa el Caddyfile de F1-002; el uso está al inicio del archivo. `Caddyfile.local` es sólo para
+  probar en local.
+  - La CSP es estricta y va sólo en la SPA: `script-src`/`style-src 'self'`, sin `unsafe-*`.
+  - `web/src/seguridad/csp.test.ts` la vigila leyendo el snippet con `?raw`.
+- **Web**:
+  - marca propia (`web/src/marca/Marca.tsx` + `public/favicon.svg`; el logo usa `currentColor` y
+    sigue al acento);
+  - meta `description` y `theme-color`;
+  - login rediseñado y 404 con código y botón;
+  - `pesosCompactos`/`compacto` en `dinero.ts`: los ejes daban `$-1.2 k` y ahora dan `-$1.2 k`;
+  - contraste `slate-400` → `slate-500`;
+  - `npm run check:bundle` (tope 400 kB gzip, sumando también los chunks lazy), agregado al job web
+    del CI.
+
+**Números (todo en LOCAL, no en el VPS).**
+- Bundle: 210.6 kB gzip.
+- Lighthouse 13.5.0 móvil contra el Caddy local + API local + seed, con cookie de refresh por
+  `--extra-headers`, sin teclear contraseña en el navegador (performance / accesibilidad /
+  buenas prácticas):
+
+  | Página | Perf | A11y | BP |
+  |---|---|---|---|
+  | `/login` | 99 | 100 | 96 |
+  | `/` | 95 | 100 | 100 |
+  | `/reportes` | 92-99 | 100 | 100 |
+  | `/mesas` | 99 | 100 | 100 |
+  | `/tickets` | 99 | 100 | 100 |
+  | `/admin` | 99 | 100 | 100 |
+  | 404 | 99 | 100 | 100 |
+
+  - En `/login`, BP baja por el 401 esperado del refresh sin cookie.
+  - En todas las páginas hubo 0 errores de consola y 0 violaciones de CSP. Se cargaron los chunks de
+    Recharts, así que la CSP estricta sí se probó con gráficas.
+- **Sin `encode zstd gzip` la performance daba 76-77.** Ese `encode` está sólo en la SPA; en `/api`
+  no, por BREACH.
+
+**Para F1-002 (diurna, llega en frío). Lee esto.**
+1. **`TRUST_PROXY_SALTOS=1` en la API detrás de Caddy NO es opcional.** Sin él todos los usuarios
+   son una sola IP:
+   - el login admite 5 intentos/min para el sistema entero;
+   - el refresh silencioso (30/min) se agota en hora pico y saca a la gente al login.
+
+   No configures `trusted_proxies` en Caddy sobre el origen público. El default ignora el
+   `X-Forwarded-For` del cliente; lo probé con curl: falsificarlo no reinicia el cubo.
+2. **HSTS va sin `includeSubDomains` ni `preload`. Decisión abierta para Ricardo:** los dos afectan a
+   subdominios de un dominio que todavía no conocemos.
+3. **`keepalive 4s` en el `reverse_proxy`:** vi UN 502 en `/api/auth/refresh`. Mi explicación:
+   Node cierra a los 5 s las conexiones ociosas y Caddy las reusa hasta 2 min. El A/B de 24 intentos
+   por lado NO lo reprodujo: es una mitigación estándar, **no una corrección demostrada**. Si en
+   producción aparecen 502 esporádicos, empieza por ahí.
+4. El snippet ya reescribe `Path=/auth` → `Path=/api/auth` en la cookie (verificado con curl).
+5. **Los assets que no existen dan 404**, las rutas de la SPA dan `index.html`. OJO: `try_files` NO
+   acepta matcher (toma `@x` como nombre de archivo). Por eso quedó `@rutaSpa { not path /assets/*;
+   not file }` + `rewrite`.
+
+**Trampas que encontré.**
+- **Git Bash convierte `/` y `/ruta` en `C:/Program Files/Git/...`** al pasarlos como argumento a
+  node. Usa `MSYS_NO_PATHCONV=1`.
+- **Lighthouse con `--extra-headers='{json}'` y `shell:true` en Windows pierde el JSON.** Pásale un
+  archivo.
+- **chrome-launcher truena al final en Windows** (no puede borrar su temporal), pero el JSON ya quedó
+  escrito.
+- **El refresh rota la cookie:** usa una cookie nueva por corrida de Lighthouse, y ojo con el límite
+  de 5 logins/min.
+- Caddy no está instalado: bajé el binario oficial v2.11.4 al scratchpad con `gh release download`
+  (curl falla por la revocación de schannel) y verifiqué el checksum. **No entra al repo.**
+- La prueba manual no dejó filas nuevas: la API local corrió con secretos JWT sintéticos por entorno.
+
+**Qué quedó abierto.**
+- Medir Lighthouse en el VPS real (F1-002/F1-091).
+- La decisión de HSTS (punto 2 de arriba).
+- `/docs` (Swagger) detrás de Caddy no se probó; la CSP no le aplica, porque está sólo en `spa`.
+- Del revisor, no obligatoria: en `/api/*`, Caddy deja `Referrer-Policy` en
+  `strict-origin-when-cross-origin` en vez del `no-referrer` de la API. Es a propósito y está
+  comentado.
