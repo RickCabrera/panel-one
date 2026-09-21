@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { useAlcance } from '../filtros/alcance';
 import {
   escribirPeriodo,
   horaEn,
-  hoyEn,
   incluyeHoy,
   leerPeriodo,
   rangoDe,
   zonaDelPanel,
   type Periodo,
 } from '../filtros/periodo';
+import { useHoy } from '../filtros/useHoy';
 import { useMesasAbiertas, useVentas, type Filtro } from './inicio/consultas';
 import { SelectorPeriodo } from './inicio/SelectorPeriodo';
 import {
@@ -22,19 +22,6 @@ import {
   TarjetaVentaTotal,
 } from './inicio/Tarjetas';
 import { Vista } from './Vista';
-
-/**
- * El día local de hoy en `zona`, revisado cada minuto: con el panel abierto toda la
- * noche, "Hoy" pasa al día nuevo a la medianoche de la sucursal sin recargar.
- */
-function useHoy(zona: string): string {
-  const [, setPulso] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setPulso((n) => n + 1), 60_000);
-    return () => clearInterval(id);
-  }, []);
-  return hoyEn(zona, new Date());
-}
 
 export function Inicio() {
   const { empresa, sucursal, sucursalId, sucursales } = useAlcance();
