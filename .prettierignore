@@ -1,0 +1,27 @@
+# Prettier sólo formatea el código de /api y /web. Todo lo de aquí abajo se
+# queda fuera a propósito.
+
+node_modules/
+dist/
+build/
+coverage/
+package-lock.json
+
+# La guardia real de main es un script POSIX cuyos finales LF fija
+# .gitattributes y comprueba el job `guardia` del CI. Prettier no tiene nada que
+# hacer aquí, y si se lo lleva por delante la guardia deja de correr en silencio.
+scripts/
+
+# Los carriles de ci.yml viven comentados y cada tarea descomenta el suyo.
+# Reformatear ese YAML se lleva esos bloques por delante.
+.github/
+
+# .NET tiene su propio formateador (`dotnet format`).
+agent/
+
+# Documentos del protocolo: los escribe gente, con su propio ancho de línea.
+docs/
+*.md
+
+# Configuración de Claude Code: la versiona el equipo, no la formatea prettier.
+.claude/

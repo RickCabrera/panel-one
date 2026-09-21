@@ -1,0 +1,6 @@
+# Estado local de los contenedores. Nada de esto es historia del repo.
+# (La raíz ya ignora estas rutas; esto lo deja explícito en la carpeta.)
+pgdata/
+caddy_data/
+caddy_config/
+backups/

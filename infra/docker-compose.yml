@@ -1,0 +1,35 @@
+# Compose de DESARROLLO LOCAL. Levanta únicamente el Postgres del monitor, vacío:
+# el esquema lo crea Prisma en F1-010 (`npx prisma migrate dev` desde /api).
+#
+# El compose de PRODUCCIÓN —api + caddy con certificados reales— es F1-002, que es
+# una tarea diurna porque necesita el VPS y el DNS. Cuando llegue, extiende ESTE
+# archivo con esos servicios; no lo sustituye.
+#
+# Nada de esto toca la base de SoftRestaurant: el POS vive en su propio SQL Server,
+# en la máquina del restaurante, y el agente sólo lo lee.
+
+name: monitor-sr-dev
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: monitor-sr-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-monitor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-monitor}
+      POSTGRES_DB: ${POSTGRES_DB:-monitor}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      # Volumen nombrado, no bind mount: los datos sobreviven a `down` y se van
+      # con `down -v`, que es justo lo que quieres en local.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-monitor} -d ${POSTGRES_DB:-monitor}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
