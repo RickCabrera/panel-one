@@ -247,7 +247,7 @@ precio, total de la cuenta. Igual al modal de Arkhon.
 cerrar/abrir modal no dispara refetch completo del grid.
 
 ## 15 · F1-060 · CRUD de empresas, sucursales y usuarios
-`[ ]` **Epic 6 — Administración**
+`[x]` **Epic 6 — Administración**
 
 Vistas admin: alta/edición/desactivación de empresas y sucursales; alta de usuarios con rol
 y empresa; generación/rotación de API key de sucursal con modal "cópiala ahora, no se
