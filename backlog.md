@@ -73,7 +73,7 @@ arquitectura y cómo levantar todo en local.
 > encienda. Si la tarea cierra con el CI comentado, el revisor bloquea.
 
 ## 2 · F1-010 · Esquema Prisma núcleo
-`[ ]` **Epic 1 — Modelo de datos, auth y multitenancy**
+`[x]` **Epic 1 — Modelo de datos, auth y multitenancy**
 
 Modelos: `Empresa(id, nombre, activo)`, `Sucursal(id, empresa_id, nombre, zona_horaria,
 api_key_hash, activo)`, `Usuario(id, email único, password_hash argon2, nombre, rol
