@@ -130,6 +130,67 @@
         ]
       }
     },
+    "/cuenta/password": {
+      "post": {
+        "description": "Invalida todos sus refresh tokens anteriores (otros navegadores) y devuelve una sesión nueva: pone la cookie `monitor_refresh` igual que el login. Los access tokens ya emitidos siguen valiendo hasta que venzan (15 min).",
+        "operationId": "CuentaController_cambiarPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambiarPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SesionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido (la nueva mide 12..128) o la contraseña actual no es correcta.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido, o usuario/empresa ya inactivos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 5 intentos por minuto desde la misma IP."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cambia la contraseña del usuario autenticado.",
+        "tags": [
+          "cuenta"
+        ]
+      }
+    },
     "/sucursales/{id}/api-key": {
       "post": {
         "description": "La key se devuelve UNA sola vez; en la base queda su hash. Rotar invalida la key anterior de inmediato: el siguiente request del agente con ella es 401. Si llegan dos rotaciones a la vez, las dos responden 201 pero sólo la última key queda vigente.",
@@ -1192,6 +1253,71 @@
         "tags": [
           "organizacion"
         ]
+      },
+      "post": {
+        "operationId": "EmpresasAdminController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearEmpresaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente para la ruta (depende de la ruta, no del recurso).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Da de alta una empresa. Sólo admin_global.",
+        "tags": [
+          "administracion"
+        ]
       }
     },
     "/sucursales": {
@@ -1262,6 +1388,586 @@
         "summary": "Sucursales en tu alcance, activas e inactivas. Nunca incluye la API key ni su hash.",
         "tags": [
           "organizacion"
+        ]
+      },
+      "post": {
+        "operationId": "SucursalesAdminController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearSucursalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SucursalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo. Zona que no es IANA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente para la ruta (depende de la ruta, no del recurso).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa: No existe o es de otra empresa. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Da de alta una sucursal en una empresa de tu alcance. Nace sin API key.",
+        "tags": [
+          "administracion"
+        ]
+      }
+    },
+    "/empresas/{id}": {
+      "patch": {
+        "operationId": "EmpresasAdminController_editar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditarEmpresaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmpresaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente para la ruta (depende de la ruta, no del recurso).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe o es de otra empresa. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Renombra, da de baja o reactiva una empresa. Sólo admin_global.",
+        "tags": [
+          "administracion"
+        ]
+      }
+    },
+    "/sucursales/{id}": {
+      "patch": {
+        "description": "Cambiar `zonaHoraria` de una sucursal con historial reclasifica sus ventas pasadas en los cortes por día: los agregados usan la zona actual.",
+        "operationId": "SucursalesAdminController_editar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditarSucursalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SucursalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo. Zona que no es IANA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente para la ruta (depende de la ruta, no del recurso).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe o es de otra empresa. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edita nombre y zona de una sucursal, o la da de baja / reactiva.",
+        "tags": [
+          "administracion"
+        ]
+      }
+    },
+    "/usuarios": {
+      "get": {
+        "operationId": "UsuariosAdminController_listar",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": false,
+            "in": "query",
+            "description": "Sólo los usuarios de esta empresa. Fuera de tu alcance = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UsuarioDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`empresaId` no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente para la ruta (depende de la ruta, no del recurso).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa pedida: No existe o es de otra empresa. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Usuarios en tu alcance, activos e inactivos. Nunca incluye el hash.",
+        "tags": [
+          "administracion"
+        ]
+      },
+      "post": {
+        "operationId": "UsuariosAdminController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearUsuarioDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo. empresaId ausente (o presente para admin_global).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente para la ruta (depende de la ruta, no del recurso). O un admin_empresa pidiendo rol admin_global.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa: No existe o es de otra empresa. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El email ya está en uso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Da de alta un usuario con rol y empresa.",
+        "tags": [
+          "administracion"
+        ]
+      }
+    },
+    "/usuarios/{id}": {
+      "patch": {
+        "operationId": "UsuariosAdminController_editar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditarUsuarioDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo. O un cambio de rol no permitido, o darte de baja a ti mismo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente para la ruta (depende de la ruta, no del recurso). O un admin_empresa pidiendo rol admin_global.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe o es de otra empresa. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edita nombre y rol de un usuario, o lo da de baja / reactiva.",
+        "tags": [
+          "administracion"
+        ]
+      }
+    },
+    "/usuarios/{id}/password": {
+      "post": {
+        "description": "Sus refresh tokens dejan de servir en ese instante; su access token vigente, hasta que venza (15 min).",
+        "operationId": "UsuariosAdminController_resetPassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Contraseña restablecida."
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente para la ruta (depende de la ruta, no del recurso).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe o es de otra empresa. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restablece la contraseña de un usuario de tu alcance.",
+        "tags": [
+          "administracion"
         ]
       }
     }
@@ -1408,6 +2114,27 @@
         "required": [
           "statusCode",
           "message"
+        ]
+      },
+      "CambiarPasswordDto": {
+        "type": "object",
+        "properties": {
+          "actual": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "format": "password"
+          },
+          "nueva": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "format": "password"
+          }
+        },
+        "required": [
+          "actual",
+          "nueva"
         ]
       },
       "ApiKeyEmitidaDto": {
@@ -2460,6 +3187,193 @@
           "nombre",
           "zonaHoraria",
           "activo"
+        ]
+      },
+      "CrearEmpresaDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "nombre"
+        ]
+      },
+      "EditarEmpresaDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "`false` da de baja la empresa: sus usuarios ya no pueden entrar ni refrescar y los agentes de sus sucursales reciben 401. Sus sucursales y usuarios no se tocan."
+          }
+        }
+      },
+      "CrearSucursalDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Empresa de la sucursal. Fuera de tu alcance = 404."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA de la lista de Node (p. ej. `America/Mexico_City`). Un offset como `-06:00` es 400."
+          }
+        },
+        "required": [
+          "empresaId",
+          "nombre",
+          "zonaHoraria"
+        ]
+      },
+      "EditarSucursalDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA de la lista de Node (p. ej. `America/Mexico_City`). Un offset como `-06:00` es 400. OJO: los agregados cortan \"el día\" con la zona ACTUAL de la sucursal, así que cambiarla reclasifica también las ventas pasadas en los reportes por día."
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "`false` da de baja la sucursal: su agente recibe 401 desde el siguiente envío."
+          }
+        }
+      },
+      "UsuarioDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "rol": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RolUsuario"
+              }
+            ]
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Nulo sólo para admin_global."
+          },
+          "activo": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "nombre",
+          "rol",
+          "empresaId",
+          "activo"
+        ]
+      },
+      "CrearUsuarioDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "description": "Se guarda en minúsculas. Duplicado = 409."
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "rol": {
+            "description": "Sólo un admin_global crea admin_global (admin_empresa = 403).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RolUsuario"
+              }
+            ]
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Obligatoria salvo para admin_global, que no lleva (400 si viene). Fuera de tu alcance = 404."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "format": "password"
+          }
+        },
+        "required": [
+          "email",
+          "nombre",
+          "rol",
+          "password"
+        ]
+      },
+      "EditarUsuarioDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "rol": {
+            "description": "Sólo entre admin_empresa y visor. `admin_global` = 403 para admin_empresa y 400 para admin_global; cambiarle el rol a un admin_global = 400; cambiarte el rol a ti = 400.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RolUsuario"
+              }
+            ]
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "`false` lo da de baja: no puede entrar y sus refresh tokens dejan de servir (su access token vigente, hasta 15 min). Darte de baja a ti = 400."
+          }
+        }
+      },
+      "ResetPasswordDto": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "format": "password"
+          }
+        },
+        "required": [
+          "password"
         ]
       }
     }

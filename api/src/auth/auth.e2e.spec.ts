@@ -279,7 +279,7 @@ describe('Auth de usuarios (e2e, F1-011)', () => {
     });
 
     it('un refresh token usado como bearer → 401', async () => {
-      await me(await a.get(TokensService).firmarRefresh(USUARIOS.visorA.id)).expect(401);
+      await me(await a.get(TokensService).firmarRefresh(USUARIOS.visorA.id, 0)).expect(401);
     });
 
     it('usuario desactivado con access token aún vigente → 401 en /me', async () => {
@@ -327,7 +327,7 @@ describe('Auth de usuarios (e2e, F1-011)', () => {
     });
 
     it('refresh de un usuario ya inactivo → 401', async () => {
-      const token = await a.get(TokensService).firmarRefresh(USUARIOS.visorInactivo.id);
+      const token = await a.get(TokensService).firmarRefresh(USUARIOS.visorInactivo.id, 0);
       await refresh(`${COOKIE_REFRESH}=${token}`).expect(401);
     });
   });

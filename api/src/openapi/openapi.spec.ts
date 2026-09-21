@@ -14,28 +14,60 @@ describe('Contrato OpenAPI', () => {
     expect(versionado.replace(/\r\n/g, '\n')).toBe(serializar(generado));
   });
 
-  it('documenta todos los endpoints (auth, agentes, ingesta y lectura)', async () => {
+  it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
-    expect(Object.keys(paths).sort()).toEqual([
-      '/agente/yo',
-      '/auth/login',
-      '/auth/me',
-      '/auth/refresh',
-      '/empresas',
-      '/ingesta/eventos',
-      '/mesas/abiertas',
-      '/sucursales',
-      '/sucursales/{id}/api-key',
-      '/ventas/comparativo-sucursales',
-      '/ventas/formas-pago',
-      '/ventas/por-dia',
-      '/ventas/por-hora',
-      '/ventas/resumen',
-      '/ventas/tickets',
-      '/ventas/top-productos',
-    ]);
+    expect(Object.keys(paths).sort()).toEqual(
+      [
+        '/agente/yo',
+        '/auth/login',
+        '/auth/me',
+        '/auth/refresh',
+        '/cuenta/password',
+        '/empresas',
+        '/empresas/{id}',
+        '/ingesta/eventos',
+        '/mesas/abiertas',
+        '/sucursales',
+        '/sucursales/{id}',
+        '/sucursales/{id}/api-key',
+        '/ventas/comparativo-sucursales',
+        '/ventas/formas-pago',
+        '/ventas/por-dia',
+        '/ventas/por-hora',
+        '/ventas/resumen',
+        '/ventas/tickets',
+        '/ventas/top-productos',
+        '/usuarios',
+        '/usuarios/{id}',
+        '/usuarios/{id}/password',
+      ].sort(),
+    );
     expect(paths['/auth/login']?.post?.responses).toHaveProperty('429');
     expect(paths['/auth/me']?.get?.security).toEqual([{ bearer: [] }]);
+  });
+
+  it('documenta la administración (F1-060): 404 por alcance, 403 sólo por rol, y el cambio propio', async () => {
+    const { paths } = await generarDocumento();
+    const codigos = (op: { responses?: object } | undefined) =>
+      Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/empresas']?.post)).toEqual(['201', '400', '401', '403']);
+    expect(codigos(paths['/empresas/{id}']?.patch)).toEqual(['200', '400', '401', '403', '404']);
+    expect(codigos(paths['/sucursales']?.post)).toEqual(['201', '400', '401', '403', '404']);
+    expect(codigos(paths['/sucursales/{id}']?.patch)).toEqual(['200', '400', '401', '403', '404']);
+    expect(codigos(paths['/usuarios']?.get)).toEqual(['200', '400', '401', '403', '404']);
+    expect(codigos(paths['/usuarios']?.post)).toEqual(['201', '400', '401', '403', '404', '409']);
+    expect(codigos(paths['/usuarios/{id}']?.patch)).toEqual(['200', '400', '401', '403', '404']);
+    expect(codigos(paths['/usuarios/{id}/password']?.post)).toEqual([
+      '204',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
+    expect(codigos(paths['/cuenta/password']?.post)).toEqual(['200', '400', '401', '429']);
+    for (const op of [paths['/usuarios']?.post, paths['/cuenta/password']?.post]) {
+      expect(op?.security).toEqual([{ bearer: [] }]);
+    }
   });
 
   it('documenta la auth de agentes (F1-012): la rotación con bearer y /agente/yo con X-Api-Key', async () => {

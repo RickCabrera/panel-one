@@ -1,4 +1,4 @@
-import { Controller, Header, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Controller, Header, HttpCode, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -13,6 +13,8 @@ import { RolUsuario } from '@prisma/client';
 
 import { Roles } from '../auth/decoradores';
 import { ErrorDto } from '../auth/dto/sesion.dto';
+import type { RequestAutenticado } from '../auth/request-autenticado';
+import { Auditoria } from '../comun/auditoria';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import { ApiKeyService } from './api-key.service';
@@ -22,7 +24,10 @@ import { ApiKeyEmitidaDto } from './dto/agentes.dto';
 @ApiBearerAuth()
 @Controller('sucursales')
 export class SucursalApiKeyController {
-  constructor(private readonly apiKeys: ApiKeyService) {}
+  constructor(
+    private readonly apiKeys: ApiKeyService,
+    private readonly auditoria: Auditoria,
+  ) {}
 
   @Post(':id/api-key')
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
@@ -44,10 +49,19 @@ export class SucursalApiKeyController {
     type: ErrorDto,
     description: 'La sucursal no existe o es de otra empresa. Misma respuesta en los dos casos.',
   })
-  rotar(
+  async rotar(
     @EmpresaScopeActual() scope: EmpresaScope,
     @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: RequestAutenticado,
   ): Promise<ApiKeyEmitidaDto> {
-    return this.apiKeys.rotar(scope, id);
+    const emitida = await this.apiKeys.rotar(scope, id);
+    // Auditoría (F1-060): quién rotó qué. Sin la key, ni en claro ni su hash.
+    this.auditoria.registrar(req.usuario!, {
+      accion: 'sucursal.rotar_api_key',
+      recurso: 'sucursal',
+      recursoId: emitida.sucursalId,
+      empresaId: emitida.empresaId,
+    });
+    return { sucursalId: emitida.sucursalId, apiKey: emitida.apiKey };
   }
 }

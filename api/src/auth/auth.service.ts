@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
 import { RolUsuario, type Empresa, type Usuario } from '@prisma/client';
 
 import { ACCESS_TTL_SEGUNDOS } from '../config/auth.config';
 // Único servicio de auth en la allowlist de PrismaService: el login busca por
-// email ANTES de saber quién es el usuario, así que no hay scope que aplicar.
+// email ANTES de saber quién es el usuario, así que no hay scope que aplicar; el
+// refresh y el cambio de contraseña propio (F1-060) leen y escriben SÓLO la fila
+// del usuario del token, por su id. Nada de datos de negocio pasa por aquí.
 import { PrismaService } from '../prisma/prisma.service';
 import { ARGON2_OPCIONES } from './argon2';
 import type { SesionDto, UsuarioActualDto } from './dto/sesion.dto';
@@ -64,8 +66,41 @@ export class AuthService {
     if (!refreshToken) {
       throw new UnauthorizedException('No autenticado');
     }
-    const usuarioId = await this.tokens.verificarRefresh(refreshToken);
-    return this.emitir(await this.usuarioVigente(usuarioId));
+    const { usuarioId, version } = await this.tokens.verificarRefresh(refreshToken);
+    const usuario = await this.usuarioVigente(usuarioId);
+    // Un refresh emitido antes de un cambio/reset de contraseña o de una
+    // desactivación (F1-060) ya no sirve.
+    if (usuario.versionSesion !== version) {
+      throw new UnauthorizedException('No autenticado');
+    }
+    return this.emitir(usuario);
+  }
+
+  /**
+   * Cambio de contraseña del propio usuario (F1-060). Lo relee vigente (uno ya
+   * desactivado, con un access token todavía válido, recibe 401) y verifica la
+   * actual. Hash nuevo e incremento de `versionSesion` van en UNA sentencia, y la
+   * sesión nueva se emite con la versión que devolvió esa sentencia: los refresh
+   * anteriores (otros navegadores) dejan de servir y éste sigue dentro.
+   *
+   * Contraseña actual incorrecta es 400, no 401: el 401 significa "sin sesión"
+   * para el cliente, y ésta sí la tiene.
+   */
+  async cambiarPassword(usuarioId: string, actual: string, nueva: string): Promise<SesionEmitida> {
+    const usuario = await this.usuarioVigente(usuarioId);
+    const coincide = await verify(usuario.passwordHash, actual).catch(() => false);
+    if (!coincide) {
+      throw new BadRequestException('La contraseña actual no es correcta');
+    }
+    const actualizado = await this.prisma.usuario.update({
+      where: { id: usuario.id },
+      data: {
+        passwordHash: await hash(nueva, ARGON2_OPCIONES),
+        versionSesion: { increment: 1 },
+      },
+      include: { empresa: true },
+    });
+    return this.emitir(actualizado);
   }
 
   async usuarioActual(usuarioId: string): Promise<UsuarioActualDto> {
@@ -90,7 +125,7 @@ export class AuthService {
         rol: usuario.rol,
         empresaId: usuario.empresaId,
       }),
-      this.tokens.firmarRefresh(usuario.id),
+      this.tokens.firmarRefresh(usuario.id, usuario.versionSesion),
     ]);
     return {
       sesion: { accessToken, expiresIn: ACCESS_TTL_SEGUNDOS, usuario: aDto(usuario) },

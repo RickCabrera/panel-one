@@ -7,6 +7,7 @@ import { OPCIONES_THROTTLER_AGENTE } from '../agentes/throttle-agente';
 import { AUTH_CONFIG, leerAuthConfig } from '../config/auth.config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { CuentaController } from './cuenta.controller';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { TokensService } from './tokens.service';
@@ -24,7 +25,7 @@ import { TokensService } from './tokens.service';
       throttlers: [{ name: 'login', ttl: 60_000, limit: 5 }, OPCIONES_THROTTLER_AGENTE],
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, CuentaController],
   providers: [
     { provide: AUTH_CONFIG, useFactory: () => leerAuthConfig() },
     AuthService,

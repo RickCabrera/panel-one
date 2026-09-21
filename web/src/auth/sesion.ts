@@ -107,6 +107,23 @@ export function refrescarSesion(): Promise<Sesion | null> {
 }
 
 /**
+ * Espera el refresh que esté en vuelo, si hay uno; no inicia ninguno. Lo usa el
+ * cambio de contraseña propio (F1-060) antes de mandar el POST: un refresh que
+ * saliera con la cookie vieja y respondiera DESPUÉS del cambio recibiría 401 y
+ * cerraría la sesión recién emitida. Esto cubre el refresh ya en vuelo; uno que
+ * arranque durante el POST (el timer proactivo) sigue siendo una carrera
+ * posible, anotada en docs/nocturno-log.md.
+ */
+export async function esperarRefreshEnVuelo(): Promise<void> {
+  if (!enVuelo) return;
+  try {
+    await enVuelo;
+  } catch {
+    // Si falló, no hay nada que esperar: el POST sigue igual.
+  }
+}
+
+/**
  * El timer proactivo. Si la API dice que ya no hay sesión, la sesión expira. Si el
  * refresh falla por red, no se da por muerta: el siguiente request con 401 lo
  * vuelve a intentar.
