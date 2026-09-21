@@ -159,7 +159,7 @@ el test; respuesta < 300 ms.
 > esperar al agente. No lo escatimes.
 
 ## 8 · F1-033 · Endpoints de lectura para el frontend
-`[ ]` **Epic 3 — API de ingesta y modelo de ventas**
+`[x]` **Epic 3 — API de ingesta y modelo de ventas**
 
 `GET /ventas/resumen`, `GET /ventas/por-hora`, `GET /ventas/formas-pago`,
 `GET /ventas/top-productos`, `GET /ventas/tickets` (lista paginada de cheques con detalle
