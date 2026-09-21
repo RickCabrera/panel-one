@@ -286,7 +286,7 @@ claramente cuál de las dos conexiones falla.
 > de la sucursal). Lo que se versiona es la plantilla.
 
 ## 18 · F1-021 · Descubrimiento de la base y versión de SoftRestaurant
-`[ ]` **Epic 2 — Agente Windows (.NET 8)**
+`[x]` **Epic 2 — Agente Windows (.NET 8)**
 
 Al iniciar: detectar versión de SR consultando tabla de configuración/versión de la base
 indicada; registrar en log y mandarla en el heartbeat. Abstraer acceso en interfaz
