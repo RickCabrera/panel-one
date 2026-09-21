@@ -3,15 +3,16 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import type { EmpresaScope } from './empresa-scope';
-import { whereScoped, type WhereGenerico } from './scope.helper';
+import { LLAVE_EMPRESA, whereScoped, type WhereGenerico } from './scope.helper';
 
 /**
  * Las únicas operaciones que el cliente con scope deja pasar. Todas aceptan
- * `where`, y ahí es donde se inyecta el filtro de empresa. Las escrituras
- * (create/update/upsert/delete) y las búsquedas por llave única (findUnique,
- * que no admite un AND extra) se rechazan: la tarea que necesite escribir datos
- * de negocio (F1-060, la ingesta) las agrega aquí con su propio filtro y sus
- * tests, no por un atajo.
+ * `where`, y ahí es donde se inyecta el filtro de empresa. La única escritura
+ * es `updateMany` (F1-012, rotar la API key de una sucursal): lleva el mismo
+ * filtro en el WHERE y pasa por `validarEscritura`. create/update/upsert/delete
+ * y las búsquedas por llave única (findUnique, que no admite un AND extra) se
+ * rechazan: la tarea que las necesite (F1-060, la ingesta) las agrega aquí con
+ * su propio filtro y sus tests, no por un atajo.
  */
 const OPERACIONES_PERMITIDAS = [
   'findFirst',
@@ -20,8 +21,48 @@ const OPERACIONES_PERMITIDAS = [
   'count',
   'aggregate',
   'groupBy',
+  'updateMany',
 ] as const;
 type OperacionPermitida = (typeof OPERACIONES_PERMITIDAS)[number];
+
+/**
+ * Columnas que una escritura con scope NUNCA puede tocar, además de la llave de
+ * tenant del modelo (`LLAVE_EMPRESA`): la identidad de la fila y su pertenencia.
+ * Una escritura con scope no mueve una fila a otra empresa ni a otra sucursal.
+ *
+ * Es una lista de PROHIBIDAS, no de permitidas: si un modelo futuro trae otra
+ * columna de pertenencia (p. ej. `sucursalId` en `Cheque`, F1-030), ya está
+ * aquí; cualquier otra que aparezca se agrega aquí con su test.
+ */
+const COLUMNAS_INTOCABLES: readonly string[] = [
+  'id',
+  'empresaId',
+  'sucursalId',
+  'empresa',
+  'sucursal',
+];
+
+/**
+ * Valida una escritura antes de mandarla: `where` no vacío (para admin_global el
+ * filtro de empresa es `{}` y un where vacío actualizaría la tabla entera) y un
+ * `data` que no toque identidad ni pertenencia.
+ */
+function validarEscritura(
+  modelo: Prisma.ModelName,
+  args: { where?: WhereGenerico; data?: WhereGenerico },
+): void {
+  if (!args.where || Object.keys(args.where).length === 0) {
+    throw new Error(`${modelo}.updateMany con scope exige un where no vacío.`);
+  }
+  const prohibidas = new Set([...COLUMNAS_INTOCABLES, LLAVE_EMPRESA[modelo]]);
+  const tocadas = Object.keys(args.data ?? {}).filter((c) => prohibidas.has(c));
+  if (tocadas.length > 0) {
+    throw new Error(
+      `${modelo}.updateMany con scope no puede escribir ${tocadas.join(', ')}: ` +
+        'una escritura con scope no cambia la identidad ni la pertenencia de una fila.',
+    );
+  }
+}
 const PERMITIDAS: ReadonlySet<string> = new Set(OPERACIONES_PERMITIDAS);
 
 function extenderConScope(prisma: PrismaService, scope: EmpresaScope) {
@@ -36,7 +77,10 @@ function extenderConScope(prisma: PrismaService, scope: EmpresaScope) {
                 `Usa ${OPERACIONES_PERMITIDAS.join('/')}.`,
             );
           }
-          const original = (args ?? {}) as { where?: WhereGenerico };
+          const original = (args ?? {}) as { where?: WhereGenerico; data?: WhereGenerico };
+          if (operation === 'updateMany') {
+            validarEscritura(model as Prisma.ModelName, original);
+          }
           return query({
             ...original,
             where: whereScoped(scope, model as Prisma.ModelName, original.where),
@@ -50,7 +94,7 @@ function extenderConScope(prisma: PrismaService, scope: EmpresaScope) {
 type ClienteConScope = ReturnType<typeof extenderConScope>;
 type Delegado = Uncapitalize<Prisma.ModelName>;
 
-/** Sólo los modelos y sólo las lecturas: ni `$queryRaw`, ni `$transaction`, ni escrituras. */
+/** Sólo los modelos, las lecturas y `updateMany`: ni `$queryRaw`, ni `$transaction`, ni create/delete. */
 export type DatosScoped = {
   readonly [M in Delegado]: Pick<ClienteConScope[M], OperacionPermitida>;
 };

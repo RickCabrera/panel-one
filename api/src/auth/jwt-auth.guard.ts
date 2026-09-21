@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
+import { esRutaAgente } from '../agentes/decoradores';
 import { scopeDeUsuario, type EmpresaScope } from '../scope/empresa-scope';
 import { ES_PUBLICA } from './decoradores';
 import type { RequestAutenticado } from './request-autenticado';
@@ -13,7 +14,9 @@ import { TokensService } from './tokens.service';
 
 /**
  * Guard GLOBAL: toda ruta pide `Authorization: Bearer <access>` salvo las
- * marcadas `@Public()`.
+ * marcadas `@Public()` y las de agente (`@AutenticacionAgente()`, F1-012), que
+ * autentica su propio guard con `X-Api-Key`. En ésas no hay usuario ni scope de
+ * usuario: un Bearer no las abre.
  *
  * Es también quien inyecta `empresaScope` en el request. El backlog lo llama
  * "middleware", pero en Nest el middleware corre ANTES que los guards y no ve ni
@@ -33,7 +36,7 @@ export class JwtAuthGuard implements CanActivate {
       ctx.getHandler(),
       ctx.getClass(),
     ]);
-    if (esPublica) {
+    if (esPublica || esRutaAgente(this.reflector, ctx)) {
       return true;
     }
 

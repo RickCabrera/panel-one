@@ -56,11 +56,19 @@ describe('Regla de lint: el cliente crudo de Prisma no se importa fuera de la al
 
   it.each([
     'src/auth/auth.service.ts',
+    'src/agentes/agentes-auth.service.ts',
     'src/scope/scoped-prisma.service.ts',
     'src/prisma/prisma.module.ts',
   ])('permite el cliente crudo en %s (allowlist)', (archivo) => {
     expect(lint(archivo, IMPORTA_SERVICIO)).toEqual([]);
   });
+
+  it.each(['src/agentes/api-key.service.ts', 'src/agentes/agente.controller.ts'])(
+    'NO permite el cliente crudo en el resto de agentes (%s)',
+    (archivo) => {
+      expect(lint(archivo, IMPORTA_SERVICIO)).toContain('no-restricted-imports');
+    },
+  );
 
   it('NO permite el cliente crudo en el resto de auth', () => {
     expect(lint('src/auth/auth.controller.ts', IMPORTA_SERVICIO)).toContain(

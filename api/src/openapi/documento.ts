@@ -4,6 +4,7 @@ import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule, type OpenAPIObject } from '@nestjs/swagger';
 
+import { SEGURIDAD_AGENTE } from '../agentes/decoradores';
 import { AppModule } from '../app.module';
 import { COOKIE_REFRESH } from '../config/auth.config';
 
@@ -20,6 +21,7 @@ export function construirDocumento(app: INestApplication): OpenAPIObject {
     .setVersion('0.0.1')
     .addBearerAuth()
     .addCookieAuth(COOKIE_REFRESH)
+    .addApiKey({ type: 'apiKey', in: 'header', name: 'X-Api-Key' }, SEGURIDAD_AGENTE)
     .build();
   return SwaggerModule.createDocument(app, config);
 }

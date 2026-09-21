@@ -9,7 +9,7 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 
 import {
@@ -19,6 +19,7 @@ import {
   REFRESH_TTL_SEGUNDOS,
   type AuthConfig,
 } from '../config/auth.config';
+import { THROTTLER_AGENTE } from '../agentes/throttle-agente';
 import { AuthService, type SesionEmitida } from './auth.service';
 import { Public } from './decoradores';
 import { LoginDto } from './dto/login.dto';
@@ -42,6 +43,8 @@ export class AuthController {
   // Rate limit: 5 intentos por minuto por IP (throttler `login` de AuthModule).
   // Cuenta todo intento, también los 400 y los 401.
   @UseGuards(ThrottlerGuard)
+  // El throttler de agentes (por sucursal) no aplica aquí: no hay agente.
+  @SkipThrottle({ [THROTTLER_AGENTE]: true })
   @HttpCode(200)
   @ApiOperation({ summary: 'Inicia sesión. ' + DESCRIPCION_COOKIE })
   @ApiOkResponse({ type: SesionDto })

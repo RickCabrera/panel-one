@@ -22,3 +22,14 @@ export function scopeDeUsuario(usuario: {
   }
   return { tipo: 'empresa', empresaId: usuario.empresaId };
 }
+
+/**
+ * El scope de un agente: la empresa de SU sucursal, resuelta por el
+ * `AgentAuthGuard` desde la API key. El agente nunca manda el tenant.
+ *
+ * Ojo F1-031: esto acota a la EMPRESA, no a la sucursal. Si la ingesta necesita
+ * que un agente sólo vea su sucursal, el filtro por `sucursalId` se decide allá.
+ */
+export function scopeDeAgente(agente: { empresaId: string }): EmpresaScope {
+  return { tipo: 'empresa', empresaId: agente.empresaId };
+}

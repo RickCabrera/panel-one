@@ -67,18 +67,115 @@ describe('ScopedPrismaService (contra Postgres)', () => {
     ).resolves.toBe(3);
   });
 
-  it('no expone escrituras, findUnique, SQL crudo ni transacciones', () => {
+  it('no expone más escritura que updateMany, ni findUnique, SQL crudo ni transacciones', () => {
     const datos = servicio.para(A) as unknown as Record<string, Record<string, unknown>>;
     expect(Object.keys(datos).sort()).toEqual(['agenteEstado', 'empresa', 'sucursal', 'usuario']);
     expect(Object.keys(datos.sucursal).sort()).toEqual(
-      ['aggregate', 'count', 'findFirst', 'findFirstOrThrow', 'findMany', 'groupBy'].sort(),
+      [
+        'aggregate',
+        'count',
+        'findFirst',
+        'findFirstOrThrow',
+        'findMany',
+        'groupBy',
+        'updateMany',
+      ].sort(),
     );
-    for (const prohibida of ['create', 'update', 'upsert', 'delete', 'deleteMany', 'findUnique']) {
+    for (const prohibida of [
+      'create',
+      'createMany',
+      'update',
+      'upsert',
+      'delete',
+      'deleteMany',
+      'findUnique',
+    ]) {
       expect(datos.sucursal[prohibida]).toBeUndefined();
     }
     expect(datos.$queryRaw).toBeUndefined();
     expect(datos.$transaction).toBeUndefined();
     // Y el cliente crudo no está en ninguna propiedad del servicio.
     expect(Object.values(servicio)).toEqual([]);
+  });
+
+  describe('updateMany con scope (F1-012)', () => {
+    const hashDe = async (id: string) =>
+      (await prisma.sucursal.findUniqueOrThrow({ where: { id } })).apiKeyHash;
+
+    it('sobre una fila de otra empresa no toca nada (count 0; el caller lo vuelve 404)', async () => {
+      const antes = await hashDe(FX.sucursalB1);
+      await expect(
+        servicio.para(A).sucursal.updateMany({
+          where: { id: FX.sucursalB1 },
+          data: { apiKeyHash: 'f1012-hash-intruso' },
+        }),
+      ).resolves.toEqual({ count: 0 });
+      expect(await hashDe(FX.sucursalB1)).toBe(antes);
+    });
+
+    it('sobre una fila propia actualiza sólo esa', async () => {
+      await expect(
+        servicio.para(A).sucursal.updateMany({
+          where: { id: FX.sucursalA1 },
+          data: { apiKeyHash: 'f1012-hash-a1' },
+        }),
+      ).resolves.toEqual({ count: 1 });
+      expect(await hashDe(FX.sucursalA1)).toBe('f1012-hash-a1');
+      expect(await hashDe(FX.sucursalA2)).not.toBe('f1012-hash-a1');
+    });
+
+    it('admin_global actualiza una fila de cualquier empresa', async () => {
+      await expect(
+        servicio.para(GLOBAL).sucursal.updateMany({
+          where: { id: FX.sucursalB1 },
+          data: { apiKeyHash: 'f1012-hash-b1' },
+        }),
+      ).resolves.toEqual({ count: 1 });
+      expect(await hashDe(FX.sucursalB1)).toBe('f1012-hash-b1');
+    });
+
+    it.each([
+      ['sin where', undefined],
+      ['con where vacío', {}],
+    ])(
+      '%s se rechaza, también para admin_global (no actualiza la tabla entera)',
+      async (_c, where) => {
+        const antes = await prisma.sucursal.findMany({
+          where: { empresaId: nuestras },
+          orderBy: { id: 'asc' },
+        });
+        for (const scope of [A, GLOBAL]) {
+          await expect(
+            servicio
+              .para(scope)
+              .sucursal.updateMany({ where, data: { nombre: 'pisada' } } as never),
+          ).rejects.toThrow('where no vacío');
+        }
+        await expect(
+          prisma.sucursal.findMany({ where: { empresaId: nuestras }, orderBy: { id: 'asc' } }),
+        ).resolves.toEqual(antes);
+      },
+    );
+
+    it.each([
+      ['empresaId', { empresaId: FX.empresaB }],
+      ['id', { id: FX.inexistente }],
+    ])('no puede escribir %s (identidad o pertenencia)', async (columna, data) => {
+      await expect(
+        servicio.para(A).sucursal.updateMany({ where: { id: FX.sucursalA2 }, data }),
+      ).rejects.toThrow(`no puede escribir ${columna}`);
+      await expect(
+        prisma.sucursal.findUniqueOrThrow({ where: { id: FX.sucursalA2 } }),
+      ).resolves.toMatchObject({ empresaId: FX.empresaA });
+    });
+
+    it('en Empresa la llave de tenant es id, y tampoco se escribe', async () => {
+      await expect(
+        servicio.para(GLOBAL).empresa.updateMany({
+          where: { id: FX.empresaA },
+          data: { id: FX.inexistente },
+        }),
+      ).rejects.toThrow('no puede escribir id');
+    });
   });
 });

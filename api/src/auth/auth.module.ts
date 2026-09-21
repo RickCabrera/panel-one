@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 
+import { OPCIONES_THROTTLER_AGENTE } from '../agentes/throttle-agente';
 import { AUTH_CONFIG, leerAuthConfig } from '../config/auth.config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -14,10 +15,14 @@ import { TokensService } from './tokens.service';
   imports: [
     // Sin secreto aquí: cada firma/verificación pasa el suyo (access o refresh).
     JwtModule.register({}),
-    // Sólo `POST /auth/login` usa el ThrottlerGuard. Storage en memoria: vale por
-    // proceso. La IP es `req.ip`; detrás del proxy del VPS hará falta
-    // `trust proxy` (pendiente de deploy, ver docs/nocturno-log.md).
-    ThrottlerModule.forRoot({ throttlers: [{ name: 'login', ttl: 60_000, limit: 5 }] }),
+    // Dos throttlers con nombre, y cada ruta salta el que no es suyo:
+    // - `login`: 5/min por IP, sólo `POST /auth/login`. La IP es `req.ip`; detrás
+    //   del proxy del VPS hará falta `trust proxy` (pendiente de deploy).
+    // - `agente`: 120/min por sucursal, las rutas `@AutenticacionAgente()` (F1-012).
+    // Storage en memoria: vale por proceso.
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'login', ttl: 60_000, limit: 5 }, OPCIONES_THROTTLER_AGENTE],
+    }),
   ],
   controllers: [AuthController],
   providers: [

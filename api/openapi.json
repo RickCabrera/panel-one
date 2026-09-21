@@ -129,6 +129,123 @@
           "auth"
         ]
       }
+    },
+    "/sucursales/{id}/api-key": {
+      "post": {
+        "description": "La key se devuelve UNA sola vez; en la base queda su hash. Rotar invalida la key anterior de inmediato: el siguiente request del agente con ella es 401. Si llegan dos rotaciones a la vez, las dos responden 201 pero sólo la última key queda vigente.",
+        "operationId": "SucursalApiKeyController_rotar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyEmitidaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`id` no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La sucursal no existe o es de otra empresa. Misma respuesta en los dos casos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Genera la API key del agente de la sucursal, o la rota si ya tenía una.",
+        "tags": [
+          "agentes"
+        ]
+      }
+    },
+    "/agente/yo": {
+      "get": {
+        "operationId": "AgenteController_yo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgenteYoDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "La sucursal a la que pertenece la API key. Sirve al agente para verificar su key.",
+        "tags": [
+          "agente"
+        ]
+      }
     }
   },
   "info": {
@@ -150,6 +267,11 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "monitor_refresh"
+      },
+      "agente": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Api-Key"
       }
     },
     "schemas": {
@@ -268,6 +390,46 @@
         "required": [
           "statusCode",
           "message"
+        ]
+      },
+      "ApiKeyEmitidaDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "apiKey": {
+            "type": "string",
+            "example": "msr_3q2-7wXz...",
+            "description": "La API key en claro. Se muestra SÓLO en esta respuesta: en la base queda su hash. El agente la manda en el header `X-Api-Key`."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "apiKey"
+        ]
+      },
+      "AgenteYoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA de la sucursal."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "nombre",
+          "zonaHoraria"
         ]
       }
     }

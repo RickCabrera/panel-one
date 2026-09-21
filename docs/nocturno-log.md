@@ -291,3 +291,97 @@ saliendo `dist/main.js`); `npm test` 70/70 con 0 skips. Arranqué la app real
 
 **Qué haría distinto.** Escribir los archivos con Write desde el principio, en vez de
 heredocs y python desde bash: perdí dos vueltas con encoding y parseo.
+
+## 2026-09-20 21:20 — F1-012 · Auth de agentes (API key)
+**Estado:** CERRADA (PR de `feat/F1-012`, squash a main)
+
+**Qué quedó hecho.**
+- `POST /sucursales/:id/api-key` genera la key de la sucursal, o la rota si ya tenía una.
+  Sólo lo pueden llamar `admin_global` y `admin_empresa`. Responde 201 con
+  `{ sucursalId, apiKey }` y `Cache-Control: no-store`, y es la única vez que la key sale del
+  servidor. En `sucursales.api_key_hash` queda su SHA-256 en hex. Un visor recibe 403 (depende
+  de la ruta). Una sucursal de otra empresa da 404, con el mismo cuerpo que un UUID inexistente.
+- `AgentAuthGuard` lee `X-Api-Key`, calcula el hash y busca la sucursal. Da 401, siempre con
+  el mismo cuerpo, si falta la key, no existe, la sucursal está inactiva o **la empresa está
+  inactiva** (esto último lo agregué por conservador).
+- `GET /agente/yo` devuelve `{ sucursalId, nombre, zonaHoraria }` de la sucursal de la key.
+- Rate limit de 120/min por sucursal, sumando todas las rutas de agente.
+- Contrato: `api/openapi.json`, con el security scheme `agente` (apiKey en el header
+  `X-Api-Key`).
+- Verificado en local: lint, typecheck, `prisma validate` y build limpios; `npm test` 101/101
+  con 0 skips. También arranqué la app real y los 401 salen bien.
+
+**Decisiones que tomé y por qué.**
+- **Formato de la key:** `msr_` + 32 bytes aleatorios en base64url. El hash es SHA-256 sin sal,
+  como pedía la nota de F1-010 en `schema.prisma`: la búsqueda es por igualdad sobre el índice
+  único, y una key de 256 bits no se adivina por diccionario. No hubo migración.
+- **Generar y rotar son la misma operación:** una sola sentencia sobrescribe el hash, y el
+  guard busca en la base en cada request, sin caché. Por eso la key vieja da 401 en el request
+  siguiente. Si llegan dos rotaciones a la vez, gana la última; está documentado en el
+  OpenAPI para F1-060.
+- **`ScopedPrismaService` ya tiene su primera escritura: `updateMany`.** Aplica el mismo AND de
+  empresa en el WHERE, más `validarEscritura`:
+  - rechaza un `where` vacío o ausente (para admin_global el filtro es `{}` y actualizaría la
+    tabla entera);
+  - rechaza un `data` que toque `COLUMNAS_INTOCABLES` (`id, empresaId, sucursalId, empresa,
+    sucursal`) o la `LLAVE_EMPRESA` del modelo.
+  Es una lista de **prohibidas**. Si F1-030 trae otra columna de pertenencia que no esté ahí,
+  se agrega con su test. create, upsert, delete y findUnique siguen sin existir.
+- **Rutas de agente:** se marcan SÓLO con `@AutenticacionAgente()` (`src/agentes/decoradores.ts`),
+  que trae `AgentAuthGuard` y `ThrottlerGuard` pegados, en ese orden. La metadata
+  `ES_RUTA_AGENTE` no se exporta, para que nadie pueda marcar una ruta sin ponerle el guard.
+  `JwtAuthGuard` deja pasar esas rutas sin Bearer (vía `esRutaAgente()`), y un Bearer de usuario
+  NO las abre. `@AgenteActual()` truena si se usa fuera de una ruta de agente.
+- **El throttler `agente`** está en `src/agentes/throttle-agente.ts` y se registra en el
+  `ThrottlerModule.forRoot` de AuthModule, junto a `login`:
+  - Cuenta por `req.agente.sucursalId` y usa su propio `generateKey`, así que el contador es
+    por sucursal y no por ruta.
+  - En v6 **todos los throttlers con nombre aplican a toda ruta con ThrottlerGuard**, por eso
+    login lleva `@SkipThrottle({ agente: true })` y las rutas de agente `SkipThrottle({ login:
+    true })`. Si agregas un tercer throttler, sáltalo en las rutas que no son suyas.
+  - Rotar la key no reinicia el contador, porque es de la sucursal.
+- **La lectura por hash va sin scope.** `AgentesAuthService` usa `PrismaService` crudo y entró a
+  la allowlist de `eslint.config.mjs`, con la misma justificación que el login: todavía no se
+  sabe el tenant. Sólo tiene ese método. `restriccion-prisma.spec.ts` prueba que la regla sigue
+  mordiendo en el resto de `src/agentes`.
+- **`GET /agente/yo` es parte deliberada de la tarea**, con el visto bueno del revisor. Sin una
+  ruta real, el guard no tenía quién lo usara y el "Listo cuando" se habría probado contra un
+  controlador de test. Además, F1-025 y F1-026 lo pueden usar para verificar la key al
+  instalar. Lee por el helper de scope con `scopeDeAgente()`
+  (`src/scope/empresa-scope.ts`).
+- Se permite generar key a una sucursal inactiva (es inofensivo, porque el guard la rechaza).
+
+**Trampas que encontré.**
+- **El heredoc de bash volvió a romperse** con un bloque grande que traía backticks y comillas, y
+  no escribió NADA. Aprende de F1-011 y de mí: los archivos se escriben con Write.
+- En supertest, si armas varios requests de golpe (`[yo(a), yo(a, ''), ...]`) y los esperas
+  después, sale `ECONNREFUSED`: cada request abre su puerto efímero. Hay que armarlos dentro del
+  loop, justo antes de mandarlos.
+- Un helper `async` que devuelve `request(...).post(...)` pierde `.expect()` en el tipo, porque
+  el `await` lo resuelve a `Response`. Por eso existe `rotarEsperando()` en el e2e.
+- `npx prettier --write` sobre carpetas enteras cambia el fin de línea en el working copy de
+  archivos que no tocaste. Git no los ve como cambios (autocrlf), pero salen muchos warnings.
+
+**Qué quedó abierto** (el revisor aprobó con estas observaciones; ninguna es tarea nueva):
+- **F1-031, riesgo explícito:** `scopeDeAgente()` acota a la EMPRESA, no a la sucursal. En la
+  ingesta, un agente de A1 no debe poder leer ni escribir datos de A2: el filtro por
+  `sucursalId` se decide y se prueba allá. El `sucursalId` siempre sale de `@AgenteActual()`,
+  nunca del payload.
+- **`updateMany`, `where` con puros `undefined`:** `validarEscritura` sólo cuenta llaves. Un
+  `where: { id: undefined }` pasa el chequeo, Prisma ignora los `undefined` y actualizaría todas
+  las filas del scope (con scope global, la tabla entera). Hoy no se puede llegar ahí, porque
+  `ParseUUIDPipe` garantiza el id y el índice único de `api_key_hash` haría fallar una escritura
+  masiva. **La próxima tarea que use `updateMany` (F1-060) debe rechazar los where cuyos valores
+  sean todos `undefined`, con su test.**
+- **F1-092:** los requests con una key inválida no pasan por ningún throttle, porque no hay
+  sucursal que contar. Cada uno cuesta una búsqueda por índice en la base. No hay fuerza bruta
+  viable con 256 bits, pero sí carga gratis. Falta un límite por IP para los fallos.
+- **Deploy:** el storage de los throttlers está en memoria y vale por proceso (con varias
+  réplicas no alcanza), y falta configurar `trust proxy`, igual que en login.
+- El test de rate limit no prueba que la ventana se reinicie al pasar el minuto. Es
+  comportamiento de la librería y no se probó.
+- La UI para generar la key es de F1-060 (/web): debe mostrarla una sola vez y avisar que
+  rotar corta al agente en ese momento.
+
+**Qué haría distinto.** Escribir todo con Write desde el primer archivo. Me costó una vuelta
+volver a caer en la trampa del heredoc que F1-011 ya había dejado anotada.
