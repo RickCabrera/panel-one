@@ -70,6 +70,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
   it('no expone más escritura que updateMany, ni findUnique, SQL crudo ni transacciones', () => {
     const datos = servicio.para(A) as unknown as Record<string, Record<string, unknown>>;
     expect(Object.keys(datos).sort()).toEqual([
+      'agenteContacto',
       'agenteEstado',
       'cheque',
       'chequePago',

@@ -331,6 +331,12 @@ cola, último error. El API lo persiste en `AgenteEstado`.
 sucursal; matar el servicio pone la sucursal en estado desconectado tras 3 intervalos sin
 heartbeat.
 
+> **Nota de F1-061:** el panel decide "conectado" por el **contacto** (tabla
+> `agente_contacto`: el último lote aceptado por la ingesta, reloj del servidor). El agente
+> tiene que mandar **un lote por ciclo aunque no traiga cheques** (con su heartbeat); si sólo
+> manda cuando hay datos, la sucursal sale "Desconectado" en falso. `tamanoCola` ya existe en
+> el heartbeat; la latencia de query no (migración + DTO aquí).
+
 ## 21 · F1-026 · Instalador y guía de instalación
 `[ ]` **Epic 2 — Agente Windows (.NET 8)**
 

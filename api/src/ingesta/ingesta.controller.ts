@@ -32,7 +32,11 @@ export class IngestaController {
       '(sucursal, folioSr), reemplazando partidas y pagos; snapshots por (sucursal, ' +
       'capturadoAt), con 24 h de histórico más el último; heartbeat al estado del agente. ' +
       'La sucursal sale de la API key: ningún evento manda ids de tenant. Acepta ' +
-      '`Content-Encoding: gzip`.',
+      '`Content-Encoding: gzip`. Todo lote con sobre válido registra además el CONTACTO del ' +
+      'agente (reloj del servidor, `agente_contacto`; lo lee `GET /agentes/estado`), aunque sus ' +
+      'eventos salgan rechazados. El contacto queda fuera de la idempotencia a propósito: un ' +
+      'reenvío lo mueve, porque el agente sí volvió a hablar; los datos quedan idénticos. El ' +
+      'heartbeat puede traer `tamanoCola`.',
   })
   @ApiOkResponse({
     type: ResultadoIngestaDto,

@@ -291,6 +291,22 @@ export class DatosHeartbeatDto {
   @IsString()
   @MaxLength(2000)
   ultimoError?: string | null;
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    minimum: 0,
+    maximum: 2147483647,
+    example: 3,
+    description:
+      'Eventos pendientes en la cola local del agente (F1-061). Entero ≥ 0. Ausente o null = ' +
+      '"no reportado". Como el resto del heartbeat, se ignora si el heartbeat llegó tarde.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2147483647)
+  tamanoCola?: number | null;
 }
 
 // ---------------------------------------------------------------------------

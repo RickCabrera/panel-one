@@ -4,6 +4,7 @@ import { plainToInstance, type ClassConstructor } from 'class-transformer';
 import { validate, type ValidationError } from 'class-validator';
 
 import type { AgenteAutenticado } from '../auth/request-autenticado';
+import { Reloj } from '../comun/reloj';
 import type {
   DatosCheque,
   DatosEstado,
@@ -81,12 +82,22 @@ export function esTransitorio(err: unknown): boolean {
  * Idempotencia: reenviar un evento ya guardado deja la base EXACTAMENTE igual
  * (ni ids de partidas, ni `updated_at`): si lo que llega es idéntico a lo que
  * hay, no se escribe. Si cambió, el cheque se reemplaza por completo.
+ *
+ * Contacto (F1-061): todo lote cuyo sobre pasó la validación registra "el
+ * agente nos habló ahora" (reloj del servidor) en `agente_contacto`, aunque
+ * todos sus eventos salgan rechazados: el agente está vivo. Ese registro NO es
+ * dato de la ingesta y queda fuera de la idempotencia A PROPÓSITO: un reenvío
+ * lo mueve, porque el agente sí nos volvió a hablar. Los datos (cheques,
+ * partidas, pagos, snapshots, `agente_estado`) siguen idénticos.
  */
 @Injectable()
 export class IngestaService {
   private readonly log = new Logger(IngestaService.name);
 
-  constructor(private readonly datos: ScopedPrismaService) {}
+  constructor(
+    private readonly datos: ScopedPrismaService,
+    private readonly reloj: Reloj,
+  ) {}
 
   async procesarLote(
     agente: AgenteAutenticado,
@@ -96,6 +107,7 @@ export class IngestaService {
     const procesados: string[] = [];
     const rechazados: RechazoDto[] = [];
 
+    await this.registrarContacto(escritura, agente);
     for (const [indice, evento] of eventos.entries()) {
       const id = idDe(evento);
       const normalizado = await validarYNormalizar(evento);
@@ -124,6 +136,24 @@ export class IngestaService {
       }
     }
     return { procesados, rechazados };
+  }
+
+  /**
+   * Si falla, se loguea y el lote sigue: los datos importan más que la marca de
+   * conexión, y el siguiente lote la vuelve a intentar.
+   */
+  private async registrarContacto(
+    escritura: EscrituraSucursal,
+    agente: AgenteAutenticado,
+  ): Promise<void> {
+    try {
+      const ahora = new Date(this.reloj.ahora());
+      await escritura.enTransaccion((ops) => ops.registrarContacto(ahora));
+    } catch (err) {
+      this.log.error(
+        `No se registró el contacto del agente de la sucursal ${agente.sucursalId}: ${describir(err)}`,
+      );
+    }
   }
 
   private aplicar(escritura: EscrituraSucursal, evento: EventoNormalizado): Promise<void> {
@@ -184,6 +214,7 @@ function mismoEstado(
     a.versionAgente === b.versionAgente &&
     a.versionSr === b.versionSr &&
     a.ultimoError === b.ultimoError &&
+    a.tamanoCola === b.tamanoCola &&
     (a.ultimaLecturaAt?.getTime() ?? null) === (b.ultimaLecturaAt?.getTime() ?? null)
   );
 }
@@ -315,6 +346,7 @@ function normalizarHeartbeat(d: DatosHeartbeatDto): EventoNormalizado {
       versionSr: d.versionSr ?? null,
       ultimaLecturaAt: d.ultimaLecturaAt ? fechaUtc(d.ultimaLecturaAt) : null,
       ultimoError: d.ultimoError ?? null,
+      tamanoCola: d.tamanoCola ?? null,
     },
   };
 }

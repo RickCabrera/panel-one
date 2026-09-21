@@ -2,25 +2,28 @@ import { useSearchParams } from 'react-router';
 
 import { useUsuario } from '../auth/contexto';
 import { useAlcance } from '../filtros/alcance';
+import { Agentes } from './admin/Agentes';
 import { Empresas } from './admin/Empresas';
 import { Sucursales } from './admin/Sucursales';
 import { Usuarios } from './admin/Usuarios';
 import { Vista } from './Vista';
 
-type Pestana = 'sucursales' | 'usuarios' | 'empresas';
+type Pestana = 'sucursales' | 'usuarios' | 'agentes' | 'empresas';
 
 const PARAM_PESTANA = 'tab';
 
 const TEXTO: Record<Pestana, string> = {
   sucursales: 'Sucursales',
   usuarios: 'Usuarios',
+  agentes: 'Agentes',
   empresas: 'Empresas',
 };
 
 /**
  * Administración (F1-060). La pestaña vive en la URL (`?tab=`), como el alcance:
  * un enlace copiado abre la misma pestaña. Sucursales y Usuarios trabajan sobre la
- * empresa del selector del Topbar; Empresas es sólo de admin_global.
+ * empresa del selector del Topbar; Empresas es sólo de admin_global. Agentes
+ * (F1-061) es el estado del agente de cada sucursal, también sobre esa empresa.
  */
 export function Administracion() {
   const usuario = useUsuario();
@@ -28,8 +31,8 @@ export function Administracion() {
   const [parametros, setParametros] = useSearchParams();
   const pestanas: Pestana[] =
     usuario.rol === 'admin_global'
-      ? ['sucursales', 'usuarios', 'empresas']
-      : ['sucursales', 'usuarios'];
+      ? ['sucursales', 'usuarios', 'agentes', 'empresas']
+      : ['sucursales', 'usuarios', 'agentes'];
   const pedida = parametros.get(PARAM_PESTANA) as Pestana | null;
   const actual: Pestana = pedida && pestanas.includes(pedida) ? pedida : 'sucursales';
 
@@ -46,6 +49,8 @@ export function Administracion() {
     contenido = <Empresas />;
   } else if (!empresa) {
     contenido = <p className="text-sm text-slate-500">Cargando empresa…</p>;
+  } else if (actual === 'agentes') {
+    contenido = <Agentes key={empresa.id} empresa={empresa} />;
   } else if (actual === 'usuarios') {
     contenido = <Usuarios key={empresa.id} empresa={empresa} />;
   } else {

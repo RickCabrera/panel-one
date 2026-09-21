@@ -1,4 +1,4 @@
-import type { FormaPago, Prisma } from '@prisma/client';
+import { Prisma, type FormaPago } from '@prisma/client';
 
 import type { AgenteAutenticado } from '../auth/request-autenticado';
 import { COLUMNAS_INTOCABLES } from './scope.helper';
@@ -62,6 +62,8 @@ export interface DatosEstado {
   versionSr: string | null;
   ultimaLecturaAt: Date | null;
   ultimoError: string | null;
+  /** Eventos en la cola local del agente (F1-061). `null` = no lo reportó. */
+  tamanoCola: number | null;
 }
 
 /** Cuánto histórico de snapshots se conserva además del último (F1-030). */
@@ -212,6 +214,22 @@ export class OperacionesSucursal {
       create: { ...datos, ...this.#deLaSucursal },
       update: { ...datos },
     });
+  }
+
+  /**
+   * Registra que el agente de ESTA sucursal nos habló a las `ahora` (reloj del
+   * servidor, F1-061). Un solo `INSERT ... ON CONFLICT` por la PK: dos lotes en
+   * paralelo de una sucursal sin fila no chocan (nada de buscar-y-crear), y
+   * `GREATEST` impide que un lote que entró antes pero termina después deje el
+   * contacto más viejo.
+   */
+  async registrarContacto(ahora: Date): Promise<void> {
+    const t = exigirFecha('ahora', ahora);
+    await this.#tx.$executeRaw(Prisma.sql`
+      INSERT INTO agente_contacto (sucursal_id, empresa_id, ultimo_contacto_at)
+      VALUES (${this.#sucursalId}::uuid, ${this.#empresaId}::uuid, ${t})
+      ON CONFLICT (sucursal_id) DO UPDATE
+        SET ultimo_contacto_at = GREATEST(agente_contacto.ultimo_contacto_at, EXCLUDED.ultimo_contacto_at)`);
   }
 }
 

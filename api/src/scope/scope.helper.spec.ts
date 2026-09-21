@@ -32,6 +32,7 @@ describe('whereEmpresa / whereScoped', () => {
       Sucursal: 'empresaId',
       Usuario: 'empresaId',
       AgenteEstado: 'empresaId',
+      AgenteContacto: 'empresaId',
       Cheque: 'empresaId',
       ChequePartida: 'empresaId',
       ChequePago: 'empresaId',

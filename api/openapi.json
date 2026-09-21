@@ -308,9 +308,91 @@
         ]
       }
     },
+    "/agentes/estado": {
+      "get": {
+        "description": "Una fila por sucursal activa, también las que nunca reportaron (todo null). Devuelve edades en segundos; qué es \"desconectado\" lo decide el panel. Sin cache.",
+        "operationId": "EstadoAgentesController_deEmpresa",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EstadoAgenteSucursalDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`empresaId` ausente o no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Estado del agente de cada sucursal activa de la empresa (F1-061).",
+        "tags": [
+          "agentes"
+        ]
+      }
+    },
     "/ingesta/eventos": {
       "post": {
-        "description": "Idempotente: reenviar el mismo lote deja exactamente los mismos datos. Cheques por (sucursal, folioSr), reemplazando partidas y pagos; snapshots por (sucursal, capturadoAt), con 24 h de histórico más el último; heartbeat al estado del agente. La sucursal sale de la API key: ningún evento manda ids de tenant. Acepta `Content-Encoding: gzip`.",
+        "description": "Idempotente: reenviar el mismo lote deja exactamente los mismos datos. Cheques por (sucursal, folioSr), reemplazando partidas y pagos; snapshots por (sucursal, capturadoAt), con 24 h de histórico más el último; heartbeat al estado del agente. La sucursal sale de la API key: ningún evento manda ids de tenant. Acepta `Content-Encoding: gzip`. Todo lote con sobre válido registra además el CONTACTO del agente (reloj del servidor, `agente_contacto`; lo lee `GET /agentes/estado`), aunque sus eventos salgan rechazados. El contacto queda fuera de la idempotencia a propósito: un reenvío lo mueve, porque el agente sí volvió a hablar; los datos quedan idénticos. El heartbeat puede traer `tamanoCola`.",
         "operationId": "IngestaController_recibir",
         "parameters": [],
         "requestBody": {
@@ -2177,6 +2259,78 @@
           "zonaHoraria"
         ]
       },
+      "EstadoAgenteSucursalDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA de la sucursal."
+          },
+          "ultimoContactoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cuándo nos habló el agente por última vez: el último lote aceptado por `POST /ingesta/eventos`, con el reloj del SERVIDOR. UTC. Null = nunca ha reportado."
+          },
+          "edadContactoSegundos": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Segundos desde `ultimoContactoAt` (reloj del servidor), ≥ 0. Es la edad confiable para decidir si el agente está desconectado; el umbral lo decide el panel."
+          },
+          "ultimaLecturaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Última lectura exitosa de SoftRestaurant que reportó el heartbeat, con el reloj de la PC del POS. UTC. Se queda quieta si el agente está vivo pero no puede leer SR."
+          },
+          "edadLecturaSegundos": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Segundos desde `ultimaLecturaAt`, recortado a ≥ 0. Depende del reloj de la PC del POS: si está adelantado, la lectura parece más reciente de lo que es."
+          },
+          "versionAgente": {
+            "type": "string",
+            "nullable": true,
+            "example": "0.1.0"
+          },
+          "versionSr": {
+            "type": "string",
+            "nullable": true,
+            "example": "10.0"
+          },
+          "tamanoCola": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Eventos en la cola local del agente, según su último heartbeat. Null = no reportado."
+          },
+          "ultimoError": {
+            "type": "string",
+            "nullable": true,
+            "description": "Último error que reportó el agente."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "nombre",
+          "zonaHoraria",
+          "ultimoContactoAt",
+          "edadContactoSegundos",
+          "ultimaLecturaAt",
+          "edadLecturaSegundos",
+          "versionAgente",
+          "versionSr",
+          "tamanoCola",
+          "ultimoError"
+        ]
+      },
       "ModificadorDto": {
         "type": "object",
         "properties": {
@@ -2462,6 +2616,14 @@
           "ultimoError": {
             "type": "string",
             "nullable": true
+          },
+          "tamanoCola": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 2147483647,
+            "example": 3,
+            "description": "Eventos pendientes en la cola local del agente (F1-061). Entero ≥ 0. Ausente o null = \"no reportado\". Como el resto del heartbeat, se ignora si el heartbeat llegó tarde."
           }
         },
         "required": [

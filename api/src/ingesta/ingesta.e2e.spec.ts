@@ -133,6 +133,12 @@ describe('POST /ingesta/eventos (e2e, F1-031)', () => {
    * Todo lo que la ingesta escribe de una sucursal, TODAS las columnas (ids,
    * `updated_at` y `recibido_at` incluidos), serializado como lo vería alguien
    * que lee la base.
+   *
+   * `agente_contacto` (F1-061) queda FUERA de esta foto A PROPÓSITO, y no es
+   * precedente para excluir ninguna otra tabla: no es dato de la ingesta sino
+   * "cuándo nos habló el agente" (reloj del servidor), y un reenvío lo mueve
+   * porque el agente sí volvió a hablar. Su comportamiento se prueba en
+   * `agentes/estado-agentes.e2e.spec.ts`.
    */
   async function foto(sucursalId: string) {
     const cheques = await prisma.cheque.findMany({ where: { sucursalId }, orderBy: { id: 'asc' } });
@@ -480,6 +486,52 @@ describe('POST /ingesta/eventos (e2e, F1-031)', () => {
       estado = await prisma.agenteEstado.findUniqueOrThrow(donde);
       expect(estado).toMatchObject({ versionAgente: '1.1.0', ultimoError: 'timeout sintético' });
       expect(estado.ultimaLecturaAt?.toISOString()).toBe('2026-09-20T10:00:00.000Z');
+    });
+  });
+
+  describe('heartbeat: tamaño de cola (F1-061)', () => {
+    const donde = { where: { sucursalId: FX.sucursalA2 } };
+
+    it('se guarda; ausente = null; uno que llega tarde no lo cambia', async () => {
+      await lote(KEYS.a2, [
+        eventoHeartbeat('tc1', { ultimaLecturaAt: '2026-09-21T10:00:00Z', tamanoCola: 12 }),
+      ]);
+      expect((await prisma.agenteEstado.findUniqueOrThrow(donde)).tamanoCola).toBe(12);
+
+      await lote(KEYS.a2, [
+        eventoHeartbeat('tc0', { ultimaLecturaAt: '2026-09-21T09:00:00Z', tamanoCola: 99 }),
+      ]);
+      expect((await prisma.agenteEstado.findUniqueOrThrow(donde)).tamanoCola).toBe(12);
+
+      await lote(KEYS.a2, [eventoHeartbeat('tc2', { ultimaLecturaAt: '2026-09-21T10:01:00Z' })]);
+      expect((await prisma.agenteEstado.findUniqueOrThrow(donde)).tamanoCola).toBeNull();
+
+      await lote(KEYS.a2, [
+        eventoHeartbeat('tc3', { ultimaLecturaAt: '2026-09-21T10:02:00Z', tamanoCola: 0 }),
+      ]);
+      expect((await prisma.agenteEstado.findUniqueOrThrow(donde)).tamanoCola).toBe(0);
+    });
+
+    it.each([
+      ['negativo', -1],
+      ['decimal', 1.5],
+      ['texto', '3'],
+      ['fuera de INT', 2147483648],
+    ])('tamanoCola %s → evento rechazado sin reintento, estado intacto', async (_n, valor) => {
+      const antes = await foto(FX.sucursalA2);
+      const r = await lote(KEYS.a2, [
+        eventoHeartbeat('tc-malo', { ultimaLecturaAt: '2026-09-21T11:00:00Z', tamanoCola: valor }),
+      ]);
+      expect(r.procesados).toEqual([]);
+      expect(r.rechazados).toEqual([
+        {
+          id: 'tc-malo',
+          indice: 0,
+          reintentable: false,
+          motivo: expect.stringContaining('tamanoCola'),
+        },
+      ]);
+      expect(await foto(FX.sucursalA2)).toEqual(antes);
     });
   });
 

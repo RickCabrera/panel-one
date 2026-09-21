@@ -19,6 +19,7 @@ describe('Contrato OpenAPI', () => {
     expect(Object.keys(paths).sort()).toEqual(
       [
         '/agente/yo',
+        '/agentes/estado',
         '/auth/login',
         '/auth/me',
         '/auth/refresh',
@@ -86,6 +87,19 @@ describe('Contrato OpenAPI', () => {
       in: 'header',
       name: 'X-Api-Key',
     });
+  });
+
+  it('documenta el estado de agentes (F1-061): bearer, 403 del visor, 404 y el reloj de cada edad', async () => {
+    const { paths, components } = await generarDocumento();
+    const op = paths['/agentes/estado']?.get;
+    expect(op?.security).toEqual([{ bearer: [] }]);
+    expect(Object.keys(op?.responses ?? {}).sort()).toEqual(['200', '400', '401', '403', '404']);
+    const esquema = JSON.stringify(components?.schemas?.EstadoAgenteSucursalDto);
+    expect(esquema).toContain('reloj del SERVIDOR');
+    expect(esquema).toContain('reloj de la PC del POS');
+    const heartbeat = JSON.stringify(components?.schemas?.DatosHeartbeatDto);
+    expect(heartbeat).toContain('tamanoCola');
+    expect(paths['/ingesta/eventos']?.post?.description).toContain('CONTACTO');
   });
 
   it('documenta la ingesta (F1-031): X-Api-Key, 200 con procesados/rechazados, 400, 413 y los tres tipos de evento', async () => {
