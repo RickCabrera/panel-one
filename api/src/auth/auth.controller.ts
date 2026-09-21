@@ -93,14 +93,27 @@ export class AuthController {
     return this.auth.usuarioActual(req.usuario!.id);
   }
 
-  private responder({ sesion, refreshToken }: SesionEmitida, res: Response): SesionDto {
-    res.cookie(COOKIE_REFRESH, refreshToken, {
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: this.config.cookieSegura,
-      path: COOKIE_REFRESH_PATH,
-      maxAge: REFRESH_TTL_SEGUNDOS * 1000,
-    });
-    return sesion;
+  private responder(emitida: SesionEmitida, res: Response): SesionDto {
+    return responderSesion(emitida, res, this.config);
   }
+}
+
+/**
+ * Pone la cookie de refresh y devuelve el cuerpo de la sesión. La usan el login,
+ * el refresh y el cambio de contraseña propio (`CuentaController`, F1-060): la
+ * cookie sale siempre con los mismos atributos, aunque la ruta no sea `/auth`.
+ */
+export function responderSesion(
+  { sesion, refreshToken }: SesionEmitida,
+  res: Response,
+  config: AuthConfig,
+): SesionDto {
+  res.cookie(COOKIE_REFRESH, refreshToken, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: config.cookieSegura,
+    path: COOKIE_REFRESH_PATH,
+    maxAge: REFRESH_TTL_SEGUNDOS * 1000,
+  });
+  return sesion;
 }

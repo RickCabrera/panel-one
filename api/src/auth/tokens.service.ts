@@ -40,9 +40,13 @@ export class TokensService {
     );
   }
 
-  firmarRefresh(usuarioId: string): Promise<string> {
+  /**
+   * `version` es la `versionSesion` del usuario al emitir (F1-060): el refresh
+   * la compara con la base y un token de una versión anterior ya no sirve.
+   */
+  firmarRefresh(usuarioId: string, version: number): Promise<string> {
     return this.jwt.signAsync(
-      { typ: 'refresh' },
+      { typ: 'refresh', ver: version },
       {
         subject: usuarioId,
         // `jti` aleatorio: dos refresh emitidos en el mismo segundo son distintos,
@@ -67,10 +71,19 @@ export class TokensService {
     return { id: sub, rol: rol as RolUsuario, empresaId };
   }
 
-  /** Devuelve el id del usuario del refresh token. */
-  async verificarRefresh(token: string): Promise<string> {
+  /**
+   * Devuelve el id del usuario y la versión de sesión del refresh token. Un
+   * token emitido antes de F1-060 no trae `ver`: vale como versión 0, la
+   * inicial de todo usuario, así que sigue sirviendo hasta el primer cambio de
+   * contraseña. Un `ver` que no es entero no negativo se rechaza.
+   */
+  async verificarRefresh(token: string): Promise<{ usuarioId: string; version: number }> {
     const claims = await this.verificar(token, this.config.refreshSecret, 'refresh');
-    return claims.sub;
+    const version = 'ver' in claims ? claims.ver : 0;
+    if (typeof version !== 'number' || !Number.isInteger(version) || version < 0) {
+      throw new UnauthorizedException('No autenticado');
+    }
+    return { usuarioId: claims.sub, version };
   }
 
   private async verificar(

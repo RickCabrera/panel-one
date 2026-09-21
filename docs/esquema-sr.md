@@ -216,7 +216,9 @@ usa ningún agregado.
   dar de alta los dos textos. Si nombran IGUAL formas distintas, hace falta catálogo por sucursal.
 - Los textos del seed de desarrollo (`EFECTIVO`, `TARJETA DE CREDITO`, `VALES DESPENSA`, ...) son
   **sintéticos**, no de SR. No los copies a la tabla de arriba como si fueran reales.
-- El catálogo todavía no tiene CRUD: lo trae F1-060.
+- El catálogo todavía no tiene CRUD. F1-060 (administración) no lo incluyó porque su texto en
+  el backlog no lo pide: queda como decisión abierta para Ricardo (ver `docs/nocturno-log.md`,
+  entrada de F1-060). Mientras tanto se da de alta directo en la base.
 
 **Cuentas con pago mixto:** _(pendiente — cómo se reparten los montos)_
 

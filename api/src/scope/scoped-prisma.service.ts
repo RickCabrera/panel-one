@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { EmpresaScope } from './empresa-scope';
 import type { AgenteAutenticado } from '../auth/request-autenticado';
 import { ConsultaVentas, type FiltroVentas } from './consulta-ventas';
+import { EscrituraAdmin } from './escritura-admin';
 import { EscrituraSucursal } from './escritura-sucursal';
 import {
   COLUMNAS_INTOCABLES,
@@ -19,8 +20,9 @@ import {
  * es `updateMany` (F1-012, rotar la API key de una sucursal): lleva el mismo
  * filtro en el WHERE y pasa por `validarEscritura`. create/update/upsert/delete
  * y las búsquedas por llave única (findUnique, que no admite un AND extra) se
- * rechazan: la tarea que las necesite (F1-060, la ingesta) las agrega aquí con
- * su propio filtro y sus tests, no por un atajo.
+ * rechazan: la tarea que las necesite las agrega con su propio filtro y sus
+ * tests, no por un atajo. La ingesta (F1-031) escribe por `deSucursal()` y las
+ * altas de la administración (F1-060) por `admin()`.
  */
 const OPERACIONES_PERMITIDAS = [
   'findFirst',
@@ -33,16 +35,56 @@ const OPERACIONES_PERMITIDAS = [
 ] as const;
 type OperacionPermitida = (typeof OPERACIONES_PERMITIDAS)[number];
 
+function esObjetoPlano(valor: unknown): valor is WhereGenerico {
+  return (
+    typeof valor === 'object' && valor !== null && Object.getPrototypeOf(valor) === Object.prototype
+  );
+}
+
 /**
- * Valida una escritura antes de mandarla: `where` no vacío (para admin_global el
- * filtro de empresa es `{}` y un where vacío actualizaría la tabla entera) y un
- * `data` que no toque identidad ni pertenencia.
+ * ¿El `where` ACOTA de verdad qué filas se escriben? Contar llaves no alcanza
+ * (riesgo anotado en el log de F1-012, resuelto en F1-060): Prisma ignora un
+ * filtro `undefined`, así que `{ id: undefined }`, `{ id: { equals: undefined } }`
+ * o `{ AND: [{ id: undefined }] }` se vuelven "todas las filas".
+ *
+ * - Un valor `undefined` no acota.
+ * - Un objeto de operador (`{ equals, in, ... }`) o de relación acota si alguna
+ *   de sus llaves acota. `not`/`NOT` nunca cuentan: "todas menos X" no acota.
+ * - `AND` acota si alguno de sus elementos acota; `OR` sólo si TODOS acotan (un
+ *   `{}` entre las ramas vuelve el OR "todas las filas") y hay al menos uno.
+ * - Cualquier otro valor (texto, número, `null`, fecha, arreglo de `in`) acota.
+ */
+export function whereAcota(where: unknown): boolean {
+  if (!esObjetoPlano(where)) {
+    return false;
+  }
+  return Object.entries(where).some(([llave, valor]) => {
+    if (valor === undefined || llave === 'NOT' || llave === 'not') {
+      return false;
+    }
+    if (llave === 'AND') {
+      const ramas: unknown[] = Array.isArray(valor) ? valor : [valor];
+      return ramas.some(whereAcota);
+    }
+    if (llave === 'OR') {
+      const ramas: unknown[] = Array.isArray(valor) ? valor : [valor];
+      return ramas.length > 0 && ramas.every(whereAcota);
+    }
+    return esObjetoPlano(valor) ? whereAcota(valor) : true;
+  });
+}
+
+/**
+ * Valida una escritura antes de mandarla: un `where` que acote de verdad (para
+ * admin_global el filtro de empresa es `{}` y un where vacío, o hecho de puros
+ * `undefined`, actualizaría la tabla entera) y un `data` que no toque identidad
+ * ni pertenencia.
  */
 function validarEscritura(
   modelo: Prisma.ModelName,
   args: { where?: WhereGenerico; data?: WhereGenerico },
 ): void {
-  if (!args.where || Object.keys(args.where).length === 0) {
+  if (!whereAcota(args.where)) {
     throw new Error(`${modelo}.updateMany con scope exige un where no vacío.`);
   }
   const prohibidas = new Set([...COLUMNAS_INTOCABLES, LLAVE_EMPRESA[modelo]]);
@@ -130,6 +172,15 @@ export class ScopedPrismaService {
    */
   deSucursal(agente: AgenteAutenticado): EscrituraSucursal {
     return new EscrituraSucursal((fn) => this.#prisma.$transaction((tx) => fn(tx)), agente);
+  }
+
+  /**
+   * Las altas de la administración (F1-060): empresa, sucursal y usuario, cada
+   * una con su propio chequeo de alcance (ver `escritura-admin.ts`). Las
+   * ediciones siguen por `para(scope).X.updateMany`.
+   */
+  admin(scope: EmpresaScope): EscrituraAdmin {
+    return new EscrituraAdmin(this.#prisma, scope);
   }
 
   /**

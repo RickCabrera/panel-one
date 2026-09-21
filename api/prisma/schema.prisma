@@ -75,18 +75,23 @@ model Sucursal {
 }
 
 model Usuario {
-  id           String     @id @default(uuid()) @db.Uuid
+  id            String     @id @default(uuid()) @db.Uuid
   // Siempre en minúsculas: lo normaliza quien escribe (seed, y login en F1-011).
-  email        String     @unique
-  passwordHash String     @map("password_hash")
-  nombre       String
-  rol          RolUsuario
+  email         String     @unique
+  passwordHash  String     @map("password_hash")
+  nombre        String
+  rol           RolUsuario
   // Nulo sólo para admin_global, obligatorio para los demás roles. Lo garantiza
   // el CHECK `usuarios_rol_empresa_chk` de la migración, no este schema.
-  empresaId    String?    @map("empresa_id") @db.Uuid
-  activo       Boolean    @default(true)
-  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  empresaId     String?    @map("empresa_id") @db.Uuid
+  activo        Boolean    @default(true)
+  // Versión de las sesiones del usuario (F1-060). Va en el refresh token (claim
+  // `ver`) y el refresh la compara con la base: cambiar o restablecer la
+  // contraseña, o desactivar al usuario, la incrementa y deja sin efecto todo
+  // refresh emitido antes. El access token (15 min) NO se revoca con esto.
+  versionSesion Int        @default(0) @map("version_sesion")
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   empresa Empresa? @relation(fields: [empresaId], references: [id], onDelete: Restrict)
 
@@ -261,7 +266,8 @@ model MesaSnapshot {
 //
 // DECISION PROVISIONAL (nocturno): un catálogo por EMPRESA (no por sucursal) y
 // match EXACTO del texto, sin normalizar mayúsculas ni espacios: normalizar es
-// adivinar (docs/esquema-sr.md §4). Sin CRUD todavía: lo trae F1-060.
+// adivinar (docs/esquema-sr.md §4). Sin CRUD todavía: F1-060 no lo incluyó (su texto
+// en el backlog no lo pide) y queda como decisión abierta para Ricardo.
 model FormaPagoCatalogo {
   id        String    @id @default(uuid()) @db.Uuid
   empresaId String    @map("empresa_id") @db.Uuid

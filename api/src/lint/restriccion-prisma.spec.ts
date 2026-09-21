@@ -85,6 +85,18 @@ describe('Regla de lint: el cliente crudo de Prisma no se importa fuera de la al
     },
   );
 
+  // F1-060: la administración escribe por `ScopedPrismaService.admin()` y
+  // `para(scope).updateMany`; ni ella ni el helper de altas entran a la allowlist.
+  it.each([
+    'src/administracion/administracion.service.ts',
+    'src/administracion/administracion.controller.ts',
+    'src/scope/escritura-admin.ts',
+    'src/auth/cuenta.controller.ts',
+  ])('NO permite el cliente crudo en la administración (%s)', (archivo) => {
+    expect(lint(archivo, IMPORTA_SERVICIO)).toContain('no-restricted-imports');
+    expect(lint(archivo, IMPORTA_CLIENTE)).toContain('no-restricted-imports');
+  });
+
   it('NO permite el cliente crudo en el resto de auth', () => {
     expect(lint('src/auth/auth.controller.ts', IMPORTA_SERVICIO)).toContain(
       'no-restricted-imports',

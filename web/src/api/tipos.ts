@@ -41,6 +41,70 @@ export interface Sucursal {
   activo: boolean;
 }
 
+/** `UsuarioDto` de `GET/POST/PATCH /usuarios` (F1-060). Nunca trae el hash. */
+export interface UsuarioAdmin {
+  id: string;
+  email: string;
+  nombre: string;
+  rol: Rol;
+  /** Nulo sólo para admin_global. */
+  empresaId: string | null;
+  activo: boolean;
+}
+
+/** `CrearUsuarioDto`. `empresaId` va nulo/ausente sólo para admin_global. */
+export interface CrearUsuario {
+  email: string;
+  nombre: string;
+  rol: Rol;
+  empresaId?: string | null;
+  /** 12..128 caracteres. */
+  password: string;
+}
+
+/** `EditarUsuarioDto`: sólo los campos que cambian. */
+export interface EditarUsuario {
+  nombre?: string;
+  rol?: Rol;
+  activo?: boolean;
+}
+
+/** `CrearSucursalDto`. `zonaHoraria` es un nombre IANA (`America/Mexico_City`). */
+export interface CrearSucursal {
+  empresaId: string;
+  nombre: string;
+  zonaHoraria: string;
+}
+
+/** `EditarSucursalDto`. */
+export interface EditarSucursal {
+  nombre?: string;
+  zonaHoraria?: string;
+  activo?: boolean;
+}
+
+/** `EditarEmpresaDto`. */
+export interface EditarEmpresa {
+  nombre?: string;
+  activo?: boolean;
+}
+
+/** `ApiKeyEmitidaDto` de `POST /sucursales/:id/api-key`: la key en claro, UNA sola vez. */
+export interface ApiKeyEmitida {
+  sucursalId: string;
+  apiKey: string;
+}
+
+/** `CambiarPasswordDto` de `POST /cuenta/password`; responde un `Sesion`. */
+export interface CambiarPassword {
+  actual: string;
+  nueva: string;
+}
+
+/** Largo de toda contraseña nueva (`PASSWORD_MIN`/`PASSWORD_MAX` del API). */
+export const PASSWORD_MIN = 12;
+export const PASSWORD_MAX = 128;
+
 /** `ErrorDto`: cuerpo de todo error de la API. */
 export interface ErrorCuerpo {
   statusCode: number;

@@ -144,9 +144,21 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       expect(await hashDe(FX.sucursalB1)).toBe('f1012-hash-b1');
     });
 
+    // F1-060: un where de puros `undefined` Prisma lo ignora y sería "todas las
+    // filas". Se rechaza igual que uno vacío (riesgo del log de F1-012).
     it.each([
       ['sin where', undefined],
       ['con where vacío', {}],
+      ['con { id: undefined }', { id: undefined }],
+      ['con varias llaves undefined', { id: undefined, nombre: undefined }],
+      ['con { id: { equals: undefined } }', { id: { equals: undefined } }],
+      ['con { id: { in: undefined } }', { id: { in: undefined } }],
+      ['con AND de undefined', { AND: [{ id: undefined }] }],
+      ['con AND vacío', { AND: {} }],
+      ['con OR vacío', { OR: [] }],
+      ['con una rama vacía en el OR', { OR: [{ id: FX.sucursalA1 }, {}] }],
+      ['con sólo NOT', { NOT: { id: FX.sucursalA1 } }],
+      ['con sólo { not }', { id: { not: FX.sucursalA1 } }],
     ])(
       '%s se rechaza, también para admin_global (no actualiza la tabla entera)',
       async (_c, where) => {
@@ -166,6 +178,16 @@ describe('ScopedPrismaService (contra Postgres)', () => {
         ).resolves.toEqual(antes);
       },
     );
+
+    it.each([
+      ['{ id: { equals } }', { id: { equals: FX.sucursalA1 } }],
+      ['AND con una rama que acota', { AND: [{ id: FX.sucursalA1 }, { nombre: undefined }] }],
+      ['OR con todas las ramas que acotan', { OR: [{ id: FX.sucursalA1 }] }],
+    ])('un where que sí acota pasa: %s', async (_c, where) => {
+      await expect(
+        servicio.para(A).sucursal.updateMany({ where, data: { nombre: 'A1' } }),
+      ).resolves.toEqual({ count: 1 });
+    });
 
     it.each([
       ['empresaId', { empresaId: FX.empresaB }],
