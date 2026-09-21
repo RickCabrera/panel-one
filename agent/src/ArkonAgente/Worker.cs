@@ -1,5 +1,6 @@
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
+using ArkonAgente.SoftRestaurant;
 using ArkonAgente.Sql;
 
 namespace ArkonAgente;
@@ -9,13 +10,19 @@ internal sealed record DependenciasWorker(
     RutasAgente Rutas,
     Func<string, ResultadoConfiguracion> CargarConfig,
     Func<ConfiguracionAgente, IReadOnlyList<IVerificacion>> CrearVerificaciones,
+    Func<ConfiguracionAgente, CancellationToken, Task<ResultadoDeteccion>> DetectarSr,
+    EstadoSoftRestaurant EstadoSr,
     TimeSpan ReintentoConfig,
     Action<int> TerminarProceso)
 {
     public static readonly TimeSpan ReintentoConfigPorDefecto = TimeSpan.FromSeconds(60);
 
-    public static DependenciasWorker Reales(RutasAgente rutas) =>
-        new(rutas, CargadorConfiguracion.Cargar, Diagnosticador.VerificacionesPara, ReintentoConfigPorDefecto, TerminarDeVerdad);
+    public static DependenciasWorker Reales(RutasAgente rutas, EstadoSoftRestaurant estadoSr) =>
+        new(rutas, CargadorConfiguracion.Cargar, Diagnosticador.VerificacionesPara, DetectarDeVerdad, estadoSr,
+            ReintentoConfigPorDefecto, TerminarDeVerdad);
+
+    private static Task<ResultadoDeteccion> DetectarDeVerdad(ConfiguracionAgente config, CancellationToken cancelacion) =>
+        new DetectorVersionSr(new ConexionSoftRestaurant(config.ConnectionString)).DetectarAsync(cancelacion);
 
     /// <summary>
     /// Mata el proceso con código distinto de cero, como indica la guía de Microsoft
@@ -33,9 +40,9 @@ internal sealed record DependenciasWorker(
 
 /// <summary>
 /// El servicio. Carga la config, deja en el log un diagnóstico de las dos
-/// conexiones y entra al ciclo cada <c>intervaloSegundos</c>. El trabajo del ciclo
-/// —leer SoftRestaurant, encolar en el SQLite local y enviar al API— llega en
-/// F1-021 / F1-024.
+/// conexiones, detecta la versión de SoftRestaurant y elige el reader (F1-021), y
+/// entra al ciclo cada <c>intervaloSegundos</c>. Leer ventas, encolar en el SQLite
+/// local y enviar al API llega en F1-022 / F1-023 / F1-024.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -54,6 +61,7 @@ internal sealed class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
     private readonly DependenciasWorker _dep;
+    private string? _ultimoMensajeDeteccion;
 
     public Worker(ILogger<Worker> logger, DependenciasWorker dependencias)
     {
@@ -142,9 +150,12 @@ internal sealed class Worker : BackgroundService
             {
                 // DECISION PROVISIONAL (nocturno): una conexión que falla al arrancar
                 // (incluido un usuario SQL con permisos de escritura) se registra como
-                // Warning y el servicio sigue. En F1-020 todavía no lee SR, así que no hay
-                // nada que negarle. Si el agente debe NEGARSE a leer con un usuario que
-                // puede escribir es decisión abierta para Ricardo (ver nocturno-log).
+                // Warning y el servicio sigue. Hasta F1-021 el agente sólo lee vistas de
+                // catálogo y una fila de dbo.parametros2 (la versión), nunca tablas de
+                // operación. Si el agente debe NEGARSE a leer con un usuario que puede
+                // escribir es decisión abierta para Ricardo; si F1-022 llega sin
+                // decidirse, lo conservador es NO leer las tablas de operación con ese
+                // usuario (ficha de F1-022 en backlog.md).
                 _logger.LogWarning(
                     "Diagnóstico {Nombre}: FALLA. {Detalle} {Sugerencia}", v.Nombre, v.Detalle, v.Sugerencia ?? "");
             }
@@ -158,11 +169,64 @@ internal sealed class Worker : BackgroundService
 
     private async Task CicloAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
     {
+        await DetectarSiFaltaAsync(config, stoppingToken);
+
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
-            // F1-021 / F1-024: leer SR, encolar y enviar.
-            _logger.LogDebug("Ciclo sin trabajo configurado todavía.");
+            await DetectarSiFaltaAsync(config, stoppingToken);
+
+            // F1-022 / F1-023 / F1-024: leer SR con el reader elegido, encolar y enviar.
+            _logger.LogDebug("Ciclo sin lectura de ventas todavía.");
+        }
+    }
+
+    /// <summary>
+    /// Mientras no haya reader, detecta la versión de SoftRestaurant en cada ciclo:
+    /// el servidor puede estar apagado al arrancar o el técnico puede corregir la
+    /// base. Una versión no soportada o una base inalcanzable NO tumban el servicio:
+    /// quedan en el log (una vez por cada mensaje distinto) y en
+    /// <see cref="EstadoSoftRestaurant"/> para el heartbeat. Con el reader elegido
+    /// ya no se vuelve a detectar; si SR se actualiza, basta reiniciar el servicio.
+    /// </summary>
+    private async Task DetectarSiFaltaAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
+    {
+        if (_dep.EstadoSr.Reader is not null)
+        {
+            return;
+        }
+
+        var resultado = await _dep.DetectarSr(config, stoppingToken);
+        _dep.EstadoSr.Registrar(resultado);
+
+        var mensaje = resultado.Error ?? resultado.VersionSr;
+        if (mensaje == _ultimoMensajeDeteccion)
+        {
+            return;
+        }
+
+        _ultimoMensajeDeteccion = mensaje;
+        switch (resultado.Estado)
+        {
+            case EstadoDeteccion.Soportada:
+                _logger.LogInformation(
+                    "SoftRestaurant versión {VersionSr} detectado; se lee con {Reader}.",
+                    resultado.VersionSr, resultado.Reader!.Nombre);
+                if (resultado.Aviso is { } aviso)
+                {
+                    _logger.LogWarning("SoftRestaurant: {Aviso}", aviso);
+                }
+
+                break;
+            case EstadoDeteccion.NoSoportada:
+                _logger.LogError(
+                    "SoftRestaurant: {Error} El agente no leerá ventas hasta resolverlo; lo vuelve a intentar cada {Segundos} s.",
+                    resultado.Error, config.IntervaloSegundos);
+                break;
+            default:
+                _logger.LogWarning(
+                    "{Error} Se vuelve a intentar cada {Segundos} s.", resultado.Error, config.IntervaloSegundos);
+                break;
         }
     }
 }

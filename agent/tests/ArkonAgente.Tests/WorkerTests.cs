@@ -1,5 +1,6 @@
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
+using ArkonAgente.SoftRestaurant;
 using Microsoft.Extensions.Logging;
 
 namespace ArkonAgente.Tests;
@@ -18,6 +19,8 @@ public class WorkerTests
             carpeta.Rutas,
             _ => { Interlocked.Increment(ref lecturas); return new ResultadoConfiguracion(null, ["Falta el campo 'apiKey'."], []); },
             _ => throw new InvalidOperationException("no debe diagnosticar sin config"),
+            DetectaSr10,
+            new EstadoSoftRestaurant(),
             Reintento,
             NoTermina);
         var worker = new Worker(log, dep);
@@ -48,6 +51,8 @@ public class WorkerTests
                 ? new ResultadoConfiguracion(null, ["mal"], [])
                 : new ResultadoConfiguracion(Datos.Config(), [], []),
             _ => [sql, api],
+            DetectaSr10,
+            new EstadoSoftRestaurant(),
             Reintento,
             NoTermina);
         var worker = new Worker(log, dep);
@@ -71,7 +76,8 @@ public class WorkerTests
         var log = new LogEnMemoria();
         var api = new VerificacionFija("API", true);
         var dep = new DependenciasWorker(
-            carpeta.Rutas, _ => new ResultadoConfiguracion(Datos.Config(), [], []), _ => [api], Reintento, NoTermina);
+            carpeta.Rutas, _ => new ResultadoConfiguracion(Datos.Config(), [], []), _ => [api], DetectaSr10, new EstadoSoftRestaurant(),
+            Reintento, NoTermina);
         var worker = new Worker(log, dep);
 
         await worker.StartAsync(CancellationToken.None);
@@ -82,6 +88,110 @@ public class WorkerTests
         Assert.DoesNotContain(Datos.ApiKey, log.Todo);
         Assert.DoesNotContain(Datos.Password, log.Todo);
     }
+
+    private static DependenciasWorker ConDeteccion(
+        CarpetaTemporal carpeta, Func<ResultadoDeteccion> detectar, EstadoSoftRestaurant estado) =>
+        new(carpeta.Rutas,
+            _ => new ResultadoConfiguracion(Datos.Config() with { IntervaloSegundos = 1 }, [], []),
+            _ => [],
+            (_, _) => Task.FromResult(detectar()),
+            estado,
+            Reintento,
+            NoTermina);
+
+    [Fact]
+    public async Task Version_de_SR_no_soportada_se_registra_una_vez_y_el_servicio_sigue()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var log = new LogEnMemoria();
+        var estado = new EstadoSoftRestaurant();
+        var detecciones = 0;
+        var worker = new Worker(log, ConDeteccion(carpeta, () =>
+        {
+            Interlocked.Increment(ref detecciones);
+            return ResultadoDeteccion.NoSoportada("SoftRestaurant versión 12.000000 no soportada.", "12.000000");
+        }, estado));
+
+        await worker.StartAsync(CancellationToken.None);
+        await Esperar(() => Volatile.Read(ref detecciones) >= 3); // reintenta en cada ciclo
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.True(worker.ExecuteTask!.IsCompletedSuccessfully);
+        var error = Assert.Single(log.De(LogLevel.Error));
+        Assert.Contains("12.000000 no soportada", error);
+        Assert.Contains("no leerá ventas", error);
+        Assert.Null(estado.Reader);
+        Assert.Equal("12.000000", estado.VersionSr);
+        Assert.Equal("SoftRestaurant versión 12.000000 no soportada.", estado.UltimoError);
+        Assert.Contains("Agente detenido.", log.Todo);
+    }
+
+    [Fact]
+    public async Task Sin_conexion_reintenta_y_al_detectar_elige_el_reader_y_deja_de_detectar()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var log = new LogEnMemoria();
+        var estado = new EstadoSoftRestaurant();
+        var detecciones = 0;
+        var worker = new Worker(log, ConDeteccion(carpeta, () =>
+            Interlocked.Increment(ref detecciones) < 3
+                ? ResultadoDeteccion.SinConexion("No se pudo detectar la versión de SoftRestaurant. Servidor apagado.")
+                : ResultadoDeteccion.Soportada(new SrV11Reader(new VersionSr("10.021800", 10))),
+            estado));
+
+        await worker.StartAsync(CancellationToken.None);
+        await Esperar(() => estado.Reader is not null);
+        await Task.Delay(TimeSpan.FromSeconds(2.5)); // al menos dos ciclos más de 1 s
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(3, Volatile.Read(ref detecciones));
+        Assert.IsType<SrV11Reader>(estado.Reader);
+        Assert.Equal("10.021800", estado.VersionSr);
+        Assert.Null(estado.UltimoError);
+        Assert.Single(log.De(LogLevel.Warning), m => m.Contains("Servidor apagado."));
+        Assert.Empty(log.De(LogLevel.Error));
+        Assert.Contains(log.De(LogLevel.Information),
+            m => m.Contains("SoftRestaurant versión 10.021800 detectado; se lee con SrV11Reader."));
+    }
+
+    [Fact]
+    public async Task Version_11_elige_el_reader_con_advertencia()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var log = new LogEnMemoria();
+        var estado = new EstadoSoftRestaurant();
+        var worker = new Worker(log, ConDeteccion(carpeta, () =>
+            ResultadoDeteccion.Soportada(new SrV11Reader(new VersionSr("11.0", 11)), "SoftRestaurant 11 no se ha validado."),
+            estado));
+
+        await worker.StartAsync(CancellationToken.None);
+        await Esperar(() => estado.Reader is not null);
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Contains(log.De(LogLevel.Warning), m => m.Contains("SoftRestaurant 11 no se ha validado."));
+        Assert.Contains(log.De(LogLevel.Information), m => m.Contains("versión 11.0 detectado"));
+    }
+
+    [Fact]
+    public async Task Una_excepcion_al_detectar_es_falla_interna_y_termina_con_codigo_1()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var log = new LogEnMemoria();
+        int? codigo = null;
+        var dep = ConDeteccion(carpeta, () => throw new InvalidOperationException("bug"), new EstadoSoftRestaurant())
+            with { TerminarProceso = c => codigo = c };
+        var worker = new Worker(log, dep);
+
+        await worker.StartAsync(CancellationToken.None);
+        await Esperar(() => codigo is not null);
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(1, codigo);
+        Assert.Contains(log.De(LogLevel.Critical), m => m.Contains("código 1"));
+    }
+
+    private static Task<ResultadoDeteccion> DetectaSr10(ConfiguracionAgente config, CancellationToken cancelacion) =>
+        Task.FromResult(ResultadoDeteccion.Soportada(new SrV11Reader(new VersionSr("10.021800", 10))));
 
     private static void NoTermina(int codigo) => Assert.Fail($"El worker no debía terminar el proceso (código {codigo}).");
 
@@ -97,6 +207,8 @@ public class WorkerTests
             carpeta.Rutas,
             _ => throw new IOException("disco lleno"),
             _ => [],
+            DetectaSr10,
+            new EstadoSoftRestaurant(),
             Reintento,
             c => codigo = c);
         var worker = new Worker(log, dep);

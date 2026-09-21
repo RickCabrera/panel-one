@@ -34,10 +34,7 @@ internal sealed class VerificacionSql : IVerificacion
             await using var conexion = _conexion.CrearConexion();
             await conexion.OpenAsync(cancelacion);
 
-            await using var comando = conexion.CreateCommand();
-            comando.CommandText = ConsultasEmbebidas.Leer("diagnostico");
-            comando.CommandType = CommandType.Text;
-            comando.CommandTimeout = ConexionSoftRestaurant.TimeoutComandoSegundos;
+            await using var comando = ConexionSoftRestaurant.CrearComando(conexion, "diagnostico");
 
             await using var lector = await comando.ExecuteReaderAsync(CommandBehavior.SingleRow, cancelacion);
             if (!await lector.ReadAsync(cancelacion))
@@ -96,13 +93,31 @@ internal sealed class VerificacionSql : IVerificacion
             nombre, $"{detalle} Sin permisos de escritura a nivel servidor, base ni esquema dbo.", avisos);
     }
 
-    internal static (string Detalle, string? Sugerencia) ClasificarError(SqlException ex, ConexionSoftRestaurant conexion)
+    /// <summary>
+    /// <c>CERT_E_UNTRUSTEDROOT</c> (0x800B0109): SqlClient lo pone como
+    /// <c>SqlException.Number</c> cuando el certificado del servidor no es de confianza.
+    /// </summary>
+    internal const int ErrorCertificadoNoConfiable = -2146893019;
+
+    internal static (string Detalle, string? Sugerencia) ClasificarError(SqlException ex, ConexionSoftRestaurant conexion) =>
+        ClasificarError(ex.Number, ex.Message, conexion);
+
+    /// <summary>
+    /// Separado de <see cref="SqlException"/> (que no se puede construir en un test)
+    /// para probar cada caso con el número y el texto reales.
+    /// </summary>
+    internal static (string Detalle, string? Sugerencia) ClasificarError(int numero, string mensaje, ConexionSoftRestaurant conexion)
     {
         var destino = conexion.Resumen();
-        var mensaje = ex.Message;
 
-        if (mensaje.Contains("certificate", StringComparison.OrdinalIgnoreCase)
-            || mensaje.Contains("certificado", StringComparison.OrdinalIgnoreCase))
+        // ✅ VALIDADO (F1-021, SR 10 / SQL Server 2014 Express en un Windows en español):
+        // el mensaje dice "La cadena de certificación fue emitida por una entidad en la
+        // que no se confía" y trae "Proveedor de SSL": ni "certificate" ni "certificado".
+        // Sin el número, caía en la rama de TLS y sugería lo que no era.
+        if (numero == ErrorCertificadoNoConfiable
+            || mensaje.Contains("certificate", StringComparison.OrdinalIgnoreCase)
+            || mensaje.Contains("certificado", StringComparison.OrdinalIgnoreCase)
+            || mensaje.Contains("certificación", StringComparison.OrdinalIgnoreCase))
         {
             return (
                 $"El servidor respondió, pero su certificado TLS no es de confianza ({destino}).",
@@ -118,11 +133,14 @@ internal sealed class VerificacionSql : IVerificacion
                 "si la base está en esta misma PC.");
         }
 
-        return ex.Number switch
+        return numero switch
         {
             18456 => (
                 $"El servidor rechazó el usuario o la contraseña ({destino}).",
                 "Revisa 'User ID' y 'Password' en 'connectionString', y que el servidor acepte autenticación SQL (modo mixto)."),
+            229 => (
+                $"El usuario no tiene permiso de lectura sobre una tabla de la base ({destino}).",
+                "El usuario del agente necesita el rol db_datareader sobre la base de SoftRestaurant (y nada más)."),
             4060 or 916 => (
                 $"Conectó al servidor, pero no pudo abrir la base ({destino}).",
                 "Revisa que 'Database' sea la base de SoftRestaurant y que el usuario tenga acceso a ella."),
@@ -130,7 +148,7 @@ internal sealed class VerificacionSql : IVerificacion
                 $"El servidor no respondió a tiempo ({destino}).",
                 "Revisa que el servicio de SQL Server esté encendido."),
             _ => (
-                $"No se pudo llegar al servidor SQL ({destino}; error {ex.Number}).",
+                $"No se pudo llegar al servidor SQL ({destino}; error {numero}).",
                 "Revisa el nombre del servidor e instancia (p. ej. .\\SQLEXPRESS o 127.0.0.1\\NATIONALSOFT), " +
                 "que el servicio de SQL Server esté encendido y, si es por red, que TCP/IP esté habilitado y el firewall lo permita."),
         };

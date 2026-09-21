@@ -15,11 +15,61 @@ public partial class ConsultasEmbebidasTests
         RegexOptions.IgnoreCase)]
     private static partial Regex PalabrasQueEscriben();
 
+    /// <summary>Cada objeto después de FROM / JOIN, con alias opcional, y su hint si lo trae.</summary>
+    [GeneratedRegex(
+        @"\b(?:FROM|JOIN)\s+(?!\()(?<objeto>(?:\[[^\]]+\]|\w+)(?:\.(?:\[[^\]]+\]|\w+))*)(?:\s+(?:AS\s+)?(?!WITH\b|WHERE\b|JOIN\b|INNER\b|LEFT\b|RIGHT\b|FULL\b|CROSS\b|OUTER\b|ON\b|GROUP\b|ORDER\b|UNION\b)\w+)?(?<hint>\s+WITH\s*\(\s*NOLOCK\s*\))?",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex ObjetoLeido();
+
+    /// <summary>Formas de leer una tabla que la guardia de NOLOCK no sabe revisar: se prohíben.</summary>
+    [GeneratedRegex(@"\bAPPLY\b|WITH\s*\(\s*NOLOCK\s*\)\s*,|\bFROM\s+[\w.\[\]]+(?:\s+(?:AS\s+)?\w+)?\s*,", RegexOptions.IgnoreCase)]
+    private static partial Regex LecturaNoRevisable();
+
     [Fact]
     public void Existen_las_consultas_esperadas()
     {
-        Assert.Contains("diagnostico", ConsultasEmbebidas.Nombres());
-        Assert.StartsWith("--", ConsultasEmbebidas.Leer("diagnostico"));
+        var nombres = ConsultasEmbebidas.Nombres();
+        foreach (var esperada in new[] { "diagnostico", "sr_estructura", "sr_version" })
+        {
+            Assert.Contains(esperada, nombres);
+            Assert.StartsWith("--", ConsultasEmbebidas.Leer(esperada));
+        }
+    }
+
+    [Fact]
+    public void Toda_tabla_o_vista_que_lee_una_consulta_embebida_lleva_NOLOCK()
+    {
+        foreach (var nombre in ConsultasEmbebidas.Nombres())
+        {
+            Assert.Empty(ProblemasDeNolock(ConsultasEmbebidas.Leer(nombre)).Select(p => $"{nombre}.sql: {p}"));
+        }
+    }
+
+    [Theory]
+    [InlineData("SELECT a FROM dbo.cheques")]
+    [InlineData("SELECT a FROM dbo.cheques AS c WHERE c.a = 1")]
+    [InlineData("SELECT a FROM dbo.cheques c WITH (NOLOCK) JOIN dbo.cheqdet d ON d.f = c.f")]
+    [InlineData("SELECT a FROM [dbo].[cheques]")]
+    [InlineData("SELECT a FROM dbo.cheques c WITH (NOLOCK), dbo.cheqdet d WITH (NOLOCK)")]
+    [InlineData("SELECT a FROM dbo.cheques c, dbo.cheqdet d")]
+    [InlineData("SELECT a FROM dbo.cheques c WITH (NOLOCK) CROSS APPLY dbo.fn(c.a) x")]
+    [InlineData("SELECT (SELECT 1 FROM dbo.x) AS y FROM dbo.z WITH (NOLOCK)")]
+    public void La_guardia_de_NOLOCK_detecta_lecturas_sin_hint(string sql)
+    {
+        Assert.NotEmpty(ProblemasDeNolock(sql));
+    }
+
+    [Theory]
+    [InlineData("SELECT SERVERPROPERTY('Edition'), DB_NAME()")] // como diagnostico.sql: sin FROM
+    [InlineData("SELECT a FROM dbo.cheques WITH (NOLOCK)")]
+    [InlineData("SELECT a FROM dbo.cheques AS c WITH (NOLOCK) JOIN dbo.cheqdet AS d WITH(NOLOCK) ON d.f = c.f")]
+    [InlineData("SELECT a FROM [dbo].[cheques] c with ( nolock ) WHERE c.a = 1")]
+    [InlineData("SELECT a FROM (SELECT b FROM dbo.x WITH (NOLOCK)) AS t")]
+    [InlineData("-- FROM dbo.x sin hint en un comentario\nSELECT 1")]
+    [InlineData("SELECT 'FROM dbo.x, y' AS texto")]
+    public void La_guardia_de_NOLOCK_acepta_lecturas_con_hint(string sql)
+    {
+        Assert.Empty(ProblemasDeNolock(sql));
     }
 
     [Fact]
@@ -55,6 +105,17 @@ public partial class ConsultasEmbebidasTests
     public void La_guardia_no_se_confunde_con_textos_ni_comentarios(string sql)
     {
         Assert.DoesNotMatch(PalabrasQueEscriben(), SinComentariosNiTextos(sql));
+    }
+
+    private static List<string> ProblemasDeNolock(string sql)
+    {
+        var codigo = SinComentariosNiTextos(sql);
+        var problemas = ObjetoLeido().Matches(codigo)
+            .Where(m => !m.Groups["hint"].Success)
+            .Select(m => $"'{m.Groups["objeto"].Value}' sin WITH (NOLOCK)")
+            .ToList();
+        problemas.AddRange(LecturaNoRevisable().Matches(codigo).Select(m => $"'{m.Value.Trim()}' (join con coma o APPLY)"));
+        return problemas;
     }
 
     private static string SinComentariosNiTextos(string sql)

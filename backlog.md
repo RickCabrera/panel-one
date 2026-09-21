@@ -344,6 +344,19 @@ heartbeat.
 > tiene que mandar **un lote por ciclo aunque no traiga cheques** (con su heartbeat); si sólo
 > manda cuando hay datos, la sucursal sale "Desconectado" en falso. `tamanoCola` ya existe en
 > el heartbeat; la latencia de query no (migración + DTO aquí).
+>
+> **Nota de F1-021 — también es "Listo cuando" de esta tarea:** la versión de SR y el error
+> de detección ya viven en el singleton `EstadoSoftRestaurant` (`agent/src/ArkonAgente/
+> SoftRestaurant/`), pero el agente todavía no los envía. El heartbeat los manda así:
+> - **versión no soportada o sin conexión:** `ultimoError` = `EstadoSoftRestaurant.UltimoError`.
+>   `versionSr` va null, o con la versión leída si la hubo (una v12 reporta `"12.000000"`
+>   y el error).
+> - **versión soportada:** `versionSr` = `EstadoSoftRestaurant.VersionSr` (p. ej.
+>   `"10.021800"`) y `ultimoError` null.
+>
+> Se prueba con un test del armado del heartbeat. `ResultadoDeteccion` ya acota los textos
+> a lo que acepta el DTO (`versionSr` ≤ 50, `ultimoError` ≤ 2000). Si F1-025 junta varios
+> errores en `ultimoError`, el recorte a 2000 lo hace F1-025.
 
 ## 21 · F1-026 · Instalador y guía de instalación
 `[ ]` **Epic 2 — Agente Windows (.NET 8)**
@@ -481,6 +494,15 @@ nativos de SR del mismo día (venta total, nº de cuentas, formas de pago).
 > **Atacar EN CUANTO haya acceso a un SR real.** Es el cuello de botella de toda la Fase 1:
 > mientras no cierre, F1-022 y F1-023 no se pueden escribir de verdad y el agente no lee
 > nada real.
+>
+> **Nota de F1-021.** En la PC de desarrollo ya hay un **SR 10 instalado**: instancia
+> `.\NATIONALSOFT`, base `softrestaurant10`, SQL Server 2014 Express. F1-021 lo usó sólo
+> para ver catálogo y la versión (esquema-sr §1, §11). Lo que falta de esta tarea:
+> - mapear columnas contra esa base;
+> - probar el agente con un usuario **`db_datareader`** real: la detección nunca corrió
+>   con él, sólo con sysadmin;
+> - si hay acceso a un SR 11, confirmar que usa `parametros2.versiondb` y el mismo
+>   esquema. Hoy es SUPUESTO y el agente lo marca con un Warning.
 
 ## F1-022 · Lectura de ventas cerradas (cheques)
 `[ ]` **Epic 2** · 🔒 **Razón: bloqueada por F1-090.** El mapeo de tablas no está validado;
@@ -497,6 +519,26 @@ cancelaciones).
 **Listo cuando:** cerrar una cuenta en SR aparece en la cola del agente en ≤ 1 ciclo;
 reprocesar el mismo folio no duplica (la idempotencia final la da el API, pero el agente no
 debe reenviar en bucle).
+
+> **Nota de F1-021 — decisión abierta que esta tarea NO puede pasar por alto.** Falta que
+> Ricardo decida si el agente debe **negarse a leer SR con un usuario que puede escribir**.
+> Hoy el diagnóstico marca FALLA y el servicio sólo registra un Warning y sigue
+> (`DECISION PROVISIONAL (nocturno)` en `Worker.cs`, `DiagnosticarAsync`). Hasta F1-021
+> eso bastaba: el agente sólo lee catálogo y una fila de `parametros2`.
+>
+> Si esta tarea llega y Ricardo no ha decidido, la opción conservadora es **NO leer las
+> tablas de operación** (`cheques`, `tempcheques`...) cuando el diagnóstico encontró
+> permisos de escritura. Eso va con un error claro en el log y en el heartbeat.
+>
+> Otras cosas que F1-021 deja para aquí:
+> - Existe `ISoftRestaurantReader`, con `SrV11Reader` como implementación. Los métodos de
+>   lectura se agregan ahí.
+> - Toda query sale de `ConexionSoftRestaurant.CrearComando`, que pone el timeout corto.
+> - `ConsultasEmbebidasTests` exige `WITH (NOLOCK)` en todo `FROM`/`JOIN` y prohíbe los
+>   joins con coma y `APPLY`.
+> - La base es SQL Server 2014: no hay `STRING_AGG` (esquema-sr §11).
+> - Si una lectura falla porque SR se actualizó con el agente corriendo, hay que volver a
+>   detectar la versión. Hoy sólo se detecta al arrancar.
 
 ## F1-023 · Lectura de cuentas abiertas (mesas en vivo)
 `[ ]` **Epic 2** · 🔒 **Razón: bloqueada por F1-090.** Mismo caso que F1-022: las tablas

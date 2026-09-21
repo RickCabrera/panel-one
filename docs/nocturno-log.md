@@ -1639,3 +1639,173 @@ cara que la consulta.
 **Qué haría distinto.** Escribir el archivo de apoyo de tests con Write desde el principio y
 no con heredoc. Y pensar desde el plan qué pasa con el código de salida del proceso ante
 `sc failure`. Lo encontró el revisor, y es justo el AC ("sobrevive reinicios").
+
+## 2026-09-21 04:05 — F1-021 · Descubrimiento de la base y versión de SoftRestaurant
+**Estado:** CERRADA (el número de PR lo da `gh pr create`). Sin PARCIAL. **Ojo:** el *envío*
+de la versión y del error en el heartbeat **no está hecho**. Se delegó a F1-025, que ahora
+tiene en su ficha un "Listo cuando" verificable. Que F1-021 tenga `[x]` no quiere decir "ya
+se manda".
+
+**Hallazgo grande: en esta máquina YA HAY un SoftRestaurant 10 real.**
+- Instancia `.\NATIONALSOFT` (servicio `MSSQL$NATIONALSOFT`), base `softrestaurant10`, SQL
+  Server 2014 SP1 Express (12.0.4100.1).
+- El exe está en `C:\Program Files (x86)\Softrestaurant10` (`softrestaurant.exe` 10.0.323).
+- El log de F1-020 decía que no había SQL Server; ya lo hay.
+- Para entrar: `sqlcmd -S ".\NATIONALSOFT" -E -d softrestaurant10`. **Así eres sysadmin**:
+  sólo SELECT, siempre con NOLOCK y `-t`.
+- No se creó un usuario de solo lectura: crearlo es escribir en el servidor del POS.
+- Sólo se miró el catálogo y la columna de versión. Ningún dato de negocio entró al repo.
+- Todo lo visto quedó en `docs/esquema-sr.md` §1, §11 (recuadro), §12 y en la tabla de
+  instalaciones.
+
+**Qué quedó hecho.**
+- **Detección** (`agent/src/ArkonAgente/SoftRestaurant/`):
+  - `sr_estructura.sql` lee sólo el catálogo, con NOLOCK: qué tablas candidatas hay en `dbo`
+    y si existe `parametros2.versiondb`.
+  - Si existe, `sr_version.sql` lee `TOP (2) versiondb FROM dbo.parametros2 WITH (NOLOCK)`.
+  - `HuellaSr.Desde` pasa las filas a una huella y `SelectorReader.Elegir` decide. Las dos
+    son puras.
+  - Mayor 10 → `SrV11Reader`. Mayor 11 → `SrV11Reader` más un Aviso, que el Worker registra
+    como Warning.
+  - Todo lo demás es NoSoportada con un mensaje claro:
+    - otra versión mayor;
+    - base sin `parametros2`/`versiondb` (el mensaje da 3 causas);
+    - tabla vacía;
+    - filas con versiones distintas;
+    - valor ilegible;
+    - faltan tablas núcleo.
+  - `DetectorVersionSr` corre las queries. Cualquier falla sale como `SinConexion`, con el
+    mensaje de `ClasificarError` y sin secretos.
+- **`EstadoSoftRestaurant`** es un singleton con reader, `VersionSr` y `UltimoError`: lo que
+  F1-025 tiene que mandar. `ResultadoDeteccion` ya acota los textos a 50 y 2000 caracteres.
+- **Worker:**
+  - Detecta antes del primer tick y en cada tick hasta tener reader.
+  - Registra una sola vez cada mensaje distinto: Information, Error o Warning según el
+    caso. Nunca se cae.
+  - Con reader elegido deja de detectar. **Si SR se actualiza con el agente corriendo, hay
+    que reiniciar el servicio.** Anotado en la ficha de F1-022.
+- **`ConexionSoftRestaurant.CrearComando(conexion, "consulta")`**: todo comando contra SR
+  sale de ahí, con el texto embebido y el timeout de 5 s. `VerificacionSql` también lo usa.
+- **Guardia de NOLOCK** en `ConsultasEmbebidasTests`:
+  - todo `FROM`/`JOIN` a un objeto lleva `WITH (NOLOCK)`;
+  - los joins con coma y `APPLY` están prohibidos;
+  - no mira comentarios ni textos.
+- **Arreglo que no estaba en el plan** (el revisor lo aceptó dentro del alcance):
+  - **El problema:** sin `TrustServerCertificate`, en un Windows en español el error real es
+    "*La cadena de certificación fue emitida por una entidad en la que no se confía*"
+    (Number -2146893019). `ClasificarError` sólo buscaba "certificate" o "certificado", así
+    que lo mandaba a la rama de TLS con la sugerencia equivocada ("Encrypt=False / actualiza").
+  - **Lo que cambié:**
+    - reconoce el número y la palabra "certificación";
+    - la sobrecarga `ClasificarError(int, string, conexion)` se puede probar;
+    - agregué el caso 229 (lectura denegada).
+  - **Por qué entra:** los mensajes de la detección pasan por ahí y viajan en el heartbeat.
+- **Docs:**
+  - `agent/README.md`: sección de detección.
+  - `backlog.md`, notas en tres fichas:
+    - F1-025: el "Listo cuando" del envío;
+    - F1-022: la decisión sobre el usuario con escritura y lo que hereda de F1-021;
+    - F1-090: la SR local, lo pendiente con `db_datareader` y la v11.
+
+**Qué se probó y qué NO.**
+- `dotnet build -c Release`: 0 advertencias. `dotnet test`: **173/173, 0 omitidos**.
+- **Prueba de mutación** (todo restaurado). Tests que fallaron con cada cambio:
+  - quitar NOLOCK de `sr_version.sql`: 1;
+  - quitar lo de registrar cada mensaje una sola vez: 2;
+  - quitar el chequeo de tablas faltantes: 1.
+- **Contra la base real**, con el exe Release en consola, `ARKON_AGENTE_DIR` en el scratchpad
+  e Integrated Security:
+  - `softrestaurant10` → `SoftRestaurant versión 10.021800 detectado; se lee con SrV11Reader.`
+    **Éste es el AC.**
+  - `Database=master` → Error con las 3 causas; no se cae y reintenta.
+  - Sin `TrustServerCertificate` → Warning de certificado con la sugerencia correcta (tras
+    el arreglo).
+  - `agente test` → FALLA SQL por sysadmin, que es lo correcto. Así `FilaDiagnostico.Leer`
+    quedó probado contra un servidor real, que era un pendiente de F1-020.
+  - Un grep de la api key en los logs da 0.
+- **NO probado. Que nadie lo lea como hecho:**
+  - **Con un usuario `db_datareader` nunca corrió**, sólo con sysadmin. Con
+    `db_datareader`, `sys.tables` sólo lista lo que el usuario puede leer (supuesto, §1).
+    Queda para F1-090 / F1-026.
+  - **SR 11**: nunca vista. Que use `parametros2.versiondb` y el mismo esquema es SUPUESTO.
+  - **El servicio como LocalSystem** contra esta base: no hubo consola elevada (F1-020b).
+  - **Cancelación a media query** (observación del revisor):
+    - **El riesgo:** SqlClient puede lanzar `SqlException` ("Operation cancelled by user")
+      en vez de `OperationCanceledException`, y `DetectorVersionSr` la convierte en
+      `SinConexion`. No hace daño: el timer sale en el siguiente tick.
+    - **Qué hacer:** la próxima tarea que toque el detector debe agregar
+      `catch (SqlException) when (cancelacion.IsCancellationRequested) { throw new OperationCanceledException(cancelacion); }`.
+    - **Ojo:** tiene que lanzar una OCE, no relanzar la `SqlException`. El Worker sólo trata
+      la OCE como parada normal; con cualquier otra excepción mataría el proceso con
+      código 1.
+
+**Decisiones que tomé y por qué.**
+- **La versión sale de `parametros2.versiondb` y se reporta tal cual** (`"10.021800"`, sin
+  redondear).
+  - Hay columnas señuelo: `configuracion.versiondb` vale NULL y `parametros.versiondb` vale
+    `'0'`.
+  - Que la parte entera sea la versión mayor es SUPUESTO. Cómo se relaciona `021800` con el
+    exe 10.0.323, no se sabe.
+- **Nombres del catálogo comparados exactos (ordinal).** La instalación es CI y los nombres
+  vienen en minúsculas. Con una collation CS rara saldría "faltan tablas", y eso es mejor
+  que leer a ciegas.
+- **Varias filas en `parametros2`:** si dicen lo mismo se acepta; si difieren, NoSoportada.
+  Nunca se ha visto.
+- **`DECISION PROVISIONAL (nocturno)` en `Worker.cs`, `DiagnosticarAsync`, sigue abierta.**
+  - Con un usuario que puede escribir, el agente sólo registra un Warning y sigue.
+  - F1-021 sólo lee el catálogo y una fila de parámetros.
+  - La ficha de F1-022 dice lo conservador: si Ricardo no ha decidido, **no leer tablas de
+    operación con ese usuario**.
+- **ISoftRestaurantReader no tiene métodos de lectura**, sólo `Nombre` y `Version`. Los
+  agregan F1-022/F1-023. No quedó nada a medio cablear.
+
+**Observaciones del revisor y cómo quedaron.**
+- **Plan: APROBADO CON OBSERVACIONES.** Todas atendidas:
+  - "Listo cuando" verificable en F1-025;
+  - Warning para la v11;
+  - mensaje con las 3 causas;
+  - filas con el mismo valor aceptadas;
+  - comparación exacta de nombres;
+  - guardia NOLOCK que también prohíbe joins con coma y APPLY;
+  - detección inyectable en el Worker;
+  - `HuellaSr.Desde` puro y probado;
+  - decisión provisional marcada, con nota en F1-022;
+  - docs §1, §11 y §12, sin marcar el codepage como validado.
+- **Entregable: APROBADO CON OBSERVACIONES** en la primera pasada, sin bloqueo:
+  1. Decir en el log que el envío del heartbeat se delegó a F1-025: hecho, arriba.
+  2. Cancelación a media query: anotada arriba para la próxima tarea.
+  3. Repetir que no se probó con `db_datareader` y que la decisión sigue abierta: hecho.
+  4. Esta entrada.
+
+**Trampas que encontré.**
+- **La misma de F1-020, y caí otra vez.**
+  - Un heredoc con `python -` dentro, con regex que llevaban `\\b`, dejó **caracteres de
+    retroceso (0x08)** en un `.cs`. Y un `\\n` salió como salto de línea real.
+  - Luego, un heredoc largo con comillas simples desbalanceadas falló entero ("unexpected
+    EOF").
+  - **Lo que tenga barras invertidas o comillas raras escríbelo con Write o Edit.** Para
+    detectar el daño, busca caracteres de control con Python (ord < 32 que no sean salto,
+    retorno ni tabulador).
+- **SQL Server 2014 no tiene `STRING_AGG`** (error 195). Las queries del agente tienen que
+  ser T-SQL de 2014.
+- **SqlClient escribe en consola** "*el elemento TLS 1.0 negociado es un protocolo
+  inseguro*". Este SQL 2014 SP1 no ofrece TLS 1.2, pero conecta igual.
+- **En modo servicio en consola los acentos salen como `�`**: `Console.OutputEncoding` sólo
+  se ajusta en `test`. El archivo de log sale bien en UTF-8. Es cosmético; no se tocó.
+
+**Qué quedó abierto** (ninguna es tarea nueva de la cola):
+- **F1-025:** mandar `EstadoSoftRestaurant.VersionSr` y `UltimoError` en el heartbeat. Está
+  en su ficha.
+- **Ricardo:** decidir si el agente se niega a leer con un usuario que puede escribir, antes
+  de F1-022.
+- **F1-090** (hay SR 10 local, ver su ficha): mapear columnas, probar con `db_datareader` y,
+  si aparece, la v11.
+- **F1-026:** el T-SQL de `db_datareader` ya se podría probar contra `.\NATIONALSOFT`, pero
+  crear el usuario **es escribir en el servidor del POS**. Lo decide Ricardo de día, no una
+  sesión nocturna.
+
+**Qué haría distinto.**
+- Buscar desde el primer minuto si la máquina ya tiene SR (`sc query state= all`, filtrando
+  por SQL) en vez de creerle al log anterior. Eso convirtió la tarea de "supuestos" en
+  "validada".
+- No volver a escribir código con barras invertidas en un heredoc.
