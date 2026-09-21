@@ -1,0 +1,23 @@
+<Project>
+
+  <!--
+    Propiedades comunes a todos los proyectos de /agent.
+
+    `Nullable=enable` lo pide el AC de F1-001 y no es cosmetico: el agente lee una
+    base ajena (SoftRestaurant) donde media columna es NULL en la practica, y el
+    compilador avisando es la diferencia entre un NullReferenceException a las tres
+    de la tarde y un campo vacio bien manejado.
+
+    NO se pone TreatWarningsAsErrors: esta tarea no lo pide y endurecerlo aqui
+    condiciona tareas que no son suyas. Si se quiere, va en F1-092 (hardening).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

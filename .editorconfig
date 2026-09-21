@@ -1,0 +1,39 @@
+# Configuración de estilo compartida por los tres carriles del monorepo.
+# Prettier (en /api y /web) y `dotnet format` (en /agent) la respetan; el resto
+# de archivos dependen sólo de esto.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{js,jsx,ts,tsx,mjs,cjs,json,jsonc,yml,yaml,css,html}]
+indent_size = 2
+
+[*.cs]
+indent_size = 4
+
+[*.{csproj,props,targets,sln}]
+indent_size = 2
+
+[*.md]
+# Dos espacios al final son un salto de línea en Markdown: no los recortes.
+trim_trailing_whitespace = false
+
+# El orquestador nocturno lo lee PowerShell 5.1 en Windows y .gitattributes lo
+# marca `-text` a propósito: aquí tampoco se le tocan los finales de línea.
+[*.ps1]
+end_of_line = crlf
+
+# El hook es un script POSIX. Con CRLF el `#!/bin/sh` llega con un \r pegado, el
+# hook queda instalado, se ve bien y NO CORRE. El job `guardia` del CI lo vigila.
+[scripts/git-hooks/*]
+end_of_line = lf
+
+[Makefile]
+indent_style = tab

@@ -1,0 +1,6 @@
+# Artefactos de compilación y de tests de este carril. La raíz ya los ignora;
+# aquí queda explícito en la carpeta (lo pide el AC de F1-001).
+dist/
+coverage/
+*.tsbuildinfo
+.eslintcache

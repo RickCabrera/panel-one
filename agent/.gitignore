@@ -1,0 +1,13 @@
+# Artefactos de compilacion de .NET. La raiz ya los ignora; aqui queda explicito
+# en la carpeta (lo pide el AC de F1-001).
+bin/
+obj/
+publish/
+*.user
+*.binlog
+
+# La config real del agente trae la cadena de conexion al SQL Server del cliente
+# y la API key de la sucursal. Lo que se versiona es la plantilla, y va en
+# infra/config.example.json (ruta reservada por el .gitignore de la raiz y por el
+# job `guardia` del CI). La crea F1-020.
+config.json
