@@ -14,15 +14,23 @@ describe('Contrato OpenAPI', () => {
     expect(versionado.replace(/\r\n/g, '\n')).toBe(serializar(generado));
   });
 
-  it('documenta todos los endpoints (auth, agentes e ingesta)', async () => {
+  it('documenta todos los endpoints (auth, agentes, ingesta y lectura)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual([
       '/agente/yo',
       '/auth/login',
       '/auth/me',
       '/auth/refresh',
+      '/empresas',
       '/ingesta/eventos',
+      '/mesas/abiertas',
+      '/sucursales',
       '/sucursales/{id}/api-key',
+      '/ventas/formas-pago',
+      '/ventas/por-hora',
+      '/ventas/resumen',
+      '/ventas/tickets',
+      '/ventas/top-productos',
     ]);
     expect(paths['/auth/login']?.post?.responses).toHaveProperty('429');
     expect(paths['/auth/me']?.get?.security).toEqual([{ bearer: [] }]);
@@ -69,5 +77,47 @@ describe('Contrato OpenAPI', () => {
       expect(texto).not.toContain('sucursalId');
       expect(texto).not.toContain('empresaId');
     }
+  });
+
+  it('documenta la lectura (F1-033): Bearer en todo, 400/401/404 con filtro, y los esquemas', async () => {
+    const { paths, components } = await generarDocumento();
+    const conFiltro = [
+      '/ventas/resumen',
+      '/ventas/por-hora',
+      '/ventas/formas-pago',
+      '/ventas/top-productos',
+      '/ventas/tickets',
+      '/mesas/abiertas',
+      '/sucursales',
+    ];
+    for (const ruta of conFiltro) {
+      const op = paths[ruta]?.get;
+      expect(op?.security).toEqual([{ bearer: [] }]);
+      expect(Object.keys(op?.responses ?? {}).sort()).toEqual(['200', '400', '401', '404']);
+    }
+    const empresas = paths['/empresas']?.get;
+    expect(empresas?.security).toEqual([{ bearer: [] }]);
+    expect(Object.keys(empresas?.responses ?? {}).sort()).toEqual(['200', '401']);
+
+    const nombres = (ruta: string) =>
+      (paths[ruta]?.get?.parameters ?? []).map((p) => ('name' in p ? p.name : '')).sort();
+    expect(nombres('/ventas/resumen')).toEqual(['desde', 'empresaId', 'hasta', 'sucursalId']);
+    expect(nombres('/ventas/top-productos')).toEqual(
+      ['desde', 'empresaId', 'hasta', 'limite', 'por', 'sucursalId'].sort(),
+    );
+    expect(nombres('/ventas/tickets')).toEqual(
+      ['desde', 'empresaId', 'folio', 'hasta', 'pagina', 'porPagina', 'sucursalId'].sort(),
+    );
+
+    const esquemas = components?.schemas ?? {};
+    // Un promedio sin divisor es null: el contrato lo dice.
+    expect(JSON.stringify(esquemas.ResumenDto)).toMatch(/"ticketPromedio":\{[^}]*"nullable":true/);
+    // La sucursal nunca expone su API key ni el hash.
+    expect(Object.keys((esquemas.SucursalDto as { properties: object }).properties).sort()).toEqual(
+      ['activo', 'empresaId', 'id', 'nombre', 'zonaHoraria'],
+    );
+    expect(JSON.stringify(esquemas)).not.toMatch(/apiKeyHash/);
+    expect(esquemas).toHaveProperty('PaginaTicketsDto');
+    expect(esquemas).toHaveProperty('MesasSucursalDto');
   });
 });

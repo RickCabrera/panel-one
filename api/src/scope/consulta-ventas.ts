@@ -13,10 +13,14 @@ import type { EmpresaScope } from './empresa-scope';
  * la zona de CADA sucursal. El caller sólo aporta el cuerpo, que lee de ellas:
  *
  * - `sucursales_alcance(id, empresa_id, nombre, zona_horaria)`
- * - `ventas(id, empresa_id, sucursal_id, cerrado_at, hora_local, comensales,
- *   subtotal, impuestos, descuentos, propina, total)`: cheques NO cancelados
- *   cerrados en el rango.
- * - `cancelados(id, sucursal_id)`: cheques cancelados del rango.
+ * - `ventas(id, empresa_id, sucursal_id, folio, cerrado_at, hora_local,
+ *   comensales, subtotal, impuestos, descuentos, propina, total)`: cheques NO
+ *   cancelados cerrados en el rango.
+ * - `cancelados(id, empresa_id, sucursal_id, folio, momento)`: cheques
+ *   cancelados del rango, ubicados por `momento = COALESCE(cerrado_at, abierto_at)`.
+ * - `tickets(id, empresa_id, sucursal_id, folio, momento, cancelado)`: la lista
+ *   de tickets (F1-033) = `ventas` ∪ `cancelados`; `momento` es `cerrado_at` en
+ *   los no cancelados.
  * - `partidas_ventas(cheque_id, empresa_id, sucursal_id, producto, categoria,
  *   cantidad, total)`: partidas de `ventas`.
  * - `pagos_ventas(cheque_id, empresa_id, sucursal_id, forma_raw, monto)`.
@@ -51,6 +55,7 @@ export const CTES_VENTAS = [
   'partidas_ventas',
   'pagos_ventas',
   'catalogo_formas',
+  'tickets',
 ] as const;
 
 /** Un día de calendario real, en ms UTC de su medianoche, o null. */
@@ -223,7 +228,9 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
   const inicioLocal = Prisma.sql`(${filtro.desde}::date::timestamp AT TIME ZONE s.zona_horaria)`;
   const finLocal = Prisma.sql`((${filtro.hasta}::date + 1)::timestamp AT TIME ZONE s.zona_horaria)`;
   // Pre-filtro grueso en UTC (las zonas van de -12 a +14 h) que sí puede usar
-  // los índices `(empresa_id, cerrado_at)` / `(sucursal_id, cerrado_at)`.
+  // los índices `(empresa_id, cerrado_at)` / `(sucursal_id, cerrado_at)`. En
+  // `cancelados` va partido en dos ramas (con y sin `cerrado_at`) porque el
+  // `COALESCE` no es sargable; no cambia qué filas entran, sólo acota el escaneo.
   const inicioGrueso = Prisma.sql`((${filtro.desde}::date::timestamp AT TIME ZONE 'UTC') - interval '15 hours')`;
   const finGrueso = Prisma.sql`(((${filtro.hasta}::date + 1)::timestamp AT TIME ZONE 'UTC') + interval '15 hours')`;
   const sucursalCheque =
@@ -237,7 +244,7 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
     WHERE s.empresa_id = ${empresa} ${filtroTenant(scope, 's')} ${sucursal}
   ),
   ventas AS (
-    SELECT c.id, c.empresa_id, c.sucursal_id, c.cerrado_at,
+    SELECT c.id, c.empresa_id, c.sucursal_id, c.folio, c.cerrado_at,
            extract(hour FROM c.cerrado_at AT TIME ZONE s.zona_horaria)::int AS hora_local,
            c.comensales, c.subtotal, c.impuestos, c.descuentos, c.propina, c.total
     FROM cheques c
@@ -248,11 +255,16 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
       AND c.cerrado_at >= ${inicioLocal} AND c.cerrado_at < ${finLocal}
   ),
   cancelados AS (
-    SELECT c.id, c.sucursal_id
+    SELECT c.id, c.empresa_id, c.sucursal_id, c.folio,
+           COALESCE(c.cerrado_at, c.abierto_at) AS momento
     FROM cheques c
     JOIN sucursales_alcance s ON s.id = c.sucursal_id AND s.empresa_id = c.empresa_id
     WHERE c.empresa_id = ${empresa} ${filtroTenant(scope, 'c')} ${sucursalCheque}
       AND c.cancelado
+      AND (
+        (c.cerrado_at >= ${inicioGrueso} AND c.cerrado_at < ${finGrueso})
+        OR (c.cerrado_at IS NULL AND c.abierto_at >= ${inicioGrueso} AND c.abierto_at < ${finGrueso})
+      )
       AND COALESCE(c.cerrado_at, c.abierto_at) >= ${inicioLocal}
       AND COALESCE(c.cerrado_at, c.abierto_at) < ${finLocal}
   ),
@@ -272,5 +284,10 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
     SELECT f.empresa_id, f.forma_raw, f.forma::text AS forma
     FROM formas_pago_catalogo f
     WHERE f.empresa_id = ${empresa} ${filtroTenant(scope, 'f')}
+  ),
+  tickets AS (
+    SELECT id, empresa_id, sucursal_id, folio, cerrado_at AS momento, false AS cancelado FROM ventas
+    UNION ALL
+    SELECT id, empresa_id, sucursal_id, folio, momento, true AS cancelado FROM cancelados
   )`;
 }

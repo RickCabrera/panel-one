@@ -106,7 +106,7 @@ function manual(cheques: ChequeSeed[], f: FiltroVentas) {
   const resumen = {
     venta: pesos(venta),
     cuentas: v.length,
-    ticketPromedio: pesos(v.length ? div2(venta, v.length) : D()),
+    ticketPromedio: v.length ? pesos(div2(venta, v.length)) : null,
     subtotal: pesos(suma(v, 'subtotal')),
     impuestos: pesos(suma(v, 'impuestos')),
     propina: pesos(suma(v, 'propina')),
@@ -180,7 +180,7 @@ function manual(cheques: ChequeSeed[], f: FiltroVentas) {
         nombre: NOMBRE[id],
         venta: pesos(vs),
         cuentas: xs.length,
-        ticketPromedio: pesos(xs.length ? div2(vs, xs.length) : D()),
+        ticketPromedio: xs.length ? pesos(div2(vs, xs.length)) : null,
         comensales: xs.reduce((s, c) => s + (c.comensales ?? 0), 0),
       };
     })
@@ -630,12 +630,12 @@ describe('AgregadosVentasService: casos borde con valores literales', () => {
     ]);
   });
 
-  it('un rango vacío da ceros, no nulls', async () => {
+  it('un rango vacío da ceros en las sumas y null en los promedios (F1-033)', async () => {
     const r = await servicio.resumen(A, f('2027-01-01'));
     expect(r).toEqual({
       venta: '0.00',
       cuentas: 0,
-      ticketPromedio: '0.00',
+      ticketPromedio: null,
       subtotal: '0.00',
       impuestos: '0.00',
       propina: '0.00',

@@ -149,6 +149,42 @@ describe('ScopedPrismaService.ventas() (contra Postgres)', () => {
           folio: '3',
           folioSr: 'CV-B1',
         },
+        // Para la CTE `tickets` (F1-033): cancelados con y sin cierre, uno
+        // cancelado que se abrió ese día pero se cerró otro, y uno abierto.
+        {
+          ...base,
+          sucursalId: FX.sucursalA1,
+          empresaId: FX.empresaA,
+          folio: '4',
+          folioSr: 'CV-A1-CANCELADO',
+          cancelado: true,
+        },
+        {
+          ...base,
+          cerradoAt: null,
+          sucursalId: FX.sucursalA1,
+          empresaId: FX.empresaA,
+          folio: '5',
+          folioSr: 'CV-A1-CANCELADO-SIN-CIERRE',
+          cancelado: true,
+        },
+        {
+          ...base,
+          cerradoAt: new Date('2026-11-12T20:00:00Z'),
+          sucursalId: FX.sucursalA1,
+          empresaId: FX.empresaA,
+          folio: '6',
+          folioSr: 'CV-A1-CANCELADO-OTRO-DIA',
+          cancelado: true,
+        },
+        {
+          ...base,
+          cerradoAt: null,
+          sucursalId: FX.sucursalA1,
+          empresaId: FX.empresaA,
+          folio: '7',
+          folioSr: 'CV-A1-ABIERTO',
+        },
       ],
     });
   });
@@ -198,6 +234,39 @@ describe('ScopedPrismaService.ventas() (contra Postgres)', () => {
     await expect(
       folios(A, { empresaId: FX.empresaA, sucursalId: FX.sucursalA2, ...dia }),
     ).resolves.toEqual(['CV-A2']);
+  });
+
+  it('tickets (F1-033) = ventas ∪ cancelados, con su momento y su flag; nada abierto ni ajeno', async () => {
+    const q = () => servicio.ventas(A, { empresaId: FX.empresaA, ...dia });
+    const tickets = await q().consultar<{ id: string; momento: Date; cancelado: boolean }>(
+      Prisma.sql`SELECT id, momento, cancelado FROM tickets`,
+    );
+    const union = await q().consultar<{ id: string }>(
+      Prisma.sql`SELECT id FROM ventas UNION ALL SELECT id FROM cancelados`,
+    );
+    expect(tickets.map((t) => t.id).sort()).toEqual(union.map((u) => u.id).sort());
+    const guardados = await prisma.cheque.findMany({
+      where: { id: { in: tickets.map((t) => t.id) } },
+    });
+    const porFolio = Object.fromEntries(
+      tickets.map((t) => [guardados.find((g) => g.id === t.id)!.folioSr, t]),
+    );
+    expect(Object.keys(porFolio).sort()).toEqual([
+      'CV-A1',
+      'CV-A1-CANCELADO',
+      'CV-A1-CANCELADO-SIN-CIERRE',
+      'CV-A2',
+    ]);
+    expect(porFolio['CV-A1'].cancelado).toBe(false);
+    expect(porFolio['CV-A1-CANCELADO'].cancelado).toBe(true);
+    // Sin cierre, el cancelado se ubica por su apertura.
+    expect(porFolio['CV-A1-CANCELADO-SIN-CIERRE'].momento).toEqual(cierre);
+    // Para B, desde el scope de A: vacío.
+    await expect(
+      servicio
+        .ventas(A, { empresaId: FX.empresaB, ...dia })
+        .consultar(Prisma.sql`SELECT id FROM tickets`),
+    ).resolves.toEqual([]);
   });
 
   it('valida el filtro antes de consultar', () => {

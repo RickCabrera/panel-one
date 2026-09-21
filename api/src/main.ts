@@ -5,9 +5,12 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 
 import { AppModule } from './app.module';
 import { configurarApp } from './configurar-app';
+import { leerDocsConfig, montarDocs } from './openapi/docs';
 
 async function bootstrap(): Promise<void> {
   const app = configurarApp(await NestFactory.create<NestExpressApplication>(AppModule));
+  // `/docs` sólo con DOCS_USUARIO/DOCS_PASSWORD (Basic); sin ellas no se monta.
+  montarDocs(app, leerDocsConfig());
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
 }
