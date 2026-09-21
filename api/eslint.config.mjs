@@ -28,6 +28,9 @@ export default tseslint.config(
   //   - src/scope/scoped-prisma.service.ts: el helper de scope en sí.
   //   - src/auth/auth.service.ts: el login busca por email antes de saber quién
   //     es el usuario; no hay scope que aplicar.
+  //   - src/agentes/agentes-auth.service.ts: igual que el login, busca la
+  //     sucursal por el hash de la API key ANTES de saber de qué empresa es el
+  //     request (F1-012). Sólo tiene esa lectura.
   //   - *.spec.ts: los tests arman y limpian fixtures directamente.
   // `src/lint/restriccion-prisma.spec.ts` comprueba que la regla sí muerde.
   {
@@ -36,6 +39,7 @@ export default tseslint.config(
       'src/prisma/**',
       'src/scope/scoped-prisma.service.ts',
       'src/auth/auth.service.ts',
+      'src/agentes/agentes-auth.service.ts',
       'src/**/*.spec.ts',
     ],
     rules: {
