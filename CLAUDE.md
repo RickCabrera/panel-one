@@ -182,6 +182,32 @@ En ese modo el bucle cambia así, y NADA MÁS cambia:
   siguiente sesión no ve el salto y vuelve a tomar la misma tarea. Después borra la rama,
   crea el archivo vacío `TAREA_SALTADA.txt` en la raíz y termina **sin marcar nada** en el
   backlog.
+- **Corte por tiempo: la tarea que no cabe se PARTE, no se abandona ni se salta.** Si a
+  media construcción ves que la tarea completa no entra en el tiempo de la sesión, no la
+  dejes a medias en una rama que nadie va a retomar ni la marques SALTADA: córtala. Un
+  corte son cuatro movimientos, y los cuatro:
+  1. **Mergea la parte que funciona y no rompe nada.** Misma rama, mismo PR, mismos checks
+     locales, mismo revisor, mismo CI verde. Lo que entra tiene que quedar coherente por sí
+     solo: nada a medio cablear, ningún test borrado ni en skip, ninguna validación
+     aflojada. Si el pedazo que tienes no cumple eso, no hay corte que valga y la tarea
+     sigue el camino normal (cerrar o SALTAR).
+  2. **Marca `[x]` en `backlog.md` y en esa misma línea escribe `**PARCIAL:** falta ...`**
+     con lo que quedó fuera, concreto. El `[x]` es lo que hace que las tareas que dependían
+     de ésta avancen con lo que ya existe; el `PARCIAL` es lo que evita que alguien lea ese
+     `[x]` como "completa".
+  3. **Agrega al final del `backlog.md` una tarea nueva `<ID>b`** —`F1-032b` si cortaste
+     `F1-032`— con el resto y con **su propio "Listo cuando"**, y **métela en la Cola
+     nocturna justo después de la tarea actual**: su fila en la tabla y su lugar en el
+     orden. Ahí es donde va, no al final de la cola: el resto de una tarea cortada suele
+     ser justo lo que las siguientes esperan.
+  4. **Escribe en `docs/nocturno-log.md` por qué se cortó y DÓNDE se cortó**: qué quedó
+     dentro, qué quedó fuera, y por dónde retomar. La sesión que tome la `<ID>b` llega en
+     frío y ese log es lo único que tiene.
+  El `[x]`, el `PARCIAL`, la tarea nueva y su fila en la cola son **todos `backlog.md`**:
+  el commit de cierre sigue tocando ese archivo y ninguno más, así que el respaldo por
+  commit del orquestador lo sigue reconociendo como cierre. El resto del cierre no cambia:
+  la nota del log viaja en el PR de la parte que sí entró, y el centinela final es
+  `TAREA_CERRADA.txt`.
 - Decisiones que dependen del mundo (una instalación real de SoftRestaurant que todavía no
   se ha visto, una versión del POS que no está mapeada): busca primero en
   `docs/esquema-sr.md`. Si no está cubierta ahí, toma la opción MÁS CONSERVADORA, déjala

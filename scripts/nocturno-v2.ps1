@@ -64,20 +64,40 @@ Set-Location $raiz
 # limite de tokens y duerme 30 min. Doce veces: seis horas de nada por un PATH.
 # En un repo recien creado -que es donde este script se estrena- es justo el
 # escenario mas probable.
-if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
-  Write-Host 'PREFLIGHT: no encuentro "claude" en el PATH. Instala Claude Code o abre una consola nueva.' -ForegroundColor Red
+#
+# Se revisan TODAS y se reporta la lista completa: si faltan node y dotnet, que
+# el primer intento los muestre los dos y no obligue a dos vueltas.
+$faltantes = @()
+$requeridos = @(
+  @{ Cmd = 'claude'; Razon = 'es la sesion que hace la tarea. Instala Claude Code o abre una consola nueva.' },
+  @{ Cmd = 'gh';     Razon = 'el protocolo abre y mergea PRs con gh.' },
+  @{ Cmd = 'git';    Razon = 'el loop hace checkout, pull y rev-list en cada vuelta.' },
+  @{ Cmd = 'node';   Razon = 'los checks de /api y /web corren con node.' },
+  @{ Cmd = 'npm';    Razon = 'lint, typecheck, test y build de /api y /web se lanzan con npm.' },
+  @{ Cmd = 'dotnet'; Razon = 'los checks de /agent son dotnet build y dotnet test.' }
+)
+
+foreach ($r in $requeridos) {
+  if (-not (Get-Command $r.Cmd -ErrorAction SilentlyContinue)) {
+    $faltantes += $r
+  }
+}
+
+if ($faltantes.Count -gt 0) {
+  Write-Host 'PREFLIGHT: falta lo siguiente en el PATH y el loop no arranca.' -ForegroundColor Red
+  foreach ($f in $faltantes) {
+    Write-Host ("  - " + $f.Cmd + ": " + $f.Razon) -ForegroundColor Red
+  }
   exit 1
 }
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-  Write-Host 'PREFLIGHT: no encuentro "gh" en el PATH. El protocolo abre y mergea PRs con gh.' -ForegroundColor Red
-  exit 1
-}
+
+# gh instalado no es gh autenticado, y el protocolo no llega al PR sin sesion.
 gh auth status 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
   Write-Host 'PREFLIGHT: gh no esta autenticado. Corre "gh auth login" y vuelve.' -ForegroundColor Red
   exit 1
 }
-Write-Host 'Preflight ok: claude en PATH, gh autenticado.' -ForegroundColor Green
+Write-Host 'Preflight ok: claude, gh, git, node, npm y dotnet en PATH, gh autenticado.' -ForegroundColor Green
 
 $log = Join-Path $raiz "docs\nocturno-$(Get-Date -Format 'yyyyMMdd-HHmm').txt"
 
