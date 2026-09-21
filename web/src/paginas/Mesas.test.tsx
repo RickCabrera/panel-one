@@ -547,6 +547,10 @@ describe('Detalle de consumo (modal, F1-051)', () => {
     expect(document.activeElement).not.toBe(document.body);
     await usuarioEvt.tab();
     expect(cerrar).toHaveFocus();
+    // Shift+Tab desde el panel tampoco sale hacia las tarjetas de atrás.
+    await usuarioEvt.click(within(dialogo).getByText('Paquete familiar'));
+    await usuarioEvt.tab({ shift: true });
+    expect(cerrar).toHaveFocus();
     await usuarioEvt.click(within(dialogo).getByText('Paquete familiar'));
     await usuarioEvt.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
