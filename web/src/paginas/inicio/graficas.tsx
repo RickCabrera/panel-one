@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 
+import { pesosCompactos } from '../../dinero/dinero';
 import { ACENTO, type PuntoHora } from './puntosHora';
 
 export function TooltipHora({
@@ -33,8 +34,6 @@ export function TooltipHora({
   );
 }
 
-const compacto = new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 });
-
 export function GraficaPorHora({ puntos }: { puntos: PuntoHora[] }) {
   return (
     <div className="h-52 w-full min-w-0">
@@ -42,11 +41,7 @@ export function GraficaPorHora({ puntos }: { puntos: PuntoHora[] }) {
         <LineChart data={puntos} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="#e2e8f0" vertical={false} />
           <XAxis dataKey="etiqueta" tick={{ fontSize: 11 }} interval={3} />
-          <YAxis
-            width={44}
-            tick={{ fontSize: 11 }}
-            tickFormatter={(v: number) => `$${compacto.format(v)}`}
-          />
+          <YAxis width={44} tick={{ fontSize: 11 }} tickFormatter={pesosCompactos} />
           <Tooltip content={<TooltipHora />} />
           <Line
             type="monotone"

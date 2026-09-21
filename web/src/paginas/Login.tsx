@@ -4,6 +4,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router';
 import { ErrorApi } from '../api/cliente';
 import { useAuth } from '../auth/contexto';
 import { destinoSeguro } from '../auth/siguiente';
+import { Logo, NOMBRE_PRODUCTO } from '../marca/Marca';
 import { PantallaCarga } from './PantallaCarga';
 
 function mensajeDeError(error: unknown): string {
@@ -49,13 +50,19 @@ export function Login() {
       : null;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4">
       <form
         onSubmit={enviar}
-        className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+        aria-busy={enviando}
+        className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
       >
-        <h1 className="text-center text-xl font-semibold text-acento">Monitor SoftRestaurant</h1>
-        <p className="mt-1 text-center text-sm text-slate-500">Inicia sesión para continuar</p>
+        <div className="flex flex-col items-center text-acento">
+          <Logo className="h-12 w-12" />
+          <h1 className="mt-3 text-center text-xl font-semibold">{NOMBRE_PRODUCTO}</h1>
+        </div>
+        <p className="mt-1 text-center text-sm text-slate-600">
+          Ventas y mesas de tus sucursales, en vivo.
+        </p>
 
         {aviso && !error && (
           <p role="status" className="mt-4 rounded-md bg-amber-50 p-2 text-sm text-amber-800">
@@ -78,7 +85,7 @@ export function Login() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-acento focus:outline-none"
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-acento focus:outline-none focus:ring-2 focus:ring-acento/30"
         />
 
         <label className="mt-3 block text-sm font-medium" htmlFor="password">
@@ -91,17 +98,20 @@ export function Login() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-acento focus:outline-none"
+          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-acento focus:outline-none focus:ring-2 focus:ring-acento/30"
         />
 
         <button
           type="submit"
           disabled={enviando}
-          className="mt-5 w-full rounded-md bg-acento px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="mt-6 w-full rounded-md bg-acento px-3 py-2.5 text-sm font-medium text-white hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento disabled:opacity-60"
         >
           {enviando ? 'Entrando…' : 'Entrar'}
         </button>
       </form>
+      <p className="mt-6 text-center text-xs text-slate-500">
+        ¿Sin acceso? Pídeselo al administrador de tu empresa.
+      </p>
     </main>
   );
 }

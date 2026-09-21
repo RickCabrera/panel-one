@@ -1,5 +1,6 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
+import { compacto, pesosCompactos } from '../../dinero/dinero';
 import { ACENTO } from '../inicio/puntosHora';
 
 /**
@@ -32,8 +33,6 @@ export function TooltipBarra({
   );
 }
 
-const compacto = new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 });
-
 export function GraficaPorDia({ barras }: { barras: Barra[] }) {
   return (
     <div className="h-56 w-full min-w-0">
@@ -41,11 +40,7 @@ export function GraficaPorDia({ barras }: { barras: Barra[] }) {
         <BarChart data={barras} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="#e2e8f0" vertical={false} />
           <XAxis dataKey="etiqueta" tick={{ fontSize: 11 }} minTickGap={12} />
-          <YAxis
-            width={44}
-            tick={{ fontSize: 11 }}
-            tickFormatter={(v: number) => `$${compacto.format(v)}`}
-          />
+          <YAxis width={44} tick={{ fontSize: 11 }} tickFormatter={pesosCompactos} />
           <Tooltip content={<TooltipBarra />} cursor={{ fill: '#f1f5f9' }} />
           <Bar dataKey="valor" fill={ACENTO} isAnimationActive={false} />
         </BarChart>
@@ -63,7 +58,7 @@ export function GraficaTop({ barras, dinero }: { barras: Barra[]; dinero: boolea
           <XAxis
             type="number"
             tick={{ fontSize: 11 }}
-            tickFormatter={(v: number) => (dinero ? `$${compacto.format(v)}` : compacto.format(v))}
+            tickFormatter={dinero ? pesosCompactos : compacto}
           />
           <YAxis
             type="category"

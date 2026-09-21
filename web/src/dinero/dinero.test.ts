@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { aCentavos, formatearPesos, paraGrafica, pesos, porcentaje, sumar } from './dinero';
+import {
+  aCentavos,
+  compacto,
+  formatearPesos,
+  paraGrafica,
+  pesos,
+  pesosCompactos,
+  porcentaje,
+  sumar,
+} from './dinero';
 
 describe('aCentavos', () => {
   it('lee el texto de la API a centavos exactos', () => {
@@ -83,5 +92,20 @@ describe('porcentaje', () => {
 describe('paraGrafica', () => {
   it('da el número en pesos, sólo para dibujar', () => {
     expect(paraGrafica(123450n)).toBe(1234.5);
+  });
+});
+
+describe('ejes de gráfica', () => {
+  it('pesosCompactos pone el signo ANTES del $, como formatearPesos', () => {
+    expect(pesosCompactos(0)).toBe('$0');
+    expect(pesosCompactos(950)).toBe('$950');
+    expect(pesosCompactos(12500)).toBe(`$${compacto(12500)}`);
+    expect(pesosCompactos(-12500)).toBe(`-$${compacto(12500)}`);
+    expect(pesosCompactos(-12500).startsWith('-$')).toBe(true);
+  });
+
+  it('compacto abrevia miles y millones en es-MX', () => {
+    expect(compacto(12500)).toMatch(/^12\.5\s?k$/i);
+    expect(compacto(2_500_000)).toMatch(/^2\.5\s?M$/);
   });
 });

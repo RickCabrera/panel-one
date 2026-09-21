@@ -1,0 +1,19 @@
+# Caddyfile SÓLO para probar en local los snippets de `seguridad.caddy` (F1-092).
+# No es el de producción (ése es F1-002). Desde la raíz del repo, con la API en
+# :3000 y `npm run build` hecho en /web:
+#
+#     caddy run --config infra/caddy/Caddyfile.local --adapter caddyfile
+#
+# y abre http://localhost:8080. Sin HTTPS: el navegador ignora el HSTS sobre http.
+{
+	admin off
+	auto_https off
+}
+
+import seguridad.caddy
+
+:8080 {
+	import cabeceras_seguridad
+	import api localhost:3000
+	import spa web/dist
+}

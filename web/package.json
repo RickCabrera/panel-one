@@ -10,7 +10,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:bundle": "node scripts/tamano-bundle.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.103.1",
