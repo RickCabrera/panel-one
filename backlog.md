@@ -86,7 +86,7 @@ ultimo_error)`. Índices por `empresa_id` en todo. Seed: 1 admin global, 1 empre
 con `onDelete: Restrict`.
 
 ## 3 · F1-011 · Auth de usuarios (JWT)
-`[ ]` **Epic 1 — Modelo de datos, auth y multitenancy**
+`[x]` **Epic 1 — Modelo de datos, auth y multitenancy**
 
 Endpoints `POST /auth/login` (rate limit 5/min por IP), `POST /auth/refresh`,
 `GET /auth/me`. Access token 15 min, refresh 7 días en cookie httpOnly. Guard global de
