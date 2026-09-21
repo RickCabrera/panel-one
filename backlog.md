@@ -271,7 +271,7 @@ tamaño de cola reportado, último error. Badge de alerta en sidebar si alguna s
 > anota el resto como pendiente. Di qué se probó.
 
 ## 17 · F1-020 · Esqueleto del servicio + configuración
-`[ ]` **Epic 2 — Agente Windows (.NET 8)**
+`[x]` **Epic 2 — Agente Windows (.NET 8)** · **PARCIAL:** falta verificar con `sc create` en consola elevada el arranque con Windows y el reinicio tras caída (proceso matado y falla interna); el resto está en F1-020b (Diurnas).
 
 Worker Service instalable con `sc create` (documentar) y publicado como single-file
 self-contained x64. Config en `C:\ProgramData\ArkonAgente\config.json`:
