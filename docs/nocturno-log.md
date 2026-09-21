@@ -2456,3 +2456,53 @@ cerrado y restaurable, con todo esto dentro.
 - Del revisor, no obligatoria: en `/api/*`, Caddy deja `Referrer-Policy` en
   `strict-origin-when-cross-origin` en vez del `no-referrer` de la API. Es a propósito y está
   comentado.
+
+### Cierre tras la reapertura (2026-09-21, tarde)
+**El "Estado" de arriba ya no aplica.** Dice que el cierre depende del CI y que la tarea se saltaría:
+eso era antes de que se arreglara la facturación. Esta entrada lleva hora 11:58 y va DESPUÉS de la
+de las 12:10 (la "REABIERTA") sólo por el rebase; no es un duplicado.
+
+- **Checks locales tras el rebase sobre 8fcb504:**
+  - /api: lint limpio, typecheck limpio, jest **651/651** (28 suites), 0 skips.
+  - /web: build limpio, lint limpio, vitest **302/302** (24 archivos), 0 skips; `check:bundle`
+    210.6 kB gzip.
+  - /infra: `docker compose config` OK.
+- **Revisor del entregable (tras el rebase): APROBADO CON OBSERVACIONES**, sin bloqueo. La única
+  obligatoria era esta sección. El número de PR lo da `gh pr create`; es uno nuevo, no el #23.
+- **"Listo cuando"** (revisión cruzada sin hallazgos críticos abiertos) se da por cumplido **sobre el
+  alcance literal de la ficha**: headers, rate limits, bundle, Lighthouse, formatos, marca, 404 y
+  login. Lo de abajo NO estaba en la ficha y no se hizo, para no meter nada "de pasada".
+
+**⚠️ Pendientes que otras sesiones anotaron "para F1-092" y que F1-092 NO resolvió.** Esta era la
+última tarea de la cola: si nadie los recoge aquí, quedan apuntando a una tarea cerrada. Son
+**decisión abierta para Ricardo** (convertirlos en tareas o descartarlos):
+1. **RIESGO DE SEGURIDAD — no hay logout ni revocación** (log, líneas ~265-290 y ~844). "Salir" sólo
+   limpia el cliente; la cookie de refresh sigue valiendo hasta 7 días. En una PC compartida,
+   `fetch('/api/auth/refresh',{method:'POST'})` desde la consola entra como el usuario anterior. Hace
+   falta `POST /auth/logout` que borre la cookie y, mejor, revoque (tabla de sesiones o versión de
+   token). Relacionado: un usuario desactivado sigue entrando a rutas de datos hasta que vence su
+   access (15 min); rotar el refresh no invalida el anterior. **Es lo primero que yo haría.**
+2. Sin límite de fallos por IP en login más allá del cubo de 5/min; el reset de contraseña por admin
+   no tiene throttle propio (línea ~1423).
+3. Exportar CSV (líneas ~1021-1026): "Hoy" en hora pico aborta seguido; folios con ceros a la
+   izquierda se pierden en Excel; `aCentavos(x) ?? 0n` muestra $0.00 sin aviso
+   (`inicio/Tarjetas.tsx`, `inicio/puntosHora.ts`); la anti-inyección sólo mira el primer carácter;
+   cancelados listados en Tickets (decisión de producto).
+4. Inicio vs Monitor (líneas ~1244-1245, ~1332): "Venta en vivo" suma sucursales desconectadas y el
+   Monitor no; el KPI "Última lectura" con "Todas" muestra la más vieja.
+5. Accesibilidad del modal de consumo: `aria-label` sólo con el nombre del producto (línea ~1331).
+6. El badge de agentes re-renderiza el sidebar cada 5 s para admins (línea ~1510).
+7. Menores anteriores: regla de lint de Prisma brincable con `require`/subrutas (línea ~282);
+   `statement_timeout` en nuestra base (línea ~736); tope de 5 MB también en `/auth/login`
+   (línea ~561); 390 px sin medir en navegador (línea ~891).
+
+**Comentarios de código que quedan desactualizados** (no se tocaron, sería "de pasada"):
+`web/src/auth/marcaCierre.ts:5,9` y `web/src/api/cliente.ts` (~73) dicen "logout (F1-092)", y
+`web/src/paginas/tickets/exportar.ts:35` dice "anotado para F1-092". Quien haga el logout, que los
+corrija.
+
+**Otra decisión abierta para Ricardo** (del revisor, no nueva de este diff): el nombre del producto
+"Monitor SoftRestaurant" usa la marca de un tercero; el logo sí es propio. Va junto a la de HSTS.
+
+**Estado de la cola al cerrar:** con F1-092 `[x]` no queda nada en la Cola nocturna. La siguiente
+sesión debe crear `COLA_VACIA.txt` y terminar, salvo que Ricardo agregue tareas (p. ej. el logout).
