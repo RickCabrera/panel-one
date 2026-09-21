@@ -10,19 +10,21 @@ import { AuthService } from './auth.service';
 import { CuentaController } from './cuenta.controller';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
+import { OPCIONES_THROTTLER_LOGIN, OPCIONES_THROTTLER_REFRESH } from './throttlers';
 import { TokensService } from './tokens.service';
 
 @Module({
   imports: [
     // Sin secreto aquí: cada firma/verificación pasa el suyo (access o refresh).
     JwtModule.register({}),
-    // Dos throttlers con nombre, y cada ruta salta el que no es suyo:
-    // - `login`: 5/min por IP, sólo `POST /auth/login`. La IP es `req.ip`; detrás
-    //   del proxy del VPS hará falta `trust proxy` (pendiente de deploy).
+    // Tres throttlers con nombre, y cada ruta salta los que no son suyos:
+    // - `login`: 5/min por IP, `POST /auth/login` y `POST /cuenta/password`.
+    // - `refresh`: 30/min por IP, `POST /auth/refresh` (F1-092).
     // - `agente`: 120/min por sucursal, las rutas `@AutenticacionAgente()` (F1-012).
+    // La IP es `req.ip`: detrás de Caddy sale de `TRUST_PROXY_SALTOS` (configurarApp).
     // Storage en memoria: vale por proceso.
     ThrottlerModule.forRoot({
-      throttlers: [{ name: 'login', ttl: 60_000, limit: 5 }, OPCIONES_THROTTLER_AGENTE],
+      throttlers: [OPCIONES_THROTTLER_LOGIN, OPCIONES_THROTTLER_REFRESH, OPCIONES_THROTTLER_AGENTE],
     }),
   ],
   controllers: [AuthController, CuentaController],

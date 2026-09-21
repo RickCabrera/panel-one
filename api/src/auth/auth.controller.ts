@@ -25,6 +25,7 @@ import { Public } from './decoradores';
 import { LoginDto } from './dto/login.dto';
 import { ErrorDto, SesionDto, UsuarioActualDto } from './dto/sesion.dto';
 import type { RequestAutenticado } from './request-autenticado';
+import { THROTTLER_LOGIN, THROTTLER_REFRESH } from './throttlers';
 
 const DESCRIPCION_COOKIE =
   `Pone la cookie \`${COOKIE_REFRESH}\` (httpOnly, SameSite=Strict, Path=${COOKIE_REFRESH_PATH}, ` +
@@ -43,8 +44,8 @@ export class AuthController {
   // Rate limit: 5 intentos por minuto por IP (throttler `login` de AuthModule).
   // Cuenta todo intento, también los 400 y los 401.
   @UseGuards(ThrottlerGuard)
-  // El throttler de agentes (por sucursal) no aplica aquí: no hay agente.
-  @SkipThrottle({ [THROTTLER_AGENTE]: true })
+  // Ni el de refresh ni el de agentes (por sucursal: aquí no hay agente) aplican.
+  @SkipThrottle({ [THROTTLER_REFRESH]: true, [THROTTLER_AGENTE]: true })
   @HttpCode(200)
   @ApiOperation({ summary: 'Inicia sesión. ' + DESCRIPCION_COOKIE })
   @ApiOkResponse({ type: SesionDto })
@@ -65,6 +66,10 @@ export class AuthController {
 
   @Post('refresh')
   @Public()
+  // Rate limit: 30 por minuto por IP (throttler `refresh`). No gasta los intentos
+  // del login, y el de agentes truena sin agente en el request: se saltan los dos.
+  @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ [THROTTLER_LOGIN]: true, [THROTTLER_AGENTE]: true })
   @HttpCode(200)
   @ApiCookieAuth(COOKIE_REFRESH)
   @ApiOperation({
@@ -75,6 +80,7 @@ export class AuthController {
     type: ErrorDto,
     description: 'Sin cookie, cookie inválida o vencida, o usuario/empresa ya inactivos.',
   })
+  @ApiTooManyRequestsResponse({ description: 'Más de 30 refresh por minuto desde la misma IP.' })
   async refresh(
     @Req() req: RequestAutenticado,
     @Res({ passthrough: true }) res: Response,

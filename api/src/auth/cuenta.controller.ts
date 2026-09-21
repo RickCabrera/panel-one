@@ -19,6 +19,7 @@ import { AuthService } from './auth.service';
 import { CambiarPasswordDto } from './dto/password.dto';
 import { ErrorDto, SesionDto } from './dto/sesion.dto';
 import type { RequestAutenticado } from './request-autenticado';
+import { THROTTLER_REFRESH } from './throttlers';
 
 /**
  * La cuenta del propio usuario (F1-060), para CUALQUIER rol. Vive fuera de
@@ -39,7 +40,7 @@ export class CuentaController {
   // Mismo límite que el login (5/min por IP): adivinar la contraseña actual con
   // un token robado no sale más barato que por el login.
   @UseGuards(ThrottlerGuard)
-  @SkipThrottle({ [THROTTLER_AGENTE]: true })
+  @SkipThrottle({ [THROTTLER_REFRESH]: true, [THROTTLER_AGENTE]: true })
   @HttpCode(200)
   @ApiOperation({
     summary: 'Cambia la contraseña del usuario autenticado.',
