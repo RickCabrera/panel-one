@@ -13,3 +13,14 @@ afterEach(() => {
 // entre tests. Todo test que la establezca llama `terminarSesion()` en su
 // afterEach (como App.test.tsx y cliente.test.ts), o el siguiente arranca con el
 // token y el timer del anterior.
+
+// jsdom no trae ResizeObserver y el `ResponsiveContainer` de Recharts lo pide al
+// montarse. Con tamaño 0 no dibuja nada, que es lo que queremos: los tests revisan
+// los números en texto, no los píxeles de la gráfica.
+if (!('ResizeObserver' in globalThis)) {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

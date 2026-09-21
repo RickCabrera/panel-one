@@ -156,7 +156,9 @@ describe('deep-link y login', () => {
     await entrar();
 
     expect(await screen.findByRole('heading', { name: 'Panel de ventas' })).toBeInTheDocument();
-    expect(ubicacion()).toMatch(/^\/\?empresa=/);
+    // La normalización del alcance llega cuando responde /empresas, que puede ser
+    // después del primer render de la vista: se espera, no se da por hecha.
+    await waitFor(() => expect(ubicacion()).toMatch(/^\/\?empresa=/));
   });
 });
 
