@@ -1028,3 +1028,138 @@ por escapado en Bash costaron más que todo el layout.
 - **Sin hallazgos nuevos sobre SoftRestaurant:** esta tarea sólo consume nuestra API. `docs/esquema-sr.md` no cambió.
 
 **Qué haría distinto.** Escribir el test de "el filtro viejo nunca se ve" antes que el `placeholderData`. Es la clase de regla que un test normal (esperar a que aparezca lo nuevo) no puede detectar.
+
+## 2026-09-21 01:07 — F1-043 · Reportes básicos
+**Estado:** CERRADA (PR de `feat/F1-043`, squash a main)
+
+**Qué quedó hecho.**
+- **Cruza carriles (/api + /web), a propósito.** F1-043 figura como /web, pero la API no tenía
+  "ventas por día" ni endpoint para el comparativo (el log de F1-033 lo dejó abierto). Los agregué
+  aquí porque son la API mínima sin la que la tarea no se puede construir. No abrí una F1-033b.
+  El revisor lo aceptó en el plan. Corrí los checks de los dos carriles.
+- **API:**
+  - `GET /ventas/por-dia` da una fila por cada día `desde..hasta` (inclusivo, con ceros).
+  - `GET /ventas/comparativo-sucursales` es el `comparativoSucursales` de F1-032, que ahora tiene
+    endpoint.
+  - Los dos pasan por `CacheAgregados` (15 s) y por `consulta()`: 400 y luego 404, nunca 403.
+  - La CTE `ventas` del helper de scope ganó `dia_local` (el día de cierre en la zona de la
+    sucursal). `diasDelRango()` rellena los días con aritmética de medianoche UTC sobre fechas de
+    calendario.
+  - `api/openapi.json` está regenerado y `openapi.spec.ts` lista los paths nuevos. Sin migración.
+- **Web:** `/reportes` (`web/src/paginas/Reportes.tsx` + `web/src/paginas/reportes/`):
+  - **Ventas por día:** barras, tabla y fila Total.
+  - **Comparativo entre sucursales:** sucursal, venta, tickets, ticket promedio y comensales, con
+    fila Total. El promedio del total es venta/cuentas en `bigint`, con mitad lejos de cero como
+    la API.
+  - **Top productos:** tabla y barras horizontales, "Por importe/Por cantidad" y "Mostrar
+    10/20/50".
+  - **Export CSV** por reporte.
+  - El periodo va en la URL y "hoy" es la zona del panel, igual que F1-041. Sin auto-refresco y
+    sin `placeholderData`.
+- **CSV común:** `web/src/csv/csv.ts` (BOM, CRLF, anti-inyección, importes exactos, `nombreCsv`,
+  `descargar`). `tickets/csv.ts` lo reusa, y `tickets/exportar.ts` reexporta `descargar`.
+  **`tickets/csv.test.ts` y `Tickets.test.tsx` no se tocaron y siguen verdes.** Eso prueba que la
+  extracción no cambió la salida.
+- **Checks:**
+  - /api: lint y typecheck limpios, `npm test` **502/502, 0 skips**.
+  - /web: build y lint limpios, `npm test` **196/196, 0 skips** (26 nuevos).
+  - CI: sin carril nuevo que encender.
+- **Revisor:**
+  - Plan aprobado con 7 observaciones, atendidas.
+  - Entregable aprobado con 3 observaciones: esta nota, la honestidad del cuadre y el 500 de
+    `porDia`. Las tres están abajo.
+
+**El "Listo cuando" (los totales cuadran con el dashboard): qué se probó y qué NO.**
+- **Probado, en la API contra Postgres:**
+  - Σ venta y Σ cuentas de por-día = las del comparativo = `resumen`.
+  - Está en los 6 escenarios del spec del servicio (incluidos Tijuana con DST y el rango vacío) y
+    en el e2e (3 filtros).
+  - La serie por día también cuadra contra un cálculo a mano con `Intl`, cheque por cheque.
+- **Probado, manual sobre HTTP:**
+  - Levanté la API sobre el Postgres local con `seed:ventas` y secretos JWT sintéticos por
+    variable de entorno. Entré con el admin del seed, cuyo email y contraseña leyó de `seed.ts` un
+    script temporal.
+  - Cuadra en tres casos:
+    - mes 2026-09-01..21: $258,199.88 / 334 (lo mismo que registró F1-041);
+    - 30 días: $388,235.39 / 482;
+    - sólo "Sucursal Norte": $196,328.03 / 241.
+  - Pasé esas respuestas reales a la vista con un test temporal (ya borrado). El total de
+    Reportes fue igual al texto de la Venta total del Panel en los tres. El ticket promedio
+    combinado del mes dio $773.05, igual que en F1-041.
+- **Lo que prueba `Reportes.test.tsx`:** su fixture está hecho para cuadrar. Sólo prueba que la
+  vista suma sin perder un centavo y que pinta lo mismo que el Panel; **no** prueba que la API
+  cuadre.
+- **NO validado:** el cuadre contra los **reportes nativos de SoftRestaurant**, porque no hemos
+  visto una instalación real. El supuesto de que "el día es el del CIERRE, no una fecha de negocio
+  ni un turno" (esquema-sr.md §2) sigue abierto hasta F1-090. Si SR corta distinto, cambian
+  `resumen` y por-día juntos.
+- No lo abrí en el navegador: entrar exige teclear la contraseña, y está prohibido (igual que en
+  F1-040, 041 y 042). No medí 390 px en un navegador real.
+
+**Decisiones que tomé y por qué.**
+- **Por día con varias zonas:** cada cuenta cae en el día de SU sucursal, así que "1 de
+  septiembre" junta el de CDMX con el de Tijuana. Es la misma regla de `resumen` y es lo que hace
+  que la suma cuadre exacta. Está en la descripción del DTO/OpenAPI y en esquema-sr.md §2.
+- **Guarda en `porDia`:** si Postgres devolviera un `dia_local` fuera de `desde..hasta`, lanza
+  `Error('Venta por día fuera del rango pedido.')`, que el cliente ve como **500 genérico**. Es una
+  invariante, no un error del cliente. Si algún día aparece, significa que el corte de día de
+  `ventas` y el de la lista de días se separaron: se busca en `consulta-ventas.ts`, no en el
+  request.
+- **CSV sin fila de totales**, igual que Tickets: Excel suma, y no queda una fila que alguien sume
+  dos veces. Un importe ilegible detiene el archivo y lo dice. Un ticket promedio `null` sale como
+  celda vacía, nunca como 0.00.
+- **Importe ilegible en pantalla:** la fila dice "Importe inválido", el total dice "Sin dato" y la
+  barra no se dibuja. Nunca se muestra $0.00.
+- **El orden y el límite del top viven en estado del componente, no en la URL:** se pierden al
+  salir de la vista. Si Ricardo los quiere compartibles por link, es un cambio chico en
+  `Reportes.tsx`.
+- **Top sin fila Total:** el importe va antes del descuento de la cuenta y no cuadra con la venta
+  (la vista lo dice).
+
+**Trampas que encontré.**
+- **Mi cálculo "a mano" de por-día tumbó por timeout** (5 s) un test que ya existía. Creaba dos
+  `Intl.DateTimeFormat` por cheque y por día (~30k). Lo arreglé calculando el día de cada cheque
+  una sola vez. Si agregas otra referencia a mano en ese spec, no hagas `Intl` dentro de un bucle
+  por día.
+- **`prettier --write` sobre una carpeta de /api** marcó como modificados archivos que no toqué
+  (la trampa de CRLF que ya contó F1-033). Su diff de contenido estaba vacío. Los restauré con
+  `git checkout --` antes del commit.
+- **En los tests de la vista, la tarjeta no existe hasta que responde el refresh de sesión.** Un
+  `getByRole('region')` justo después de `montar()` falla. Usa `findByRole`: en
+  `Reportes.test.tsx` es `esperarTarjeta()`.
+- **El guard de `guardiaCuerpo` no deja `extract(... FROM ...)` en el cuerpo.** Todo lo derivado de
+  la fecha (`hora_local`, `dia_local`) va en la CTE del helper. `to_char(dia_local, 'YYYY-MM-DD')`
+  sí pasa, porque las comillas simples están permitidas y las dobles no.
+- **Los heredocs de Bash volvieron a fallar dos veces:** una con template literals de TS y otra
+  con este log (`unexpected EOF`). Esta nota se escribió con Write, como ya pedían F1-040 y
+  F1-042. Hazle caso.
+
+**Prueba de mutación** (hecha; el código quedó restaurado y las suites otra vez en verde):
+- API: `dia_local` en UTC → fallan 12.
+- Web:
+  - suma en float → falla 1;
+  - total que se salta la fila ilegible (la toma como 0) → fallan 3;
+  - sin `sucursalId` en la queryKey → falla 1;
+  - truncar en vez de redondear el ticket promedio → fallan 4;
+  - `placeholderData` con el dato previo → falla 1 (el de "nunca los datos del alcance
+    anterior").
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **Sigue sin tocarse, del revisor de F1-041** (aquí habría sido "de pasada"):
+  `aCentavos(x) ?? 0n` en `inicio/Tarjetas.tsx` (`TarjetaFormasPago`) y en `inicio/puntosHora.ts`
+  convierte un importe inválido en $0.00 sin aviso. Los reportes nuevos NO lo hacen. Queda para
+  F1-092.
+- El cuadre contra los reportes nativos de SR, para F1-090/091 (arriba).
+- La medida de 390 px en un navegador real sigue pendiente, como en F1-041/042. Las tablas van en
+  `overflow-x-auto`, y en móvil se esconde la columna Comensales del comparativo.
+- Con 366 días, la tabla por día se desplaza dentro de `max-h-80` y las barras quedan muy
+  delgadas. Funciona, pero para rangos de un año convendría agrupar por semana o mes. Es una
+  mejora de producto para Ricardo, no un bug.
+- `useReporte` (en `reportes/consultas.ts`) y `useVentas` (en `inicio/consultas.ts`) son casi el
+  mismo hook. No los unifiqué para no tocar el dashboard de pasada. Candidato para F1-092.
+- **Sin hallazgos nuevos sobre SoftRestaurant.** esquema-sr.md §2 sólo ganó la consecuencia, para
+  los reportes, del supuesto del día de cierre que ya estaba.
+
+**Qué haría distinto.** Medir desde el principio el tiempo del spec contra Postgres al agregar
+una referencia a mano: el timeout de 5 s de Jest es el primer aviso de que la referencia es más
+cara que la consulta.
