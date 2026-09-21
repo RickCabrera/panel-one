@@ -1,11 +1,16 @@
 import { Controller, Get } from '@nestjs/common';
+import { ApiExcludeController } from '@nestjs/swagger';
 
 import { AppService } from './app.service';
+import { Public } from './auth/decoradores';
 
 /**
  * Andamio del carril /api. `GET /` NO es contrato: la fuente única del contrato es
- * el OpenAPI, que nace en F1-033. No construyas nada contra esta ruta.
+ * `api/openapi.json` (F1-011), y esta ruta queda fuera a propósito. No construyas
+ * nada contra ella. Es pública: es la señal de vida del proceso.
  */
+@ApiExcludeController()
+@Public()
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}

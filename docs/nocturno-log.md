@@ -169,3 +169,125 @@ contra Postgres real. Verificado en local: `migrate dev` aplica y una segunda co
 
 **Qué haría distinto.** Confirmar qué expone Prisma en los errores (meta, clase, código)
 antes de escribir los asserts: me habría ahorrado una vuelta.
+
+## 2026-09-20 21:03 — F1-011 · Auth de usuarios (JWT)
+**Estado:** CERRADA (PR de `feat/F1-011`, squash a main)
+
+**Qué quedó hecho.** `POST /auth/login` (rate limit 5/min por IP → 429), `POST /auth/refresh`,
+`GET /auth/me`. Access JWT de 15 min en el body y refresh JWT de 7 días en la cookie
+`monitor_refresh` (httpOnly, SameSite=Strict, Path=/auth, Secure con `NODE_ENV=production`).
+Hay dos guards globales, `JwtAuthGuard` y luego `RolesGuard`, más los decoradores
+`@Public()` y `@Roles()`. El helper obligatorio de scope es `ScopedPrismaService.para(scope)`
+y el contrato quedó en `api/openapi.json`. En CI, el carril api ya levanta Postgres, corre
+`migrate deploy` y `npm test`.
+Verificado en local: lint, typecheck, `prisma validate` y `nest build` limpios (sigue
+saliendo `dist/main.js`); `npm test` 70/70 con 0 skips. Arranqué la app real
+(`node dist/main.js`): sin secretos truena con mensaje claro; con secretos, `GET /` da 200,
+`/auth/me` sin token 401 y login malo 401.
+
+**Decisiones que tomé y por qué.**
+- **El scope se aplica en el guard, no en un middleware** (el backlog dice "middleware"). En
+  Nest el middleware corre antes que los guards y no ve el JWT validado ni `@Public()`.
+  `JwtAuthGuard` verifica el token y en ese mismo paso pone `req.usuario` y
+  `req.empresaScope`. El decorador `@EmpresaScopeActual()` lo lee y truena si la ruta es
+  pública.
+- **Cómo queda obligatorio el helper de scope** (lo que pidió el revisor):
+  1. `ScopedPrismaService.para(scope)` devuelve sólo los delegados de los modelos, y sólo con
+     `findFirst/findFirstOrThrow/findMany/count/aggregate/groupBy`. Una extensión de Prisma
+     mete `AND {empresaId}` en el WHERE (para `Empresa` usa `id`). No hay create, update,
+     delete, findUnique, `$queryRaw` ni `$transaction`. El cliente crudo vive en un campo
+     `#privado`.
+  2. `LLAVE_EMPRESA` en `src/scope/scope.helper.ts` tiene un
+     `satisfies Record<Prisma.ModelName, ...>`: **F1-030 tiene que registrar `Cheque`,
+     `ChequePartida`, etc. ahí, o el typecheck falla.** Ojo: `ChequePartida` y `ChequePago`
+     no traen `empresa_id` en el backlog. O se les agrega la columna (con FK compuesta, igual
+     que AgenteEstado) o se decide otra cosa, pero hay que decidirlo en F1-030.
+  3. `eslint.config.mjs` usa `no-restricted-imports` para prohibir `PrismaService` y
+     `PrismaClient` en `src/**`. La allowlist es `src/prisma/**`,
+     `src/scope/scoped-prisma.service.ts`, `src/auth/auth.service.ts` (el login busca por
+     email sin scope) y los `*.spec.ts`. `src/lint/restriccion-prisma.spec.ts` comprueba que
+     la regla sí muerde: corre el ESLint real por `--stdin` en un proceso aparte, porque la
+     config `.mjs` no carga dentro de jest.
+- **Las escrituras con scope NO existen todavía.** F1-060 (CRUD) y la ingesta las van a
+  necesitar. Hay que agregarlas en `ScopedPrismaService` con su filtro (que `data.empresaId`
+  no pueda apuntar a otra empresa) y con tests, no importando Prisma directo. La ingesta
+  (F1-031) va por API key y no por usuario: probablemente necesite un scope "de sucursal".
+  Es decisión de F1-012/F1-031.
+- **El 404 se prueba con un controlador que sólo existe en el test**
+  (`PruebaScopeController` en `src/auth/auth.e2e.spec.ts`). Hoy no hay ningún endpoint de
+  datos por empresa (`/empresas` y `/sucursales` son de F1-033/F1-060). Recorre la tubería
+  real: login → guard → scope → `findFirst` con scope → `encontradoOr404`. Visor de A pide
+  una sucursal o la empresa de B → 404, con cuerpo idéntico al de un UUID inexistente.
+  **F1-033 debe agregar e2e de scoping por cada endpoint real.**
+- Login: el email se normaliza (`trim().toLowerCase()`) con un `@Transform` en el DTO, antes
+  de `@IsEmail` (con espacios, IsEmail da 400), y otra vez en el servicio. Email inexistente,
+  contraseña mala, usuario inactivo o empresa inactiva → **401 con el mismo cuerpo**. Cuando
+  el email no existe se verifica igual contra un hash argon2 de relleno, así el tiempo de
+  respuesta no delata qué emails existen.
+- Refresh y `/me` **releen al usuario de la base** (activo y empresa activa). El scope de
+  cada request, en cambio, sale de los claims del access token.
+- `ARGON2_OPCIONES` se mudó a `src/auth/argon2.ts`; el seed lo importa y lo re-exporta.
+  Si `src/` importara de `prisma/`, `nest build` cambiaría la raíz de salida y
+  `dist/main.js` dejaría de existir.
+- El contrato OpenAPI se genera con `npm run openapi` en /api (`NestFactory.create` en modo
+  `preview`: no pide base ni secretos). `src/openapi/openapi.spec.ts` falla si
+  `api/openapi.json` no es exactamente lo que genera el código. El archivo está en
+  `.prettierignore` y fijo en LF en `.gitattributes`. `GET /` (andamio) queda fuera del
+  contrato (`@ApiExcludeController`) y es `@Public()`. **`/docs` todavía NO se sirve**: es de
+  F1-033, que lo pide protegido.
+- Dependencias nuevas: `@nestjs/jwt@11`, `@nestjs/throttler@6`, `@nestjs/swagger@11` (el 12
+  pide Nest 12), `class-validator`, `class-transformer`, `cookie-parser`, `supertest`.
+
+**Trampas que encontré.**
+- **El rate limit de login le pega a los propios tests.** Todos los requests salen de la
+  misma IP y cuentan también los 400 y los 401. Cada `describe` del e2e levanta su propia
+  app, porque el storage del throttler es por instancia, y ninguno pasa de 5 logins. Donde
+  sólo hace falta un token, se firma con `TokensService`. **No subas el límite ni apagues el
+  throttler en tests.** Si agregas casos de login, abre otro bloque.
+- `npm test` ahora es `jest --runInBand`. `prisma/esquema.spec.ts` fotografía tablas enteras
+  y, en paralelo, los fixtures de auth se colaban en la foto.
+- Los fixtures son propios (`api/test/fixtures-auth.ts`, UUIDs `f1011000-…` y emails
+  `@f1-011.test`) y **no dependen del seed**: en CI la base llega vacía. Se limpian antes y
+  después.
+- En supertest, `await (await algo).expect()` no tipa: el `await` del `Test` ya devuelve el
+  `Response`.
+- `require.resolve('eslint/bin/eslint.js')` falla porque no está en los `exports` del
+  paquete. Hay que resolver `eslint/package.json` y armar la ruta desde ahí.
+- En Git Bash, un script de python con `open()` sin `encoding` escribe cp1252 y rompe los
+  acentos. Usa Edit/Write, o `encoding='utf-8'` explícito. Un heredoc largo con backticks
+  y comillas también se rompió en el parser de bash, dos veces, y en ese caso no se escribe
+  nada.
+- **Tu `api/.env` local no trae `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET`**: no lo toqué (es
+  un archivo de secretos). `npm run dev` no arranca hasta que se agreguen; los valores de
+  relleno y el comando para generarlos están en `api/.env.example` y en el README. Los tests
+  no los necesitan: `api/test/entorno.ts` pone unos sintéticos si faltan.
+
+**Qué quedó abierto** (no son tareas nuevas en el backlog, en autónomo no se agregan):
+- **No hay revocación de refresh tokens ni logout.** No hay tabla de sesiones: rotar no
+  invalida el refresh anterior, y uno robado vale 7 días. Tampoco se revoca el access: un
+  usuario desactivado o cambiado de empresa conserva su scope viejo hasta 15 min (`/me` y
+  refresh sí lo cortan). Candidato para F1-092.
+- **`trust proxy`**: detrás del proxy del VPS, `req.ip` será la IP del proxy y el límite de
+  5/min se compartirá entre todos. Hay que configurarlo al hacer el deploy.
+- **CORS** para la SPA: F1-040 decide si usa el proxy de Vite (cookie del mismo origen) o
+  CORS con credentials. La cookie es SameSite=Strict con Path=/auth.
+- El storage del throttler es en memoria y vale por proceso: con varias réplicas no alcanza.
+- El revisor aprobó el entregable con estas observaciones, que quedaron anotadas y **sin
+  tocar el código**. Así lo que entra es exactamente lo que se revisó:
+  1. **La regla de lint se puede brincar.** No cubre `require('@prisma/client')`, las
+     subrutas (`@prisma/client/default`, `.prisma/client`) ni `import x = require(...)`.
+     Atrapa el olvido, no a quien quiera saltársela. Hay que agregar esos patrones, con
+     casos en `restriccion-prisma.spec.ts`, la próxima vez que se toque la regla (F1-033
+     o F1-092).
+  2. **`findFirstOrThrow` da 500.** Está entre las lecturas permitidas de
+     `ScopedPrismaService`, y si no encuentra nada lanza el error de Prisma, que llega como
+     500 y no como 404. No filtra nada, pero rompe la convención: **F1-033 debe quitarla**
+     de `OPERACIONES_PERMITIDAS` o traducirla a `NotFoundException`.
+  3. **Un usuario desactivado sigue entrando a las rutas de datos** hasta que vence su
+     access token (15 min), no sólo a `/me`. Va junto con la revocación, en F1-092.
+  4. **Los `include`/`select` de relaciones no pasan por el filtro de empresa.** Hoy da
+     igual, porque todas las relaciones cuelgan de la misma empresa. **Hay que revisarlo en
+     F1-030** si `ChequePartida` o `ChequePago` quedan sin `empresa_id` propio.
+
+**Qué haría distinto.** Escribir los archivos con Write desde el principio, en vez de
+heredocs y python desde bash: perdí dos vueltas con encoding y parseo.

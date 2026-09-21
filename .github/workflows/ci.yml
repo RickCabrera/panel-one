@@ -15,8 +15,8 @@ name: CI
 #
 # F1-001 creó el monorepo y encendió los tres carriles con su gate mínimo (lint,
 # typecheck y build). Lo que sigue comentado son SÓLO los pasos de test, cada uno
-# con la tarea que lo enciende anotada encima: F1-011 (api), F1-041 (web) y
-# F1-021 (agent).
+# con la tarea que lo enciende anotada encima: F1-041 (web) y F1-021 (agent).
+# F1-011 encendió los del carril api (servicio postgres, migrate deploy y npm test).
 #
 # El job `guardia` sí corre desde el minuto cero. No es de adorno: es lo que hace
 # que el CI exista, se vea en verde en cada PR y falle si alguien commitea un
@@ -82,9 +82,9 @@ jobs:
   # ---------------------------------------------------------------------------
   # CARRIL /api (NestJS + Prisma + Postgres)
   # ACTIVO desde F1-001, que creó el monorepo. Corre lint + typecheck (y desde
-  # F1-010, prisma validate + generate). El paso
-  # `test` y el servicio de postgres siguen comentados hasta F1-011 (los
-  # primeros e2e de auth, que necesitan base real).
+  # F1-010, prisma validate + generate). Desde F1-011 levanta un Postgres 16,
+  # aplica las migraciones y corre `npm test` completo: los e2e de auth y de
+  # scope multiempresa, y los del esquema, contra base real.
   # ---------------------------------------------------------------------------
   api:
     name: API (NestJS)
@@ -93,20 +93,20 @@ jobs:
       run:
         working-directory: api
 
-    # DESCOMENTAR EN F1-011: los e2e de auth y de scoping necesitan base real.
-    # services:
-    #   postgres:
-    #     image: postgres:16
-    #     env:
-    #       POSTGRES_USER: postgres
-    #       POSTGRES_PASSWORD: postgres
-    #       POSTGRES_DB: monitor_test
-    #     ports: ['5432:5432']
-    #     options: >-
-    #       --health-cmd pg_isready
-    #       --health-interval 10s
-    #       --health-timeout 5s
-    #       --health-retries 5
+    # F1-011: los e2e de auth y de scoping necesitan base real.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: monitor_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -128,13 +128,17 @@ jobs:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/sin_base
       - run: npx prisma generate
       - run: npm run typecheck
-      # DESCOMENTAR EN F1-011, junto con el servicio de postgres de arriba.
-      # - run: npx prisma migrate deploy
-      #   env:
-      #     DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
-      # - run: npm test
-      #   env:
-      #     DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
+      # F1-011: base real para los tests. Los secretos JWT son de relleno,
+      # sintéticos, y sólo firman tokens dentro de esta corrida (sin ellos, el
+      # setup de jest pone otros de relleno igual; aquí quedan explícitos).
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
+      - run: npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
+          JWT_ACCESS_SECRET: ci-access-secreto-de-relleno-sintetico-0000000001
+          JWT_REFRESH_SECRET: ci-refresh-secreto-de-relleno-sintetico-000000002
 
   # ---------------------------------------------------------------------------
   # CARRIL /web (React 18 + Vite + TS)

@@ -107,9 +107,17 @@ npm run dev:api                # o: npm run dev --workspace @monitor/api
 El seed crea `admin@monitor.local` con la contraseña de `SEED_ADMIN_PASSWORD` (o la de
 desarrollo por defecto, con aviso en consola). Correrlo otra vez no cambia nada.
 
-Los tests de `/api` (`npm test`) corren contra el Postgres de `DATABASE_URL`: en local es
-tu base de desarrollo, a la que sólo le escriben el seed (idempotente) y un registro
-temporal que borran al terminar. Sin base, fallan; no se saltan.
+La API no arranca sin `JWT_ACCESS_SECRET` y `JWT_REFRESH_SECRET` (al menos 32 caracteres
+y distintos entre sí). `api/.env.example` trae unos de relleno para local y el comando
+para generar los tuyos. Si tu `api/.env` es anterior a F1-011, agrégaselos.
+
+Los tests de `/api` (`npm test`) corren en serie contra el Postgres de `DATABASE_URL`: en
+local es tu base de desarrollo, a la que sólo le escriben el seed (idempotente) y fixtures
+sintéticas (empresas, sucursales y usuarios `@f1-011.test`) que borran al terminar. Sin
+base, fallan; no se saltan.
+
+El contrato de la API es `api/openapi.json`. Si cambias un endpoint o un DTO, corre
+`npm run openapi` en `/api` y commitea el resultado: un test falla si no coincide.
 
 Queda escuchando en `http://localhost:3000`.
 
