@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
@@ -7,3 +8,8 @@ import { afterEach } from 'vitest';
 afterEach(() => {
   cleanup();
 });
+
+// OJO: la sesión (`src/auth/sesion.ts`) vive en variables del módulo y sobrevive
+// entre tests. Todo test que la establezca llama `terminarSesion()` en su
+// afterEach (como App.test.tsx y cliente.test.ts), o el siguiente arranca con el
+// token y el timer del anterior.
