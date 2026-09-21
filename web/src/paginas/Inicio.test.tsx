@@ -74,10 +74,11 @@ function mesas(): MesasSucursal[] {
       nombre: 'Centro',
       zonaHoraria: 'America/Mexico_City',
       snapshot: {
-        capturadoAt: '2026-09-21T03:29:00.000Z',
-        recibidoAt: '2026-09-21T03:29:01.000Z',
-        edadSegundos: 60,
-        edadRecepcionSegundos: 180,
+        capturadoAt: '2026-09-21T03:29:59.000Z',
+        recibidoAt: '2026-09-21T03:30:00.000Z',
+        edadSegundos: 30,
+        // Fresca: con más de 90 s la sucursal ya es desconectada y no se suma (F1-094).
+        edadRecepcionSegundos: 30,
         mesas: [{ total: '350.50' }, { total: '1200.00' }],
       },
     },
@@ -164,12 +165,15 @@ describe('Panel de ventas: los números son los de la API', () => {
 
     // % sobre lo pagado: 1 de 3 y 2 de 3.
     expect(await screen.findByTestId('forma-efectivo')).toHaveTextContent('Efectivo$1.0033.3 %');
+    expect(screen.getByTestId('dona-formas')).toBeInTheDocument();
     expect(screen.getByTestId('forma-tarjeta')).toHaveTextContent('Tarjeta$2.0066.7 %');
     expect(screen.getByTestId('forma-transferencia')).toHaveTextContent('$0.000.0 %');
 
     // Venta en vivo: 350.50 + 1200.00 del snapshot de Centro; Tijuana no reporta.
     expect(await screen.findByTestId('venta-en-vivo')).toHaveTextContent('$1,550.50');
-    expect(tarjeta('Venta en vivo')).toHaveTextContent('2 mesas abiertas · dato de hace 3 min');
+    expect(tarjeta('Venta en vivo')).toHaveTextContent(
+      '2 mesas abiertas · dato de hace menos de 1 min',
+    );
     expect(tarjeta('Venta en vivo')).toHaveTextContent('Sin reporte todavía: Tijuana.');
 
     // "Hoy" es el día de CDMX (las sucursales están en zonas distintas), no el de UTC.
@@ -397,6 +401,62 @@ describe('carga, vacío y error', () => {
     expect(tarjeta('Venta en vivo')).not.toHaveTextContent('$350.50');
   });
 
+  it('una forma de pago con importe ilegible: "Sin dato", sin %, sin dona y fuera del total', async () => {
+    apiDashboard({
+      'GET /ventas/formas-pago': () =>
+        json(200, {
+          ...FORMAS,
+          formas: [
+            { forma: 'efectivo', monto: '1.00' },
+            { forma: 'tarjeta', monto: '2,00' },
+            { forma: 'transferencia', monto: '0.00' },
+            { forma: 'otro', monto: '0.00' },
+          ],
+        }),
+    });
+    montar(`/?empresa=${A}`);
+
+    const filaTarjeta = await screen.findByTestId('forma-tarjeta');
+    expect(filaTarjeta).toHaveTextContent('TarjetaSin dato');
+    expect(filaTarjeta).not.toHaveTextContent('$0.00');
+    // Sin porcentajes: con una base incompleta, efectivo NO es el 100 %.
+    expect(screen.getByTestId('forma-efectivo')).toHaveTextContent(/^Efectivo\$1\.00$/);
+    expect(screen.getByTestId('formas-incompletas')).toHaveTextContent(
+      'no se muestran porcentajes sobre una suma incompleta',
+    );
+    expect(tarjeta('Formas de pago')).not.toHaveTextContent('%');
+    expect(screen.queryByTestId('dona-formas')).not.toBeInTheDocument();
+  });
+
+  it('todas las formas ilegibles: "Sin dato" en cada una, y no "Sin pagos"', async () => {
+    apiDashboard({
+      'GET /ventas/formas-pago': () =>
+        json(200, { ...FORMAS, formas: FORMAS.formas.map((f) => ({ ...f, monto: 'x' })) }),
+    });
+    montar(`/?empresa=${A}`);
+
+    for (const forma of ['efectivo', 'tarjeta', 'transferencia', 'otro']) {
+      expect(await screen.findByTestId(`forma-${forma}`)).toHaveTextContent('Sin dato');
+    }
+    expect(screen.getByTestId('formas-incompletas')).toBeInTheDocument();
+    expect(tarjeta('Formas de pago')).not.toHaveTextContent('Sin pagos');
+    expect(tarjeta('Formas de pago')).not.toHaveTextContent('$0.00');
+  });
+
+  it('una hora con importe ilegible lo avisa bajo la gráfica', async () => {
+    apiDashboard({
+      'GET /ventas/por-hora': () =>
+        json(
+          200,
+          POR_HORA.map((f) => (f.hora === 13 ? { ...f, venta: 'mucho' } : f)),
+        ),
+    });
+    montar(`/?empresa=${A}`);
+    expect(await screen.findByTestId('horas-sin-dato')).toHaveTextContent(
+      'Alguna hora no trae un importe legible',
+    );
+  });
+
   it('si un endpoint falla, esa tarjeta lo dice y las demás siguen', async () => {
     apiDashboard({
       'GET /ventas/formas-pago': () => json(500, { statusCode: 500, message: 'Falló la base' }),
@@ -409,6 +469,79 @@ describe('carga, vacío y error', () => {
     );
     expect(await screen.findByTestId('venta-total')).toHaveTextContent('$15,234.50');
     expect(screen.getByTestId('venta-en-vivo')).toHaveTextContent('$1,550.50');
+  });
+});
+
+describe('Venta en vivo con una sucursal desconectada (F1-094)', () => {
+  /** Centro fresco (30 s) y Tijuana con un snapshot de `edadTijuana` segundos. */
+  function conTijuana(edadTijuana: number, edadCentro = 30): MesasSucursal[] {
+    const [centro] = mesas();
+    centro.snapshot!.edadRecepcionSegundos = edadCentro;
+    return [
+      centro,
+      {
+        sucursalId: SUCURSAL_A2.id,
+        nombre: 'Tijuana',
+        zonaHoraria: 'America/Tijuana',
+        snapshot: {
+          capturadoAt: new Date(AHORA.getTime() - edadTijuana * 1000).toISOString(),
+          recibidoAt: new Date(AHORA.getTime() - edadTijuana * 1000).toISOString(),
+          edadSegundos: edadTijuana,
+          edadRecepcionSegundos: edadTijuana,
+          mesas: [{ total: '9999.00' }],
+        },
+      },
+    ];
+  }
+
+  it('Inicio y Monitor muestran la misma cifra, y la desconectada se nombra', async () => {
+    apiDashboard({ 'GET /mesas/abiertas': () => json(200, conTijuana(7200)) });
+    montar(`/?empresa=${A}`);
+
+    expect(await screen.findByTestId('venta-en-vivo')).toHaveTextContent('$1,550.50');
+    expect(tarjeta('Venta en vivo')).toHaveTextContent('2 mesas abiertas');
+    expect(tarjeta('Venta en vivo')).not.toHaveTextContent('9,999');
+    // "dato de hace…" es el de lo que se suma, no las 2 h de Tijuana.
+    expect(tarjeta('Venta en vivo')).toHaveTextContent('dato de hace menos de 1 min');
+    expect(screen.getByTestId('vivo-desconectadas')).toHaveTextContent(
+      'Desconectadas, sin contar: Tijuana.',
+    );
+    const enInicio = screen.getByTestId('venta-en-vivo').textContent;
+
+    cleanup();
+    montar(`/mesas?empresa=${A}`);
+    expect(await screen.findByTestId('kpi-en-curso')).toHaveTextContent(enInicio!);
+    expect(screen.getByTestId('kpi-mesas')).toHaveTextContent('2');
+  });
+
+  it('si todas las que reportan están desconectadas no hay cifra, ni $0.00', async () => {
+    apiDashboard({ 'GET /mesas/abiertas': () => json(200, conTijuana(7200, 7200)) });
+    montar(`/?empresa=${A}`);
+
+    expect(
+      await within(await screen.findByRole('region', { name: 'Venta en vivo' })).findByText(
+        'No hay datos en vivo que mostrar.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('venta-en-vivo')).not.toBeInTheDocument();
+    expect(tarjeta('Venta en vivo')).not.toHaveTextContent('$0.00');
+    expect(screen.getByTestId('vivo-desconectadas')).toHaveTextContent('Centro, Tijuana');
+  });
+
+  it('sin respuesta nueva, la sucursal que pasa los 90 s sale sola de la suma', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], shouldAdvanceTime: true });
+    vi.setSystemTime(AHORA);
+    apiDashboard({ 'GET /mesas/abiertas': () => json(200, conTijuana(80)) });
+    montar(`/?empresa=${A}`);
+    expect(await screen.findByTestId('venta-en-vivo')).toHaveTextContent('$11,549.50');
+
+    // Dos pulsos del reloj (10 s) y ningún refresco (20 s): Tijuana llega a ~90 s.
+    // Uno más y pasa el umbral sin que la API conteste nada nuevo.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    await waitFor(() => expect(screen.getByTestId('venta-en-vivo')).toHaveTextContent('$1,550.50'));
+    expect(screen.getByTestId('vivo-desconectadas')).toHaveTextContent('Tijuana');
   });
 });
 
@@ -461,7 +594,8 @@ describe('refresco', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
-    await waitFor(() => expect(pedidas(api, '/mesas/abiertas')).toHaveLength(2));
+    // El vivo cada 20 s (como el Monitor): 1 + 3 en 60 s. Los agregados, ninguno más.
+    await waitFor(() => expect(pedidas(api, '/mesas/abiertas')).toHaveLength(4));
     expect(pedidas(api, '/ventas/resumen')).toHaveLength(1);
     expect(pedidas(api, '/ventas/por-hora')).toHaveLength(1);
   });

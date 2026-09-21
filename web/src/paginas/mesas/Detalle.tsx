@@ -187,9 +187,22 @@ function Consumo({ mesa, conSucursal }: { mesa: MesaMonitor; conSucursal: boolea
   );
 }
 
+/**
+ * Lo que oye el lector de pantalla por renglón: cantidad, producto e importe, con el
+ * mismo formato que el texto visible (F1-094). Los modificadores no traen cantidad en
+ * el snapshot (esquema-sr.md §5): llevan nombre y precio, sin inventarla.
+ */
+function etiquetaPartida(p: PartidaMesa): string {
+  return `${p.cantidad ?? SIN_DATO} × ${p.producto ?? SIN_DATO}, ${importe(p.total)}`;
+}
+
+function etiquetaModificador(m: ModificadorMesa): string {
+  return `${m.nombre ?? SIN_DATO}, ${importe(m.precio)}`;
+}
+
 function Partida({ partida: p }: { partida: PartidaMesa }) {
   return (
-    <li className="py-1.5" aria-label={p.producto ?? SIN_DATO}>
+    <li className="py-1.5" aria-label={etiquetaPartida(p)}>
       <div className="flex gap-3">
         <span className="w-12 shrink-0 text-right tabular-nums">{p.cantidad ?? SIN_DATO}</span>
         <span className="min-w-0 flex-1 break-words">
@@ -222,7 +235,7 @@ function Modificadores({
   return (
     <ul className={`mt-0.5 text-xs text-slate-500 ${className}`}>
       {lista.map((m, i) => (
-        <li key={i} aria-label={m.nombre ?? SIN_DATO}>
+        <li key={i} aria-label={etiquetaModificador(m)}>
           <div className="flex gap-3">
             <span className="min-w-0 flex-1 break-words">+ {m.nombre ?? SIN_DATO}</span>
             <span className="shrink-0 tabular-nums">{importe(m.precio)}</span>

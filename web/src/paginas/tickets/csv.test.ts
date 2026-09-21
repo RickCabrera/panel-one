@@ -22,7 +22,7 @@ describe('ticketsACsv', () => {
     const [encabezado, fila] = filas(ticketsACsv([ticket()], SUCURSALES));
     expect(encabezado).toBe(ENCABEZADOS.join(','));
     expect(fila).toBe(
-      'Centro,1001,2026-09-20,21:30,5,Juan Pérez,3,1000.00,160.00,0.00,50.00,1160.00,EFECTIVO + TARJETA DE CREDITO,No',
+      'Centro,"=""1001""",2026-09-20,21:30,5,Juan Pérez,3,1000.00,160.00,0.00,50.00,1160.00,EFECTIVO + TARJETA DE CREDITO,No',
     );
   });
 
@@ -34,7 +34,7 @@ describe('ticketsACsv', () => {
     const [, centro, tijuana] = filas(csv);
     expect(centro).toContain(',2026-09-20,21:30,');
     // El mismo instante, una hora antes en Tijuana. En UTC sería el 21 a las 03:30.
-    expect(tijuana).toMatch(/^Tijuana,T1,2026-09-20,20:30,/);
+    expect(tijuana).toMatch(/^Tijuana,"=""T1""",2026-09-20,20:30,/);
   });
 
   it('un cancelado sin cierre usa la apertura y se marca, sin fila de totales', () => {
@@ -44,14 +44,16 @@ describe('ticketsACsv', () => {
     );
     const lineas = filas(csv);
     expect(lineas).toHaveLength(2);
-    expect(lineas[1]).toMatch(/^Centro,1001,2026-09-20,12:05,.*,Sí$/);
+    expect(lineas[1]).toMatch(/^Centro,"=""1001""",2026-09-20,12:05,.*,Sí$/);
   });
 
   it('los nulos quedan vacíos', () => {
     const [, fila] = filas(
       ticketsACsv([ticket({ mesa: null, mesero: null, comensales: null, pagos: [] })], SUCURSALES),
     );
-    expect(fila).toBe('Centro,1001,2026-09-20,21:30,,,,1000.00,160.00,0.00,50.00,1160.00,,No');
+    expect(fila).toBe(
+      'Centro,"=""1001""",2026-09-20,21:30,,,,1000.00,160.00,0.00,50.00,1160.00,,No',
+    );
   });
 
   it('entrecomilla comas, comillas y saltos de línea, y dobla las comillas', () => {
@@ -75,7 +77,8 @@ describe('ticketsACsv', () => {
         SUCURSALES,
       ),
     );
-    expect(fila).toContain(`,'-5,`);
+    // El folio va como literal `="..."`: no se evalúa, no hace falta el apóstrofo.
+    expect(fila).toContain(`,"=""-5""",`);
     expect(fila).toContain(`,'+1,"'=HYPERLINK(""http://x"",""y"")",`);
     expect(fila).toContain(`,'@SUM(A1),`);
   });
@@ -99,6 +102,22 @@ describe('ticketsACsv', () => {
 
   it('sin tickets queda sólo el encabezado', () => {
     expect(ticketsACsv([], SUCURSALES)).toBe(`${BOM}${ENCABEZADOS.join(',')}\r\n`);
+  });
+});
+
+describe('ticketsACsv: el folio queda como texto en Excel', () => {
+  const folio = (f: string) => filas(ticketsACsv([ticket({ folio: f })], SUCURSALES))[1];
+
+  it('ceros a la izquierda y folios largos van como literal ="..."', () => {
+    expect(folio('000123')).toMatch(/^Centro,"=""000123""",2026-09-20,/);
+    // 20 dígitos: como número, Excel lo daría en notación científica.
+    expect(folio('12345678901234567890')).toMatch(/^Centro,"=""12345678901234567890""",/);
+  });
+
+  it('un folio que parece fórmula queda como literal, sin evaluarse', () => {
+    expect(folio('=HYPERLINK("http://x","y")')).toMatch(
+      /^Centro,"=""=HYPERLINK\(""""http:\/\/x"""",""""y""""\)""",/,
+    );
   });
 });
 

@@ -37,6 +37,27 @@ export function texto(valor: string | null): string {
   return campo(/^[=+\-@\t\r]/.test(valor) ? `'${valor}` : valor);
 }
 
+/** Excel no acepta una cadena de más de 255 caracteres dentro de una fórmula. */
+export const MAX_TEXTO_EXCEL = 255;
+
+/**
+ * Un texto que Excel tiene que dejar COMO TEXTO aunque parezca número o fecha (el
+ * folio: `000123` perdería los ceros y un folio largo saldría en notación
+ * científica). Se escribe como la fórmula `="<valor>"`: un literal de cadena, con las
+ * comillas internas dobladas, así que NADA del contenido se evalúa y la inyección
+ * CSV no aplica (un `=CMD()` sale tal cual, como texto). Luego `campo` lo
+ * entrecomilla para el CSV (segunda capa de comillas dobladas).
+ *
+ * Con salto de línea o más de `MAX_TEXTO_EXCEL` caracteres la fórmula no sirve, y se
+ * cae a `texto()`. Trade-off (F1-094): un programa que lea el CSV sin ser hoja de
+ * cálculo ve `="000123"`; LibreOffice y Google Sheets lo evalúan como Excel.
+ */
+export function textoExcel(valor: string | null): string {
+  if (valor === null) return '';
+  if (valor.length > MAX_TEXTO_EXCEL || /[\r\n]/.test(valor)) return texto(valor);
+  return campo(`="${valor.replace(/"/g, '""')}"`);
+}
+
 /** Centavos exactos como número decimal (`-12.50`, `1234567.89`). */
 export function centavosCsv(centavos: bigint): string {
   const negativo = centavos < 0n;

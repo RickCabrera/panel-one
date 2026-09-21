@@ -2621,3 +2621,103 @@ scope: no hay fuga entre empresas. De sus observaciones queda abierta una, **par
   aquí: sería "de pasada" y toca el helper de scope.
 
 **Estado de la cola al cerrar:** sigue **F1-094** (pendientes que quedaron "para F1-092", /web).
+
+## 2026-09-21 18:30 — F1-094 · Pendientes que quedaron "para F1-092"
+**Estado:** CERRADA si el PR se mergea (el número lo da `gh pr create`). Sólo /web + docs.
+Plan: APROBADO CON OBSERVACIONES (5 obligatorias, todas atendidas; ver abajo). Entregable: ver
+"Revisor del entregable" al final.
+
+**Qué quedó hecho (los 4 "Listo cuando").**
+1. **CSV de Tickets, folio como texto.** `textoExcel()` en `web/src/csv/csv.ts`: escribe
+   `="<folio>"`, con las comillas dobladas dos veces (dentro del literal de la fórmula y luego para
+   el CSV). Es un literal de cadena: Excel no evalúa nada de adentro, así que la inyección no
+   aplica. Con salto de línea o más de 255 caracteres (el límite de Excel para una cadena en
+   fórmula) cae a `texto()`, la regla del apóstrofo. Sólo la columna Folio lo usa.
+   - **Trade-off:** un programa que lea el CSV sin ser hoja de cálculo ve `="000123"`. LibreOffice
+     y Google Sheets lo evalúan igual que Excel.
+   - Tests: `web/src/csv/csv.test.ts` (nuevo) compara el campo completo con `toBe`, incluido un
+     intento de escape `1" & HYPERLINK("http://x") & "`. Los tests de `tickets/csv.test.ts` y
+     `Tickets.test.tsx` que esperaban `1001` o `'-5` en la columna Folio se adaptaron al formato
+     nuevo.
+2. **Importes inválidos ya no se muestran como $0.00.**
+   - `puntosHora.ts`: una hora que viene con un importe ilegible queda como `valor: null` (la línea
+     se corta) y "Sin dato". Una hora que falta sigue siendo un cero real. La tarjeta avisa debajo
+     de la gráfica (`horas-sin-dato`).
+   - `TarjetaFormasPago`: una forma ilegible sale con "Sin dato" y queda fuera del total. Con
+     **una sola** ilegible **no hay % ni dona**, porque la base está incompleta (O2 del revisor), y
+     aparece una nota (`formas-incompletas`). Si todas son ilegibles se ve "Sin dato" en cada fila,
+     no "Sin pagos".
+   - El tooltip se prueba directo con `TooltipHora`, sin hover en jsdom.
+3. **Inicio y Monitor.**
+   - **Regla única:** sólo suman las sucursales **conectadas**. `ventaEnVivo(filas, respuestaAt,
+     ahora)` ahora **delega en `armarMonitor`**, así que la cifra es la misma por construcción.
+   - Para no crear un ciclo de imports, `importeDe`/`totalDe` (con su `DECISION PROVISIONAL`) se
+     movieron de `inicio/ventaEnVivo.ts` a `mesas/mesa.ts`.
+   - La tarjeta envejece el dato con `useAhora` **dentro de un subcomponente**
+     (`VentaEnVivoCifras`), para que las gráficas de Recharts no se vuelvan a pintar cada 5 s.
+     Nombra las desconectadas ("Desconectadas, sin contar: …"). Si ninguna está conectada dice
+     "No hay datos en vivo que mostrar.", como el Monitor, sin $0.00.
+   - **`useMesasAbiertas` de Inicio pasó de 60 s a 20 s (`POLLING_MS`).** Con 60 s y un umbral de
+     90 s, un snapshot sano de ~35 s cruzaría el umbral antes del siguiente refresco y parpadearía
+     a "desconectada" cada minuto. Usa la misma llave de query que el Monitor. Cuesta 3 requests
+     por minuto en vez de 1.
+   - **"Última lectura" cambió de significado** (regla documentada en `Kpis.ultimaLectura`,
+     `reglas.ts`). Ahora es la lectura más vieja **de las conectadas**; antes incluía las
+     desconectadas. Sin conectadas es `null`. El "dato de hace…" de Inicio es ese mismo valor.
+   - Tests adaptados: `reglas.test.ts` y `Mesas.test.tsx` esperaban la lectura de la
+     desconectada; ahora esperan la de Centro, y en el caso 90/91 s la frescura es `demorada`.
+     El fixture de Inicio pasó de 180 s (que ahora sería desconectada) a 30 s.
+   - En el test de "periodo que no incluye hoy" se mantuvo el avance de 60 s (O3): los agregados
+     siguen en 1 y el vivo ahora son 4.
+   - Tests nuevos:
+     - unitario: `ventaEnVivo === armarMonitor` con una desconectada, y la sucursal que envejece
+       sola;
+     - integración: Inicio y luego Monitor con los mismos datos muestran la misma cifra
+       ($1,550.50, con la desconectada fuera); todas desconectadas; y la sucursal que sale sola de
+       la suma con reloj falso.
+   - `docs/esquema-sr.md` §5 actualizado (O1): la "diferencia conocida" ya no aplica, están la
+     regla nueva y dónde vive `totalDe`. **No hay hallazgo nuevo de SR.**
+4. **Accesibilidad y rendimiento.**
+   - `Detalle.tsx`: el `aria-label` de una partida es `"3 × Refresco, $150.00"`, con el mismo
+     formateador y el mismo "Sin dato" que el texto visible. El de un modificador es
+     `"Sin hielo, $0.00"`: **el snapshot no trae cantidad por modificador** (supuesto de §5), así
+     que para los modificadores el "Listo cuando" se cumple con nombre e importe, sin inventar una
+     cantidad. Los tests de `Mesas.test.tsx` usan ahora el nombre completo exacto.
+   - Badge de agentes: hook nuevo `useConReloj(calcular)` en `mesas/consultas.ts`, con
+     `useSyncExternalStore`. La suscripción es una función de módulo (estable) con un intervalo de
+     5 s; el snapshot es `calcular(Date.now())`, un primitivo. React sólo vuelve a pintar cuando el
+     valor cambia. `AlertaAgentes` lo usa para el **conteo**.
+   - **O5, verificado:** el test nuevo de `Agentes.test.tsx` ("el reloj del badge no vuelve a pintar
+     nada…", `<Profiler>` alrededor de `<Rutas/>` en `/cuenta` como admin, con el badge montado a
+     700 s) **se corrió primero contra el código viejo y falló con `["update","update","update"]`**:
+     un commit por pulso. Con el hook da `[]`.
+   - El unitario del hook (`mesas/consultas.test.tsx`) comprueba 0 renders extra en 30 s y
+     exactamente 1 al cruzar. Incluye un control con `useAhora` que da 6 renders en 30 s.
+- `exportar.ts`: el comentario "anotado para F1-092" ahora dice que el punto ("Hoy" en hora pico
+  aborta el export) **sigue abierto** y apunta a este log (entrada F1-092, "Pendientes", punto 3).
+
+**Checks locales (/web):** build limpio, lint limpio, vitest **329/329** (26 archivos, antes
+302/24), 0 skips; `check:bundle` 210.9 kB gzip (tope 400). No se tocó /api.
+
+**Decisiones y lo que sigue abierto (para Ricardo).**
+- R1 del revisor, a medias: el snapshot de `useConReloj` usa `Date.now()` y no un `ahora` guardado
+  en un ref. En dev, React compara dos snapshots seguidos y sólo avisaría si justo entre ellos se
+  cruza un umbral, que es un caso rarísimo y sólo de dev. Lo dejé así por simple.
+- Con todas las sucursales desconectadas, el Monitor no pinta KPIs y la tarjeta de Inicio no da
+  cifra: en ese caso no hay "misma cifra" que comparar, y ninguna de las dos inventa $0.00.
+- Siguen abiertos del log de F1-092, sin tocar: anti-inyección más allá del primer carácter,
+  cancelados en Tickets, "Hoy" en hora pico, throttles de login y reset, lint de Prisma,
+  `statement_timeout`, 390 px. Más las decisiones de HSTS y de la marca, y las dos de F1-093.
+
+**Trampas.**
+- **Python con `open()` en modo texto + `newline=''` al escribir convierte CRLF → LF**; git lo
+  normaliza al commitear (`autocrlf`), así que el diff queda limpio. Pero `npx prettier --write`
+  sobre una CARPETA reescribe archivos que no tocaste: revierte con `git checkout --` los que sólo
+  cambian en espacios (me pasó con `SelectorPeriodo.tsx`, `Tarjeta.tsx` y `graficas.tsx`).
+- `\r\n` dentro de un heredoc de Python sin `r''` se escribe como un salto de línea REAL en el
+  `.ts`, y deja un regex roto. Revisa con `cat -A`.
+- En un test de React Testing Library, `tarjeta('X')` (`getByRole`) antes del primer `await`
+  truena: la región todavía no existe. Usa `findByRole`.
+
+**Estado de la cola al cerrar:** con F1-094 `[x]` no queda nada en la Cola nocturna. La siguiente
+sesión debe crear `COLA_VACIA.txt` y terminar, salvo que Ricardo agregue tareas.

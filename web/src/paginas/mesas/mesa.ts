@@ -1,4 +1,4 @@
-import { importeDe, totalDe } from '../inicio/ventaEnVivo';
+import { aCentavos } from '../../dinero/dinero';
 
 /**
  * Hasta qué nivel se leen los modificadores de modificadores. Más abajo no se lee y
@@ -76,7 +76,6 @@ export function leerMesa(crudo: Record<string, unknown>): MesaAbierta {
     mesero: texto(crudo.mesero),
     folio: texto(crudo.folio),
     abiertoAt: instante(crudo.abiertoAt),
-    // La misma regla que la tarjeta "Venta en vivo" del Panel (F1-041).
     total: totalDe(crudo),
     comensales: entero(crudo.comensales),
     impreso: typeof crudo.impreso === 'boolean' ? crudo.impreso : null,
@@ -130,6 +129,28 @@ function leerModificador(crudo: unknown, nivel: number): ModificadorMesa {
     modificadores: cabe ? hijos.map((h) => leerModificador(h, nivel + 1)) : [],
     truncado: ilegibles || (!cabe && hijos.length > 0),
   };
+}
+
+/**
+ * DECISION PROVISIONAL (nocturno): la forma de cada mesa del snapshot NO está fijada
+ * (esquema-sr.md §5, SUPUESTO; la fijan F1-023/F1-050). Se supone un campo `total`
+ * con el importe de la cuenta abierta, en texto decimal o número. Lo usan el Monitor
+ * y, a través de `armarMonitor`, la tarjeta "Venta en vivo" del Panel (F1-041).
+ * Venían de `inicio/ventaEnVivo.ts`; se movieron aquí en F1-094 para que
+ * `ventaEnVivo` pueda delegar en `armarMonitor` sin un ciclo de imports.
+ */
+export function totalDe(mesa: Record<string, unknown>): bigint | null {
+  return importeDe(mesa.total);
+}
+
+/**
+ * Un importe del snapshot: texto decimal de hasta 2 cifras (`"350.50"`) o número
+ * finito, en centavos. Cualquier otra cosa es `null` ("Sin dato"), nunca 0.
+ */
+export function importeDe(v: unknown): bigint | null {
+  if (typeof v === 'string') return aCentavos(v);
+  if (typeof v === 'number' && Number.isFinite(v)) return aCentavos(String(v));
+  return null;
 }
 
 function esObjeto(v: unknown): v is Record<string, unknown> {

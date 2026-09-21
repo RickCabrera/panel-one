@@ -242,9 +242,9 @@ describe('Monitor de mesas: sucursal desconectada', () => {
     expect(screen.queryByText('$9,999.00')).not.toBeInTheDocument();
     expect(kpi('kpi-mesas')).toHaveTextContent('4');
     expect(kpi('kpi-en-curso')).toHaveTextContent('$1,550.80');
-    // La última lectura muestra la más vieja, en rojo.
-    expect(kpi('kpi-lectura')).toHaveTextContent('19:30');
-    expect(kpi('kpi-lectura')).toHaveAttribute('data-frescura', 'desconectada');
+    // La última lectura es la de lo que SE SUMA (Centro, 21:29), no las 2 h de Tijuana.
+    expect(kpi('kpi-lectura')).toHaveTextContent('21:29');
+    expect(kpi('kpi-lectura')).toHaveAttribute('data-frescura', 'fresca');
   });
 
   it('si la única sucursal está desconectada no hay KPIs en cero, sólo el aviso', async () => {
@@ -262,7 +262,8 @@ describe('Monitor de mesas: sucursal desconectada', () => {
     const banner = await screen.findByTestId('banner-desconectada');
     expect(banner).toHaveTextContent('Tijuana');
     expect(screen.getAllByTestId('banner-desconectada')).toHaveLength(1);
-    expect(kpi('kpi-lectura')).toHaveAttribute('data-frescura', 'desconectada');
+    // La lectura que cuenta es la de Centro: 90 s, todavía conectada pero con retraso.
+    expect(kpi('kpi-lectura')).toHaveAttribute('data-frescura', 'demorada');
     expect(kpi('kpi-mesas')).toHaveTextContent('4');
   });
 });
@@ -411,7 +412,7 @@ describe('Detalle de consumo (modal, F1-051)', () => {
     expect(within(dialogo).queryByTestId('detalle-sucursal')).not.toBeInTheDocument();
 
     const partidas = within(dialogo).getByRole('list', { name: 'Partidas' });
-    const refresco = within(partidas).getByRole('listitem', { name: 'Refresco' });
+    const refresco = within(partidas).getByRole('listitem', { name: '3 × Refresco, $150.00' });
     expect(refresco).toHaveTextContent('3Refresco');
     expect(refresco).toHaveTextContent('Bebidas · $50.00 c/u');
     expect(refresco).toHaveTextContent('$150.00');
@@ -424,22 +425,26 @@ describe('Detalle de consumo (modal, F1-051)', () => {
     montar(`/mesas?empresa=${A}&sucursal=${SUCURSAL_A1.id}`);
     const { dialogo } = await abrir('Mesa 5');
 
-    const paquete = within(dialogo).getByRole('listitem', { name: 'Paquete familiar' });
+    const paquete = within(dialogo).getByRole('listitem', {
+      name: '1 × Paquete familiar, $462.00',
+    });
     expect(paquete).toHaveTextContent('Paquetes · $450.00 c/u');
     expect(paquete).toHaveTextContent('$462.00');
 
-    const bebida = within(paquete).getByRole('listitem', { name: 'Bebida: limonada' });
+    const bebida = within(paquete).getByRole('listitem', { name: 'Bebida: limonada, $0.00' });
     expect(bebida).toHaveTextContent('+ Bebida: limonada$0.00');
     // Segundo nivel: dentro de la bebida, no al lado.
-    const sinHielo = within(bebida).getByRole('listitem', { name: 'Sin hielo' });
+    const sinHielo = within(bebida).getByRole('listitem', { name: 'Sin hielo, $0.00' });
     expect(sinHielo).toHaveTextContent('+ Sin hielo$0.00');
-    const jarra = within(bebida).getByRole('listitem', { name: 'Jarra grande' });
+    const jarra = within(bebida).getByRole('listitem', { name: 'Jarra grande, $12.00' });
     expect(jarra).toHaveTextContent('$12.00');
     // Tercer nivel: dentro de la jarra, y no dentro de "Sin hielo".
-    expect(within(jarra).getByRole('listitem', { name: 'Con chía' })).toHaveTextContent(
+    expect(within(jarra).getByRole('listitem', { name: 'Con chía, $0.00' })).toHaveTextContent(
       '+ Con chía$0.00',
     );
-    expect(within(sinHielo).queryByRole('listitem', { name: 'Con chía' })).not.toBeInTheDocument();
+    expect(
+      within(sinHielo).queryByRole('listitem', { name: 'Con chía, $0.00' }),
+    ).not.toBeInTheDocument();
     // Cada nivel es una lista dentro del renglón de su padre.
     expect(sinHielo.parentElement?.closest('li')).toBe(bebida);
     expect(bebida.parentElement?.closest('li')).toBe(paquete);
@@ -473,7 +478,7 @@ describe('Detalle de consumo (modal, F1-051)', () => {
     ]) {
       expect(d(id)).toHaveTextContent('Sin dato');
     }
-    const flan = within(dialogo).getByRole('listitem', { name: 'Flan' });
+    const flan = within(dialogo).getByRole('listitem', { name: '1 × Flan, Sin dato' });
     // Sin total de partida: no se calcula con cantidad × precio.
     expect(flan).toHaveTextContent('Categoría: sin dato · $40.00 c/u');
     expect(flan).toHaveTextContent(/c\/uSin dato$/);

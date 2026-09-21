@@ -403,7 +403,7 @@ describe('Vista Tickets: export CSV', () => {
     const lineas = texto.replace(/\r\n$/, '').split('\r\n');
     const conFolio4 = todos.filter((t) => t.folio.startsWith('4'));
     expect(lineas).toHaveLength(1 + conFolio4.length); // encabezado + filas, sin totales
-    expect(lineas[1].split(',')[1]).toBe(conFolio4[0].folio);
+    expect(lineas[1].split(',')[1]).toBe(`"=""${conFolio4[0].folio}"""`);
     expect(lineas.filter((l) => l.endsWith(',Sí'))).toHaveLength(1);
 
     // El export pidió de 100 en 100 con el mismo filtro que la tabla.
