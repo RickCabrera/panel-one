@@ -57,7 +57,7 @@
 ---
 
 ## 1 · F1-001 · Monorepo y tooling base
-`[ ]` **Epic 0 — Infraestructura y esqueleto del proyecto**
+`[x]` **Epic 0 — Infraestructura y esqueleto del proyecto** · **PARCIAL:** falta verificar `docker compose up` en `/infra` (esta máquina no tiene virtualización habilitada en BIOS); el resto está en F1-001b (Diurnas).
 
 Crear repo con carpetas `/agent`, `/api`, `/web`, `/infra`, `/docs`. Configurar:
 `.editorconfig`, `.gitignore` por carpeta, ESLint+Prettier en `/api` y `/web`,
@@ -372,6 +372,16 @@ alguien contrató, un secreto que alguien pega, un restaurante real— y ninguna
 código las cierra.
 
 Si la Cola nocturna se vacía, **no bajes aquí**: crea `COLA_VACIA.txt` y termina.
+
+## F1-001b · Verificar `docker compose up` del Postgres local
+`[ ]` **Epic 0** · 🔒 **Razón: necesita una máquina con virtualización habilitada en BIOS.**
+Resto del corte de F1-001: todo lo demás de su "Listo cuando" quedó verificado (PR #2).
+La máquina donde se cerró no puede arrancar el engine de Docker, así que sólo se validó
+`docker compose config`. No hay código que escribir salvo que el `up` destape un fallo.
+
+**Listo cuando:** `docker compose up -d` en `/infra` deja el contenedor `monitor-sr-postgres`
+en estado `healthy`; `psql` con las credenciales de `infra/.env.example` conecta y la base
+`monitor` está vacía (sin tablas); `docker compose down` lo detiene limpio.
 
 ## F1-002 · Docker Compose de producción + Caddy
 `[ ]` **Epic 0** · 🔒 **Razón: necesita el VPS contratado y el dominio con DNS apuntando.**
