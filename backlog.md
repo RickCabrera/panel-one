@@ -183,7 +183,7 @@ en móvil). Login page + guardas de ruta + refresh silencioso de token. TanStack
 móvil (390 px) todo es usable sin scroll horizontal.
 
 ## 10 · F1-041 · Dashboard "Panel de ventas"
-`[ ]` **Epic 4 — Frontend: Panel de ventas**
+`[x]` **Epic 4 — Frontend: Panel de ventas**
 
 Réplica funcional de la pantalla Inicio de Arkhon: selector de periodo (Hoy / Esta semana /
 Este mes / Mes anterior / rango custom), tarjeta Venta total con gráfica de línea por hora
