@@ -236,6 +236,16 @@ la PC del POS puede estar desfasado**: para decidir si una sucursal está "desco
 (F1-050) conviene la edad de recepción. El intervalo de lectura del agente no lo conoce el
 API: el umbral de "3 intervalos" lo fija F1-050/F1-020.
 
+**Lo que el panel (F1-041, tarjeta "Venta en vivo") supone:** ⚠️ **SUPUESTO no validado,
+lo fija F1-023/F1-050** — cada mesa del snapshot trae un campo `total` con el importe de la
+cuenta abierta, como texto decimal (`"350.50"`) o número. La tarjeta suma esos `total` en
+centavos exactos; si **una sola** mesa no trae un `total` legible, muestra "Sin dato" en vez
+de una suma parcial. Falta confirmar contra `tempcheques` (o la tabla que sea) que el total
+de una cuenta abierta **ya incluye** descuentos e impuestos como el `total` de un cheque
+cerrado, y si una mesa puede traer varias cuentas. El seed de F1-032 no genera snapshots:
+esto sólo se probó con respuestas falsas. Código: `web/src/paginas/inicio/ventaEnVivo.ts`.
+La edad que muestra la tarjeta es `edadRecepcionSegundos` (reloj del servidor).
+
 ---
 
 ## 6. Productos y catálogo

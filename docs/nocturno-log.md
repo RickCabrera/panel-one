@@ -856,3 +856,86 @@ los tests muerdan.
 
 **Qué haría distinto.** Escribir todos los archivos con Write desde el principio. Las tres roturas
 por escapado en Bash costaron más que todo el layout.
+
+## 2026-09-21 00:25 — F1-041 · Dashboard "Panel de ventas"
+**Estado:** CERRADA (PR de `feat/F1-041`, squash a main)
+
+**Qué quedó hecho.**
+- La vista Inicio (`/`) ya es el dashboard. Está en `web/src/paginas/Inicio.tsx` y `web/src/paginas/inicio/`:
+  - Selector de periodo: Hoy / Esta semana / Este mes / Mes anterior / Rango.
+  - Tarjeta **Venta total**, con una línea por hora hecha con Recharts. El tooltip muestra el importe exacto.
+  - **Dona de formas de pago**, con monto y %.
+  - Tarjetas **Venta en vivo**, **Ticket promedio + comensales** y **Descuentos y cortesías**.
+  - "Actualizado hh:mm" y botón Refrescar.
+  - Cada tarjeta tiene su skeleton, su estado vacío y su error. Si una tarjeta falla, las demás siguen.
+- **El periodo vive en la URL**, igual que el alcance: `?periodo=semana|mes|mes-anterior|rango&desde=&hasta=`. Sin `periodo` vale "hoy". La lógica está en `web/src/filtros/periodo.ts`. Cambiar la sucursal o el periodo cambia la queryKey y vuelve a consultar sin recargar.
+- **Dinero exacto en el front:** `web/src/dinero/dinero.ts` convierte el texto de la API a centavos en `bigint`, y de ahí salen la suma, el formato `$1,234.50` y el %.
+  - `number` sólo se usa para la posición de los puntos en Recharts (`paraGrafica`).
+  - **F1-042 y F1-043 deben usar este módulo** para sumar pies de tabla y CSV.
+- Recharts 3.10 (peer React 18 ok) se carga **en diferido** (`lazy` en `Tarjetas.tsx`): el chunk principal quedó en 244 kB y Recharts va aparte (372 kB). Sin eso, el build avisaba de un chunk de más de 500 kB.
+- Los tipos nuevos del contrato (`Resumen`, `VentaHora`, `FormasPago`, `MesasSucursal`…) están en `web/src/api/tipos.ts`, escritos campo por campo contra `api/openapi.json`. **No se tocó la API ni el OpenAPI.**
+- Tests: `npm test` en /web da **123/123, 0 skips**. Son 54 nuevos: dinero, periodo, venta en vivo y la integración `Inicio.test.tsx` con rutas reales y `apiFalsa`. Build y lint limpios, y prettier limpio en los archivos que toqué.
+- **CI:** el `npm test` del carril web ya lo había encendido F1-040. Lo comprobé y no toqué `ci.yml`.
+
+**Verificación contra el seed (Listo cuando), hecha.**
+- Levanté la API local sobre el Postgres local, con los secretos JWT sintéticos por variable de entorno, y corrí `seed:ventas` (500 cheques, 30 días hasta el 2026-09-21).
+- Guardé con curl, a través del proxy de Vite, las respuestas de los 4 endpoints para el mes en curso (2026-09-01..21). Con esas respuestas alimenté el dashboard en un test temporal que ya borré.
+- Lo que pintó coincide peso a peso con la API:
+  - venta $258,199.88, 334 cuentas y 14 canceladas;
+  - ticket $773.05;
+  - 1390 comensales, $172.26 por comensal;
+  - descuentos $4,069.57 en 33 cuentas;
+  - formas: efectivo $128,614.43 (47.4 %), tarjeta $115,728.77 (42.6 %), transferencia $16,641.78 (6.1 %), otro $10,384.80 (3.8 %), con "VALES DESPENSA" sin catálogo.
+- La serie por hora suma exactamente la venta total.
+- **No la hice en el navegador:** para entrar habría que teclear la contraseña, y eso está prohibido (lo mismo le pasó a F1-040).
+- **Tampoco medí 390 px en navegador** esta vez. El layout es de una columna en móvil, con `flex-wrap` y `min-w-0`, pero la medida real queda pendiente para F1-092 o para quien tenga una sesión abierta.
+
+**Decisiones que tomé y por qué.**
+- **"Hoy" se calcula en la zona de la sucursal** (`hoyEn` con `Intl`, nunca la del navegador ni UTC). Con "Todas":
+  - si todas comparten zona, se usa ésa;
+  - si no, **America/Mexico_City**. Es `DECISION PROVISIONAL (nocturno)` en `web/src/filtros/periodo.ts` (`zonaDelPanel`).
+  - La API corta cada sucursal en su zona; el front sólo elige la fecha. Entre la medianoche de CDMX y la de Tijuana, "Hoy" ya es el día nuevo y Tijuana sale en cero.
+  - **Decisión abierta para Ricardo:** confirmarla o cambiarla.
+- Las consultas esperan a que `/sucursales` responda (éxito o error), porque de esa lista sale la zona. Sin eso se pedía un día y enseguida otro.
+- **La semana empieza el lunes.** Mes anterior = el mes completo. El rango se valida igual que la API: días inclusivos, máximo 366. Un rango inválido no consulta y dice qué corregir.
+- **Venta en vivo** es `DECISION PROVISIONAL (nocturno)` en `web/src/paginas/inicio/ventaEnVivo.ts`:
+  - Suma `mesa.total` de cada mesa del snapshot. Si una sola mesa no lo trae legible, muestra "Sin dato", no una suma parcial.
+  - Muestra la edad del dato más viejo con `edadRecepcionSegundos` (reloj del servidor) y nombra las sucursales que nunca reportaron.
+  - No decide "desconectada": eso es de F1-050.
+  - Supuesto anotado en esquema-sr.md §5.
+- **Auto-refresco:** los 3 agregados se refrescan cada 60 s sólo si el periodo incluye hoy (lo que pide el backlog). Venta en vivo se refresca cada 60 s **siempre**, porque no depende del periodo (observación del revisor).
+- **"Actualizado hh:mm" = el dato más viejo en pantalla**, no el más nuevo: si una tarjeta no se pudo refrescar, la hora no promete lo contrario. Se muestra en la zona del panel.
+- **El % de formas de pago es sobre lo pagado** (Σ formas), no sobre la venta: los pagos incluyen la propina. Con total 0 no hay %.
+- `null` de la API (ticket promedio, promedio por comensal) se muestra como "—", nunca como $0.00. Cortesías siempre dice "Sin dato", porque la API siempre manda null.
+- Cambiar de alcance o periodo muestra skeletons y **no** usa `placeholderData`: así nunca se ven números del alcance anterior bajo el nuevo.
+
+**Trampas que encontré.**
+- **`App.test.tsx` › "un ?siguiente= externo no saca de la SPA" era una carrera:**
+  - Comprobaba la URL normalizada justo después de ver el heading, pero la normalización llega cuando responde `/empresas`.
+  - Corrido solo fallaba **también con el Inicio viejo de main** (lo probé). Con la vista nueva empezó a fallar en la suite completa.
+  - Lo arreglé esperando la normalización con `waitFor`. La aserción es la misma: se espera, no se afloja.
+- **La primera prueba de mutación sobrevivió.** Cambié `sumar` por float con redondeo a centavos y los tests seguían verdes, porque 0.1 + 0.2 redondeado sí da 0.30. Agregué un test con importes más allá de 2^53 centavos que sí lo detecta.
+- **jsdom no trae `ResizeObserver`** y `ResponsiveContainer` lo pide. Hay un stub en `test-setup.ts`. En jsdom la gráfica mide 0 y no dibuja; los tests revisan texto, y el tooltip se prueba aparte (`TooltipHora`).
+- **Leer `api/.env` desde Bash está denegado** por permisos. Para levantar la API usé secretos sintéticos por variable de entorno. La contraseña del admin del seed es el default de desarrollo de `seed.ts`.
+- **El `vite` en background bloquea borrar carpetas bajo `src/`** ("Device or resource busy"). Hay que matarlo primero.
+- **`python` con reemplazos de texto en tests me rompió un archivo una vez.** Usa Write/Edit (lo mismo que dijo F1-040).
+
+**Prueba de mutación** (hecha; el código quedó restaurado y la suite otra vez en 123/123):
+- "hoy" en UTC → fallan 6.
+- Suma en float → falla 1, después del test nuevo.
+- Sin `sucursalId` en la queryKey → falla "cambiar de sucursal".
+- Auto-refresco siempre encendido → falla "no incluye hoy".
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- La decisión de zona con "Todas" (arriba), para Ricardo.
+- La forma de `mesa.total` y si incluye descuentos e impuestos: la fijan F1-023 y F1-050 (esquema-sr.md §5). Si al final el campo se llama distinto, el único cambio es `totalDe()` en `ventaEnVivo.ts`.
+- La medida de 390 px en navegador real, pendiente.
+- La gráfica de varios días suma todas las horas del rango (la etiqueta lo dice). Una serie por día es de F1-043, que según el log de F1-033 necesita un endpoint nuevo.
+- `react-is` quedó en 17.0.2 (deduplicado con `pretty-format` de Testing Library). Recharts lo acepta como peer, pero si algún día se sube React a 19, hay que revisarlo.
+
+- **Observaciones del revisor en el entregable (aprobado; no toqué el código para que entre lo revisado):**
+  1. `aCentavos(x) ?? 0n` en `TarjetaFormasPago` (`Tarjetas.tsx`) y en `datosPorHora` (`puntosHora.ts`) convierte un importe inválido en $0.00 sin aviso, y en formas distorsiona el %. La API ya valida el formato, así que el riesgo es bajo, pero **F1-042/F1-043, al reusar `dinero.ts`, deberían mostrar error o "Sin dato"** en ese caso, y de paso corregir estos dos.
+  2. Los % redondeados pueden no sumar 100.0 %. Es cosmético, no un error de importes.
+  3. Que cuadre peso a peso contra los reportes nativos de SR no se puede probar sin una instalación real: queda para la validación en campo.
+
+**Qué haría distinto.** Empezar las pruebas de mutación por el dinero. Un test de "0.1 + 0.2" parece que protege contra el float, y no protege contra el float con redondeo.
