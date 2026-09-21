@@ -53,6 +53,8 @@
 | 20 | F1-025 · Heartbeat y auto-diagnóstico | 2 · Agente | /agent |
 | 21 | F1-026 · Instalador y guía de instalación | 2 · Agente | /agent |
 | 22 | F1-092 · Hardening y pulido final | 7 · Cierre | todos |
+| 23 | F1-093 · Logout y revocación de refresh tokens | 1 · Datos | /api + /web |
+| 24 | F1-094 · Pendientes que quedaron "para F1-092" | 7 · Cierre | /web |
 
 ---
 
@@ -433,6 +435,66 @@ abiertos.
 
 > La parte de Caddy se escribe y se valida con `docker compose config` + test local; **no
 > se despliega** (el deploy está prohibido en modo autónomo y el VPS es tarea diurna).
+
+## 23 · F1-093 · Logout y revocación de refresh tokens
+`[ ]` **Epic 1 — Modelo de datos, auth y multitenancy**
+
+`POST /auth/logout` en el api: borra la cookie de refresh y **revoca en el servidor** el
+refresh de esa sesión (tabla de sesiones o versión de token por usuario; la decisión va en
+el plan). El botón "Salir" de la SPA llama a este endpoint antes de limpiar el cliente.
+
+**Listo cuando:** cerrar sesión invalida el refresh en el servidor; un refresh revocado
+recibe 401; hay test e2e que lo cubre (login → logout → refresh con la cookie vieja = 401).
+
+> **Por qué es la primera.** Hoy "Salir" sólo limpia el cliente y la cookie de refresh vale
+> hasta 7 días: en una PC compartida, `fetch('/api/auth/refresh', {method:'POST'})` desde la
+> consola entra como el usuario anterior (log, entradas de F1-011 y F1-040, y la de F1-092).
+>
+> **En el mismo entregable:** contrato OpenAPI actualizado con el endpoint nuevo; si hay
+> tabla nueva, migración de Prisma. Corregir los comentarios que dicen "logout (F1-092)" en
+> `web/src/auth/marcaCierre.ts` y `web/src/api/cliente.ts`.
+>
+> **Relacionado, a valorar en el plan (no obligatorio para el "Listo cuando"):** rotar el
+> refresh no invalida el anterior, y un usuario desactivado sigue entrando a rutas de datos
+> hasta que vence su access (15 min). Si la revocación elegida lo resuelve sin costo, se
+> incluye; si no, se anota en el log.
+
+## 24 · F1-094 · Pendientes que quedaron "para F1-092"
+`[ ]` **Epic 7 — Validación contra SoftRestaurant real y cierre de fase**
+
+Pendientes que varias sesiones anotaron "para F1-092" y que F1-092 no tocó (lista completa
+en su entrada del log). Esta tarea cubre los cuatro puntos de abajo, **cada uno con su
+propio "Listo cuando"**. Lo que no está aquí no se hace de pasada.
+
+1. **CSV de Tickets: folios numéricos.** Excel abre `000123` como `123` y un folio largo en
+   notación científica.
+   **Listo cuando:** el CSV exportado escribe el folio de forma que Excel lo conserve como
+   texto (ceros a la izquierda y folios largos intactos), con test unitario del exportador.
+2. **Montos inválidos mostrados como $0.00.** `aCentavos(x) ?? 0n` en
+   `web/src/paginas/inicio/Tarjetas.tsx` (`TarjetaFormasPago`) y en
+   `web/src/paginas/inicio/puntosHora.ts` convierte un importe que no se puede leer en
+   $0.00 sin avisar.
+   **Listo cuando:** un importe inválido se muestra como dato no disponible (no como
+   $0.00) y no se suma a ningún total; hay test de cada caso.
+3. **Totales de Inicio frente al Monitor no cuadran.** "Venta en vivo" de Inicio suma todas
+   las sucursales con snapshot, desconectadas incluidas, y el Monitor las excluye. El KPI
+   "Última lectura" con "Todas" muestra la lectura más vieja, desconectadas incluidas.
+   **Listo cuando:** con una sucursal desconectada, Inicio y Monitor muestran la misma
+   venta en vivo (o Inicio distingue explícitamente la parte desconectada), y "Última
+   lectura" tiene una regla documentada en el código; hay test con una sucursal
+   desconectada.
+4. **Accesibilidad y rendimiento menores.**
+   - El modal de consumo pone en los `<li>` de partidas y modificadores un `aria-label`
+     con sólo el nombre del producto.
+   - El badge de agentes (`useAhora` en `web/src/layout/Sidebar.tsx`) re-renderiza el
+     sidebar cada 5 s para los admins.
+   **Listo cuando:** el `aria-label` incluye cantidad e importe (tests adaptados al texto
+   nuevo, no borrados); el sidebar ya no se re-renderiza por el reloj cuando el badge no
+   cambia, con test que lo compruebe.
+
+> Corregir en el mismo entregable el comentario "anotado para F1-092" de
+> `web/src/paginas/tickets/exportar.ts` si el punto que describe sigue abierto, apuntándolo
+> al log.
 
 ---
 
