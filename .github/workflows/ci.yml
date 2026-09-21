@@ -81,7 +81,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # CARRIL /api (NestJS + Prisma + Postgres)
-  # ACTIVO desde F1-001, que creó el monorepo. Corre lint + typecheck. El paso
+  # ACTIVO desde F1-001, que creó el monorepo. Corre lint + typecheck (y desde
+  # F1-010, prisma validate + generate). El paso
   # `test` y el servicio de postgres siguen comentados hasta F1-011 (los
   # primeros e2e de auth, que necesitan base real).
   # ---------------------------------------------------------------------------
@@ -119,6 +120,13 @@ jobs:
         working-directory: .
       # Lint antes que los tests: falla en un segundo en vez de quemar la suite.
       - run: npm run lint
+      # F1-010: el schema se valida, y el cliente se genera ANTES del typecheck
+      # (el seed y los tests del esquema importan sus tipos). Ninguno de los dos
+      # toca la base: la URL es de relleno, sólo tiene que existir.
+      - run: npx prisma validate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/sin_base
+      - run: npx prisma generate
       - run: npm run typecheck
       # DESCOMENTAR EN F1-011, junto con el servicio de postgres de arriba.
       # - run: npx prisma migrate deploy

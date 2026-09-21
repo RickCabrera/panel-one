@@ -24,6 +24,6 @@
     // el paso `npm test` siga comentado hasta F1-011.
     "types": ["node", "jest"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "prisma/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

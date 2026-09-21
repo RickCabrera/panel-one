@@ -77,7 +77,11 @@ docker compose up -d
 
 Levanta un `postgres:16` **vacío** en el puerto 5432, con usuario/contraseña/base
 `monitor` por defecto. Para cambiarlos, copia `infra/.env.example` a `infra/.env`.
-El esquema todavía no existe: lo crea Prisma en F1-010.
+El esquema lo crea Prisma en el paso 3.
+
+**Sin Docker** (máquina sin virtualización, por ejemplo): sirve un PostgreSQL 16 nativo
+en el 5432 con un rol `monitor`/`monitor` que tenga `CREATEDB` (`prisma migrate dev` crea
+y borra una *shadow database*) y una base `monitor` de su propiedad.
 
 Para tirarlo y borrar los datos: `docker compose down -v`.
 
@@ -93,8 +97,19 @@ npm install
 
 ```bash
 cp api/.env.example api/.env   # ajusta DATABASE_URL si cambiaste algo en infra/.env
+cd api
+npx prisma migrate dev         # aplica las migraciones y genera el cliente
+npx prisma db seed             # 1 admin global, 1 empresa demo, 2 sucursales (idempotente)
+cd ..
 npm run dev:api                # o: npm run dev --workspace @monitor/api
 ```
+
+El seed crea `admin@monitor.local` con la contraseña de `SEED_ADMIN_PASSWORD` (o la de
+desarrollo por defecto, con aviso en consola). Correrlo otra vez no cambia nada.
+
+Los tests de `/api` (`npm test`) corren contra el Postgres de `DATABASE_URL`: en local es
+tu base de desarrollo, a la que sólo le escriben el seed (idempotente) y un registro
+temporal que borran al terminar. Sin base, fallan; no se saltan.
 
 Queda escuchando en `http://localhost:3000`.
 
