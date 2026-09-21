@@ -244,3 +244,54 @@ sqlite3 -readonly "C:\ProgramData\ArkonAgente\cola.db" "SELECT id, tipo, clave, 
   Se crea una cola nueva y vacía.
 - El SQLite nativo (`e_sqlite3`) va dentro de `agente.exe` al publicar en un solo archivo.
   No hay DLL que copiar.
+
+## Heartbeat y auto-diagnóstico (F1-025)
+
+En **cada ciclo**, el servicio hace tres cosas, en este orden:
+
+1. **Consulta SoftRestaurant.** Mientras no haya versión detectada, detecta (F1-021). Con el
+   reader elegido, corre la **sonda** `sr_sondeo.sql`: una fila de `dbo.parametros2`, con
+   `WITH (NOLOCK)` y el timeout corto. Mide cuánto tarda la consulta (sin contar el abrir la
+   conexión).
+2. **Encola un heartbeat.** Siempre, pase lo que pase en el paso 1. Una excepción ahí no corta
+   el ciclo: queda en el log (`Error`, una vez por tipo) y en el heartbeat.
+3. **Vacía la cola** hacia el API (F1-024). El heartbeat viaja en el mismo lote: no suma
+   peticiones.
+
+Así sale **un lote por ciclo aunque no haya ventas**, que es lo que el panel lee como
+"conectado" (F1-061: más de 90 s sin lote = "Desconectado").
+
+Qué lleva el heartbeat:
+
+| Campo | De dónde sale |
+|---|---|
+| `versionAgente` | La versión del exe, con el commit recortado (`1.0.0+1a99dc7`). |
+| `versionSr` | La versión leída de SR (`10.021800`); también si no se soporta (`12.000000`). Null si no se pudo leer. |
+| `ultimaLecturaAt` | La última vez que la **sonda** respondió (UTC). No avanza si falla. |
+| `latenciaQueryMs` | Lo que tardó la sonda de este ciclo; null si falló o todavía no hay reader. |
+| `tamanoCola` | Pendientes en `cola.db` **sin contar el heartbeat** (se colapsa y viaja en el lote que lo reporta). |
+| `ultimoError` | Ver abajo; null si todo está bien. |
+
+> ⚠️ **"Última lectura" hoy es la sonda, no una lectura de ventas.** El agente todavía no lee
+> cheques (F1-022/F1-023, bloqueadas por F1-090). Que el panel diga "última lectura hace 10 s"
+> quiere decir que la base de SR contesta, **no que las ventas estén llegando**. Cuando F1-022
+> lea cheques, su lectura reemplaza a la sonda (`DECISION PROVISIONAL (nocturno)` en
+> `SondeoSr.cs`).
+
+`ultimoError` junta hasta tres partes, separadas por ` | `, en este orden (cada una de hasta
+600 caracteres; el total, hasta 2000):
+
+1. **Rechazos definitivos** que siguen en `cola.db` (7 días): cuántos, cuántos son cheques
+   (ventas que faltan en el panel) y el último, con folio y motivo.
+2. **El envío al API:** la falla vigente ("falla desde … (N intentos): …") o, hasta una hora
+   después de recuperarse, la última caída ("falló de … a …: …"). Durante la caída no llega
+   ningún heartbeat; al reconectar, ésta es la forma de ver qué pasó.
+3. **SoftRestaurant:** el error de la detección o, con reader, el de la sonda.
+
+Nunca lleva la API key, la contraseña ni la cadena de conexión: los mensajes de SQL salen de
+`VerificacionSql.ClasificarError` y los de una excepción, sólo con el tipo.
+
+**`intervaloSegundos` mayor a 30** da un aviso al cargar la config: el panel marca
+"desconectado" a los 90 s fijos, así que con un intervalo mayor la sucursal sale
+desconectada en falso entre ciclo y ciclo (decisión abierta, ver la ficha de F1-061 en
+`backlog.md`).
