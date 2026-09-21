@@ -143,7 +143,7 @@ e2e); un evento inválido no tumba el lote completo.
 > el que implementa F1-024 del otro lado: documéntalo bien.
 
 ## 7 · F1-032 · Servicio de agregados de ventas
-`[ ]` **Epic 3 — API de ingesta y modelo de ventas**
+`[x]` **Epic 3 — API de ingesta y modelo de ventas**
 
 Queries SQL (no ORM) para: venta total y nº de cuentas por rango de fechas, serie por hora
 del día, desglose por forma de pago (mapeo `forma_raw`→ENUM configurable por catálogo
