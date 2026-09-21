@@ -61,7 +61,8 @@ internal sealed class VerificacionSql : IVerificacion
 
     internal const string AvisoAutenticacionWindows =
         "La cadena usa autenticación de Windows: el servicio entra a SQL Server como su propia cuenta " +
-        "(LocalSystem = NT AUTHORITY\\SYSTEM) y 'agente test' como la tuya, así que este diagnóstico puede no " +
+        "(NT SERVICE\\ArkonAgente, o NT AUTHORITY\\SYSTEM si se instaló como LocalSystem) y 'agente test' " +
+        "como la tuya, así que este diagnóstico puede no " +
         "reflejar lo que verá el servicio. Usa un usuario SQL de solo lectura (User ID / Password).";
 
     /// <summary>

@@ -24,3 +24,8 @@ api/prisma/migrations/** text eol=lf
 # El contrato OpenAPI lo genera `npm run openapi` con LF y `openapi.spec.ts` lo
 # compara contra el código; con CRLF en un checkout de Windows no coincidiría.
 api/openapi.json text eol=lf
+
+# Scripts del instalador del agente (F1-026): los lee PowerShell 5.1 / sqlcmd en la PC del
+# restaurante. Van en UTF-8 CON BOM (sin BOM, 5.1 y sqlcmd los leen como ANSI y los acentos
+# salen rotos; InstaladorPs1Tests lo vigila). CRLF en el checkout, como pide .editorconfig.
+agent/instalador/*.ps1 text eol=crlf
