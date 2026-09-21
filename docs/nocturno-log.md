@@ -272,6 +272,22 @@ saliendo `dist/main.js`); `npm test` 70/70 con 0 skips. Arranqué la app real
 - **CORS** para la SPA: F1-040 decide si usa el proxy de Vite (cookie del mismo origen) o
   CORS con credentials. La cookie es SameSite=Strict con Path=/auth.
 - El storage del throttler es en memoria y vale por proceso: con varias réplicas no alcanza.
+- El revisor aprobó el entregable con estas observaciones, que quedaron anotadas y **sin
+  tocar el código**. Así lo que entra es exactamente lo que se revisó:
+  1. **La regla de lint se puede brincar.** No cubre `require('@prisma/client')`, las
+     subrutas (`@prisma/client/default`, `.prisma/client`) ni `import x = require(...)`.
+     Atrapa el olvido, no a quien quiera saltársela. Hay que agregar esos patrones, con
+     casos en `restriccion-prisma.spec.ts`, la próxima vez que se toque la regla (F1-033
+     o F1-092).
+  2. **`findFirstOrThrow` da 500.** Está entre las lecturas permitidas de
+     `ScopedPrismaService`, y si no encuentra nada lanza el error de Prisma, que llega como
+     500 y no como 404. No filtra nada, pero rompe la convención: **F1-033 debe quitarla**
+     de `OPERACIONES_PERMITIDAS` o traducirla a `NotFoundException`.
+  3. **Un usuario desactivado sigue entrando a las rutas de datos** hasta que vence su
+     access token (15 min), no sólo a `/me`. Va junto con la revocación, en F1-092.
+  4. **Los `include`/`select` de relaciones no pasan por el filtro de empresa.** Hoy da
+     igual, porque todas las relaciones cuelgan de la misma empresa. **Hay que revisarlo en
+     F1-030** si `ChequePartida` o `ChequePago` quedan sin `empresa_id` propio.
 
 **Qué haría distinto.** Escribir los archivos con Write desde el principio, en vez de
 heredocs y python desde bash: perdí dos vueltas con encoding y parseo.
