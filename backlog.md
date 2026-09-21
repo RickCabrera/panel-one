@@ -455,14 +455,31 @@ La máquina donde se cerró no puede arrancar el engine de Docker, así que sól
 en estado `healthy`; `psql` con las credenciales de `infra/.env.example` conecta y la base
 `monitor` está vacía (sin tablas); `docker compose down` lo detiene limpio.
 
-## F1-020b · Verificar el servicio del agente instalado con `sc create`
-`[ ]` **Epic 2** · 🔒 **Razón: necesita una consola elevada (administrador) y reiniciar la
-máquina.** Resto del corte de F1-020: el código, `agente test` y los comandos de instalación
-están entregados y probados en consola (ver `docs/nocturno-log.md`), pero la sesión nocturna
-no tiene elevación para `sc create` ni puede reiniciar la máquina.
+## F1-020b · Verificar el instalador y el servicio del agente con consola elevada
+`[ ]` **Epic 2** · 🔒 **Razón: necesita una consola elevada (administrador), reiniciar la
+máquina y decidir escribir un login en el SQL Server de la SR local.** Resto del corte de
+F1-020 **y de F1-026**: el código, `agente test`, `instalar.ps1`, `crear-usuario-lector.ps1`
+y su `.sql` están entregados y probados hasta donde se puede sin elevación (ver
+`docs/nocturno-log.md`), pero ninguna sesión nocturna ha tenido elevación, y crear el login
+es escribir en el servidor del POS, que lo autoriza Ricardo.
 
-**Listo cuando:** siguiendo `agent/README.md` en una consola de administrador: `sc create`
-+ `sc failure` + `sc start` dejan el servicio `ArkonAgente` en `RUNNING`; tras reiniciar
+**Listo cuando:**
+1. **Lector (F1-026), en la SR local de desarrollo** (`.\NATIONALSOFT`, `softrestaurant10`),
+   con autorización de Ricardo: `crear-usuario-lector.ps1` termina en "LISTO"; correrlo
+   otra vez repone la contraseña sin fallar; `agente test` con `monitor_lector` da **OK en
+   SQL** (sin "permisos de escritura") y el servicio detecta la versión y su sonda responde,
+   lo que valida el supuesto de §1/§11 de que `db_datareader` alcanza. Al menos una rama de
+   "ALTO" probada (p. ej. darle `db_datawriter` a mano y volver a correr: se detiene sin
+   cambiar nada; luego quitárselo).
+2. **Instalador (F1-026):** `instalar.ps1` en una consola de administrador deja el servicio
+   `ArkonAgente` en `RUNNING` **con la cuenta virtual `NT SERVICE\ArkonAgente`**, el
+   `icacls` deja la carpeta sólo para SYSTEM, Administradores y el SID del servicio
+   (`icacls C:\ProgramData\ArkonAgente` lo muestra), el servicio escribe su log y `cola.db`
+   con esa cuenta, y en el panel la sucursal sale "Conectado". Volver a correrlo (actualizar)
+   conserva `config.json` y `cola.db`. Si la cuenta virtual no funciona, se documenta por qué
+   y se cambia el default a `LocalSystem` (quitar la `DECISION PROVISIONAL (nocturno)` de
+   `instalar.ps1`).
+3. **Servicio (F1-020):** tras reiniciar
 Windows arranca solo (`sc query` = `RUNNING` sin tocar nada) y escribe en
 `C:\ProgramData\ArkonAgente\logs\agente-AAAAMMDD.log`; matando el proceso
 (`taskkill /F /IM agente.exe`) el administrador de servicios lo levanta de nuevo en ≤ 1 min;
@@ -471,6 +488,9 @@ dentro del ciclo del worker (hoy no hay manera de provocarla desde afuera, porqu
 todavía no tiene trabajo), el log registra `Critical` + "código 1" y el servicio vuelve a
 `RUNNING` en ≤ 1 min;
 `sc stop` lo detiene limpio y el log dice "Agente detenido.".
+
+La medición de "una persona no técnica en < 15 minutos" de F1-026 **no** es de aquí: es de
+F1-091, con una persona real.
 
 ## F1-002 · Docker Compose de producción + Caddy
 `[ ]` **Epic 0** · 🔒 **Razón: necesita el VPS contratado y el dominio con DNS apuntando.**
@@ -627,6 +647,12 @@ perder ingesta.
 
 **Listo cuando:** checklist firmado; bugs encontrados convertidos en issues y resueltos
 antes de cerrar fase.
+
+> **Nota de F1-026:** el "instalación < 15 min" se mide con la guía
+> `docs/instalacion-agente.md`, seguida por una persona no técnica sobre una instalación
+> limpia, con el paquete de `agent/README.md` ("Armar el paquete del instalador"). Es el AC
+> de F1-026 que de noche no se pudo medir. Anotar el tiempo por paso y lo que no se
+> entendió, y corregir la guía en el mismo cierre.
 
 ## Toda la FASE 2
 `[ ]` 🔒 **Razón: congelada hasta que F1-091 cierre.** No es una fecha: es una condición.

@@ -173,7 +173,9 @@ jobs:
   # ACTIVO desde F1-001: corre restore + build. El paso `test` lo encendió F1-020
   # (el backlog se lo asignaba a F1-021): la config, la redacción de secretos y
   # el diagnóstico de `agente test` ya son lógica que no puede quedar sin gate.
-  # Los tests no necesitan Windows, SQL Server ni red.
+  # Los tests no necesitan Windows, SQL Server ni red. Los del instalador (F1-026)
+  # sí necesitan PowerShell: usan el `pwsh` que ya trae ubuntu-latest, y si no
+  # está, fallan (no se saltan).
   # ---------------------------------------------------------------------------
   agent:
     name: Agente (.NET 8)

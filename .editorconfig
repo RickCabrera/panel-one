@@ -30,6 +30,10 @@ trim_trailing_whitespace = false
 [*.ps1]
 end_of_line = crlf
 
+# El instalador del agente lo leen PowerShell 5.1 y sqlcmd: sin BOM, acentos rotos.
+[agent/instalador/*.{ps1,sql}]
+charset = utf-8-bom
+
 # El hook es un script POSIX. Con CRLF el `#!/bin/sh` llega con un \r pegado, el
 # hook queda instalado, se ve bien y NO CORRE. El job `guardia` del CI lo vigila.
 [scripts/git-hooks/*]

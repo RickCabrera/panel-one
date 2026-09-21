@@ -52,7 +52,8 @@ internal sealed class ConexionSoftRestaurant
 
     /// <summary>
     /// Autenticación de Windows: el login es la cuenta que corre el proceso
-    /// (LocalSystem en el servicio, el administrador en <c>agente test</c>).
+    /// (la cuenta del servicio —NT SERVICE\ArkonAgente o LocalSystem, ver instalar.ps1—,
+    /// el administrador en <c>agente test</c>).
     /// </summary>
     public bool UsaAutenticacionWindows => _constructor.IntegratedSecurity;
 

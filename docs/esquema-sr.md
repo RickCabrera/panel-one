@@ -577,6 +577,67 @@ instalación de SR 10 (ver el recuadro de abajo). Lo que no aparece ahí sigue s
   Otras instalaciones pueden usar otro nombre, por ejemplo `.\SQLEXPRESS` si SR se montó
   sobre un SQL ya existente. El técnico lo pone en la cadena.
 
+### Usuario de solo lectura e instalador (F1-026)
+
+El instalador (`agent/instalador/`) crea el login `monitor_lector` con
+`crear-usuario-lector.sql`, que **sólo** lo agrega a `db_datareader`. **El script nunca se ha
+ejecutado**: crear un login es escribir en el servidor del POS, y la única instancia a la
+mano es la de desarrollo con SR (lo decide Ricardo de día, F1-020b).
+
+> **Lo que se vio en la instalación local de desarrollo (F1-026, 2026-09-21).** ✅ VALIDADO
+> sólo para esa instalación, con una consulta de catálogo de solo lectura (`WITH (NOLOCK)`,
+> `sqlcmd -t 10`, login sysadmin de Windows), sin tocar datos:
+>
+> ```sql
+> SELECT CAST(SERVERPROPERTY('IsIntegratedSecurityOnly') AS int) AS solo_windows;
+> SELECT p.permission_name, p.state_desc, p.class_desc, COUNT(*) AS n
+> FROM sys.database_permissions AS p WITH (NOLOCK)
+> JOIN sys.database_principals AS g WITH (NOLOCK) ON g.principal_id = p.grantee_principal_id
+> WHERE g.name = N'public'
+> GROUP BY p.permission_name, p.state_desc, p.class_desc;
+> SELECT name, type_desc FROM sys.database_principals WITH (NOLOCK)
+> WHERE type IN ('S','U','G') AND principal_id > 4;
+> SELECT COUNT(*) FROM sys.procedures WITH (NOLOCK);
+> ```
+>
+> - **Modo mixto** (`IsIntegratedSecurityOnly = 0`): un login SQL como `monitor_lector`
+>   puede entrar sin tocar la configuración del servidor.
+> - **`public` sólo tiene `SELECT` (GRANT) sobre 140 objetos** de `softrestaurant10`; ningún
+>   INSERT/UPDATE/DELETE/EXECUTE/ALTER. O sea: con `db_datareader` y nada más, el lector no
+>   hereda escritura por `public`. No se miró qué son esos 140 objetos.
+> - La base no tiene usuarios propios (SQL, Windows ni grupos) además de los de sistema.
+> - 6 procedimientos almacenados en la base.
+> - **`sqlcmd` de SQL 2014** (el que trae esta instalación, en
+>   `C:\Program Files (x86)\Microsoft SQL Server\120\Tools\Binn`): lee bien un `.sql` en UTF-8
+>   **con BOM** (sin BOM los acentos salen rotos), y **toma las variables de entorno como
+>   variables de script** (`$(BASE_SR)`); si una variable no existe, dice "*scripting variable
+>   not defined*", sale con código 1 y no manda el lote. Se probó con un `PRINT`, sin
+>   escribir nada.
+
+Supuestos del instalador (⚠️ ninguno visto funcionando):
+
+- ⚠️ **SUPUESTO — el administrador de Windows de la PC es sysadmin del SQL del POS**
+  (`sqlcmd -E`). En esta instalación lo es, pero desde SQL 2008 `BUILTIN\Administrators` ya
+  no entra como sysadmin por defecto, y en otras instalaciones el único acceso puede ser `sa`
+  con una contraseña que tiene el soporte de NationalSoft. Por eso
+  `crear-usuario-lector.ps1 -UsuarioAdmin sa` (pide la contraseña sin mostrarla y la pasa por
+  `SQLCMDPASSWORD`). `sa` sólo se usa para crear el lector, **nunca** va en `config.json`.
+- ⚠️ **SUPUESTO — `sqlcmd` viene con el SQL Express de SR.** En la instalación vista sí. Si
+  falta, el script da la alternativa con SSMS en modo SQLCMD.
+- ⚠️ **SUPUESTO — con `db_datareader` alcanza** para `sys.tables`, `parametros2` y las tablas
+  de cuentas (§1). Igual que en §1: nunca se ha corrido con un usuario así.
+- ⚠️ **SUPUESTO — SR puede ir sobre un SQL 2008/2008 R2.** Por eso el T-SQL usa
+  `sp_addrolemember` y no `ALTER ROLE ... ADD MEMBER` (2012+), no usa `IS_ROLEMEMBER` (2012+),
+  y la guardia de los tests lo parsea con el parser de SQL 2008.
+- ⚠️ **SUPUESTO — cambiar el modo de autenticación no es opción** (reinicia el SQL del POS =
+  la caja no cobra). Si un servidor es "sólo Windows", el script se detiene sin cambiar nada
+  y manda a soporte.
+- ❓ **DECISIÓN ABIERTA para Ricardo — `db_denydatawriter`.** Agregar al lector a
+  `db_denydatawriter` le negaría escritura aunque `public` la tuviera en otra instalación. No
+  otorga nada, pero el backlog pide literalmente "sólo `db_datareader`" y en la instalación
+  vista `public` no escribe, así que no se agregó. El script sí **avisa** (sin abortar) si
+  `public` tiene INSERT/UPDATE/DELETE/EXECUTE/ALTER/CONTROL.
+
 ---
 
 ## 12. Rarezas
@@ -649,4 +710,4 @@ instalación de SR 10 (ver el recuadro de abajo). Lo que no aparece ahí sigue s
 
 | Fecha | Versión SR | Restaurante / entorno | Qué se validó |
 |---|---|---|---|
-| 2026-09-21 | 10 (exe 10.0.323, `versiondb` 10.021800) | Instalación local de desarrollo (SQL Server 2014 SP1 Express, instancia `.\NATIONALSOFT`). Sin datos de negocio: sólo catálogo y la columna de versión. Login sysadmin (no es config de producción) | Detección de versión y elección del reader (F1-021); conexión, certificado y TLS; `diagnostico.sql` (§1, §11, §12). **No** valida el mapeo de cuentas, pagos ni productos: eso es F1-090. |
+| 2026-09-21 | 10 (exe 10.0.323, `versiondb` 10.021800) | Instalación local de desarrollo (SQL Server 2014 SP1 Express, instancia `.\NATIONALSOFT`). Sin datos de negocio: sólo catálogo y la columna de versión. Login sysadmin (no es config de producción) | Detección de versión y elección del reader (F1-021); conexión, certificado y TLS; `diagnostico.sql` (§1, §11, §12). Modo mixto, permisos de `public` y comportamiento de `sqlcmd` 2014 (F1-026, §11). **No** valida el mapeo de cuentas, pagos ni productos: eso es F1-090. |
