@@ -332,8 +332,10 @@ centavos exactos; si **una sola** mesa no trae un `total` legible, muestra "Sin 
 de una suma parcial. Falta confirmar contra `tempcheques` (o la tabla que sea) que el total
 de una cuenta abierta **ya incluye** descuentos e impuestos como el `total` de un cheque
 cerrado, y si una mesa puede traer varias cuentas. El seed de F1-032 no genera snapshots:
-esto sólo se probó con respuestas falsas. Código: `web/src/paginas/inicio/ventaEnVivo.ts`.
-La edad que muestra la tarjeta es `edadRecepcionSegundos` (reloj del servidor).
+esto sólo se probó con respuestas falsas. Código: `totalDe`/`importeDe` en
+`web/src/paginas/mesas/mesa.ts` (se movieron ahí desde `inicio/ventaEnVivo.ts` en F1-094);
+la tarjeta (`inicio/ventaEnVivo.ts`) calcula con `armarMonitor` del Monitor. La edad que
+muestra la tarjeta es `edadRecepcionSegundos` (reloj del servidor).
 
 **Lo que el Monitor de mesas (F1-050) supone.** Todo lo de este bloque es ⚠️ **SUPUESTO no
 validado**: nadie ha visto todavía `tempcheques` ni la tabla que sea. Lo valida F1-023 contra
@@ -382,10 +384,18 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
     último error y la lectura vieja a la vista. Esto no es un hallazgo de SR: la tarea no
     leyó SR. Lo que sí depende del agente real (F1-020/F1-025): que mande un lote por
     ciclo aunque no tenga cheques, para que el contacto avance.
-- **Diferencia conocida con el Panel (no es un error de cuadre):** la tarjeta "Venta en
-  vivo" de Inicio (F1-041) suma **todas** las sucursales que tienen snapshot, también las
-  desconectadas. El Monitor excluye las desconectadas. Con una sucursal desconectada, las
-  dos cifras no coinciden. Queda anotado para F1-092.
+- **Panel y Monitor dan la misma cifra (F1-094).** La tarjeta "Venta en vivo" de Inicio
+  se calcula con el mismo `armarMonitor` que el KPI "En curso" del Monitor: **sólo suman las
+  sucursales conectadas** (umbral de 90 s de arriba, con la edad que sigue creciendo en el
+  navegador). Las desconectadas se nombran ("Desconectadas, sin contar") y, si ninguna está
+  conectada, no hay cifra (tampoco $0.00). Inicio consulta las mesas cada 20 s, como el
+  Monitor, para que un snapshot sano no cruce el umbral entre dos consultas.
+  - **"Última lectura" (KPI del Monitor)** = la lectura **más vieja de las sucursales
+    conectadas**, es decir, la edad del dato más viejo que entra en las cifras. Las
+    desconectadas no cuentan (tienen su banner). Sin conectadas es `null`. El "dato de
+    hace…" de la tarjeta de Inicio es ese mismo valor. Regla en `Kpis.ultimaLectura`
+    (`reglas.ts`). No es un hallazgo de SR: son reglas de presentación sobre el supuesto
+    del umbral.
 - **Lo que el Detalle de consumo (F1-051, modal) supone.** Todo es ⚠️ **SUPUESTO no
   validado**, igual que lo de arriba. Código: `web/src/paginas/mesas/mesa.ts` (lectura,
   `DECISION PROVISIONAL (nocturno)`), `Detalle.tsx` (modal), `seleccion.ts`.

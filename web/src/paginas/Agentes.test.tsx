@@ -1,5 +1,6 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Profiler } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -262,6 +263,43 @@ describe('Sidebar: badge de sucursales sin reportar', () => {
     });
     // 590 + ~25 s > 600 s, y el refetch fallido de los 20 s no lo apagó.
     await waitFor(() => expect(screen.getByTestId('alerta-agentes')).toHaveTextContent('1'));
+  });
+
+  it('el reloj del badge no vuelve a pintar nada mientras el badge no cambia', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], shouldAdvanceTime: true });
+    vi.setSystemTime(AHORA);
+    const api = apiAgentes('admin_empresa', () => json(200, [fila(SUCURSAL_A1, 700)]));
+    const commits: string[] = [];
+    const queryClient = crearQueryClient();
+    queryClient.setDefaultOptions({
+      queries: { ...queryClient.getDefaultOptions().queries, retry: false },
+    });
+    render(
+      <MemoryRouter initialEntries={[`/cuenta?empresa=${A}`]}>
+        <Proveedores queryClient={queryClient}>
+          <Profiler id="app" onRender={(_, fase) => commits.push(fase)}>
+            <Rutas />
+          </Profiler>
+        </Proveedores>
+      </MemoryRouter>,
+    );
+    // El badge SÍ está montado (700 s > 600 s): lo que se mide es su reloj.
+    await waitFor(() => expect(screen.getByTestId('alerta-agentes')).toHaveTextContent('1'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(pedidas(api)).toHaveLength(1);
+    commits.length = 0;
+
+    // 15 s = tres pulsos del reloj de 5 s y ningún poll (cada 20 s): nada cambia.
+    for (let pulso = 0; pulso < 3; pulso++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+    }
+    expect(pedidas(api)).toHaveLength(1);
+    expect(commits).toEqual([]);
+    expect(screen.getByTestId('alerta-agentes')).toHaveTextContent('1');
   });
 
   it('un visor no ve el badge ni pide /agentes/estado', async () => {

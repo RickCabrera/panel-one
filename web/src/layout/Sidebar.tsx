@@ -6,7 +6,7 @@ import { queryAlcance, useAlcance } from '../filtros/alcance';
 import { Marca } from '../marca/Marca';
 import { sinReportar, UMBRAL_ALERTA_S } from '../paginas/admin/reglasAgentes';
 import { useEstadoAgentes } from '../paginas/admin/consultas';
-import { useAhora } from '../paginas/mesas/consultas';
+import { useConReloj } from '../paginas/mesas/consultas';
 
 interface Entrada {
   ruta: string;
@@ -74,17 +74,20 @@ export function Sidebar({ abierto, onNavegar }: { abierto: boolean; onNavegar: (
 function AlertaAgentes({ search, onNavegar }: { search: string; onNavegar: () => void }) {
   const { empresa } = useAlcance();
   const consulta = useEstadoAgentes(empresa?.id);
-  const ahora = useAhora();
-  if (consulta.data === undefined) return null;
-  const caidas = sinReportar(consulta.data, consulta.dataUpdatedAt, ahora);
-  if (caidas.length === 0) return null;
+  const { data, dataUpdatedAt } = consulta;
+  // Sólo el CONTEO depende del reloj: el badge se vuelve a pintar cuando cambia, no
+  // cada pulso (F1-094).
+  const caidas = useConReloj((ahora) =>
+    data === undefined ? 0 : sinReportar(data, dataUpdatedAt, ahora).length,
+  );
+  if (caidas === 0) return null;
 
   const destino = new URLSearchParams(search);
   destino.set('tab', 'agentes');
   const texto =
-    caidas.length === 1
+    caidas === 1
       ? `1 sucursal lleva más de ${UMBRAL_ALERTA_S / 60} min sin reportar`
-      : `${caidas.length} sucursales llevan más de ${UMBRAL_ALERTA_S / 60} min sin reportar`;
+      : `${caidas} sucursales llevan más de ${UMBRAL_ALERTA_S / 60} min sin reportar`;
   return (
     <Link
       to={{ pathname: '/admin', search: `?${destino.toString()}` }}
@@ -94,7 +97,7 @@ function AlertaAgentes({ search, onNavegar }: { search: string; onNavegar: () =>
       data-testid="alerta-agentes"
       className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white"
     >
-      {caidas.length}
+      {caidas}
     </Link>
   );
 }

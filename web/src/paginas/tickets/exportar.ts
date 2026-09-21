@@ -32,7 +32,8 @@ export const MENSAJE_CAMBIARON =
  * F1-033). DECISION PROVISIONAL (nocturno): si el `total` cambia entre páginas o
  * los tickets únicos no cuadran con él, NO se entrega archivo: un CSV al que le
  * falta o le sobra un cheque sin avisar es peor que pedir que se repita. Con
- * "Hoy" en hora pico eso va a pasar seguido; está anotado para F1-092.
+ * "Hoy" en hora pico eso va a pasar seguido. Sigue abierto: F1-092 no lo tomó y
+ * F1-094 tampoco; ver docs/nocturno-log.md (F1-092, "Pendientes", punto 3).
  */
 export async function exportarTickets(
   parametros: ParametrosTickets,

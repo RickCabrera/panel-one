@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import { pedir } from '../../api/cliente';
 import type { MesasSucursal } from '../../api/tipos';
@@ -40,4 +40,23 @@ export function useAhora(): number {
     return () => clearInterval(id);
   }, []);
   return ahora;
+}
+
+/** Un intervalo por suscriptor; de módulo para que la suscripción sea estable. */
+function suscribirPulso(avisar: () => void): () => void {
+  const id = setInterval(avisar, PULSO_MS);
+  return () => clearInterval(id);
+}
+
+/**
+ * Un valor derivado de la hora (p. ej. cuántas sucursales pasaron un umbral), que se
+ * recalcula cada `PULSO_MS` pero sólo re-renderiza cuando CAMBIA. `useAhora` pinta
+ * cada 5 s aunque nada cambie; esto no (F1-094: el badge de agentes). `calcular`
+ * tiene que devolver un primitivo, porque React compara con `Object.is`.
+ */
+export function useConReloj<T extends string | number | boolean | null>(
+  calcular: (ahora: number) => T,
+): T {
+  const snapshot = () => calcular(Date.now());
+  return useSyncExternalStore(suscribirPulso, snapshot, snapshot);
 }

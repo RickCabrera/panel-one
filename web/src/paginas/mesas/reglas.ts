@@ -104,7 +104,14 @@ export interface Kpis {
   atencion: number;
   /** Mesas sin hora de apertura legible: ni están en `atencion` ni se esconden. */
   sinHora: number;
-  /** La lectura MÁS VIEJA de las sucursales que han reportado. */
+  /**
+   * Regla (F1-094): la lectura MÁS VIEJA de las sucursales que ENTRAN en las cifras
+   * (las conectadas), o sea, qué tan viejo es el dato más viejo que se está sumando.
+   * Las desconectadas NO cuentan: ya tienen su banner y salen en `excluidas`, y con
+   * ellas el KPI decía "hace 2 h" junto a cifras de hace segundos. Sin ninguna
+   * conectada es `null` (el Monitor no pinta KPIs en ese caso). La tarjeta "Venta en
+   * vivo" del Panel usa este mismo valor para su "dato de hace…".
+   */
   ultimaLectura: { recibidoAt: number; edadSegundos: number; frescura: Frescura } | null;
   /** Nombres de las sucursales que no entran en las cifras. */
   excluidas: string[];
@@ -175,7 +182,9 @@ export function armarMonitor(
 
   const totales = mesas.map((m) => m.total);
   const impresos = mesas.map((m) => m.impreso);
-  const conLectura = sucursales.filter((s) => s.edadSegundos !== null && s.recibidoAt !== null);
+  const conLectura = sucursales.filter(
+    (s) => s.estado === 'conectada' && s.edadSegundos !== null && s.recibidoAt !== null,
+  );
   const masVieja = conLectura.reduce<SucursalMonitor | null>(
     (peor, s) => (peor === null || s.edadSegundos! > peor.edadSegundos! ? s : peor),
     null,

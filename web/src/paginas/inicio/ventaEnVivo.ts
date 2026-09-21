@@ -1,72 +1,53 @@
 import type { MesasSucursal } from '../../api/tipos';
-import { aCentavos, sumar } from '../../dinero/dinero';
+import { armarMonitor, type EstadoSucursal } from '../mesas/reglas';
 
 export interface VentaEnVivo {
-  /** Σ de las cuentas abiertas; `null` si alguna mesa no trae un `total` legible. */
+  /**
+   * Σ de las cuentas abiertas de las sucursales CONECTADAS; `null` si alguna de esas
+   * mesas no trae un `total` legible (no hay suma parcial).
+   */
   total: bigint | null;
+  /** Mesas de las sucursales conectadas. */
   mesas: number;
-  /** Sucursales con al menos un snapshot. */
+  /** Sucursales con al menos un snapshot, conectadas o no. */
   reportando: number;
+  /** Las que entran en la suma. */
+  conectadas: number;
+  /** Nombres de las que reportaron pero pasaron el umbral: NO se suman. */
+  desconectadas: string[];
   /** Nombres de las que nunca han mandado uno. */
   sinReporte: string[];
-  /** El snapshot más viejo que entra en la suma, en segundos (reloj del servidor). */
+  /** La lectura más vieja que entra en la suma, en segundos; `null` sin conectadas. */
   edadMaximaSegundos: number | null;
 }
 
 /**
- * DECISION PROVISIONAL (nocturno): la forma de cada mesa del snapshot NO está
- * fijada todavía (esquema-sr.md §5, SUPUESTO; la fijan F1-023/F1-050). Se supone un
- * campo `total` con el importe de la cuenta abierta, en texto decimal o número. Si
- * UNA sola mesa no lo trae legible, la tarjeta dice "Sin dato" en vez de una suma
- * parcial que parezca completa. El seed de F1-032 no trae snapshots: esto sólo se
- * ha probado con respuestas falsas (ventaEnVivo.test.ts, Inicio.test.tsx).
- *
- * La edad es `edadRecepcionSegundos` (reloj del servidor), no `edadSegundos` (reloj
- * de la PC del POS, que puede estar desfasado). Aquí sólo se muestra: la regla de
- * "sucursal desconectada" es de F1-050.
+ * La tarjeta "Venta en vivo" del Panel. Regla (F1-094): es EXACTAMENTE la cifra
+ * "En curso" del Monitor de Mesas, porque se calcula con `armarMonitor`: una sucursal
+ * cuyo snapshot pasó el umbral de desconexión (`mesas/reglas.ts`) no se suma en
+ * ninguna de las dos vistas, y aquí se nombra como desconectada. `respuestaAt` es el
+ * `dataUpdatedAt` de la consulta y `ahora` la hora del navegador: la edad sigue
+ * creciendo entre consultas igual que en el Monitor.
  */
-export function ventaEnVivo(filas: readonly MesasSucursal[]): VentaEnVivo {
-  const montos: bigint[] = [];
-  let legible = true;
-  let mesas = 0;
-  let edadMaxima: number | null = null;
-  const sinReporte: string[] = [];
-
-  for (const fila of filas) {
-    if (!fila.snapshot) {
-      sinReporte.push(fila.nombre);
-      continue;
-    }
-    edadMaxima = Math.max(edadMaxima ?? 0, fila.snapshot.edadRecepcionSegundos);
-    for (const mesa of fila.snapshot.mesas) {
-      mesas += 1;
-      const monto = totalDe(mesa);
-      if (monto === null) legible = false;
-      else montos.push(monto);
-    }
-  }
-
+export function ventaEnVivo(
+  filas: readonly MesasSucursal[],
+  respuestaAt: number,
+  ahora: number,
+): VentaEnVivo {
+  const { sucursales, kpis } = armarMonitor(filas, respuestaAt, ahora);
+  const nombres = (estado: EstadoSucursal) =>
+    sucursales.filter((s) => s.estado === estado).map((s) => s.nombre);
+  const conectadas = nombres('conectada').length;
+  const sinReporte = nombres('sin-reporte');
   return {
-    total: legible ? sumar(montos) : null,
-    mesas,
-    reportando: filas.length - sinReporte.length,
+    total: kpis.enCurso,
+    mesas: kpis.mesas,
+    reportando: sucursales.length - sinReporte.length,
+    conectadas,
+    desconectadas: nombres('desconectada'),
     sinReporte,
-    edadMaximaSegundos: edadMaxima,
+    edadMaximaSegundos: kpis.ultimaLectura?.edadSegundos ?? null,
   };
-}
-
-export function totalDe(mesa: Record<string, unknown>): bigint | null {
-  return importeDe(mesa.total);
-}
-
-/**
- * Un importe del snapshot: texto decimal de hasta 2 cifras (`"350.50"`) o número
- * finito, en centavos. Cualquier otra cosa es `null` ("Sin dato"), nunca 0.
- */
-export function importeDe(v: unknown): bigint | null {
-  if (typeof v === 'string') return aCentavos(v);
-  if (typeof v === 'number' && Number.isFinite(v)) return aCentavos(String(v));
-  return null;
 }
 
 /** "hace 3 min", "hace 2 h": la edad del dato, para que "en vivo" no engañe. */

@@ -160,12 +160,25 @@ describe('armarMonitor', () => {
     expect(m.kpis.enCurso).toBe(10000n);
     expect(m.kpis.atencion).toBe(0);
     expect(m.kpis.excluidas).toEqual(['Norte']);
-    // La última lectura es la MÁS VIEJA: la de Norte, en rojo.
+    // La última lectura es la más vieja de las que SE SUMAN (F1-094): la de Centro.
+    // Norte ya sale en `excluidas` y en su banner.
     expect(m.kpis.ultimaLectura).toEqual({
-      recibidoAt: T0 - 7_200_000,
-      edadSegundos: 7200,
-      frescura: 'desconectada',
+      recibidoAt: T0 - 30_000,
+      edadSegundos: 30,
+      frescura: 'fresca',
     });
+  });
+
+  it('"Última lectura": la más vieja de las conectadas; sin conectadas, null', () => {
+    const dos = armarMonitor(
+      [fila('c', 'Centro', 10, []), fila('n', 'Norte', 80, []), fila('s', 'Sur', 95, [])],
+      T0,
+      T0,
+    );
+    expect(dos.kpis.ultimaLectura?.edadSegundos).toBe(80);
+    expect(dos.kpis.ultimaLectura?.frescura).toBe('demorada');
+    const ninguna = armarMonitor([fila('n', 'Norte', 7200, [])], T0, T0);
+    expect(ninguna.kpis.ultimaLectura).toBeNull();
   });
 
   it('90 s es conectada; 91 s ya no', () => {

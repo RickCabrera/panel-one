@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { pedir } from '../../api/cliente';
 import type { FormasPago, MesasSucursal, Resumen, VentaHora } from '../../api/tipos';
 import type { Rango } from '../../filtros/periodo';
+import { POLLING_MS } from '../mesas/reglas';
 
 /** Cada cuánto se refrescan solas las tarjetas (backlog F1-041). */
 export const AUTO_REFRESCO_MS = 60_000;
@@ -60,7 +61,10 @@ export function useVentas<E extends keyof Endpoints>(
 
 /**
  * Las mesas abiertas. No dependen del periodo (son el dato vivo), así que se
- * refrescan cada 60 s siempre, aunque el periodo sea el mes anterior.
+ * refrescan siempre, aunque el periodo sea el mes anterior. Cada `POLLING_MS` (20 s),
+ * como el Monitor, y no cada 60 s (F1-094): la tarjeta aplica el mismo umbral de
+ * desconexión (90 s) y con 60 s un snapshot sano de ~35 s lo cruzaría antes del
+ * siguiente refresco, y la sucursal parpadearía a "desconectada" cada minuto.
  */
 export function useMesasAbiertas(filtro: Filtro | null) {
   return useQuery({
@@ -71,6 +75,6 @@ export function useMesasAbiertas(filtro: Filtro | null) {
         signal,
       }),
     enabled: filtro !== null,
-    refetchInterval: AUTO_REFRESCO_MS,
+    refetchInterval: POLLING_MS,
   });
 }
