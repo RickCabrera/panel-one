@@ -171,7 +171,7 @@ agregados.
 tests e2e de scoping por rol.
 
 ## 9 · F1-040 · Base de la SPA
-`[ ]` **Epic 4 — Frontend: Panel de ventas**
+`[x]` **Epic 4 — Frontend: Panel de ventas**
 
 Vite + React Router: layout con sidebar (Inicio, Monitor de Mesas, Tickets, Reportes,
 Administración según rol), topbar con selector empresa/sucursal persistido en URL
