@@ -357,6 +357,26 @@ heartbeat.
 > Se prueba con un test del armado del heartbeat. `ResultadoDeteccion` ya acota los textos
 > a lo que acepta el DTO (`versionSr` ≤ 50, `ultimoError` ≤ 2000). Si F1-025 junta varios
 > errores en `ultimoError`, el recorte a 2000 lo hace F1-025.
+>
+> **Nota de F1-024 — la cola ya existe; esto también es "Listo cuando" de esta tarea:**
+> - **Encolar el heartbeat en cada ciclo** con `ColaLocal.Encolar(TipoEvento.Heartbeat, …)`
+>   en `Worker.CicloAsync`, **antes** de `envio.CicloAsync`. Es lo que hace que salga un lote
+>   por ciclo aunque no haya cheques (nota de F1-061). Para eso el Worker necesita la
+>   `ColaLocal`: hoy sólo la tiene el `EnviadorCola` (propiedad `Cola`).
+> - `tamanoCola` = `ColaLocal.ContarPendientes()`.
+> - **El heartbeat pendiente se colapsa** (`DECISION PROVISIONAL (nocturno)` en
+>   `ColaLocal.Encolar`): encolar uno borra el anterior sin mandar. Con el API caído sólo viaja
+>   el último al reconectar, que es lo único que el API guarda.
+> - **Obligatorio: reportar los rechazos definitivos.** Un cheque rechazado por el API
+>   (`reintentable: false`, o 413 aunque vaya solo) sale de la cola con `rechazado_at` y
+>   `motivo_rechazo`: es una venta que falta en el panel, y hoy sólo queda un Error en el log
+>   local. El heartbeat tiene que llevarlo a `ultimoError` (o a un contador nuevo en el DTO),
+>   con el recorte a 2000.
+> - **También a `ultimoError`: la falla de envío vigente** (400 que no se va, 401, red caída).
+>   Mientras dure no llega el heartbeat, pero al reconectar el panel debe poder ver qué pasó.
+> - **Rate limit:** el envío usa como máximo `min(intervaloSegundos, 20)` lotes por ciclo, o
+>   sea ≤ 60 peticiones por minuto. El heartbeat viaja en el mismo lote, no suma peticiones.
+>   Si F1-025 manda algo por fuera de la cola, recalcular contra los 120 por minuto del API.
 
 ## 21 · F1-026 · Instalador y guía de instalación
 `[ ]` **Epic 2 — Agente Windows (.NET 8)**
@@ -539,6 +559,15 @@ debe reenviar en bucle).
 > - La base es SQL Server 2014: no hay `STRING_AGG` (esquema-sr §11).
 > - Si una lectura falla porque SR se actualizó con el agente corriendo, hay que volver a
 >   detectar la versión. Hoy sólo se detecta al arrancar.
+>
+> **Nota de F1-024 — cómo encolar.** `ColaLocal.Encolar(TipoEvento.Cheque, payloadJson)`,
+> donde `payloadJson` es el `datos` de `DatosChequeDto` (api/src/ingesta/dto/ingesta.dto.ts)
+> como objeto JSON, importes en texto. **Tiene que traer `folioSr`**: es la clave de la cola.
+> Encolar un folio que ya tiene un pendiente **borra el pendiente viejo** (sólo viaja la última
+> versión), así que re-encolar en cada relectura de la ventana de 2 h no duplica ni crece; lo
+> que sí conviene es no re-encolar un cheque que no cambió, para no reenviarlo en cada ciclo.
+> Se encola en `Worker.CicloAsync`, **antes** de `envio.CicloAsync`. El cursor incremental
+> puede vivir en el mismo `cola.db` (tabla propia), nunca en SR.
 
 ## F1-023 · Lectura de cuentas abiertas (mesas en vivo)
 `[ ]` **Epic 2** · 🔒 **Razón: bloqueada por F1-090.** Mismo caso que F1-022: las tablas
@@ -551,6 +580,12 @@ etiquetado con timestamp de lectura.
 
 **Listo cuando:** abrir/modificar/cerrar una mesa en SR se refleja en el snapshot del
 siguiente ciclo; una mesa cerrada desaparece del snapshot y su cheque llega por F1-022.
+
+> **Nota de F1-024 — cómo encolar.** `ColaLocal.Encolar(TipoEvento.Snapshot, payloadJson)`
+> con el `datos` de `DatosSnapshotDto` (`capturadoAt` + `mesas`). Encolar un snapshot borra el
+> pendiente anterior: la cola nunca guarda más de uno sin mandar. Se encola en
+> `Worker.CicloAsync`, antes de `envio.CicloAsync`. Ojo con el tope de 5 MB por lote (medido
+> ya inflado): un snapshot que solo no cabe se rechaza para siempre (413).
 
 ## F1-091 · Prueba end-to-end piloto
 `[ ]` **Epic 7** · 🔒 **Razón: necesita un restaurante piloto real (o una VM con SR demo

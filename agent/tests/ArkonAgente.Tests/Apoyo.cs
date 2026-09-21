@@ -113,3 +113,35 @@ internal sealed class HandlerFalso(Func<HttpRequestMessage, CancellationToken, T
         return responder(request, cancellationToken);
     }
 }
+
+/// <summary>Envío que sólo cuenta cuántos ciclos le pidieron y si lo liberaron.</summary>
+internal sealed class EnvioFalso : ArkonAgente.Cola.ICicloEnvio
+{
+    private int _ciclos;
+
+    public int Ciclos => Volatile.Read(ref _ciclos);
+
+    public bool Liberado { get; private set; }
+
+    public Task CicloAsync(CancellationToken cancelacion)
+    {
+        Interlocked.Increment(ref _ciclos);
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => Liberado = true;
+}
+
+/// <summary>Reloj que sólo avanza cuando el test lo pide.</summary>
+internal sealed class RelojFalso(DateTimeOffset inicio) : TimeProvider
+{
+    public RelojFalso() : this(new DateTimeOffset(2026, 9, 21, 12, 0, 0, TimeSpan.Zero))
+    {
+    }
+
+    public DateTimeOffset Ahora { get; private set; } = inicio;
+
+    public override DateTimeOffset GetUtcNow() => Ahora;
+
+    public void Avanzar(TimeSpan cuanto) => Ahora += cuanto;
+}

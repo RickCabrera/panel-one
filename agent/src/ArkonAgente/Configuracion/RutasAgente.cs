@@ -2,7 +2,7 @@ namespace ArkonAgente.Configuracion;
 
 /// <summary>
 /// Dónde viven la config y los logs del agente: <c>C:\ProgramData\ArkonAgente</c>
-/// (<c>config.json</c> en la raíz, logs en <c>logs\</c>).
+/// (<c>config.json</c> y <c>cola.db</c> en la raíz, logs en <c>logs\</c>).
 /// </summary>
 /// <remarks>
 /// La carpeta se inyecta a todo lo demás; sólo <c>Program</c> decide cuál es. La
@@ -15,6 +15,9 @@ internal sealed record RutasAgente(string Carpeta)
     public const string NombreCarpeta = "ArkonAgente";
 
     public string ArchivoConfig => Path.Combine(Carpeta, "config.json");
+
+    /// <summary>La cola local del agente (F1-024), SQLite: <c>cola.db</c>.</summary>
+    public string ArchivoCola => Path.Combine(Carpeta, Cola.ColaLocal.NombreArchivo);
 
     public string CarpetaLogs => Path.Combine(Carpeta, "logs");
 
