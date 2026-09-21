@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
@@ -18,7 +19,7 @@ import { hashApiKey, PREFIJO_API_KEY } from './api-key';
 
 async function crearApp(): Promise<INestApplication> {
   const modulo = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = configurarApp(modulo.createNestApplication());
+  const app = configurarApp(modulo.createNestApplication<NestExpressApplication>());
   await app.init();
   return app;
 }

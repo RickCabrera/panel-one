@@ -70,6 +70,21 @@ describe('Regla de lint: el cliente crudo de Prisma no se importa fuera de la al
     },
   );
 
+  // F1-031: la ingesta escribe SÓLO por `ScopedPrismaService.deSucursal()`, y
+  // `escritura-sucursal.ts` recibe el cliente de transacción del helper: ninguno
+  // de los dos entró a la allowlist.
+  it.each([
+    'src/ingesta/ingesta.service.ts',
+    'src/ingesta/ingesta.controller.ts',
+    'src/scope/escritura-sucursal.ts',
+  ])(
+    'NO permite el cliente crudo en la ingesta ni en las escrituras de sucursal (%s)',
+    (archivo) => {
+      expect(lint(archivo, IMPORTA_SERVICIO)).toContain('no-restricted-imports');
+      expect(lint(archivo, IMPORTA_CLIENTE)).toContain('no-restricted-imports');
+    },
+  );
+
   it('NO permite el cliente crudo en el resto de auth', () => {
     expect(lint('src/auth/auth.controller.ts', IMPORTA_SERVICIO)).toContain(
       'no-restricted-imports',

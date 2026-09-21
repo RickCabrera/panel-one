@@ -124,7 +124,8 @@ muestran en el detalle)_
 - ⚠️ **SUPUESTO — el orden de las partidas importa** para mostrar el ticket. Se guarda
   `orden` (0..n, la posición en que llegan en el lote), único dentro de cada cheque.
 - Los modificadores se guardan como una lista JSON (`jsonb`, `[]` por defecto) con la forma
-  que les dé la ingesta. Su forma en SR sigue pendiente.
+  que les dé la ingesta: `[{ nombre, precio }]`, con `precio` en texto a 2 decimales
+  (F1-031, supuesto, ver §13). Su forma en SR sigue pendiente.
 
 ---
 
@@ -151,7 +152,8 @@ guardamos en `forma_raw` y su mapeo a nuestro ENUM `efectivo/tarjeta/transferenc
 un cheque puede tener varios pagos, uno por fila. `forma_raw` guarda siempre el texto crudo
 de SR, y `forma` es el ENUM `forma_pago` (`efectivo/tarjeta/transferencia/otro`) que se
 deriva de ese texto con el catálogo de F1-032. ⚠️ **SUPUESTO:** que SR nombra la forma de
-pago con un texto que se puede mapear.
+pago con un texto que se puede mapear. Mientras no haya catálogo, la ingesta (F1-031) guarda
+`forma = otro` en todos los pagos (DECISION PROVISIONAL, ver §13).
 
 ---
 
@@ -168,6 +170,10 @@ pago con un texto que se puede mapear.
 **Cómo se sabe si la cuenta ya se imprimió:** _(pendiente — KPI "cuentas sin imprimir")_
 
 **Qué pasa con la fila al cerrar la cuenta:** _(pendiente — ¿se borra, se marca?)_
+
+**Lo que la ingesta (F1-031) ya supone de esta sección:** el snapshot llega completo en cada
+ciclo como `{ capturadoAt, mesas: object[] }` y se guarda sin validar la forma de cada mesa
+(⚠️ SUPUESTO, ver §13). El API conserva el último por sucursal más 24 h de histórico.
 
 ---
 
@@ -244,6 +250,44 @@ _(pendiente — no se toca hasta que F1-091 cierre)_
 > tablas, valores centinela, campos que la interfaz muestra pero la base no guarda.
 
 _(pendiente)_
+
+---
+
+## 13. Contrato de ingesta: lo que el API (F1-031) supone de SR
+
+> `POST /ingesta/eventos` es la única frontera entre el agente y el api. El agente
+> **traduce** lo que lee de SR a este contrato (lo define `api/src/ingesta/dto/ingesta.dto.ts`
+> y lo publica `api/openapi.json`). Nada de aquí se ha visto en una instalación real: son
+> supuestos que F1-022/F1-023 tienen que cumplir al leer SR, y que F1-090 valida.
+
+- ⚠️ **SUPUESTO — SR guarda las fechas en hora local de la sucursal, sin zona.** El API
+  **rechaza** cualquier fecha sin zona (`Z` u offset `±hh:mm`): el agente tiene que
+  convertir la hora local de SR a un instante con zona usando `Sucursal.zona_horaria`
+  (la que devuelve `GET /agente/yo`). Ojo con el cambio de horario: México ya no lo usa,
+  pero una hora local ambigua sólo la puede resolver el agente, que sabe de qué sucursal es.
+  Se guardan milisegundos; lo que venga más fino (.NET manda 7 decimales) se trunca.
+- ⚠️ **SUPUESTO — los importes de SR llevan hasta 4 decimales** (`money`, §3). El contrato
+  pide **texto decimal** (`"125.50"`, nunca número JSON) con hasta 10 enteros y 4
+  decimales. El API redondea a 2 **mitad lejos de cero** (el mismo redondeo de NUMERIC en
+  Postgres) antes de guardar. Un importe que al redondear ya no cabe en NUMERIC(12,2)
+  (`9999999999.9999`) se rechaza con `reintentable: false`. El precio de los
+  modificadores sigue la misma regla.
+- ⚠️ **SUPUESTO — las cantidades caben en NUMERIC(12,3)**: hasta 9 enteros y 3 decimales,
+  en texto. No se redondean; más decimales se rechazan.
+- ⚠️ **SUPUESTO — un modificador de SR se reduce a `{ nombre, precio }`**, incluidos los de
+  $0.00. Si en SR resulta tener más estructura (cantidad, grupo, modificador de
+  modificador), el contrato cambia en la tarea que lo descubra y se amplía aquí.
+- `DECISION PROVISIONAL (nocturno)` — **la forma de pago se guarda como `otro`** siempre
+  (`api/src/ingesta/normalizar.ts#derivarFormaPago`). Sin catálogo de ninguna instalación
+  (§4), adivinar por el texto metería errores silenciosos en el desglose. El texto crudo
+  queda en `forma_raw`; F1-032 deriva el ENUM con su catálogo.
+- ⚠️ **SUPUESTO — la forma de una mesa en el snapshot todavía no se conoce** (§5, F1-023
+  bloqueada por F1-090). El API sólo exige `mesas: object[]` y guarda `{ mesas }` en el
+  `payload` tal cual, sin validar lo de adentro. F1-023/F1-050 fijan la forma.
+- ❓ **Recordatorio de la DECISIÓN ABIERTA de §2 (folios reiniciados).** F1-031 dejó
+  implementado el upsert por `(sucursal_id, folio_sr)`: si SR reinicia folios, un cheque
+  nuevo **pisa en silencio** a uno viejo con el mismo `folio_sr`. Sigue sin resolverse y
+  es lo primero que hay que mirar en F1-090.
 
 ---
 
