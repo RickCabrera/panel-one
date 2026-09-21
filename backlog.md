@@ -200,7 +200,7 @@ mensaje claro.
 > `.github/workflows/ci.yml`. Es la primera vista con lógica que vale la pena probar.
 
 ## 11 · F1-042 · Vista Tickets
-`[ ]` **Epic 4 — Frontend: Panel de ventas**
+`[x]` **Epic 4 — Frontend: Panel de ventas**
 
 Tabla paginada de cheques cerrados: folio, hora, mesa, mesero, comensales, total, forma de
 pago; fila expandible con partidas y modificadores; filtros por fecha, sucursal, búsqueda
