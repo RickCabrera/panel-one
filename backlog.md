@@ -128,7 +128,7 @@ para depurar).
 > Todo importe en `NUMERIC(12,2)`. Todo timestamp en UTC.
 
 ## 6 · F1-031 · Endpoint de ingesta idempotente
-`[ ]` **Epic 3 — API de ingesta y modelo de ventas**
+``[x]` **Epic 3 — API de ingesta y modelo de ventas**
 
 `POST /ingesta/eventos` (AgentAuthGuard): recibe lote mixto, valida con
 zod/class-validator, procesa en transacción por evento: cheques → upsert por
