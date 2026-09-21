@@ -72,20 +72,5 @@ export async function exportarTickets(
   return [...porId.values()];
 }
 
-/** Dispara la descarga de un texto como archivo, sin pasar por el servidor. */
-export function descargar(
-  nombre: string,
-  contenido: string,
-  tipo = 'text/csv;charset=utf-8',
-): void {
-  const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));
-  const enlace = document.createElement('a');
-  enlace.href = url;
-  enlace.download = nombre;
-  enlace.style.display = 'none';
-  document.body.appendChild(enlace);
-  enlace.click();
-  enlace.remove();
-  // Revocar en el mismo tick puede cancelar la descarga en algunos navegadores.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
+/** Movida a `csv/csv.ts` (F1-043); se reexporta para Tickets. */
+export { descargar } from '../../csv/csv';

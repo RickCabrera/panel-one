@@ -22,7 +22,9 @@ import {
   type OrdenTop,
   type ProductoTop,
   type Resumen,
+  type VentaDia,
   type VentaHora,
+  type VentaSucursal,
 } from '../agregados-ventas.service';
 import type { PagoTicket, PaginaTickets, PartidaTicket, Ticket } from '../tickets.service';
 
@@ -199,6 +201,47 @@ export class VentaHoraDto implements VentaHora {
 
   @ApiProperty()
   cuentas!: number;
+}
+
+export class VentaDiaDto implements VentaDia {
+  @ApiProperty({
+    example: '2026-09-01',
+    description:
+      'Día LOCAL de cierre (`YYYY-MM-DD`). Con varias sucursales en zonas distintas, cada ' +
+      'cuenta cae en el día de SU zona: el 1 de septiembre de CDMX y el de Tijuana van en la ' +
+      'misma fila, igual que en `/ventas/resumen`.',
+  })
+  dia!: string;
+
+  @ApiProperty(DINERO)
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+}
+
+export class VentaSucursalDto implements VentaSucursal {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  nombre!: string;
+
+  @ApiProperty({ ...DINERO, description: 'Σ total de las cuentas no canceladas de la sucursal.' })
+  venta!: string;
+
+  @ApiProperty({ description: 'Cuentas no canceladas cerradas en el rango.' })
+  cuentas!: number;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'venta / cuentas. Null si la sucursal no tuvo cuentas en el rango.',
+  })
+  ticketPromedio!: string | null;
+
+  @ApiProperty({ description: 'Σ comensales (las cuentas sin el dato cuentan 0).' })
+  comensales!: number;
 }
 
 class MontoFormaDto {

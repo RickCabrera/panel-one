@@ -19,7 +19,9 @@ import {
   type FormasPago,
   type ProductoTop,
   type Resumen,
+  type VentaDia,
   type VentaHora,
+  type VentaSucursal,
 } from './agregados-ventas.service';
 import { CacheAgregados } from './cache-agregados';
 import {
@@ -31,7 +33,9 @@ import {
   ResumenDto,
   TicketsQueryDto,
   TopProductosQueryDto,
+  VentaDiaDto,
   VentaHoraDto,
+  VentaSucursalDto,
 } from './dto/ventas.dto';
 import { TicketsService, type PaginaTickets } from './tickets.service';
 
@@ -51,7 +55,7 @@ function parametros(q: FiltroVentasQueryDto): string[] {
  * Lectura de ventas para el panel (F1-033). Cualquier rol autenticado; el
  * alcance lo pone el scope del token (`@EmpresaScopeActual()`).
  *
- * Los cuatro agregados pasan por `CacheAgregados` (15 s). El cache se consulta
+ * Los agregados (todo menos tickets) pasan por `CacheAgregados` (15 s). El cache se consulta
  * aquí, DESPUÉS del ValidationPipe, y su llave usa el scope del token más
  * todos los parámetros; nunca un tenant sacado del query. Tickets no se cachea.
  */
@@ -95,6 +99,43 @@ export class VentasController {
   ): Promise<VentaHora[]> {
     return this.cache.obtener(scope, 'por-hora', parametros(q), () =>
       this.agregados.porHora(scope, filtroDe(q)),
+    );
+  }
+
+  @Get('por-dia')
+  @ApiOperation({
+    summary:
+      'Venta por día LOCAL de cierre: una fila por cada día de desde..hasta, con cero donde no hubo.',
+    description:
+      'Σ venta y Σ cuentas = las de /ventas/resumen con el mismo filtro. Con varias sucursales, ' +
+      'cada cuenta cae en el día de SU zona. Cache de 15 s por usuario-alcance y filtro.',
+  })
+  @ApiOkResponse({ type: [VentaDiaDto] })
+  porDia(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: FiltroVentasQueryDto,
+  ): Promise<VentaDia[]> {
+    return this.cache.obtener(scope, 'por-dia', parametros(q), () =>
+      this.agregados.porDia(scope, filtroDe(q)),
+    );
+  }
+
+  @Get('comparativo-sucursales')
+  @ApiOperation({
+    summary:
+      'Una fila por sucursal en alcance (incluidas las que no vendieron): venta, cuentas, ticket ' +
+      'promedio y comensales.',
+    description:
+      'Σ venta y Σ cuentas = las de /ventas/resumen con el mismo filtro. Con `sucursalId`, sólo ' +
+      'esa. Orden por nombre. Cache de 15 s por usuario-alcance y filtro.',
+  })
+  @ApiOkResponse({ type: [VentaSucursalDto] })
+  comparativoSucursales(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: FiltroVentasQueryDto,
+  ): Promise<VentaSucursal[]> {
+    return this.cache.obtener(scope, 'comparativo-sucursales', parametros(q), () =>
+      this.agregados.comparativoSucursales(scope, filtroDe(q)),
     );
   }
 

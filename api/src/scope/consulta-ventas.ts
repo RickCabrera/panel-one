@@ -14,8 +14,9 @@ import type { EmpresaScope } from './empresa-scope';
  *
  * - `sucursales_alcance(id, empresa_id, nombre, zona_horaria)`
  * - `ventas(id, empresa_id, sucursal_id, folio, cerrado_at, hora_local,
- *   comensales, subtotal, impuestos, descuentos, propina, total)`: cheques NO
- *   cancelados cerrados en el rango.
+ *   dia_local, comensales, subtotal, impuestos, descuentos, propina, total)`:
+ *   cheques NO cancelados cerrados en el rango. `hora_local` y `dia_local` son
+ *   los del cierre en la zona de SU sucursal.
  * - `cancelados(id, empresa_id, sucursal_id, folio, momento)`: cheques
  *   cancelados del rango, ubicados por `momento = COALESCE(cerrado_at, abierto_at)`.
  * - `tickets(id, empresa_id, sucursal_id, folio, momento, cancelado)`: la lista
@@ -246,6 +247,7 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
   ventas AS (
     SELECT c.id, c.empresa_id, c.sucursal_id, c.folio, c.cerrado_at,
            extract(hour FROM c.cerrado_at AT TIME ZONE s.zona_horaria)::int AS hora_local,
+           (c.cerrado_at AT TIME ZONE s.zona_horaria)::date AS dia_local,
            c.comensales, c.subtotal, c.impuestos, c.descuentos, c.propina, c.total
     FROM cheques c
     JOIN sucursales_alcance s ON s.id = c.sucursal_id AND s.empresa_id = c.empresa_id

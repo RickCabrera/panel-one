@@ -101,10 +101,12 @@ const Q = (o: Record<string, string | number | undefined>) =>
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
     .join('&');
 
-/** Los seis endpoints que reciben empresa (y sucursal opcional). */
+/** Los endpoints que reciben empresa (y sucursal opcional). */
 const CON_EMPRESA: Array<{ ruta: string; extra: Record<string, string> }> = [
   { ruta: '/ventas/resumen', extra: RANGO },
   { ruta: '/ventas/por-hora', extra: RANGO },
+  { ruta: '/ventas/por-dia', extra: RANGO },
+  { ruta: '/ventas/comparativo-sucursales', extra: RANGO },
   { ruta: '/ventas/formas-pago', extra: RANGO },
   { ruta: '/ventas/top-productos', extra: RANGO },
   { ruta: '/ventas/tickets', extra: RANGO },
@@ -329,6 +331,38 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
       expect(
         (await get(`/ventas/top-productos?${qs}&por=cantidad&limite=5`, USUARIOS.visorA)).body,
       ).toEqual(await s.topProductos(A, filtro, { por: 'cantidad', limite: 5 }));
+      expect((await get(`/ventas/por-dia?${qs}`, USUARIOS.visorA)).body).toEqual(
+        await s.porDia(A, filtro),
+      );
+      expect((await get(`/ventas/comparativo-sucursales?${qs}`, USUARIOS.visorA)).body).toEqual(
+        await s.comparativoSucursales(A, filtro),
+      );
+    });
+
+    it('F1-043: por día y comparativo suman exactamente lo que dice el resumen', async () => {
+      const filtros = [
+        filtro,
+        { ...filtro, sucursalId: FX.sucursalA2 },
+        { empresaId: FX.empresaA, desde: '2026-11-01', hasta: '2026-11-01' },
+      ];
+      for (const f of filtros) {
+        const qs = Q(f);
+        const r = (await get(`/ventas/resumen?${qs}`, USUARIOS.visorA)).body;
+        const dias = (await get(`/ventas/por-dia?${qs}`, USUARIOS.visorA)).body as Array<{
+          venta: string;
+          cuentas: number;
+        }>;
+        const suc = (await get(`/ventas/comparativo-sucursales?${qs}`, USUARIOS.visorA))
+          .body as Array<{ venta: string; cuentas: number }>;
+        const suma = (xs: Array<{ venta: string }>) =>
+          xs.reduce((acc, x) => acc.plus(x.venta), new Prisma.Decimal(0)).toFixed(2);
+        const cuentas = (xs: Array<{ cuentas: number }>) => xs.reduce((n, x) => n + x.cuentas, 0);
+        expect(r.cuentas).toBeGreaterThan(0);
+        expect(suma(dias)).toBe(r.venta);
+        expect(cuentas(dias)).toBe(r.cuentas);
+        expect(suma(suc)).toBe(r.venta);
+        expect(cuentas(suc)).toBe(r.cuentas);
+      }
     });
 
     it('GET /ventas/resumen cuadra contra el cálculo a mano sobre el seed', async () => {
@@ -621,6 +655,49 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
       const despues = await get(ruta, USUARIOS.visorA);
       expect(despues.body.cuentas).toBe(1);
       expect(despues.body.venta).toBe('100.00');
+    });
+
+    it('F1-043: por día y comparativo también se cachean por scope, sin cruzar tenants', async () => {
+      // Otro día sin ventas del seed; el cheque de la prueba anterior está en el 1 de marzo.
+      const dia2 = { desde: '2027-03-03', hasta: '2027-03-03' };
+      const rutas = [
+        `/ventas/por-dia?${Q({ empresaId: FX.empresaA, ...dia2 })}`,
+        `/ventas/comparativo-sucursales?${Q({ empresaId: FX.empresaA, ...dia2 })}`,
+      ];
+      const cuentas = (body: Array<{ cuentas: number }>) => body.reduce((n, x) => n + x.cuentas, 0);
+      reloj.t = Date.parse('2027-03-03T20:00:00Z');
+      for (const r of rutas) {
+        expect(cuentas((await get(r, USUARIOS.visorA)).body)).toBe(0);
+      }
+      await prisma.cheque.create({
+        data: {
+          sucursalId: FX.sucursalA1,
+          empresaId: FX.empresaA,
+          folio: 'C2',
+          folioSr: 'F1-043-CACHE',
+          abiertoAt: new Date('2027-03-03T18:00:00Z'),
+          cerradoAt: new Date('2027-03-03T19:00:00Z'),
+          subtotal: '43.10',
+          impuestos: '6.90',
+          descuentos: '0',
+          propina: '0',
+          total: '50.00',
+        },
+      });
+      try {
+        reloj.t += TTL_CACHE_MS - 1;
+        for (const r of rutas) {
+          expect(cuentas((await get(r, USUARIOS.visorA)).body)).toBe(0);
+          expect((await get(r, USUARIOS.visorB)).status).toBe(404);
+          expect(cuentas((await get(r, USUARIOS.adminGlobal)).body)).toBe(1);
+        }
+        reloj.t += 1;
+        for (const r of rutas) {
+          expect(cuentas((await get(r, USUARIOS.visorA)).body)).toBe(1);
+        }
+      } finally {
+        await prisma.cheque.deleteMany({ where: { folioSr: 'F1-043-CACHE' } });
+      }
     });
 
     it('tickets no se cachea', async () => {

@@ -512,6 +512,210 @@
         ]
       }
     },
+    "/ventas/por-dia": {
+      "get": {
+        "description": "Σ venta y Σ cuentas = las de /ventas/resumen con el mismo filtro. Con varias sucursales, cada cuenta cae en el día de SU zona. Cache de 15 s por usuario-alcance y filtro.",
+        "operationId": "VentasController_porDia",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VentaDiaDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Venta por día LOCAL de cierre: una fila por cada día de desde..hasta, con cero donde no hubo.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/ventas/comparativo-sucursales": {
+      "get": {
+        "description": "Σ venta y Σ cuentas = las de /ventas/resumen con el mismo filtro. Con `sucursalId`, sólo esa. Orden por nombre. Cache de 15 s por usuario-alcance y filtro.",
+        "operationId": "VentasController_comparativoSucursales",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VentaSucursalDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Una fila por sucursal en alcance (incluidas las que no vendieron): venta, cuentas, ticket promedio y comensales.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
     "/ventas/formas-pago": {
       "get": {
         "description": "Cache de 15 s por usuario-alcance y filtro.",
@@ -1781,6 +1985,67 @@
           "hora",
           "venta",
           "cuentas"
+        ]
+      },
+      "VentaDiaDto": {
+        "type": "object",
+        "properties": {
+          "dia": {
+            "type": "string",
+            "example": "2026-09-01",
+            "description": "Día LOCAL de cierre (`YYYY-MM-DD`). Con varias sucursales en zonas distintas, cada cuenta cae en el día de SU zona: el 1 de septiembre de CDMX y el de Tijuana van en la misma fila, igual que en `/ventas/resumen`."
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "cuentas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dia",
+          "venta",
+          "cuentas"
+        ]
+      },
+      "VentaSucursalDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de las cuentas no canceladas de la sucursal."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas no canceladas cerradas en el rango."
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "nullable": true,
+            "description": "venta / cuentas. Null si la sucursal no tuvo cuentas en el rango."
+          },
+          "comensales": {
+            "type": "number",
+            "description": "Σ comensales (las cuentas sin el dato cuentan 0)."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "nombre",
+          "venta",
+          "cuentas",
+          "ticketPromedio",
+          "comensales"
         ]
       },
       "FormaPago": {

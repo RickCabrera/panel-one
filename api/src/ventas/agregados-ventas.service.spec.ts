@@ -14,7 +14,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { FiltroVentas } from '../scope/consulta-ventas';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
-import { AgregadosVentasService, FORMAS } from './agregados-ventas.service';
+import { AgregadosVentasService, diasDelRango, FORMAS } from './agregados-ventas.service';
 
 // Los agregados de F1-032 contra Postgres real, con el seed de 500 cheques.
 //
@@ -138,6 +138,17 @@ function manual(cheques: ChequeSeed[], f: FiltroVentas) {
     return { hora, venta: pesos(suma(xs, 'total')), cuentas: xs.length };
   });
 
+  // Los días del rango enumerados a mano (sin `diasDelRango`), cada cuenta en el
+  // día local de SU sucursal según `Intl`.
+  const diaDe = new Map(v.map((c) => [c, local(c.cerradoAt!, ZONA[c.sucursalId]).dia]));
+  const porDia: Array<{ dia: string; venta: string; cuentas: number }> = [];
+  for (let d = new Date(`${f.desde}T12:00:00Z`); ; d.setUTCDate(d.getUTCDate() + 1)) {
+    const dia = d.toISOString().slice(0, 10);
+    if (dia > f.hasta) break;
+    const xs = v.filter((c) => diaDe.get(c) === dia);
+    porDia.push({ dia, venta: pesos(suma(xs, 'total')), cuentas: xs.length });
+  }
+
   const catalogo = new Map(CATALOGO_SEED.map((c) => [c.formaRaw, c.forma]));
   const formas = new Map<FormaPago, Prisma.Decimal>(FORMAS.map((x) => [x, D()]));
   const sinCat = new Map<string, Prisma.Decimal>();
@@ -186,7 +197,7 @@ function manual(cheques: ChequeSeed[], f: FiltroVentas) {
     })
     .sort((a, b) => (a.nombre < b.nombre ? -1 : 1));
 
-  return { resumen, porHora, formasPago, top, comparativo };
+  return { resumen, porHora, porDia, formasPago, top, comparativo };
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +265,23 @@ describe('AgregadosVentasService (contra Postgres, seed de 500 cheques)', () => 
       await expect(servicio.porHora(A, filtro)).resolves.toEqual(esperado.porHora);
     });
 
+    it('serie por día local (F1-043)', async () => {
+      await expect(servicio.porDia(A, filtro)).resolves.toEqual(esperado.porDia);
+    });
+
+    it('por día y comparativo suman exactamente la venta y las cuentas del resumen (F1-043)', async () => {
+      const r = await servicio.resumen(A, filtro);
+      const dias = await servicio.porDia(A, filtro);
+      const suc = await servicio.comparativoSucursales(A, filtro);
+      const venta = (xs: Array<{ venta: string }>) =>
+        pesos(xs.reduce((acc, x) => acc.plus(x.venta), D()));
+      const cuentas = (xs: Array<{ cuentas: number }>) => xs.reduce((n, x) => n + x.cuentas, 0);
+      expect(venta(dias)).toBe(r.venta);
+      expect(cuentas(dias)).toBe(r.cuentas);
+      expect(venta(suc)).toBe(r.venta);
+      expect(cuentas(suc)).toBe(r.cuentas);
+    });
+
     it('formas de pago (con el catálogo)', async () => {
       const r = await servicio.formasPago(A, filtro);
       expect(r.formas).toEqual(esperado.formasPago.formas);
@@ -305,6 +333,9 @@ describe('AgregadosVentasService (contra Postgres, seed de 500 cheques)', () => 
     );
     await expect(servicio.comparativoSucursales(GLOBAL, filtro)).resolves.toEqual(
       await servicio.comparativoSucursales(A, filtro),
+    );
+    await expect(servicio.porDia(GLOBAL, filtro)).resolves.toEqual(
+      await servicio.porDia(A, filtro),
     );
   });
 
@@ -370,6 +401,7 @@ describe('AgregadosVentasService (contra Postgres, seed de 500 cheques)', () => 
         const filtro = { ...rango, ...cambio } as FiltroVentas;
         await expect(servicio.resumen(scope, filtro)).rejects.toThrow(NotFoundException);
         await expect(servicio.porHora(scope, filtro)).rejects.toThrow(NotFoundException);
+        await expect(servicio.porDia(scope, filtro)).rejects.toThrow(NotFoundException);
         await expect(servicio.formasPago(scope, filtro)).rejects.toThrow(NotFoundException);
         await expect(servicio.topProductos(scope, filtro)).rejects.toThrow(NotFoundException);
         await expect(servicio.comparativoSucursales(scope, filtro)).rejects.toThrow(
@@ -402,6 +434,7 @@ describe('AgregadosVentasService (contra Postgres, seed de 500 cheques)', () => 
     const llamadas: Array<() => Promise<unknown>> = [
       () => servicio.resumen(A, filtro),
       () => servicio.porHora(A, filtro),
+      () => servicio.porDia(A, filtro),
       () => servicio.formasPago(A, filtro),
       () => servicio.topProductos(A, filtro),
       () => servicio.comparativoSucursales(A, filtro),
@@ -605,6 +638,51 @@ describe('AgregadosVentasService: casos borde con valores literales', () => {
     expect(horas[23]).toEqual({ hora: 23, venta: '123.45', cuentas: 1 });
   });
 
+  it('por día: cada cuenta en el día local de su sucursal, cruzando el fin del horario de verano (F1-043)', async () => {
+    // A2 (Tijuana) del 6 al 8 de noviembre de 2027: el 7 dura 25 horas.
+    await expect(servicio.porDia(A, f('2027-11-06', '2027-11-08', FX.sucursalA2))).resolves.toEqual(
+      [
+        { dia: '2027-11-06', venta: '50.00', cuentas: 1 },
+        { dia: '2027-11-07', venta: '600.00', cuentas: 3 },
+        { dia: '2027-11-08', venta: '400.00', cuentas: 1 },
+      ],
+    );
+    // El mismo instante (B-X1 y B-X2) cae el 10 en Tijuana y el 11 en CDMX; B-Y0 es
+    // el 9 en CDMX por un milisegundo.
+    await expect(servicio.porDia(A, f('2027-12-09', '2027-12-12'))).resolves.toEqual([
+      { dia: '2027-12-09', venta: '1.00', cuentas: 1 },
+      { dia: '2027-12-10', venta: '133.45', cuentas: 2 },
+      { dia: '2027-12-11', venta: '77.70', cuentas: 1 },
+      { dia: '2027-12-12', venta: '0.00', cuentas: 0 },
+    ]);
+    // Los cancelados no cuentan en ningún día.
+    const dia7 = await servicio.porDia(A, f('2027-11-07', '2027-11-07', FX.sucursalA2));
+    expect(dia7).toEqual([{ dia: '2027-11-07', venta: '600.00', cuentas: 3 }]);
+  });
+
+  it('diasDelRango: inclusivo, sin huecos ni repetidos al cruzar cambios de horario y años', () => {
+    expect(diasDelRango('2027-11-06', '2027-11-08')).toEqual([
+      '2027-11-06',
+      '2027-11-07',
+      '2027-11-08',
+    ]);
+    expect(diasDelRango('2027-03-13', '2027-03-15')).toEqual([
+      '2027-03-13',
+      '2027-03-14',
+      '2027-03-15',
+    ]);
+    expect(diasDelRango('2027-12-31', '2028-01-01')).toEqual(['2027-12-31', '2028-01-01']);
+    expect(diasDelRango('2028-02-28', '2028-03-01')).toEqual([
+      '2028-02-28',
+      '2028-02-29',
+      '2028-03-01',
+    ]);
+    expect(diasDelRango('2027-01-01', '2027-01-01')).toEqual(['2027-01-01']);
+    const anio = diasDelRango('2028-01-01', '2028-12-31');
+    expect(anio).toHaveLength(366);
+    expect(new Set(anio).size).toBe(366);
+  });
+
   it('formas de pago: catálogo exacto y lo no mapeado aparte', async () => {
     await expect(servicio.formasPago(A, f('2027-12-10'))).resolves.toEqual({
       formas: [
@@ -649,6 +727,11 @@ describe('AgregadosVentasService: casos borde con valores literales', () => {
       sinCatalogo: [],
     });
     await expect(servicio.topProductos(A, f('2027-01-01'))).resolves.toEqual([]);
+    await expect(servicio.porDia(A, f('2027-01-01', '2027-01-03'))).resolves.toEqual([
+      { dia: '2027-01-01', venta: '0.00', cuentas: 0 },
+      { dia: '2027-01-02', venta: '0.00', cuentas: 0 },
+      { dia: '2027-01-03', venta: '0.00', cuentas: 0 },
+    ]);
     const horas = await servicio.porHora(A, f('2027-01-01'));
     expect(horas).toHaveLength(24);
     expect(horas.every((h) => h.venta === '0.00' && h.cuentas === 0)).toBe(true);
