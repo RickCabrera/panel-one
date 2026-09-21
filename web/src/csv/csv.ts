@@ -50,8 +50,10 @@ export const MAX_TEXTO_EXCEL = 255;
  *
  * Con salto de línea o más de `MAX_TEXTO_EXCEL` caracteres la fórmula no sirve, y se
  * cae a `texto()`: ahí Excel SÍ puede volver a convertir un folio sólo de dígitos
- * (no pasa con folios reales, pero no queda protegido). Trade-off (F1-094): un programa que lea el CSV sin ser hoja de
- * cálculo ve `="000123"`; LibreOffice y Google Sheets lo evalúan como Excel.
+ * (no pasa con folios reales, pero no queda protegido).
+ *
+ * Trade-off (F1-094): un programa que lea el CSV sin ser hoja de cálculo ve
+ * `="000123"`; LibreOffice y Google Sheets lo evalúan como Excel.
  */
 export function textoExcel(valor: string | null): string {
   if (valor === null) return '';
