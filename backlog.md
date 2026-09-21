@@ -14,20 +14,128 @@
 
 **La regla de elección, y es toda la regla:**
 
-1. Toma la **primera tarea de esta lista, de arriba abajo, que no esté `[x]`** y que no
-   aparezca como **SALTADA** en `docs/nocturno-log.md`.
+1. Toma la **primera tarea de la cola vigente (RONDA 2), de arriba abajo, que no esté `[x]`**
+   y que no aparezca como **SALTADA** en `docs/nocturno-log.md`.
 2. **Una tarea por sesión.** La sesión termina al cerrarla o al saltarla. No encadenes la
    siguiente aunque quede tiempo y aunque sea obvia cuál sigue.
 3. `[x]` **sólo tras merge confirmado a main**. No por CI verde, no por "ya pusheé".
-4. **No tomes nada del bloque Diurnas ni de la Fase 2**, aunque la cola se vea trabada.
-5. Si **no queda ninguna tarea pendiente** en esta cola: no inventes ninguna ni te
+4. **No tomes nada del bloque Diurnas**, aunque la cola se vea trabada.
+5. Si **no queda ninguna tarea pendiente** en la cola vigente: no inventes ninguna ni te
    adelantes a las Diurnas. Crea el archivo vacío **`COLA_VACIA.txt`** en la raíz del repo
    y termina. El loop lo lee y para.
 
-> **Este orden ya respeta el grafo de dependencias** (que sigue abajo, como referencia).
-> No lo reordenes por tu cuenta. Está puesto para que el carril B (api + frontend, que
-> avanza con el seed) corra primero y el carril A (agente) después, porque el agente es lo
-> único que necesita una instalación real de SoftRestaurant para terminar de validarse.
+---
+
+## ⚠️ AUTORIZACIÓN EXPLÍCITA DE RICARDO — 21/09/2026
+
+> **La Fase 2 queda DESCONGELADA y entra a la Cola nocturna.** El `CLAUDE.md` dice que la
+> Fase 2 está fuera de alcance "salvo tarea explícita" antes de que F1-091 cierre. **Esta
+> sección ES esa tarea explícita**, para todas las tareas listadas en la RONDA 2 y sólo para
+> ellas. Una sesión nocturna que tome una tarea de esta cola está cumpliendo el protocolo,
+> no saltándoselo, y **no debe detenerse a preguntar** ni marcar SALTADA por este motivo.
+>
+> **Por qué se descongela.** F1-091 (piloto real) y F1-090 (mapeo del POS) siguen bloqueados
+> por el mundo: no hay ventas reales en la base del POS todavía. Esperar a que cierren deja
+> la máquina parada semanas. Todo lo que está en esta cola se puede **construir y verificar
+> con el seed**, sin POS y sin cuentas externas. Lo que de verdad necesita el mundo real
+> quedó separado en Diurnas, tarea por tarea.
+
+## Las cuatro reglas de la RONDA 2 (además del protocolo normal)
+
+Estas cuatro reglas existen porque la Ronda 2 se construye **a ciegas del mundo real**: sin
+ventas reales en el POS, sin PAC contratado, sin servidor de correo, sin dominio. Un "Listo
+cuando" que dependa de cualquiera de esas cosas no se puede cumplir de noche, y la sesión
+que lo intente termina SALTANDO una tarea que era perfectamente construible.
+
+1. **Nada externo bloquea un cierre.** Si la tarea necesita un servicio de terceros (PAC,
+   correo, almacenamiento de archivos, push), se construye contra una **interfaz propia** con
+   **dos implementaciones**: la real (escrita, tipada, compilando, sin credenciales) y una
+   **falsa determinista** para tests y para el modo demo. La elección va por variable de
+   entorno. El cierre se mide contra la falsa + **tests de contrato** que fijan la forma exacta
+   de la petición que se le mandará al servicio real. Conectar el servicio real es una tarea
+   **Diurna**, y nunca bloquea a la nocturna.
+2. **El seed es la fuente de verdad del cierre.** Todo AC se mide contra datos de
+   `prisma/seed*.ts`. Si el módulo nuevo necesita datos que el seed no genera, **generarlos es
+   parte del entregable de esa misma tarea** (y el seed sigue siendo idempotente y
+   determinista, con semilla fija). Prohibido cerrar con una pantalla vacía "porque no hay
+   datos": una pantalla que no se puede ver no se puede revisar.
+3. **Nada que se lea de SoftRestaurant se inventa.** Para catálogos, inventario, recetas y
+   canales, el modelo en Postgres y su ingesta se construyen **contra lo documentado en
+   `docs/esquema-sr.md`**. Lo que ese documento no cubra se resuelve con la opción **más
+   conservadora**, se marca en el código con `# DECISION PROVISIONAL (nocturno):`, se anota en
+   `docs/esquema-sr.md` como supuesto no validado y se sigue. Nunca se detiene la sesión por
+   esto, y nunca se escribe en la base del POS ni para probar.
+4. **Paridad con Arkhon: la referencia está escrita, no en una captura.** Cada tarea de
+   paridad dice **qué tiene que verse y qué tiene que poder hacerse**. Esa lista es el AC. No
+   hace falta ver Arkhon para cumplirla, y **no se copia su diseño ni su marca**: mismas
+   capacidades, nuestra identidad visual.
+
+> **Estados vacíos, la regla que aplica a TODA la ronda.** Ninguna vista nueva miente cuando
+> no tiene datos. Nada de `$0.00`, `0` ni una gráfica plana cuando lo cierto es "no hay
+> lectura". Se dice **por qué** está vacío (sucursal desconectada, módulo sin sincronizar,
+> periodo sin ventas) y **qué haría falta** para llenarlo. Esto ya es el comportamiento del
+> Monitor de mesas y de las tarjetas de Inicio: la Ronda 2 lo extiende a todo lo nuevo.
+
+---
+
+# RONDA 2 — COLA VIGENTE (paridad con Arkhon y más)
+
+| # | Tarea | Bloque | Carril |
+|---|---|---|---|
+| 1 | F2-200 · Instalación limpia sin fricción | A · Cimientos | todos |
+| 2 | F2-201 · Seed maestro: realismo y datos para todo | A · Cimientos | /api |
+| 3 | F2-202 · Adaptadores externos e interruptor de modo demo | A · Cimientos | /api |
+| 4 | F2-203 · Deudas visuales y de datos detectadas en la revisión | A · Cimientos | /web + /api |
+| 5 | F2-210 · Navegación por secciones tipo centro de control | B · Cascarón | /web |
+| 6 | F2-211 · Modo oscuro | B · Cascarón | /web |
+| 7 | F2-212 · Cabecera de operación en vivo y rango libre global | B · Cascarón | /web |
+| 8 | F2-220 · Resumen ejecutivo | C · Ventas | /web + /api |
+| 9 | F2-140 · Comparativos | C · Ventas | /web + /api |
+| 10 | F2-221 · Análisis (mesero, producto, hora × día, área) | C · Ventas | /web + /api |
+| 11 | F2-222 · Tickets: filtros y detalle completos | C · Ventas | /web + /api |
+| 12 | F2-223 · Monitor de mesas: paridad fina | C · Ventas | /web + /api |
+| 13 | F2-224 · Centro de alertas | C · Ventas | /web + /api |
+| 14 | F2-141 · Reportes programados por correo | C · Ventas | /api + /web |
+| 15 | F2-230 · Catálogos espejo: modelo, ingesta y sincronización | D · Catálogos | /api |
+| 16 | F2-145 · Productos y orquestador de menú | D · Catálogos | /web + /api |
+| 17 | F2-231 · Meseros y rendimiento por mesero | D · Catálogos | /web + /api |
+| 18 | F2-232 · Clientes | D · Catálogos | /web + /api |
+| 19 | F2-233 · Áreas, estaciones y canales de venta | D · Catálogos | /web + /api |
+| 20 | F2-120 · Catálogos de inventario | E · Inventario | /api |
+| 21 | F2-121 · Existencias y valuación | E · Inventario | /web + /api |
+| 22 | F2-122 · Movimientos, pólizas y kardex | E · Inventario | /web + /api |
+| 23 | F2-123 · Conteos físicos | E · Inventario | /web + /api |
+| 24 | F2-124 · Traspasos | E · Inventario | /web + /api |
+| 25 | F2-125 · Recetas y consumo teórico | E · Inventario | /web + /api |
+| 26 | F2-126 · Compras, gastos y utilidad | E · Inventario | /web + /api |
+| 27 | F2-127 · Proyecciones y sugerido de compra | E · Inventario | /web + /api |
+| 28 | F2-100 · Datos fiscales y CSD por empresa | F · Facturación | /web + /api |
+| 29 | F2-101 · Código corto de facturación por cheque | F · Facturación | /api |
+| 30 | F2-103 · Portal público de autofactura | F · Facturación | /web + /api |
+| 31 | F2-104 · Emisión de CFDI | F · Facturación | /api |
+| 32 | F2-105 · Entrega de la factura | F · Facturación | /api |
+| 33 | F2-106 · Dashboard de facturación | F · Facturación | /web + /api |
+| 34 | F2-107 · Factura sin ticket y refacturación | F · Facturación | /web + /api |
+| 35 | F2-108 · Factura global | F · Facturación | /api + /web |
+| 36 | F2-109 · Cancelación de CFDI | F · Facturación | /web + /api |
+| 37 | F2-110 · Control de folios del PAC | F · Facturación | /web + /api |
+| 38 | F2-144 · Ventas por canal (delivery y mostrador) | G · Extras | /web + /api |
+| 39 | F2-142 · Tiempo real en el monitor (WebSocket) | G · Extras | /api + /web |
+| 40 | F2-146 · PWA instalable con notificaciones | G · Extras | /web + /api |
+| 41 | F2-147 · Landing pública y onboarding | G · Extras | /web + /api |
+| 42 | F2-143 · Auto-update remoto del agente | G · Extras | /agent + /api |
+| 43 | F2-240 · Lector de catálogos de SoftRestaurant | H · Agente | /agent |
+| 44 | F2-241 · Lectores de inventario y recetas | H · Agente | /agent |
+| 45 | F2-250 · Cierre de Ronda 2: auditoría de paridad y pendientes | I · Cierre | todos |
+
+> **Este orden ya respeta el grafo de dependencias.** No lo reordenes. El bloque A existe
+> porque hoy una instalación limpia **no compila** (ver F2-200) y porque el seed no alcanza
+> para ver los módulos nuevos (F2-201): sin esos dos, las 43 tareas siguientes se construyen
+> sobre arena. El bloque H va al final a propósito: es lo único que toca el POS, y lo que
+> lea se valida de día.
+
+<details>
+<summary><b>RONDA 1 — cola histórica (24/24 cerradas)</b></summary>
 
 | # | Tarea | Epic | Carril |
 |---|---|---|---|
@@ -55,6 +163,8 @@
 | 22 | F1-092 · Hardening y pulido final | 7 · Cierre | todos |
 | 23 | F1-093 · Logout y revocación de refresh tokens | 1 · Datos | /api + /web |
 | 24 | F1-094 · Pendientes que quedaron "para F1-092" | 7 · Cierre | /web |
+
+</details>
 
 ---
 
@@ -498,6 +608,470 @@ propio "Listo cuando"**. Lo que no está aquí no se hace de pasada.
 
 ---
 
+# RONDA 2 — TAREAS NUEVAS
+
+> Las tareas de la Ronda 2 que ya estaban escritas (F2-100…F2-147) viven en la sección
+> **FASE 2**, al final de este archivo, con su redacción original intacta. Lo único que
+> cambia para ellas es **cómo se cierran de noche**, y eso está en
+> [Cierre nocturno de las tareas heredadas](#cierre-nocturno-de-las-tareas-heredadas-de-fase-2).
+> Las que siguen aquí son nuevas: salieron de la revisión del 21/09/2026 (arranque en limpio
+> del proyecto y comparación funcional contra Arkhon Cloud).
+
+## BLOQUE A · Cimientos
+
+### F2-200 · Instalación limpia sin fricción
+`[ ]` **Bloque A** · /api + /web + /docs
+
+Una instalación limpia del repo **hoy no compila**. Se reprodujo entero el 21/09/2026 en la
+máquina de desarrollo y cada tropiezo está aquí. Ninguno es un bug de lógica: son huecos del
+arranque, y son justo los que va a pisar el primer cliente y cualquier máquina nueva.
+
+Lo que pasó, en orden:
+
+1. `npm ci` en la raíz **no ejecuta los scripts de instalación** (npm moderno los bloquea y
+   avisa con `npm warn allow-scripts`). Sin el `postinstall` de Prisma **el cliente no se
+   genera**, y `npm run dev` en `/api` muere con **167 errores de TypeScript** del tipo
+   `Namespace 'Prisma' has no exported member 'Decimal'` y `Property 'sql' does not exist`.
+   El CI no lo ve porque allá los scripts sí corren.
+2. No existe un script `seed` agrupador: hay que saber que son **tres** comandos distintos
+   (`npx prisma db seed`, `npm run seed:ventas`, `npm run seed:mesas`) y en ese orden.
+3. `api/.env` no se crea solo y la API **se niega a arrancar** sin `JWT_ACCESS_SECRET`. El
+   `.env.example` está muy bien documentado, pero ninguna guía dice "cópialo".
+4. En Windows, `npm` no corre en PowerShell por la política de ejecución
+   (`npm.ps1 ... la ejecución de scripts está deshabilitada`), y las guías usan `&&`, que
+   **PowerShell 5.1 no acepta** como separador.
+5. `npm audit` reporta **3 vulnerabilidades altas**, y Prisma avisa de que
+   `package.json#prisma` queda deprecado en Prisma 7.
+
+Entregable: que `git clone` + los comandos de la guía, **copiados y pegados tal cual en
+PowerShell 5.1**, dejen el panel corriendo con datos. Concretamente: `postinstall` que genere
+el cliente de Prisma (y/o la configuración que permita sus scripts, documentada), script
+`seed` en `/api` que corra los tres en orden, script `setup:env` que copie `.env.example` a
+`.env` si no existe y avise si ya existía, y `0-INSTALACION.md` + `README.md` reescritos con
+los comandos reales, verificados, uno por línea, **sin `&&`**, con la nota de
+`Set-ExecutionPolicy -Scope Process Bypass -Force` y con la alternativa `npm.cmd`. Resolver las
+3 vulnerabilidades altas si `npm audit fix` no rompe nada (si rompe, documentar cuál y por qué
+se queda). Migrar `package.json#prisma` a `prisma.config.ts` si es directo; si no, anotarlo.
+
+**Listo cuando:** en un clon nuevo, `npm ci` en la raíz deja el cliente de Prisma generado y
+`npm run typecheck` en `/api` sale limpio **sin ejecutar `prisma generate` a mano**; `npm run
+setup:env && npm run seed && npm run dev` en `/api` levanta la API con datos; un test de
+contrato falla si `api/package.json` pierde el `postinstall`; y `docs/verificacion-arranque.md`
+registra la corrida completa con su salida real (no una reconstrucción).
+
+### F2-201 · Seed maestro: realismo y datos para todos los módulos
+`[ ]` **Bloque A** · /api
+
+El seed actual es la única fuente de datos del proyecto hasta que el POS tenga ventas, así que
+es también el único lugar donde se puede ver si un módulo nuevo funciona. Hoy le faltan dos
+cosas: realismo en el día en curso, y datos para todo lo que la Ronda 2 va a construir.
+
+**El defecto del día en curso, primero.** `seed-ventas.ts` reparte los cierres del día con
+`segundoDeCierre()` sobre las 24 horas completas, **también para hoy**. A las 17:04 el panel
+mostraba tickets cerrados a las **23:49** y la gráfica "Venta por hora de cierre" llegaba a las
+24:00. No es un error de zona horaria —`instanteLocal()` está bien— es el seed inventando
+futuro. Arreglo: para el día de hoy, en la zona de cada sucursal, **no generar cierres después
+de la hora actual**, y que la gráfica de "Hoy" no dibuje horas que todavía no ocurren.
+
+**Los datos que faltan**, con volumen suficiente para que cada vista se vea llena y se pueda
+revisar: 90 días de ventas (hoy son 30) para que los comparativos mes-contra-mes tengan de
+dónde; catálogo de productos con grupos, precios y algún producto inactivo, más **un precio
+distinto para el mismo producto entre las dos sucursales** (lo va a necesitar F2-145);
+meseros con nombre y clave; clientes; áreas y canales de venta (comedor, mostrador, domicilio)
+repartidos en los cheques; insumos con unidades, almacenes y existencias, incluyendo
+**artículos bajo mínimo y en cero**; movimientos de inventario con póliza, suficientes para un
+kardex corrido; recetas para la mayoría de los productos y **al menos dos productos sin receta**
+(F2-125 tiene que listarlos aparte sin tronar); compras y gastos por categoría.
+
+Todo determinista: semilla fija, mismo resultado en cada corrida, idempotente por `upsert`.
+
+**Listo cuando:** correr el seed dos veces seguidas deja exactamente los mismos datos; ningún
+cheque de hoy cierra en el futuro (test que lo afirma con un reloj falso a las 14:00 y otro a
+las 23:30); el seed genera datos para cada módulo de la Ronda 2 y un test por módulo lo
+verifica contando filas; y el tiempo total del seed queda bajo los 60 s en una máquina normal.
+
+### F2-202 · Adaptadores externos e interruptor de modo demo
+`[ ]` **Bloque A** · /api
+
+Cimiento de la regla 1 de la Ronda 2. Sin esto, todo el bloque F (facturación) y F2-141
+(correo) se SALTAN por falta de credenciales.
+
+Definir en `/api` tres puertos con su implementación falsa determinista, elegidas por variable
+de entorno (`PAC_IMPL`, `CORREO_IMPL`, `ARCHIVOS_IMPL`, con valor `falso` por defecto en
+desarrollo y test, y arranque que **falla ruidosamente** si en producción quedan en `falso`):
+
+- **`PuertoTimbrado`** — `emitir`, `cancelar`, `consultarEstado`. La falsa genera UUID v4
+  determinista por cheque, XML mínimo bien formado con los campos que el SAT exige, y un PDF
+  marcado claramente como **no fiscal**. Puede simular errores por RFC de prueba reservado
+  (`XEXX010101000` → "RFC no inscrito", etc.) para probar el manejo de errores sin PAC.
+- **`PuertoCorreo`** — `enviar(destinatario, plantilla, adjuntos)`. La falsa escribe a
+  `/tmp/correos/` y a una tabla `CorreoEnviado` consultable desde tests.
+- **`PuertoArchivos`** — `guardar`, `leer`, `urlFirmada`. La falsa usa disco local bajo una
+  raíz configurable.
+
+Y un **modo demo** (`MODO_DEMO=1`): marca visible y permanente en la interfaz ("Datos de
+ejemplo"), que no se puede confundir con producción, y que es lo que permite enseñar el
+producto sin POS conectado.
+
+**Listo cuando:** un test de contrato por puerto fija la forma exacta del payload que recibirá
+el proveedor real (snapshot del JSON, no una llamada de red); cambiar `PAC_IMPL=falso` a
+`facturama` no requiere tocar ningún servicio de negocio, sólo la variable; arrancar con
+`NODE_ENV=production` y cualquier `_IMPL=falso` **aborta el arranque** con un mensaje que
+nombra la variable; y con `MODO_DEMO=1` la marca aparece en todas las vistas y en el título
+de la pestaña.
+
+### F2-203 · Deudas visuales y de datos detectadas en la revisión
+`[ ]` **Bloque A** · /web + /api
+
+Recogida de lo que salió en la revisión del 21/09 y de los pendientes que el log de F1-092 y
+F1-094 dejó abiertos. Son chicas y se cierran juntas.
+
+1. **Leyenda de formas de pago ilegible.** En la dona de Inicio la leyenda sale truncada a
+   `E.`, `T.`, `T.` y **no se distingue tarjeta de transferencia**, que es exactamente lo que
+   la tarjeta existe para mostrar. Nombre completo, o abreviatura inequívoca con el nombre
+   completo accesible; nunca dos etiquetas idénticas para formas distintas.
+2. **Pendientes abiertos del log**, uno por uno, cerrados o anotados con su razón:
+   anti-inyección más allá del primer carácter en el export CSV, cancelados en Tickets,
+   "Hoy" en hora pico abortando el export, throttles de login y de reset, lint de Prisma,
+   `statement_timeout`, y el layout a 390 px de ancho.
+3. **Consola en UTF-8.** `scripts/nocturno-v2.ps1` imprime `revocaci├│n`: agregar
+   `[Console]::OutputEncoding = [Text.Encoding]::UTF8` al inicio. El repo está bien; es la
+   consola.
+
+**Listo cuando:** un test de la leyenda afirma que dos formas de pago distintas nunca comparten
+etiqueta visible; cada pendiente de la lista 2 queda cerrado con su test o anotado en
+`docs/nocturno-log.md` con la razón de por qué no; el panel se usa a 390 px sin scroll
+horizontal; y la salida del script se ve con acentos correctos.
+
+## BLOQUE B · Cascarón
+
+### F2-210 · Navegación por secciones tipo centro de control
+`[ ]` **Bloque B** · /web
+
+Hoy el menú es una lista plana de cinco entradas. Al terminar la Ronda 2 habrá más de veinte
+vistas, y una lista plana de veinte es inservible. Reorganizar el lateral en secciones con
+encabezado, en este orden y con estos nombres:
+
+- **Principal** — Inicio, Empresas, Sucursales, Comparativos
+- **Ventas y dirección** — Resumen, Tickets, Monitor de mesas, Análisis, Reportes
+- **Catálogos** — Productos, Orquestador de menú, Grupos de insumos, Insumos, Meseros, Clientes
+- **Inventario y compras** — Existencias, Conteos físicos, Recetas, Proyecciones, Compras,
+  Gastos y utilidad, Traspasos
+- **Canales** — Ventas por canal
+- **Administración** — Sucursales, Usuarios, Agentes, Empresas, Facturación
+
+Cada entrada que apunte a un módulo todavía no construido aparece **deshabilitada con su razón
+al pasar el cursor** ("se construye en F2-xxx"), no oculta y no rota: el menú es el mapa del
+producto. Secciones colapsables con estado recordado por usuario. El lateral se colapsa a
+iconos en pantallas chicas y el menú entero es navegable con teclado.
+
+**Listo cuando:** el menú muestra las seis secciones con sus entradas; una entrada sin módulo
+no navega a una pantalla rota; el foco se mueve con `Tab` por todo el menú en orden visual y
+`Enter` navega; la sección colapsada sigue colapsada al recargar; y a 390 px el lateral no tapa
+el contenido.
+
+### F2-211 · Modo oscuro
+`[ ]` **Bloque B** · /web
+
+Interruptor claro / oscuro / sistema en la cabecera, con preferencia persistida por usuario.
+Tokens de color en un solo lugar (hoy los colores viven sueltos en clases de Tailwind por toda
+la interfaz): definir la paleta como variables y redefinirla para oscuro, sin duplicar
+componentes. Las gráficas, los semáforos del monitor, los estados de alerta y la dona de formas
+de pago tienen que seguir siendo legibles y distinguibles en oscuro — el semáforo de mesas
+**en particular**, porque su único canal de información es el color.
+
+**Listo cuando:** ninguna vista tiene texto bajo contraste 4.5:1 en ninguno de los dos temas
+(test automatizado sobre la paleta, no a ojo); el tema elegido sobrevive recarga y cierre de
+sesión; con "sistema" seleccionado, cambiar el tema del sistema operativo se refleja sin
+recargar; y ningún color queda escrito a mano fuera de los tokens (regla de lint).
+
+### F2-212 · Cabecera de operación en vivo y rango libre global
+`[ ]` **Bloque B** · /web
+
+Unificar en la cabecera lo que hoy está repartido: indicador de **operación en vivo** (punto
+verde con la hora de la última lectura y cuántas sucursales están reportando), selector de
+empresa y sucursal, y **selector de periodo único** con los atajos actuales (Hoy, Esta semana,
+Este mes, Mes anterior) más **rango libre con dos fechas**, compartido por todas las vistas que
+usan periodo. El periodo y la sucursal elegidos viven en la URL, para que una vista se pueda
+compartir por link tal como se está viendo.
+
+**Listo cuando:** cambiar de periodo en una vista y navegar a otra conserva el periodo; pegar
+la URL en otra pestaña abre exactamente la misma vista con el mismo periodo y sucursal; el
+indicador dice "sin lectura reciente" en vez de una hora vieja cuando ninguna sucursal reporta;
+y un rango invertido (fin antes que inicio) se corrige o se explica, no se manda a la API.
+
+## BLOQUE C · Ventas y dirección
+
+### F2-220 · Resumen ejecutivo
+`[ ]` **Bloque C** · /web + /api
+
+Vista "Resumen": lo que un dueño quiere ver en veinte segundos sin filtrar nada. Ventas del día
+contra el mismo día de la semana pasada (Δ y %), venta en curso, acumulado del mes contra el mes
+anterior a la misma altura, mejor y peor sucursal del periodo, top 5 productos, ticket promedio
+y comensales con su tendencia, y la lista de alertas activas (de F2-224 cuando exista; hasta
+entonces, sucursales desconectadas y mesas de más de 60 minutos). Todo con su comparación: un
+número sin referencia no dice nada.
+
+**Listo cuando:** cada cifra de la vista coincide con la misma cifra calculada desde Tickets o
+Inicio para el mismo periodo y sucursal (test de integración que las compara, no dos cálculos
+distintos); un periodo sin ventas muestra "sin ventas en el periodo" y no `$0.00`; y una
+sucursal sin datos en el periodo de comparación muestra "—" en el Δ, no un `+100%`.
+
+### F2-221 · Análisis
+`[ ]` **Bloque C** · /web + /api
+
+La vista que hoy no existe y que es la que convierte el panel en una herramienta de dirección:
+
+- **Por mesero:** venta, nº de cuentas, ticket promedio, comensales, propina, cancelaciones y
+  descuentos aplicados. Ranking y detalle.
+- **Por producto:** importe, cantidad, participación en la venta, y ranking de los que más
+  cayeron o subieron contra el periodo anterior.
+- **Por hora × día de la semana:** mapa de calor de la venta, que es como se decide un horario
+  o un turno.
+- **Por área y canal:** venta y mezcla (comedor, mostrador, domicilio), cuando el dato exista.
+- **Por tiempo de mesa:** duración promedio de la cuenta y rotación por mesa.
+
+Cada bloque con su export CSV y su filtro por sucursal y periodo heredados de la cabecera.
+
+**Listo cuando:** la suma de cualquier desglose (por mesero, por producto, por área) cuadra
+exactamente con la venta total del mismo periodo, y hay un test que lo afirma para los tres;
+cancelados y cortesías quedan fuera de la venta y visibles aparte; el mapa de calor distingue
+"sin ventas" de "cero pesos" y es legible en los dos temas; y un desglose con más de 500 filas
+pagina sin tumbar la vista.
+
+### F2-222 · Tickets: filtros y detalle completos
+`[ ]` **Bloque C** · /web + /api
+
+Subir la vista de Tickets a lo que se espera de un buscador de cuentas: filtros por sucursal,
+mesero, mesa, forma de pago, rango de importe, canceladas sí/no/sólo, y búsqueda por folio
+(ya existe) y por producto contenido en el ticket. Columnas ordenables. Detalle completo de la
+cuenta: partidas con modificadores, descuentos y cortesías línea por línea, pagos con su
+importe, propina, tiempo de mesa, y **el código de facturación cuando F2-101 exista**. Export
+CSV de lo filtrado, no de todo.
+
+**Listo cuando:** cada filtro aplicado se refleja en la URL y sobrevive recarga; el CSV exporta
+exactamente las filas filtradas y su conteo aparece en pantalla antes de exportar; el detalle
+de un ticket cancelado deja claro qué se canceló y cuándo; y combinar tres filtros a la vez
+responde en menos de un segundo con 90 días de seed cargados.
+
+### F2-223 · Monitor de mesas: paridad fina
+`[ ]` **Bloque C** · /web + /api
+
+El monitor ya tiene lo esencial (KPIs de mesas abiertas, en curso, sin imprimir, semáforo,
+detalle de consumo). Falta el pulido que lo vuelve la pantalla que se deja abierta todo el día:
+
+- Ordenar por antigüedad, por importe o por mesa, con el criterio recordado.
+- Filtro por sucursal y por estado (todas, sólo atención, sólo sin imprimir).
+- KPI de **atención requerida** separado y clicable, que filtra a esas mesas.
+- Tiempo transcurrido que avanza solo, sin recargar y sin repintar la vista entera.
+- Vista de pared: modo pantalla completa con tipografía grande, pensado para una pantalla
+  colgada en la cocina o la oficina, sin menú ni cabecera.
+- En el detalle, productos **pendientes de imprimir** marcados, cuando el dato exista.
+
+**Listo cuando:** con 60 mesas abiertas en el seed la vista mantiene 60 fps al avanzar el
+reloj (el contador no provoca repintados fuera de su propia tarjeta, como ya se hizo con el
+badge de agentes en F1-094); el orden y el filtro elegidos sobreviven recarga; la vista de
+pared se lee a dos metros de distancia; y con todas las sucursales desconectadas la pantalla
+dice por qué está vacía, sin inventar ceros.
+
+### F2-224 · Centro de alertas
+`[ ]` **Bloque C** · /web + /api
+
+Las alertas hoy están dispersas (el aviso de sucursal desconectada, el semáforo de mesas).
+Unificar en un modelo propio: tipo, severidad, sucursal, momento de apertura, momento de cierre
+y regla que la produjo. Reglas iniciales: sucursal sin reportar > 10 min, mesa abierta > 60 min,
+cuenta sin imprimir > 30 min, caída de venta contra el mismo día de la semana anterior por
+encima de un umbral, y (cuando existan) artículo bajo mínimo y saldo de folios bajo.
+
+Campana en la cabecera con el conteo de alertas abiertas, panel con el historial, y umbrales
+configurables por empresa desde Administración. Las alertas se **cierran solas** cuando la
+condición deja de cumplirse, y el historial conserva ambas marcas de tiempo.
+
+**Listo cuando:** una alerta que abre y cierra en el seed deja una sola fila con sus dos marcas,
+no dos filas; cambiar un umbral recalcula las alertas abiertas sin reiniciar nada; el conteo
+de la campana coincide siempre con las filas del panel; y una regla apagada deja de generar
+alertas sin borrar el historial de las que ya había.
+
+## BLOQUE D · Catálogos
+
+### F2-230 · Catálogos espejo: modelo, ingesta y sincronización
+`[ ]` **Bloque D** · /api
+
+Cimiento de todo el bloque D y una pieza del E. Modelos espejo en Postgres de lo que vive en
+SoftRestaurant, con `empresa_id`/`sucursal_id`, `origen_sr_id` para trazabilidad, `hash` del
+registro para no reescribir iguales, y `visto_at` para detectar lo que desapareció del POS:
+`Producto`, `GrupoProducto`, `Mesero`, `Cliente`, `Area`, `CanalVenta`.
+
+Endpoint de ingesta de catálogos siguiendo el mismo contrato y la misma idempotencia que
+`POST /ingesta/eventos` (F1-031): reenviar el mismo lote tres veces deja exactamente los mismos
+datos. Sincronización completa diaria más forzado manual desde Administración. **Metadata
+propia** (foto, descripción, etiquetas, mínimo/máximo) en tablas aparte que **sobreviven un
+re-sync**, porque es nuestra y no del POS. Endpoints de lectura para el frontend, con el helper
+de scope obligatorio, y contrato OpenAPI actualizado en el mismo entregable.
+
+**Listo cuando:** el mismo lote enviado tres veces deja las mismas filas y el mismo `updated_at`
+en las no modificadas; renombrar un producto actualiza y no duplica; un producto que desaparece
+del lote queda marcado inactivo con su `visto_at`, **no se borra**; la metadata propia sigue ahí
+después de un re-sync completo; y un visor de la empresa A recibe 404 (no 403) por un catálogo
+de la empresa B.
+
+### F2-231 · Meseros y rendimiento por mesero
+`[ ]` **Bloque D** · /web + /api
+
+Vista "Meseros": catálogo (nombre, clave, sucursal, activo) y ficha por mesero con su
+rendimiento en el periodo — venta, cuentas, ticket promedio, comensales atendidos, propina,
+tiempo promedio de mesa, cancelaciones y descuentos aplicados, y su posición en el ranking.
+Comparación contra el promedio de la sucursal. Export CSV.
+
+**Listo cuando:** la suma de la venta de todos los meseros del periodo es igual a la venta total
+del periodo (test); un mesero dado de baja sigue apareciendo en periodos pasados con sus cifras;
+y cancelaciones y descuentos se muestran como conteo e importe, nunca escondidos dentro de la
+venta.
+
+### F2-232 · Clientes
+`[ ]` **Bloque D** · /web + /api
+
+Vista "Clientes" con lo que el POS registre (nombre, teléfono, correo, RFC si lo hay) más lo que
+se puede derivar de los cheques: número de visitas, ticket promedio, última visita, productos
+más pedidos. Si la instalación no usa clientes en SR, la vista lo dice con todas sus letras y
+ofrece únicamente lo derivable; no se inventa una ficha vacía por cada cuenta. Los clientes
+frecuentes de facturación (F2-100, `ReceptorFrecuente`) se enlazan con la ficha cuando coincida
+el RFC.
+
+**Listo cuando:** con el seed sin clientes en SR la vista explica por qué está vacía y qué
+haría falta; con clientes, la ficha cuadra sus visitas y su ticket promedio contra Tickets
+filtrado por ese cliente; y ningún dato personal aparece en logs ni en el CSV sin que el
+usuario lo haya pedido explícitamente.
+
+### F2-233 · Áreas, estaciones y canales de venta
+`[ ]` **Bloque D** · /web + /api
+
+Catálogo de áreas (comedor, barra, terraza), estaciones y canales, con la venta de cada uno en
+el periodo y su participación. Es la base sobre la que F2-144 construye la vista de delivery y
+la que le da el corte "por área" a F2-221. Incluye el mapeo configurable **área del POS →
+canal de negocio**, porque cada restaurante nombra las suyas distinto y ese mapeo es nuestro,
+no del POS.
+
+**Listo cuando:** la suma de la venta por canal es igual a la venta total del periodo, con una
+fila explícita de "sin clasificar" cuando el cheque no trae área (nunca repartida a ojo);
+cambiar el mapeo recalcula los periodos pasados sin re-ingerir nada; y el mapeo sobrevive un
+re-sync de catálogos.
+
+## BLOQUE H · Agente
+
+> **Estas dos tareas leen SoftRestaurant, y sólo leen.** No dependen de F1-090 para
+> construirse: F1-090 valida **ventas y mesas**, que es lo que no se puede mapear sin ventas
+> reales. Los **catálogos** (productos, meseros, áreas, insumos, almacenes, recetas) sí están
+> en la base "CAFETERIA DEMO" que ya existe, y §6, §7, §8, §9 y §10 de `docs/esquema-sr.md`
+> ya los documentan. Lo que estas tareas no pueden hacer de noche es **verificarse contra una
+> operación real**: eso queda en Diurnas (F2-193).
+
+### F2-240 · Lector de catálogos de SoftRestaurant
+`[ ]` **Bloque H** · /agent
+
+Extender `ISoftRestaurantReader` con la lectura de catálogos: productos con su grupo, precio y
+estado; meseros; áreas y estaciones; clientes si la instalación los usa. Envío por el mismo
+camino que ya existe (cola SQLite resiliente de F1-024) contra el endpoint de catálogos de
+F2-230. Sincronización completa diaria a una hora configurable, más forzado bajo demanda desde
+el panel, con **hash por catálogo** para no reenviar lo que no cambió.
+
+Reglas de dominio, sin excepción: conexión de **solo lectura**, `WITH (NOLOCK)` en toda query,
+timeout corto, y **cero escrituras** en la base del POS, ni siquiera una tabla auxiliar para
+llevar el cursor — ese estado vive en el SQLite del agente. Lo que `docs/esquema-sr.md` no
+cubra se resuelve con la opción más conservadora, se marca con
+`# DECISION PROVISIONAL (nocturno):`, se anota en ese documento como supuesto y se sigue.
+
+**Listo cuando:** `dotnet test` cubre la lectura contra **fixtures** (no contra una base viva)
+para cada catálogo, incluyendo un catálogo vacío y uno con nombres con acentos, comillas y
+`NULL`; correr la sincronización dos veces seguidas sin cambios en el POS **no encola nada** la
+segunda vez; el agente registra en su log qué catálogo sincronizó, cuántas filas y en cuánto
+tiempo; y `agente test` incluye una sonda que **falla ruidosamente** si el usuario SQL
+configurado tiene permisos de escritura.
+
+### F2-241 · Lectores de inventario y recetas
+`[ ]` **Bloque H** · /agent
+
+Lo mismo para lo que come el bloque E: insumos, grupos de insumos, unidades, almacenes y
+presentaciones; existencias por almacén con costo promedio, leídas cada 30 minutos; movimientos
+de inventario con su póliza, incrementales por cursor persistido en SQLite; recetas con la
+explosión de insumos por producto; compras si la instalación las registra. Mismas reglas de
+dominio que F2-240, y ventana de relectura para capturar correcciones tardías, como hace
+F1-022 con los cheques.
+
+**Listo cuando:** `dotnet test` cubre cada lector contra fixtures, incluyendo existencias
+negativas, insumos sin receta y una póliza con partidas en cero; el cursor de movimientos
+sobrevive reiniciar el servicio y no reprocesa desde el principio; una query que tarde más del
+timeout se cancela y se registra sin tumbar el ciclo; y el agente nunca abre una transacción de
+escritura contra el POS (test que lo afirma inspeccionando el modo de la conexión).
+
+## BLOQUE I · Cierre
+
+### F2-250 · Cierre de Ronda 2: auditoría de paridad y pendientes
+`[ ]` **Bloque I** · todos
+
+Última de la cola. Tres cosas, y ninguna es escribir funcionalidad nueva:
+
+1. **Auditoría de paridad.** Recorrer la lista de capacidades de la Ronda 2 y producir
+   `docs/paridad.md`: qué se construyó, qué quedó con supuesto provisional, y qué está
+   esperando validación diurna. Una tabla honesta, con el estado real de cada módulo, que es lo
+   que Ricardo va a leer antes de enseñar el producto.
+2. **Cosecha de pendientes.** Recorrer `docs/nocturno-log.md` de toda la ronda y recoger cada
+   "queda abierto", cada `DECISION PROVISIONAL (nocturno)` del código y cada supuesto anotado
+   en `docs/esquema-sr.md`. Los que se puedan cerrar en la sesión, se cierran; los que no, se
+   escriben como tareas nuevas al final de este backlog con su "Listo cuando", para que no
+   queden sólo en un log que nadie relee.
+3. **Salud del repo.** `npm audit` sin vulnerabilidades altas o con cada una justificada;
+   tamaño del bundle bajo su tope; tests verdes en los tres carriles y sin skips; contrato
+   OpenAPI al día con todos los endpoints nuevos; `README.md` y `0-INSTALACION.md`
+   describiendo el producto que de verdad existe al terminar la ronda.
+
+**Listo cuando:** `docs/paridad.md` existe y cada renglón suyo apunta a código o a una tarea;
+no queda ningún `DECISION PROVISIONAL` sin su entrada en `docs/esquema-sr.md`; los tres
+carriles pasan sus checks; y el backlog termina con la lista de lo que falta, que es lo que
+arranca la Ronda 3.
+
+---
+
+## Cierre nocturno de las tareas heredadas de Fase 2
+
+Las tareas F2-100 … F2-147 se redactaron pensando en un piloto real, un PAC contratado y una
+bandeja de correo de verdad. Su redacción original **se queda como está** —es la definición de
+"terminado de verdad"— pero **de noche no se puede medir así**, y una sesión que lo intente
+salta una tarea que sí podía construir.
+
+**Regla:** para las tareas de esta lista, el "Listo cuando" que manda en una sesión nocturna es
+el de aquí abajo. El original queda vivo y se verifica en su tarea Diurna correspondiente
+(F2-190 a F2-194). Una tarea cerrada de noche con este criterio **se marca `[x]` con la nota
+`**PENDIENTE DE VALIDACIÓN REAL:** ver F2-19x`** en la misma línea del backlog.
+
+| Tarea | Lo que sustituye al AC original, de noche |
+|---|---|
+| **F2-100** Datos fiscales y CSD | El alta de perfil fiscal y la carga de CSD funcionan contra `PuertoTimbrado` falso: el `.key` y su contraseña **nunca tocan nuestra base ni un log** (test que inspecciona ambos), un archivo inválido da error claro sin guardar nada, y la vista calcula y muestra vigencia y alerta de < 30 días a partir de la metadata. |
+| **F2-101** Código corto | Formato, unicidad por constraint, reintento ante colisión, expiración configurable y endpoint público con su rate limit, todo medido sobre el seed. Un código expirado, uno facturado y uno inexistente responden distinto y ninguno filtra datos del ticket. |
+| **F2-103** Portal de autofactura | Flujo completo de las tres pantallas contra el puerto falso, probado en viewport de celular; validación de RFC, régimen, uso de CFDI y CP campo por campo en español; un código ya facturado ofrece re-descargar; branding por sucursal. |
+| **F2-104** Emisión de CFDI | El JSON que se construye queda fijado por **test de contrato** (snapshot revisado a mano contra la documentación de Facturama): emisor, receptor, concepto `90101500`, unidad `E48`, importes desde el cheque, forma de pago mapeada, `PUE`, MXN. Doble clic no emite dos veces (lock por código). Los errores del PAC se mapean a mensajes en español a partir de la tabla de códigos documentada. |
+| **F2-105** Entrega | XML y PDF se guardan por `PuertoArchivos` en la ruta correcta y sobreviven reinicio; el correo sale por `PuertoCorreo` falso con ambos adjuntos y su plantilla; si el puerto falla, queda registrado para reintento y el portal sigue ofreciendo la descarga. |
+| **F2-106** Dashboard de facturación | Todas las cifras cuadran contra los datos de ventas de Fase 1 y contra los CFDI del puerto falso para el mismo rango (test que compara, no dos cálculos); filtros, barras por sucursal/mes/hora, tabla con búsqueda por RFC/UUID/folio y export CSV. |
+| **F2-107** Sin ticket y refacturación | La refacturación deja el CFDI viejo cancelado con relación al nuevo y el nuevo con `TipoRelacion 04`, verificado sobre el puerto falso; la captura manual queda marcada `origen=manual` y se distingue en el dashboard. |
+| **F2-108** Factura global | La estructura de periodicidad/meses/año del CFDI global se fija por test de contrato; un ticket incluido en una global ya no se puede autofacturar y el portal lo explica con el periodo correcto. |
+| **F2-109** Cancelación | Los cuatro motivos SAT, la exigencia de UUID sustituto con motivo 01, los estados intermedios y el efecto en la tasa de facturación, todo contra el puerto falso. |
+| **F2-110** Folios | Con saldo simulado en 0 la emisión se bloquea **antes** de llamar al puerto; el reporte mensual cuadra con los CFDI del periodo; la alerta de umbral y la de vigencia anual disparan sobre relojes falsos. |
+| **F2-120 … F2-127** Inventario | Se cierran **contra el seed de F2-201**, no contra el piloto: cada cifra cuadra con lo que el seed generó y hay un test que lo afirma. El kardex reproduce el saldo desde el inicial más movimientos; conteos y traspasos **no escriben a SR** (test que lo afirma sobre el agente); las recetas listan aparte los productos sin receta; la proyección se mide contra una semana simulada del propio seed. |
+| **F2-140** Comparativos | Cuadra contra los dashboards individuales para el mismo periodo, con test; sucursal sin datos muestra "—". Ya era cerrable tal cual. |
+| **F2-141** Reportes programados | El correo sale por `PuertoCorreo` falso a la hora correcta en la zona de la empresa (reloj falso), con cifras que cuadran contra el panel; la baja funciona sin sesión iniciada. |
+| **F2-142** WebSocket | Medido en local: un evento de ingesta se ve en el monitor en < 5 s; matar el socket degrada a polling sin perder datos; el socket exige el mismo JWT y rechaza uno vencido. |
+| **F2-143** Auto-update | Medido contra un canal de versiones local y un binario de prueba: hash inválido aborta y alerta; el rollout por sucursal respeta su bandera; nunca quedan dos versiones corriendo. La prueba en una máquina real es Diurna. |
+| **F2-144** Delivery / canales | Sobre las áreas y canales de F2-233 y el seed: la mezcla por canal cuadra con el total. El spike de `docs/delivery.md` documenta lo que se sabe hoy y lo que falta ver en una instalación real. |
+| **F2-145** Productos / orquestador | Sobre el catálogo del seed, que incluye a propósito el mismo producto con precio distinto entre sucursales: la discrepancia aparece señalada; la metadata propia sobrevive un re-sync. |
+| **F2-146** PWA | Instalable desde Chrome de escritorio; el service worker sirve el armazón sin red; las notificaciones se prueban con VAPID local; cada alerta se apaga por separado. |
+| **F2-147** Landing y onboarding | Lighthouse > 90 en local; el asistente de alta deja una empresa nueva con sucursales, llaves generadas y su checklist, medido con un cronómetro en el test de flujo. |
+
+> **F2-102 (QR en el ticket) no entra a la cola nocturna.** Necesita una impresora, una
+> plantilla real de SoftRestaurant y decidir si el QR lo imprime el POS o el agente. Vive en
+> Diurnas.
+
+---
+
 # DIURNAS — requieren a Ricardo o acceso externo
 
 **Estas tareas NO se toman de noche.** No están bloqueadas por el grafo: están bloqueadas
@@ -716,14 +1290,72 @@ antes de cerrar fase.
 > de F1-026 que de noche no se pudo medir. Anotar el tiempo por paso y lo que no se
 > entendió, y corregir la guía en el mismo cierre.
 
-## Toda la FASE 2
-`[ ]` 🔒 **Razón: congelada hasta que F1-091 cierre.** No es una fecha: es una condición.
-La Fase 2 entera (Epics 8, 9 y 10 — facturación CFDI, inventario y extras) vive más abajo,
-documentada y sin tocar.
+## F2-190 · Conectar el PAC real (Facturama)
+`[ ]` **Bloque F** · 🔒 **Razón: necesita la contratación del Módulo API anual, las
+credenciales y un CSD real del SAT.** Todo el Epic 8 se construye de noche contra
+`PuertoTimbrado` falso (F2-202). Esta tarea cambia `PAC_IMPL=facturama`, carga credenciales de
+sandbox, sube un CSD de prueba y **recorre el AC original** de F2-100, F2-104, F2-107, F2-108,
+F2-109 y F2-110 contra `apisandbox.facturama.mx`.
 
-**No se adelanta Fase 2 durante el Sprint 1.** Si una decisión de Fase 1 la afecta (p. ej.
-dejar un campo listo para el código de facturación), se anota como comentario en la tarea
-de Fase 2 correspondiente, **no se implementa**.
+**Listo cuando:** un CFDI del seed timbra en sandbox con UUID real y su XML pasa el validador
+estructural; una cancelación con motivo 02 se refleja; un RFC inexistente devuelve el mensaje
+en español que ya estaba mapeado; y cada diferencia entre lo que el puerto falso suponía y lo
+que Facturama contesta de verdad queda corregida en el test de contrato correspondiente.
+
+## F2-191 · Conectar correo y almacenamiento reales
+`[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus
+registros DNS y el volumen persistente del servidor.** Cambiar `CORREO_IMPL` y `ARCHIVOS_IMPL`
+a las implementaciones reales y recorrer el AC original de F2-105 y F2-141.
+
+**Listo cuando:** el correo llega a una bandeja real con XML y PDF adjuntos válidos y sin caer
+en spam (SPF, DKIM y DMARC verificados); el resumen diario llega antes de las 9:00 hora local;
+y los archivos sobreviven un redespliegue y quedan incluidos en el respaldo de F1-004.
+
+## F2-192 · Validar los lectores de catálogos e inventario contra SoftRestaurant
+`[ ]` **Bloque H** · 🔒 **Razón: necesita el usuario SQL de solo lectura creado (F1-020b) y una
+instalación con datos de operación.** F2-240 y F2-241 se construyen de noche contra fixtures.
+Esta tarea los apunta a la base real y compara.
+
+**Listo cuando:** el catálogo de productos que muestra el panel coincide **uno a uno** con el
+catálogo de SoftRestaurant (conteo y nombres); las existencias cuadran contra el reporte de
+inventario del POS del mismo corte; cada `DECISION PROVISIONAL (nocturno)` de los lectores
+queda confirmada o corregida y borrada del código; y `docs/esquema-sr.md` pasa de "supuesto" a
+"validado" en las secciones 6 a 10, con la instalación y la versión anotadas.
+
+## F2-193 · Validar inventario, recetas y utilidad contra la operación real
+`[ ]` **Bloque E** · 🔒 **Razón: necesita el piloto con operación real (depende de F1-091).**
+Recorre el AC original de F2-121, F2-122, F2-125, F2-126 y F2-127 con datos del restaurante.
+
+**Listo cuando:** el valor de inventario cuadra contra el reporte de SR del mismo corte; el
+kardex de un artículo reproduce su saldo real; la variación teórico contra real de tres
+insumos de control coincide con lo que el encargado mide a mano; y el estado de resultados del
+mes cuadra contra el cálculo del contador dentro de ±1%, con los redondeos documentados.
+
+## F2-194 · Auditoría de paridad lado a lado contra Arkhon
+`[ ]` **Bloque I** · 🔒 **Razón: necesita la cuenta de Arkhon de Ricardo y un ojo humano.**
+Con las dos herramientas abiertas y los mismos datos, recorrer pantalla por pantalla y anotar
+en `docs/paridad.md`: qué hacemos igual, qué hacemos mejor, qué falta y qué no vale la pena
+copiar.
+
+**Listo cuando:** cada renglón de `docs/paridad.md` tiene veredicto y, si falta algo, su tarea
+correspondiente escrita en el backlog con su "Listo cuando".
+
+## F2-102 · QR y código de facturación en el ticket del POS
+`[ ]` **Bloque F** · 🔒 **Razón: necesita una impresora, la plantilla real de tickets de
+SoftRestaurant y decidir si el QR lo imprime el POS o el agente.** La redacción completa está
+en la sección FASE 2. El camino alterno ya existe sin esta tarea: el código de facturación es
+consultable en la vista de Tickets, así que esto es comodidad, no bloqueo.
+
+**Listo cuando:** un ticket impreso lleva el QR escaneable que abre el portal con el código
+precargado; si la impresión falla, el código sigue siendo consultable en el panel en menos de
+30 segundos.
+
+## Toda la FASE 2
+`[x]` **DESCONGELADA el 21/09/2026 por Ricardo.** Lo que decía esta entrada —"no se
+adelanta Fase 2 durante el Sprint 1"— dejó de aplicar: la Fase 2 **es** la Ronda 2 y está
+en la cola vigente, con la autorización explícita al inicio de este archivo. Lo que sigue
+fuera de la noche no es "la Fase 2" entera, son las tareas F2-190 a F2-194 y F2-102 de
+arriba, cada una con su razón.
 
 ---
 
@@ -838,9 +1470,11 @@ precisamente para que el frontend avance sin esperar al agente.
 
 # FASE 2 — Facturación CFDI, inventario y extras (Sprint 2)
 
-> 🔒 **CONGELADA hasta que F1-091 esté `[x]`.** Ninguna tarea de esta fase entra a la Cola
-> nocturna, y una sesión autónoma no la toca aunque la cola se vacíe. Está aquí completa
-> para no perder el trabajo de análisis, no para tomarse.
+> ✅ **DESCONGELADA el 21/09/2026.** Esta fase entera es la **Ronda 2** de la Cola nocturna.
+> Las tareas de abajo conservan su redacción original íntegra, que es la definición de
+> "terminado de verdad". Para cerrarlas **de noche** manda la tabla de
+> [Cierre nocturno de las tareas heredadas](#cierre-nocturno-de-las-tareas-heredadas-de-fase-2),
+> y su validación contra el mundo real vive en las Diurnas F2-190 … F2-194.
 
 > **Contexto fiscal para todo el Epic 8:** el PAC es **Facturama, Módulo API anual**
 > ($1,650 MXN/año, incluye API Web y API Multiemisor; folios prepagados $0.50 c/u de 1 a
@@ -854,7 +1488,7 @@ precisamente para que el frontend avance sin esperar al agente.
 ## Grafo de dependencias de Fase 2
 
 ```
-F1-091 (fase 1 cerrada) → toda F2
+(el orden real de trabajo es la RONDA 2 de la Cola nocturna, arriba)
 F2-100 → F2-104 → F2-105 → F2-109
 F2-101 → F2-102 (agente)     └→ F2-110
 F2-101 + F2-100 → F2-103 → F2-104
