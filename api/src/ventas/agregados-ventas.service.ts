@@ -45,6 +45,17 @@ export interface VentaHora {
   cuentas: number;
 }
 
+export interface VentaDia {
+  /**
+   * Día LOCAL de cierre, `YYYY-MM-DD`. Con varias sucursales en zonas distintas,
+   * cada cuenta cae en el día de SU zona: el 1 de septiembre de CDMX y el de
+   * Tijuana van en la misma fila (igual que en `resumen`).
+   */
+  dia: string;
+  venta: string;
+  cuentas: number;
+}
+
 export interface FormasPago {
   /** Las cuatro formas del ENUM, siempre, en este orden. Incluye `otro`. */
   formas: Array<{ forma: FormaPago; monto: string }>;
@@ -81,6 +92,22 @@ export const FORMAS: readonly FormaPago[] = [
 ];
 
 const CERO = new Prisma.Decimal(0);
+const MS_DIA = 86_400_000;
+
+/**
+ * Los días `desde..hasta`, inclusivos, como texto. La aritmética se hace sobre la
+ * medianoche UTC de cada fecha de calendario: no depende de la zona del servidor
+ * ni de un cambio de horario (un día de calendario siempre es uno).
+ */
+export function diasDelRango(desde: string, hasta: string): string[] {
+  const inicio = Date.parse(`${desde}T00:00:00Z`);
+  const fin = Date.parse(`${hasta}T00:00:00Z`);
+  const dias: string[] = [];
+  for (let t = inicio; t <= fin; t += MS_DIA) {
+    dias.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return dias;
+}
 
 export function pesos(d: Prisma.Decimal): string {
   return d.toFixed(2, Prisma.Decimal.ROUND_HALF_UP);
@@ -186,6 +213,31 @@ export class AgregadosVentasService {
     return Array.from({ length: 24 }, (_, hora) => {
       const f = porHora.get(hora);
       return { hora, venta: pesos(dec(f?.venta)), cuentas: f?.cuentas ?? 0 };
+    });
+  }
+
+  /**
+   * Una fila por cada día de `desde..hasta` (inclusivos), con cero donde no hubo
+   * cierres. Σ venta y Σ cuentas son exactamente las de `resumen`: cada cuenta de
+   * `ventas` tiene un solo `dia_local` y cae dentro del rango, porque el corte usa
+   * la misma zona.
+   */
+  async porDia(scope: EmpresaScope, filtro: FiltroVentas): Promise<VentaDia[]> {
+    const q = await this.consulta(scope, filtro);
+    const filas = await q.consultar<{ dia: string; venta: unknown; cuentas: number }>(
+      Prisma.sql`SELECT to_char(dia_local, 'YYYY-MM-DD') AS dia, COALESCE(sum(total), 0) AS venta,
+          count(*)::int AS cuentas
+        FROM ventas GROUP BY dia_local`,
+    );
+    const porDia = new Map(filas.map((f) => [f.dia, f]));
+    const dias = diasDelRango(filtro.desde, filtro.hasta);
+    if (filas.some((f) => !dias.includes(f.dia))) {
+      // No debería pasar nunca: sería un corte de día distinto del de `resumen`.
+      throw new Error('Venta por día fuera del rango pedido.');
+    }
+    return dias.map((dia) => {
+      const f = porDia.get(dia);
+      return { dia, venta: pesos(dec(f?.venta)), cuentas: f?.cuentas ?? 0 };
     });
   }
 

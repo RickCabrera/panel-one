@@ -79,6 +79,39 @@ export interface VentaHora {
   cuentas: number;
 }
 
+/**
+ * `VentaDiaDto`: una fila de `GET /ventas/por-dia` (F1-043). Una por cada día de
+ * `desde..hasta`, con cero donde no hubo. Con varias sucursales en zonas distintas,
+ * cada cuenta cae en el día de SU zona.
+ */
+export interface VentaDia {
+  /** `YYYY-MM-DD`, día local de cierre. */
+  dia: string;
+  venta: Importe;
+  cuentas: number;
+}
+
+/** `VentaSucursalDto`: una fila de `GET /ventas/comparativo-sucursales` (F1-043). */
+export interface VentaSucursal {
+  sucursalId: string;
+  nombre: string;
+  venta: Importe;
+  /** Cuentas no canceladas cerradas en el rango. */
+  cuentas: number;
+  /** Null si la sucursal no tuvo cuentas en el rango. */
+  ticketPromedio: Importe | null;
+  comensales: number;
+}
+
+/** `ProductoTopDto`: una fila de `GET /ventas/top-productos`. */
+export interface ProductoTop {
+  producto: string;
+  /** Σ partidas, ANTES del descuento del cheque: no cuadra con la venta. */
+  importe: Importe;
+  /** 3 decimales, en texto (`"2.000"`). */
+  cantidad: string;
+}
+
 /** `FormaPago` del OpenAPI. */
 export type FormaPago = 'efectivo' | 'tarjeta' | 'transferencia' | 'otro';
 

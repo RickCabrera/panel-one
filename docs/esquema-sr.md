@@ -132,6 +132,19 @@ descubre nada nuevo de SR; hereda los supuestos de arriba y fija este criterio:
   el desglose; los pagos no traen orden propio del POS (el contrato de ingesta no lo manda) y
   salen en un orden estable pero arbitrario.
 
+**Lo que los reportes (F1-043, `GET /ventas/por-dia` y `GET /ventas/comparativo-sucursales`)
+suponen de esta sección.** No descubren nada nuevo de SR; heredan el supuesto del día de cierre
+de arriba y lo aplican así:
+
+- La serie **por día** pone cada cuenta en el día LOCAL de cierre de **su** sucursal (columna
+  `dia_local` de la CTE `ventas`, calculada en el helper de scope). **Con varias sucursales en
+  zonas distintas, "el 1 de septiembre" junta el 1 de septiembre de CDMX y el de Tijuana**, que
+  no son el mismo intervalo de tiempo. Es lo mismo que ya hace `resumen` con un rango, y es lo
+  que hace que Σ por día = `resumen.venta` exacto. Si en F1-090 resulta que SR corta por "fecha
+  de negocio" o por turno, cambia aquí y en `resumen` a la vez, no en uno solo.
+- El **comparativo** es una fila por sucursal en alcance, con la misma definición de venta
+  (Σ `total`, sin cancelados); Σ comparativo = `resumen.venta` exacto.
+
 ---
 
 ## 3. Partidas de cuentas cerradas

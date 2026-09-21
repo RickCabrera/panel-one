@@ -26,7 +26,9 @@ describe('Contrato OpenAPI', () => {
       '/mesas/abiertas',
       '/sucursales',
       '/sucursales/{id}/api-key',
+      '/ventas/comparativo-sucursales',
       '/ventas/formas-pago',
+      '/ventas/por-dia',
       '/ventas/por-hora',
       '/ventas/resumen',
       '/ventas/tickets',
@@ -84,6 +86,8 @@ describe('Contrato OpenAPI', () => {
     const conFiltro = [
       '/ventas/resumen',
       '/ventas/por-hora',
+      '/ventas/por-dia',
+      '/ventas/comparativo-sucursales',
       '/ventas/formas-pago',
       '/ventas/top-productos',
       '/ventas/tickets',
@@ -102,6 +106,13 @@ describe('Contrato OpenAPI', () => {
     const nombres = (ruta: string) =>
       (paths[ruta]?.get?.parameters ?? []).map((p) => ('name' in p ? p.name : '')).sort();
     expect(nombres('/ventas/resumen')).toEqual(['desde', 'empresaId', 'hasta', 'sucursalId']);
+    expect(nombres('/ventas/por-dia')).toEqual(['desde', 'empresaId', 'hasta', 'sucursalId']);
+    expect(nombres('/ventas/comparativo-sucursales')).toEqual([
+      'desde',
+      'empresaId',
+      'hasta',
+      'sucursalId',
+    ]);
     expect(nombres('/ventas/top-productos')).toEqual(
       ['desde', 'empresaId', 'hasta', 'limite', 'por', 'sucursalId'].sort(),
     );
@@ -119,5 +130,9 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(esquemas)).not.toMatch(/apiKeyHash/);
     expect(esquemas).toHaveProperty('PaginaTicketsDto');
     expect(esquemas).toHaveProperty('MesasSucursalDto');
+    expect(esquemas).toHaveProperty('VentaDiaDto');
+    expect(JSON.stringify(esquemas.VentaSucursalDto)).toMatch(
+      /"ticketPromedio":\{[^}]*"nullable":true/,
+    );
   });
 });
