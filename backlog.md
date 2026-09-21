@@ -437,7 +437,7 @@ abiertos.
 > se despliega** (el deploy está prohibido en modo autónomo y el VPS es tarea diurna).
 
 ## 23 · F1-093 · Logout y revocación de refresh tokens
-`[ ]` **Epic 1 — Modelo de datos, auth y multitenancy**
+`[x]` **Epic 1 — Modelo de datos, auth y multitenancy**
 
 `POST /auth/logout` en el api: borra la cookie de refresh y **revoca en el servidor** el
 refresh de esa sesión (tabla de sesiones o versión de token por usuario; la decisión va en
