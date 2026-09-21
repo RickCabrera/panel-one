@@ -71,6 +71,16 @@ export class EstadoAgenteSucursalDto implements EstadoAgenteSucursal {
   })
   tamanoCola!: number | null;
 
+  @ApiProperty({
+    type: 'integer',
+    nullable: true,
+    example: 12,
+    description:
+      'Milisegundos que tardó la consulta a SoftRestaurant en el último heartbeat (F1-025). ' +
+      'Null = sin medición (SR inalcanzable o sin versión detectada) o agente anterior a F1-025.',
+  })
+  latenciaQueryMs!: number | null;
+
   @ApiProperty({ type: String, nullable: true, description: 'Último error que reportó el agente.' })
   ultimoError!: string | null;
 }

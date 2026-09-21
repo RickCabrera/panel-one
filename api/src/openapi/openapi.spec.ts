@@ -99,6 +99,8 @@ describe('Contrato OpenAPI', () => {
     expect(esquema).toContain('reloj de la PC del POS');
     const heartbeat = JSON.stringify(components?.schemas?.DatosHeartbeatDto);
     expect(heartbeat).toContain('tamanoCola');
+    expect(heartbeat).toContain('latenciaQueryMs');
+    expect(esquema).toContain('latenciaQueryMs');
     expect(paths['/ingesta/eventos']?.post?.description).toContain('CONTACTO');
   });
 

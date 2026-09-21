@@ -36,7 +36,7 @@ export class IngestaController {
       'agente (reloj del servidor, `agente_contacto`; lo lee `GET /agentes/estado`), aunque sus ' +
       'eventos salgan rechazados. El contacto queda fuera de la idempotencia a propósito: un ' +
       'reenvío lo mueve, porque el agente sí volvió a hablar; los datos quedan idénticos. El ' +
-      'heartbeat puede traer `tamanoCola`.',
+      'heartbeat puede traer `tamanoCola` y `latenciaQueryMs` (F1-025).',
   })
   @ApiOkResponse({
     type: ResultadoIngestaDto,

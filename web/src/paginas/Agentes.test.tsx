@@ -46,6 +46,7 @@ function fila(
     versionAgente: nunca ? null : '0.1.0',
     versionSr: nunca ? null : '10.0',
     tamanoCola: nunca ? null : 0,
+    latenciaQueryMs: nunca ? null : 12,
     ultimoError: null,
     ...extra,
   };

@@ -392,7 +392,7 @@
     },
     "/ingesta/eventos": {
       "post": {
-        "description": "Idempotente: reenviar el mismo lote deja exactamente los mismos datos. Cheques por (sucursal, folioSr), reemplazando partidas y pagos; snapshots por (sucursal, capturadoAt), con 24 h de histórico más el último; heartbeat al estado del agente. La sucursal sale de la API key: ningún evento manda ids de tenant. Acepta `Content-Encoding: gzip`. Todo lote con sobre válido registra además el CONTACTO del agente (reloj del servidor, `agente_contacto`; lo lee `GET /agentes/estado`), aunque sus eventos salgan rechazados. El contacto queda fuera de la idempotencia a propósito: un reenvío lo mueve, porque el agente sí volvió a hablar; los datos quedan idénticos. El heartbeat puede traer `tamanoCola`.",
+        "description": "Idempotente: reenviar el mismo lote deja exactamente los mismos datos. Cheques por (sucursal, folioSr), reemplazando partidas y pagos; snapshots por (sucursal, capturadoAt), con 24 h de histórico más el último; heartbeat al estado del agente. La sucursal sale de la API key: ningún evento manda ids de tenant. Acepta `Content-Encoding: gzip`. Todo lote con sobre válido registra además el CONTACTO del agente (reloj del servidor, `agente_contacto`; lo lee `GET /agentes/estado`), aunque sus eventos salgan rechazados. El contacto queda fuera de la idempotencia a propósito: un reenvío lo mueve, porque el agente sí volvió a hablar; los datos quedan idénticos. El heartbeat puede traer `tamanoCola` y `latenciaQueryMs` (F1-025).",
         "operationId": "IngestaController_recibir",
         "parameters": [],
         "requestBody": {
@@ -2311,6 +2311,12 @@
             "nullable": true,
             "description": "Eventos en la cola local del agente, según su último heartbeat. Null = no reportado."
           },
+          "latenciaQueryMs": {
+            "type": "integer",
+            "nullable": true,
+            "example": 12,
+            "description": "Milisegundos que tardó la consulta a SoftRestaurant en el último heartbeat (F1-025). Null = sin medición (SR inalcanzable o sin versión detectada) o agente anterior a F1-025."
+          },
           "ultimoError": {
             "type": "string",
             "nullable": true,
@@ -2328,6 +2334,7 @@
           "versionAgente",
           "versionSr",
           "tamanoCola",
+          "latenciaQueryMs",
           "ultimoError"
         ]
       },
@@ -2624,6 +2631,14 @@
             "maximum": 2147483647,
             "example": 3,
             "description": "Eventos pendientes en la cola local del agente (F1-061). Entero ≥ 0. Ausente o null = \"no reportado\". Como el resto del heartbeat, se ignora si el heartbeat llegó tarde."
+          },
+          "latenciaQueryMs": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 2147483647,
+            "example": 12,
+            "description": "Milisegundos que tardó la consulta a SoftRestaurant del ciclo (F1-025). Entero ≥ 0. Ausente o null = \"sin medición\" (SR inalcanzable o todavía sin versión detectada). Como el resto del heartbeat, se ignora si el heartbeat llegó tarde."
           }
         },
         "required": [

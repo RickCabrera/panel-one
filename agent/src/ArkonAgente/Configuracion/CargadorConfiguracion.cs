@@ -35,6 +35,9 @@ internal static class CargadorConfiguracion
         AllowTrailingCommas = true,
     };
 
+    /// <summary>El intervalo con el que el panel calcula "desconectado" (3 × 30 s = 90 s, F1-061).</summary>
+    internal const int IntervaloQueSuponeElPanel = 30;
+
     private static readonly string[] CamposConocidos =
         ["apiUrl", "apiKey", "connectionString", "intervaloSegundos"];
 
@@ -105,6 +108,18 @@ internal static class CargadorConfiguracion
             var apiKey = TextoObligatorio(raiz, "apiKey", errores);
             var cadena = ValidarCadena(TextoObligatorio(raiz, "connectionString", errores), errores);
             var intervalo = ValidarIntervalo(raiz, errores);
+
+            // DECISION PROVISIONAL (nocturno): el panel (F1-061) marca "desconectado" a los
+            // 90 s fijos (3 × 30 s), no a 3 × el intervalo de cada agente. El heartbeat no
+            // manda el intervalo; si Ricardo lo quiere por sucursal, es tarea aparte (cruza a
+            // /web y al Monitor de Mesas). Mientras tanto, se avisa aquí.
+            if (errores.Count == 0 && intervalo > IntervaloQueSuponeElPanel)
+            {
+                avisos.Add(
+                    $"'intervaloSegundos' vale {intervalo}: el panel marca una sucursal como desconectada " +
+                    $"a los {3 * IntervaloQueSuponeElPanel} s sin reportar, así que con más de " +
+                    $"{IntervaloQueSuponeElPanel} s saldrá desconectada en falso entre ciclo y ciclo.");
+            }
 
             if (errores.Count > 0 || apiUrl is null || apiKey is null || cadena is null)
             {

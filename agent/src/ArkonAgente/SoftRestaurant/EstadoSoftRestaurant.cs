@@ -1,16 +1,22 @@
 namespace ArkonAgente.SoftRestaurant;
 
 /// <summary>
-/// Lo último que el agente sabe de SoftRestaurant: el reader elegido, la versión y
-/// el último error de detección. Es un singleton: el worker lo escribe y el
-/// heartbeat (F1-025) lo lee para mandar <c>versionSr</c> y <c>ultimoError</c>.
+/// Lo último que el agente sabe de SoftRestaurant: el reader elegido, la versión, el
+/// último error de detección y la última sonda (F1-025). Es un singleton: el worker
+/// lo escribe y el heartbeat lo lee.
 /// </summary>
 internal sealed class EstadoSoftRestaurant
 {
+    private readonly object _candado = new();
     private ResultadoDeteccion? _ultimo;
+    private ResultadoSondeo? _ultimoSondeo;
+    private DateTimeOffset? _ultimaLecturaAt;
 
     /// <summary>Resultado de la última detección; <c>null</c> si aún no se intentó.</summary>
-    public ResultadoDeteccion? Ultimo => Volatile.Read(ref _ultimo);
+    public ResultadoDeteccion? Ultimo
+    {
+        get { lock (_candado) { return _ultimo; } }
+    }
 
     public ISoftRestaurantReader? Reader => Ultimo?.Reader;
 
@@ -18,5 +24,41 @@ internal sealed class EstadoSoftRestaurant
 
     public string? UltimoError => Ultimo?.Error;
 
-    public void Registrar(ResultadoDeteccion resultado) => Volatile.Write(ref _ultimo, resultado);
+    /// <summary>Última vez que la sonda respondió (UTC). No retrocede si la sonda falla.</summary>
+    public DateTimeOffset? UltimaLecturaAt
+    {
+        get { lock (_candado) { return _ultimaLecturaAt; } }
+    }
+
+    /// <summary>Latencia de la ÚLTIMA sonda; <c>null</c> si falló o no ha corrido.</summary>
+    public int? LatenciaQueryMs
+    {
+        get { lock (_candado) { return _ultimoSondeo?.LatenciaMs; } }
+    }
+
+    /// <summary>Error de la ÚLTIMA sonda; <c>null</c> si respondió o no ha corrido.</summary>
+    public string? ErrorLectura
+    {
+        get { lock (_candado) { return _ultimoSondeo?.Error; } }
+    }
+
+    public void Registrar(ResultadoDeteccion resultado)
+    {
+        lock (_candado)
+        {
+            _ultimo = resultado;
+        }
+    }
+
+    public void RegistrarSondeo(ResultadoSondeo resultado)
+    {
+        lock (_candado)
+        {
+            _ultimoSondeo = resultado;
+            if (resultado.Ok)
+            {
+                _ultimaLecturaAt = resultado.Instante;
+            }
+        }
+    }
 }

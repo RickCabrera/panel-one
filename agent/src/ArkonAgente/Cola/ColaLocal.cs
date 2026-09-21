@@ -7,6 +7,16 @@ namespace ArkonAgente.Cola;
 /// <summary>Un evento que todavía no llega al API, tal como sale de la cola.</summary>
 internal sealed record EventoPendiente(long Id, TipoEvento Tipo, string Payload);
 
+/// <summary>Un evento que el API rechazó sin reintento, como quedó en la cola.</summary>
+/// <param name="Clave">El <c>folioSr</c> si es cheque.</param>
+internal sealed record RechazoGuardado(TipoEvento Tipo, string? Clave, string Motivo, DateTimeOffset RechazadoAt);
+
+/// <summary>Cuántos rechazos definitivos hay en la cola (7 días) y el más reciente.</summary>
+internal sealed record ResumenRechazos(int Total, int Cheques, RechazoGuardado? Ultimo)
+{
+    public static readonly ResumenRechazos Ninguno = new(0, 0, null);
+}
+
 /// <summary>
 /// La cola local del agente (F1-024): <c>cola.db</c>, un SQLite en la carpeta del
 /// agente. Es el estado PROPIO del agente y vive aquí, nunca en la base de
@@ -169,6 +179,65 @@ internal sealed class ColaLocal
         using var comando = conexion.CreateCommand();
         comando.CommandText = $"SELECT COUNT(*) FROM eventos WHERE {Pendiente};";
         return Convert.ToInt32(comando.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// El <c>tamanoCola</c> del heartbeat (F1-025): pendientes SIN contar el heartbeat.
+    /// Se aparta a propósito de la nota de F1-024 (que decía <see cref="ContarPendientes"/>):
+    /// el heartbeat pendiente se colapsa y viaja en el mismo lote que lo reporta, así que
+    /// contarlo sólo mete un 0/1 de ruido en la cifra. No "corregir".
+    /// </summary>
+    public int ContarPendientesSinHeartbeat()
+    {
+        using var conexion = Conectar();
+        using var comando = conexion.CreateCommand();
+        comando.CommandText = $"SELECT COUNT(*) FROM eventos WHERE {Pendiente} AND tipo <> $tipo;";
+        comando.Parameters.AddWithValue("$tipo", TipoEvento.Heartbeat.Texto());
+        return Convert.ToInt32(comando.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Los rechazos definitivos que siguen en la cola (la purga los borra a los 7 días),
+    /// para que el heartbeat los lleve al panel (F1-025): un cheque rechazado es una venta
+    /// que falta.
+    /// </summary>
+    public ResumenRechazos ResumenRechazados()
+    {
+        using var conexion = Conectar();
+        using var contar = conexion.CreateCommand();
+        contar.CommandText = """
+            SELECT COUNT(*), COALESCE(SUM(CASE WHEN tipo = $cheque THEN 1 ELSE 0 END), 0)
+            FROM eventos WHERE rechazado_at IS NOT NULL;
+            """;
+        contar.Parameters.AddWithValue("$cheque", TipoEvento.Cheque.Texto());
+        int total, cheques;
+        using (var lector = contar.ExecuteReader())
+        {
+            lector.Read();
+            total = lector.GetInt32(0);
+            cheques = lector.GetInt32(1);
+        }
+
+        if (total == 0)
+        {
+            return ResumenRechazos.Ninguno;
+        }
+
+        using var ultimo = conexion.CreateCommand();
+        ultimo.CommandText = """
+            SELECT tipo, clave, motivo_rechazo, rechazado_at FROM eventos
+            WHERE rechazado_at IS NOT NULL ORDER BY rechazado_at DESC, id DESC LIMIT 1;
+            """;
+        using var fila = ultimo.ExecuteReader();
+        fila.Read();
+        var rechazo = new RechazoGuardado(
+            ParsearTipo(fila.GetString(0)),
+            fila.IsDBNull(1) ? null : fila.GetString(1),
+            fila.IsDBNull(2) ? "sin motivo" : fila.GetString(2),
+            DateTimeOffset.ParseExact(
+                fila.GetString(3), "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal));
+        return new ResumenRechazos(total, cheques, rechazo);
     }
 
     /// <summary>El API los guardó: quedan como enviados y salen de los pendientes.</summary>

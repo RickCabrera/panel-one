@@ -37,6 +37,15 @@ internal sealed class ApiFalso : HttpMessageHandler
 
     public List<PeticionRecibida> Peticiones { get; } = [];
 
+    /// <summary>Copia de <see cref="Peticiones"/>, segura mientras el envío sigue corriendo en otro hilo.</summary>
+    public List<PeticionRecibida> CopiaPeticiones()
+    {
+        lock (_candado)
+        {
+            return Peticiones.ToList();
+        }
+    }
+
     /// <summary>Lo que el API "guardó", en orden de llegada (con repeticiones si las hubo).</summary>
     public List<EventoRecibido> Guardados { get; } = [];
 

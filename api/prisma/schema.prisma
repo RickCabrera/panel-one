@@ -114,6 +114,10 @@ model AgenteEstado {
   // Tamaño de la cola local del agente (F1-061), como lo reporta el heartbeat.
   // CHECK >= 0 escrito a mano en la migración 20260921085338_agente_contacto.
   tamanoCola      Int?      @map("tamano_cola")
+  // Latencia de la consulta de SR del último ciclo, en ms (F1-025), como la
+  // reporta el heartbeat. CHECK >= 0 escrito a mano en la migración
+  // *_latencia_query.
+  latenciaQueryMs Int?      @map("latencia_query_ms")
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "agente_estado_sucursal_empresa_fkey")

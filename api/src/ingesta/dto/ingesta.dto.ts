@@ -307,6 +307,23 @@ export class DatosHeartbeatDto {
   @Min(0)
   @Max(2147483647)
   tamanoCola?: number | null;
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    minimum: 0,
+    maximum: 2147483647,
+    example: 12,
+    description:
+      'Milisegundos que tardó la consulta a SoftRestaurant del ciclo (F1-025). Entero ≥ 0. ' +
+      'Ausente o null = "sin medición" (SR inalcanzable o todavía sin versión detectada). Como ' +
+      'el resto del heartbeat, se ignora si el heartbeat llegó tarde.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(2147483647)
+  latenciaQueryMs?: number | null;
 }
 
 // ---------------------------------------------------------------------------

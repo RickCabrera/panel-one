@@ -535,6 +535,58 @@ describe('POST /ingesta/eventos (e2e, F1-031)', () => {
     });
   });
 
+  describe('heartbeat: latencia de la consulta a SR (F1-025)', () => {
+    const donde = { where: { sucursalId: FX.sucursalA2 } };
+
+    it('se guarda; ausente = null; uno que llega tarde no la cambia', async () => {
+      await lote(KEYS.a2, [
+        eventoHeartbeat('lq1', { ultimaLecturaAt: '2026-09-22T10:00:00Z', latenciaQueryMs: 37 }),
+      ]);
+      expect((await prisma.agenteEstado.findUniqueOrThrow(donde)).latenciaQueryMs).toBe(37);
+
+      await lote(KEYS.a2, [
+        eventoHeartbeat('lq0', { ultimaLecturaAt: '2026-09-22T09:00:00Z', latenciaQueryMs: 999 }),
+      ]);
+      expect((await prisma.agenteEstado.findUniqueOrThrow(donde)).latenciaQueryMs).toBe(37);
+
+      await lote(KEYS.a2, [
+        eventoHeartbeat('lq2', { ultimaLecturaAt: '2026-09-22T10:01:00Z', latenciaQueryMs: 0 }),
+      ]);
+      expect((await prisma.agenteEstado.findUniqueOrThrow(donde)).latenciaQueryMs).toBe(0);
+
+      await lote(KEYS.a2, [eventoHeartbeat('lq3', { ultimaLecturaAt: '2026-09-22T10:02:00Z' })]);
+      expect((await prisma.agenteEstado.findUniqueOrThrow(donde)).latenciaQueryMs).toBeNull();
+    });
+
+    it.each([
+      ['negativa', -1],
+      ['decimal', 12.5],
+      ['texto', '12'],
+      ['fuera de INT', 2147483648],
+    ])('latenciaQueryMs %s → evento rechazado sin reintento, estado intacto', async (_n, valor) => {
+      const antes = await foto(FX.sucursalA2);
+      const r = await lote(KEYS.a2, [
+        eventoHeartbeat('lq-mala', { ultimaLecturaAt: '2026-09-22T11:00:00Z', latenciaQueryMs: valor }),
+      ]);
+      expect(r.procesados).toEqual([]);
+      expect(r.rechazados).toEqual([
+        {
+          id: 'lq-mala',
+          indice: 0,
+          reintentable: false,
+          motivo: expect.stringContaining('latenciaQueryMs'),
+        },
+      ]);
+      expect(await foto(FX.sucursalA2)).toEqual(antes);
+    });
+
+    it('el CHECK de base rechaza una latencia negativa aunque alguien brinque el DTO', async () => {
+      await expect(
+        prisma.agenteEstado.update({ ...donde, data: { latenciaQueryMs: -5 } }),
+      ).rejects.toThrow(/agente_estado_latencia_query_ms_chk/);
+    });
+  });
+
   describe('sobre y transporte', () => {
     it.each([
       ['sin eventos', {}],

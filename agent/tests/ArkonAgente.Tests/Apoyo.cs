@@ -114,22 +114,69 @@ internal sealed class HandlerFalso(Func<HttpRequestMessage, CancellationToken, T
     }
 }
 
-/// <summary>Envío que sólo cuenta cuántos ciclos le pidieron y si lo liberaron.</summary>
+/// <summary>
+/// Envío que no habla con nadie: cuenta los ciclos, anota qué heartbeats estaban
+/// pendientes en la cola al momento de enviar (F1-025) y los da por enviados. La cola
+/// es real, en una carpeta temporal propia.
+/// </summary>
 internal sealed class EnvioFalso : ArkonAgente.Cola.ICicloEnvio
 {
+    private readonly CarpetaTemporal _carpeta = new();
+    private readonly List<int> _heartbeatsPorCiclo = [];
+    private readonly List<string> _heartbeats = [];
     private int _ciclos;
+
+    public EnvioFalso(TimeProvider? reloj = null)
+    {
+        Cola = ArkonAgente.Cola.ColaLocal.Abrir(_carpeta.Rutas.ArchivoCola, reloj ?? TimeProvider.System);
+    }
+
+    public ArkonAgente.Cola.ColaLocal Cola { get; }
+
+    public ArkonAgente.Cola.EstadoEnvio Estado { get; set; } = ArkonAgente.Cola.EstadoEnvio.Sano;
 
     public int Ciclos => Volatile.Read(ref _ciclos);
 
     public bool Liberado { get; private set; }
 
+    /// <summary>Cuántos heartbeats había pendientes en cada ciclo, en orden.</summary>
+    public IReadOnlyList<int> HeartbeatsPorCiclo
+    {
+        get { lock (_heartbeats) { return _heartbeatsPorCiclo.ToList(); } }
+    }
+
+    /// <summary>El <c>datos</c> de cada heartbeat que se "envió", en orden.</summary>
+    public IReadOnlyList<System.Text.Json.JsonElement> Heartbeats
+    {
+        get
+        {
+            lock (_heartbeats)
+            {
+                return _heartbeats.Select(h => System.Text.Json.JsonDocument.Parse(h).RootElement.Clone()).ToList();
+            }
+        }
+    }
+
     public Task CicloAsync(CancellationToken cancelacion)
     {
+        var pendientes = Cola.TomarPendientes(100);
+        var heartbeats = pendientes.Where(e => e.Tipo == ArkonAgente.Cola.TipoEvento.Heartbeat).ToList();
+        lock (_heartbeats)
+        {
+            _heartbeatsPorCiclo.Add(heartbeats.Count);
+            _heartbeats.AddRange(heartbeats.Select(h => h.Payload));
+        }
+
+        Cola.MarcarEnviados(pendientes.Select(e => e.Id));
         Interlocked.Increment(ref _ciclos);
         return Task.CompletedTask;
     }
 
-    public void Dispose() => Liberado = true;
+    public void Dispose()
+    {
+        Liberado = true;
+        _carpeta.Dispose();
+    }
 }
 
 /// <summary>Reloj que sólo avanza cuando el test lo pide.</summary>
