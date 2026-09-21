@@ -259,6 +259,53 @@ cerrado, y si una mesa puede traer varias cuentas. El seed de F1-032 no genera s
 esto sólo se probó con respuestas falsas. Código: `web/src/paginas/inicio/ventaEnVivo.ts`.
 La edad que muestra la tarjeta es `edadRecepcionSegundos` (reloj del servidor).
 
+**Lo que el Monitor de mesas (F1-050) supone.** Todo lo de este bloque es ⚠️ **SUPUESTO no
+validado**: nadie ha visto todavía `tempcheques` ni la tabla que sea. Lo valida F1-023 contra
+una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `reglas.ts`).
+
+- **Forma provisional de cada mesa del snapshot** (`DECISION PROVISIONAL (nocturno)` en
+  `mesa.ts`). El agente (F1-023) tendría que mandarla así; el API sigue sin validarla (§13):
+  ```
+  { mesa: "12", mesero: "…", folio: "…", abiertoAt: "2026-09-20T19:00:00Z",
+    total: "350.50", comensales: 4, impreso: false,
+    partidas: [{ producto, categoria, cantidad: "0.750", precioUnit, total,
+                 modificadores: [{ nombre, precio }] }] }
+  ```
+  El panel lee campo por campo, a la defensiva. Lo que falta o no se entiende sale como
+  "Sin dato", nunca $0.00 ni 0 min. Un `abiertoAt` sin zona se rechaza, por la misma regla
+  de §13.
+- ⚠️ **`total`:** la misma regla y la misma duda que "Venta en vivo" (arriba): falta saber si
+  ya incluye descuentos e impuestos. Si UNA mesa no trae un total legible, el KPI "$ en
+  curso" dice "Sin dato" en vez de dar una suma parcial.
+- ⚠️ **`impreso` (KPI "Cuentas sin imprimir"):** se supone un booleano que dice si la cuenta
+  ya se imprimió. Falta saber de qué columna de SR sale (ver "Cómo se sabe si la cuenta ya
+  se imprimió", arriba). Si alguna mesa no lo trae, el KPI dice "Sin dato" en vez de dar un
+  conteo parcial.
+- ⚠️ **`abiertoAt` va con el reloj de la PC del POS**, igual que `capturadoAt`. Los minutos
+  abierta se calculan como `(capturadoAt − abiertoAt)`, que resta dos horas del mismo reloj
+  y por eso no le afecta el desfase, **más** la edad de recepción (reloj del servidor)
+  **más** lo que lleva la respuesta en el navegador. Los minutos se truncan a enteros
+  antes del semáforo: < 40 ok, 40–60 alerta, > 60 rojo. Una apertura posterior a la
+  captura es un dato inconsistente y sale como "Sin dato".
+- ⚠️ **`comensales` y `folio`** se leen, pero sólo los va a mostrar el modal de F1-051.
+- ⚠️ **Una fila = una cuenta.** Si en SR una mesa puede tener varias cuentas abiertas, cada
+  una sale como una tarjeta distinta con el mismo número de mesa.
+- `DECISION PROVISIONAL (nocturno)` — **la sucursal está "desconectada" cuando la edad de
+  recepción pasa de 90 s** (3 intervalos de 30 s, el `intervaloSegundos` por defecto de
+  F1-020; constante `INTERVALO_AGENTE_S` en `reglas.ts`). Se usa `edadRecepcionSegundos`
+  (reloj del servidor) más el tiempo que lleva la respuesta en el navegador, **no**
+  `edadSegundos` (reloj del POS). Así, si el API deja de contestar, el banner también
+  aparece. Si el intervalo termina siendo configurable por sucursal, F1-020/F1-025 tienen
+  que mandarlo (por ejemplo en el heartbeat) y esta constante pasa a ser un dato por
+  sucursal.
+- **Diferencia conocida con el Panel (no es un error de cuadre):** la tarjeta "Venta en
+  vivo" de Inicio (F1-041) suma **todas** las sucursales que tienen snapshot, también las
+  desconectadas. El Monitor excluye las desconectadas. Con una sucursal desconectada, las
+  dos cifras no coinciden. Queda anotado para F1-092.
+- El seed de desarrollo `api/prisma/seed-mesas.ts` (`npm run seed:mesas`) genera snapshots
+  **sintéticos** con esta forma: la sucursal Centro en vivo y la Norte desconectada hace 2 h.
+  Marca los suyos con `payload.origen = 'seed'` y sólo borra ésos.
+
 ---
 
 ## 6. Productos y catálogo
@@ -374,7 +421,9 @@ _(pendiente)_
   `formas_pago_catalogo` (§4); la columna `forma` guardada no la usa ningún agregado.
 - ⚠️ **SUPUESTO — la forma de una mesa en el snapshot todavía no se conoce** (§5, F1-023
   bloqueada por F1-090). El API sólo exige `mesas: object[]` y guarda `{ mesas }` en el
-  `payload` tal cual, sin validar lo de adentro. F1-023/F1-050 fijan la forma.
+  `payload` tal cual, sin validar lo de adentro. F1-050 fijó la forma **provisional** que lee
+  el panel (§5). Sigue siendo supuesto: F1-023 la confirma o la cambia al ver SR, y en ese
+  momento decide si el API la valida.
 - ❓ **Recordatorio de la DECISIÓN ABIERTA de §2 (folios reiniciados).** F1-031 dejó
   implementado el upsert por `(sucursal_id, folio_sr)`: si SR reinicia folios, un cheque
   nuevo **pisa en silencio** a uno viejo con el mismo `folio_sr`. Sigue sin resolverse y

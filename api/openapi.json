@@ -2367,7 +2367,7 @@
               "type": "object",
               "additionalProperties": true
             },
-            "description": "Las cuentas abiertas tal como las mandó el agente. La forma de cada mesa todavía no se fija (supuesto, esquema-sr.md §5; la fijan F1-023/F1-050)."
+            "description": "Las cuentas abiertas tal como las mandó el agente; el API no valida su forma. Forma PROVISIONAL que lee el panel (F1-050; SUPUESTO, esquema-sr.md §5, la valida F1-023): `{ mesa, mesero, folio, abiertoAt (ISO UTC, reloj del POS), total (\"350.50\" o número), comensales, impreso (bool), partidas: [{ producto, categoria, cantidad, precioUnit, total, modificadores: [{ nombre, precio }] }] }`. Un campo ausente o ilegible se muestra como \"Sin dato\"."
           }
         },
         "required": [
