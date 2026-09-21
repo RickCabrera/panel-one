@@ -9,5 +9,6 @@ publish/
 # La config real del agente trae la cadena de conexion al SQL Server del cliente
 # y la API key de la sucursal. Lo que se versiona es la plantilla, y va en
 # infra/config.example.json (ruta reservada por el .gitignore de la raiz y por el
-# job `guardia` del CI). La crea F1-020.
+# job `guardia` del CI). La creo F1-020, y un test del agente comprueba que la
+# plantilla pasa el mismo cargador que el config real.
 config.json
