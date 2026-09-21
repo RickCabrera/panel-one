@@ -257,7 +257,7 @@ volverá a mostrar"; cambio de contraseña propio y reset por admin.
 auditoría mínima en log de api (quién creó/rotó qué).
 
 ## 16 · F1-061 · Estado de agentes
-`[ ]` **Epic 6 — Administración**
+`[x]` **Epic 6 — Administración**
 
 Vista con tabla por sucursal: conectado/desconectado, última lectura, versión agente y SR,
 tamaño de cola reportado, último error. Badge de alerta en sidebar si alguna sucursal lleva
