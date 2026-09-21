@@ -2068,7 +2068,7 @@ lectura" hoy es una **sonda**, no una lectura de ventas (ver Decisiones).
 (`agente_estado`) antes de correr la suite del api.
 
 ## 2026-09-21 05:40 — F1-026 · Instalador y guía de instalación
-**Estado:** SALTADA (el CI no arranca ningún job por la facturación de GitHub Actions; 2 reintentos, sigue rojo). **El código está hecho y aprobado**: el problema no es la tarea.
+**Estado:** REABIERTA por Ricardo (2026-09-21). El salto fue por la facturación de GitHub Actions, no por el código: el CI no arrancó ningún job. **Vuelve a la cola: tómala.**
 
 **Qué pasó.**
 - Entregable completo en la rama `feat/F1-026`, **PR #22**:
@@ -2093,7 +2093,7 @@ lectura" hoy es una **sonda**, no una lectura de ventas (ver Decisiones).
 2. Restaurar la rama: botón "Restore branch" en el PR #22, o
    `git fetch origin pull/22/head:feat/F1-026`.
 3. Reabrir el PR #22 y esperar el CI.
-4. Quitar esta línea SALTADA, o dejarla y marcar `[x] **PARCIAL:** falta ...` (el texto
+4. Al cerrar, marcar `[x] **PARCIAL:** falta ...` (el texto
    exacto está en la entrada de la rama).
 
 **El detalle completo está en la entrada de F1-026 dentro del PR #22** (en
@@ -2105,7 +2105,7 @@ va a saltar igual. Antes de construir nada, revisa `gh run list --limit 3`. Si e
 dice "*job was not started ... payments*", la tarea no se va a poder cerrar esta noche.
 
 ## 2026-09-21 12:10 — F1-092 · Hardening y pulido final
-**Estado:** SALTADA (el CI no arranca ningún job por la facturación de GitHub Actions; 2 reintentos, sigue rojo). **El código está hecho y aprobado**: el problema no es la tarea.
+**Estado:** REABIERTA por Ricardo (2026-09-21). El salto fue por la facturación de GitHub Actions, no por el código: el CI no arrancó ningún job. **Vuelve a la cola: tómala.**
 
 **Qué pasó.**
 - Entregable completo en la rama `feat/F1-092`, **PR #23**:
@@ -2125,7 +2125,7 @@ dice "*job was not started ... payments*", la tarea no se va a poder cerrar esta
 2. Restaurar la rama: "Restore branch" en el PR #23, o
    `git fetch origin pull/23/head:feat/F1-092`.
 3. Reabrir el PR #23 y esperar el CI.
-4. Quitar esta línea SALTADA.
+4. (Hecho: la línea de estado ya dice REABIERTA.)
 
 Lo mismo vale para F1-026 (PR #22).
 
@@ -2135,5 +2135,30 @@ Lo mismo vale para F1-026 (PR #22).
 - los números de Lighthouse;
 - las trampas.
 
-**Estado de la cola:** con F1-026 y F1-092 SALTADAS, la Cola nocturna ya no tiene tareas tomables.
+**Estado de la cola:** F1-026 y F1-092 REABIERTAS (ver la entrada siguiente). La cola vuelve a tener tareas tomables.
 La siguiente sesión debería crear `COLA_VACIA.txt`, salvo que Ricardo reabra alguna.
+
+## 2026-09-21 — REABIERTAS F1-026 y F1-092 (decisión de Ricardo)
+**Estado:** REABIERTAS. Las dos vuelven a la Cola nocturna, en su orden: primero F1-026 y
+luego F1-092.
+
+**Por qué.** Las dos se saltaron sólo porque el CI no arrancaba ningún job (facturación de
+GitHub Actions). El código y el revisor estaban bien. Ninguna de las dos falló por sí misma.
+
+**Cómo retomarlas. No las rehagas desde cero:**
+1. Antes de nada, corre `gh run list --limit 3`. Si el último run sigue diciendo "*job was
+   not started ... payments*", la facturación no se ha arreglado. Esa tarea va a chocar
+   igual: no gastes la sesión construyendo.
+2. Recupera la rama del PR cerrado: `git fetch origin pull/22/head:feat/F1-026` (F1-026) o
+   `git fetch origin pull/23/head:feat/F1-092` (F1-092). Rebasa sobre main actualizado,
+   corre los checks locales y pásala por el revisor (el entregable, no el plan: el plan
+   ya se aprobó).
+3. Reabre el PR (`gh pr reopen 22` / `gh pr reopen 23`) o abre uno nuevo desde la rama
+   rebasada. Espera el CI y cierra por el protocolo normal.
+4. El `[x]` de F1-026 lleva `**PARCIAL:**`. El texto exacto está en su entrada dentro del
+   PR #22.
+
+**Otro cambio de esta misma corrida:** `.github/workflows/ci.yml` ahora tiene `paths-ignore`
+para `backlog.md` y `docs/nocturno-log.md`. Un commit que sólo toca esos archivos (el `[x]`
+de cierre, una entrada SALTADA directa a main) ya no dispara CI. Un PR de tarea toca código,
+así que sigue corriendo el CI completo.
