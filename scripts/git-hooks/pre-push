@@ -1,0 +1,60 @@
+#!/bin/sh
+# Guardia: a main solo entran directo backlog.md y docs/nocturno-log.md. Todo lo demas, por PR.
+#
+# Es la guardia real del MODO AUTONOMO. Si el repo es privado en plan gratuito, main NO puede
+# protegerse en GitHub: la API de branch protection responde 403 pidiendo Pro. Con repo publico
+# o plan de pago, protege main tambien en GitHub (ver 0-INSTALACION.md) y quedan dos guardias.
+#
+# FAIL-CLOSED, Y NO SIEMPRE LO FUE
+# --------------------------------
+# Si el rango no resuelve -un SHA remoto que ya no existe en local, historia reescrita-
+# `git diff` truena. En la version original el `for` simplemente no iteraba sobre nada y EL
+# PUSH PASABA: la guardia se caia sola justo en el escenario mas delicado. Ahora ese caso
+# bloquea con mensaje propio.
+#
+# LA RAMA DE CEROS ERA EL MISMO AGUJERO CON OTRA CARA
+# ---------------------------------------------------
+# Cuando main no existe en el remoto, git manda `remote_sha` en ceros y no hay rango que
+# valga. Con `git diff --name-only <sha>`, git compara ese commit contra el ARBOL DE
+# TRABAJO, no contra el arbol vacio: con el arbol limpio la lista sale VACIA, el `for` no
+# itera y pasaba cualquier contenido. Medido: exit 0 empujando un commit que tocaba un
+# archivo fuera de la lista blanca. `git diff-tree --root` si lista lo que trae el commit.
+#
+# ESTE ES EL CASO DEL PRIMER PUSH DE UN REPO NUEVO, asi que aqui no es teorico: el push
+# inicial que crea main llega por esta rama del if. Ver 0-INSTALACION.md, donde el repo se
+# crea ANTES de instalar el hook justo para que ese push no choque contra la guardia.
+#
+# LIMITE CONOCIDO, ANOTADO A PROPOSITO
+# ------------------------------------
+# En la rama de ceros esto mira SOLO el commit de la punta. Si se crea main en un commit
+# cuya punta toca solo backlog.md pero cuyos ancestros tocan otra cosa, pasa. Cerrarlo
+# entero pide `git log --format= --name-only "$local_sha"`, que recorre todo lo alcanzable.
+# Queda sin hacer por decision explicita, no por descuido.
+#
+# Y `git diff A..B` es el diff NETO: un archivo agregado en un commit y borrado en otro
+# dentro del mismo push no aparece aqui, aunque su contenido si entre a la historia.
+#
+# LO QUE ESTA GUARDIA NO PUEDE
+# ----------------------------
+# `git push --no-verify` la brinca entera, y un clon nuevo no tiene hook (.git/hooks no se
+# versiona). Contra eso no hay mecanismo, solo protocolo: ver "Prohibido en modo autonomo"
+# en CLAUDE.md.
+#
+# ESTA ES LA COPIA VERSIONADA. La viva es .git/hooks/pre-push, que no se versiona.
+# 0-INSTALACION.md dice como instalarla.
+while read local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+      files=$(git diff-tree -r --no-commit-id --name-only --root "$local_sha") || { echo "pre-push BLOQUEADO: rango no resoluble" >&2; exit 1; }
+    else
+      files=$(git diff --name-only "$remote_sha..$local_sha") || { echo "pre-push BLOQUEADO: rango no resoluble" >&2; exit 1; }
+    fi
+    for f in $files; do
+      case "$f" in
+        backlog.md|docs/nocturno-log.md) ;;
+        *) echo "pre-push BLOQUEADO: '$f' no puede ir directo a main. Abre un PR." >&2; exit 1 ;;
+      esac
+    done
+  fi
+done
+exit 0

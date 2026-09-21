@@ -1,0 +1,90 @@
+# ---------- Node (/api NestJS, /web React+Vite) ----------
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# ---------- .NET 8 (/agent) ----------
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+*.userprefs
+.vs/
+publish/
+*.binlog
+
+# La cola local del agente y sus logs son estado de la máquina del restaurante,
+# no del repo: traen folios y consumos reales de un negocio.
+cola.db
+cola.db-shm
+cola.db-wal
+*.sqlite
+*.sqlite3
+logs/
+*.log
+
+# ---------- Secretos y configuración local ----------
+# Nunca al repo: cadenas de conexión al SQL Server del cliente, API keys de
+# sucursal, credenciales del PAC, claves del CSD.
+.env
+.env.*
+!.env.example
+appsettings.Development.json
+appsettings.Local.json
+config.json
+!infra/config.example.json
+*.pem
+*.key
+*.cer
+*.pfx
+secrets/
+.ssh/
+
+# ---------- Prisma ----------
+# Las migraciones SÍ se versionan. Lo que no: el shadow db y los artefactos.
+/api/prisma/*.db
+/api/prisma/*.db-journal
+
+# ---------- Infra ----------
+infra/caddy_data/
+infra/caddy_config/
+infra/pgdata/
+infra/backups/
+
+# ---------- Claude Code ----------
+# Se versiona la config de proyecto (settings.json, hooks, agents), NO lo
+# personal/local.
+.claude/settings.local.json
+.claude/prompts/
+**/.claude/settings.local.json
+
+# Salida del runner nocturno: log de corrida, no se versiona. El patrón cubre
+# `docs/nocturno-AAAAMMDD-HHMM.txt`, que es como los nombra
+# `scripts/nocturno-v2.ps1`: sin él, un `git add -A` en el commit que marca `[x]`
+# se lleva la salida de la corrida a main.
+docs/nocturno-20*.txt
+
+# Centinelas del orquestador nocturno. Los crea la sesión como último acto para
+# decirle al vigilante cómo terminó, y `scripts/nocturno-v2.ps1` los borra al
+# empezar cada vuelta. Son señales entre dos procesos de esta máquina, no
+# historia del repo — y si se colaran a main, la sesión siguiente arrancaría con
+# un centinela puesto y moriría en el primer minuto sin hacer nada.
+TAREA_CERRADA.txt
+TAREA_SALTADA.txt
+COLA_VACIA.txt
+
+# ---------- Sistema operativo ----------
+.DS_Store
+Thumbs.db
+desktop.ini

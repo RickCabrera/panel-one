@@ -1,0 +1,16 @@
+# El hook versionado es un script POSIX que se copia a .git/hooks/ y lo ejecuta
+# sh. Con finales CRLF —que es a lo que git convierte por defecto en Windows— el
+# `#!/bin/sh` de la primera línea llega con un \r pegado y el hook NO CORRE:
+# queda instalado, se ve bien, y no guarda nada. `eol=lf` es lo que hace que la
+# copia versionada sirva al instalarla.
+scripts/git-hooks/pre-push text eol=lf
+
+# Misma razón para todo script que corra dentro de un contenedor Linux o por SSH
+# en el VPS: los de /infra los ejecuta el host Ubuntu, no Windows.
+*.sh text eol=lf
+infra/Caddyfile text eol=lf
+
+# El .ps1 del orquestador es al revés: lo lee PowerShell 5.1 en Windows y se
+# guarda ASCII con BOM a propósito (ver la cabecera del propio archivo). `-text`
+# le dice a git que no le toque los finales de línea en ningún checkout.
+scripts/nocturno-v2.ps1 -text

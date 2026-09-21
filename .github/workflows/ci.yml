@@ -1,0 +1,173 @@
+name: CI
+
+# Un workflow, tres carriles: /api (NestJS), /web (React+Vite) y /agent (.NET 8).
+#
+# POR QUE NACE CASI TODO COMENTADO
+# --------------------------------
+# Este archivo entra al repo en el commit inicial, ANTES de que exista una sola
+# carpeta del monorepo: /api, /web y /agent los crea F1-001. Un job que corre
+# `npm ci` sobre una carpeta que no existe falla, y un CI que nace rojo enseña a
+# ignorar el CI. Esa es la única forma real de perderlo.
+#
+# Así que cada carril arranca comentado con la tarea exacta que lo descomenta, y
+# el gate se endurece por etapas. Descomentar un carril es parte del entregable
+# de la tarea que lo habilita, no un "ya luego": si F1-001 deja el carril
+# comentado, el revisor lo bloquea.
+#
+# El job `guardia` sí corre desde el minuto cero. No es de adorno: es lo que hace
+# que el CI exista, se vea en verde en cada PR y falle si alguien commitea un
+# secreto o un centinela.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # GUARDIA - activo desde el commit inicial. No depende de ninguna carpeta.
+  # ---------------------------------------------------------------------------
+  guardia:
+    name: Guardia del repo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Los centinelas son señales entre dos procesos de la máquina de Ricardo.
+      # Si uno llega a main, la siguiente sesión nocturna arranca con el
+      # centinela puesto y muere en el primer minuto sin hacer nada.
+      - name: Ningún centinela del orquestador en el repo
+        run: |
+          for f in TAREA_CERRADA.txt TAREA_SALTADA.txt COLA_VACIA.txt; do
+            if [ -f "$f" ]; then
+              echo "::error::$f está commiteado. Es un centinela local, va en .gitignore."
+              exit 1
+            fi
+          done
+          echo "Sin centinelas."
+
+      # Este proyecto maneja cadenas de conexión al SQL Server del cliente, API
+      # keys por sucursal y (en Fase 2) el CSD del SAT. Ninguno de esos archivos
+      # tiene por qué estar versionado nunca.
+      - name: Ningún secreto versionado
+        run: |
+          hits=$(git ls-files | grep -E '(^|/)\.env($|\.)|\.(pem|key|cer|pfx)$|(^|/)config\.json$' | grep -v '\.env\.example$' | grep -v '^infra/config\.example\.json$' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::Archivos sensibles versionados:"
+            echo "$hits"
+            exit 1
+          fi
+          echo "Sin secretos versionados."
+
+      # El hook sólo sirve si se instala con finales LF. Con CRLF el `#!/bin/sh`
+      # llega con un \r pegado: el hook queda instalado, se ve bien y no guarda
+      # nada. .gitattributes lo fija; esto comprueba que siga fijado.
+      - name: El hook pre-push conserva finales LF
+        run: |
+          if [ ! -f scripts/git-hooks/pre-push ]; then
+            echo "::error::Falta scripts/git-hooks/pre-push, que es la guardia de main."
+            exit 1
+          fi
+          if grep -q $'\r' scripts/git-hooks/pre-push; then
+            echo "::error::scripts/git-hooks/pre-push tiene CRLF. Revisa .gitattributes."
+            exit 1
+          fi
+          sh -n scripts/git-hooks/pre-push
+          echo "Hook con LF y sintaxis válida."
+
+  # ---------------------------------------------------------------------------
+  # CARRIL /api (NestJS + Prisma + Postgres)
+  # DESCOMENTAR: en F1-001, junto con la creación del monorepo. El paso `test` y
+  # el servicio de postgres, en F1-011 (los primeros e2e de auth).
+  # ---------------------------------------------------------------------------
+  # api:
+  #   name: API (NestJS)
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: api
+  #
+  #   # DESCOMENTAR EN F1-011: los e2e de auth y de scoping necesitan base real.
+  #   # services:
+  #   #   postgres:
+  #   #     image: postgres:16
+  #   #     env:
+  #   #       POSTGRES_USER: postgres
+  #   #       POSTGRES_PASSWORD: postgres
+  #   #       POSTGRES_DB: monitor_test
+  #   #     ports: ['5432:5432']
+  #   #     options: >-
+  #   #       --health-cmd pg_isready
+  #   #       --health-interval 10s
+  #   #       --health-timeout 5s
+  #   #       --health-retries 5
+  #
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #         cache: npm
+  #         # El lock vivo es el del workspace root (/api y /web son workspaces npm).
+  #         cache-dependency-path: package-lock.json
+  #     - run: npm ci
+  #       working-directory: .
+  #     # Lint antes que los tests: falla en un segundo en vez de quemar la suite.
+  #     - run: npm run lint
+  #     - run: npm run typecheck
+  #     # DESCOMENTAR EN F1-011, junto con el servicio de postgres de arriba.
+  #     # - run: npx prisma migrate deploy
+  #     #   env:
+  #     #     DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
+  #     # - run: npm test
+  #     #   env:
+  #     #     DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
+
+  # ---------------------------------------------------------------------------
+  # CARRIL /web (React 18 + Vite + TS)
+  # DESCOMENTAR: `build` en F1-001. El paso `test` en F1-041, que es donde llega
+  # el primer componente con lógica que vale la pena probar.
+  # ---------------------------------------------------------------------------
+  # web:
+  #   name: Web (React + Vite)
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: web
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #         cache: npm
+  #         cache-dependency-path: package-lock.json
+  #     - run: npm ci
+  #       working-directory: .
+  #     - run: npm run lint
+  #     # tsc + vite build: el gate mínimo de tipos del frontend.
+  #     - run: npm run build
+  #     # DESCOMENTAR EN F1-041.
+  #     # - run: npm test
+
+  # ---------------------------------------------------------------------------
+  # CARRIL /agent (.NET 8 Worker Service)
+  # DESCOMENTAR: `build` en F1-001. El paso `test` en F1-021, que es la primera
+  # tarea del agente con lógica testeable (selección de reader por versión de SR).
+  # ---------------------------------------------------------------------------
+  # agent:
+  #   name: Agente (.NET 8)
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: agent
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-dotnet@v4
+  #       with:
+  #         dotnet-version: '8.0.x'
+  #     - run: dotnet restore
+  #     # El agente se publica single-file self-contained x64 para Windows, pero
+  #     # compila en Linux de sobra para el gate del PR.
+  #     - run: dotnet build --no-restore --configuration Release
+  #     # DESCOMENTAR EN F1-021.
+  #     # - run: dotnet test --no-build --configuration Release --verbosity normal
