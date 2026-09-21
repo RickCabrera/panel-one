@@ -163,6 +163,9 @@ contra Postgres real. Verificado en local: `migrate dev` aplica y una segunda co
   `AgenteEstado` temporal que se borra en `finally`. Si F1-011 agrega tests destructivos,
   conviene una base `monitor_test` también en local.
 - No hay `PrismaService`/módulo de Nest todavía: F1-011 lo necesita y lo debe crear.
+- **Email y mayúsculas (para F1-011):** `usuarios.email` es único sólo por igualdad exacta;
+  `Admin@x` y `admin@x` serían dos usuarios. El seed guarda en minúsculas, pero F1-011 debe
+  normalizar en un solo punto antes de escribir/buscar, o agregar un único sobre `lower(email)`.
 
 **Qué haría distinto.** Confirmar qué expone Prisma en los errores (meta, clase, código)
 antes de escribir los asserts: me habría ahorrado una vuelta.
