@@ -2719,5 +2719,15 @@ Plan: APROBADO CON OBSERVACIONES (5 obligatorias, todas atendidas; ver abajo). E
 - En un test de React Testing Library, `tarjeta('X')` (`getByRole`) antes del primer `await`
   truena: la región todavía no existe. Usa `findByRole`.
 
+**Revisor del entregable: APROBADO CON OBSERVACIONES.** Re-corrió vitest 329/329, build y lint.
+Revisó a mano las dos capas de escape de `textoExcel` y comparó los asserts viejos con los nuevos:
+12 cambiaron, todos por el comportamiento nuevo y ninguno se aflojó. La única obligatoria era esta
+sección. De las no obligatorias:
+- R1 (snapshot de `useConReloj` con `Date.now()`): queda como está, ver arriba.
+- R2: un folio de más de 255 caracteres cae a `texto()` y ahí Excel sí puede convertirlo. Ya quedó
+  dicho en el JSDoc.
+- R3, **dato para Ricardo:** Inicio pide `/mesas/abiertas` 3 veces más seguido (cada 20 s). Comparte
+  la llave de caché con el Monitor, así que no duplica peticiones entre vistas.
+
 **Estado de la cola al cerrar:** con F1-094 `[x]` no queda nada en la Cola nocturna. La siguiente
 sesión debe crear `COLA_VACIA.txt` y terminar, salvo que Ricardo agregue tareas.
