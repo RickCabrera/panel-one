@@ -460,7 +460,7 @@ recibe 401; hay test e2e que lo cubre (login → logout → refresh con la cooki
 > incluye; si no, se anota en el log.
 
 ## 24 · F1-094 · Pendientes que quedaron "para F1-092"
-`[ ]` **Epic 7 — Validación contra SoftRestaurant real y cierre de fase**
+`[x]` **Epic 7 — Validación contra SoftRestaurant real y cierre de fase**
 
 Pendientes que varias sesiones anotaron "para F1-092" y que F1-092 no tocó (lista completa
 en su entrada del log). Esta tarea cubre los cuatro puntos de abajo, **cada uno con su
