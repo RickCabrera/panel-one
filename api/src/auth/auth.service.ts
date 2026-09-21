@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
-import { RolUsuario, type Empresa, type Usuario } from '@prisma/client';
+import { Prisma, RolUsuario, type Empresa, type Usuario } from '@prisma/client';
 
 import { ACCESS_TTL_SEGUNDOS } from '../config/auth.config';
 // Único servicio de auth en la allowlist de PrismaService: el login busca por
@@ -92,14 +92,23 @@ export class AuthService {
     if (!coincide) {
       throw new BadRequestException('La contraseña actual no es correcta');
     }
-    const actualizado = await this.prisma.usuario.update({
-      where: { id: usuario.id },
-      data: {
-        passwordHash: await hash(nueva, ARGON2_OPCIONES),
-        versionSesion: { increment: 1 },
-      },
-      include: { empresa: true },
-    });
+    // `activo: true` en el where: si lo dieron de baja entre la lectura y esta
+    // sentencia, no se escribe nada (P2025) y no sale un access token nuevo.
+    const actualizado = await this.prisma.usuario
+      .update({
+        where: { id: usuario.id, activo: true },
+        data: {
+          passwordHash: await hash(nueva, ARGON2_OPCIONES),
+          versionSesion: { increment: 1 },
+        },
+        include: { empresa: true },
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+          throw new UnauthorizedException('No autenticado');
+        }
+        throw error;
+      });
     return this.emitir(actualizado);
   }
 

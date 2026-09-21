@@ -1333,3 +1333,93 @@ cara que la consulta.
 - **Hallazgos sobre SoftRestaurant: ninguno visto en SR real.** §3, §5 y §13 de esquema-sr.md ganaron los supuestos de esta tarea, marcados como tales.
 
 **Qué haría distinto.** Probar primero la trampa de foco con un clic sobre texto: es el camino real de un usuario con mouse, y fue el hueco que encontró el revisor.
+
+## 2026-09-21 02:35 — F1-060 · CRUD de empresas, sucursales y usuarios
+**Estado:** CERRADA (PR en esta rama; el número lo da `gh pr create`)
+
+**Qué quedó hecho.**
+- **API, administración** (`api/src/administracion/`):
+  - `POST /empresas`, `PATCH /empresas/:id`: sólo admin_global (403 por ruta para los demás).
+  - `POST /sucursales`, `PATCH /sucursales/:id`: admins, en su alcance. Otra empresa = 404, idéntico a inexistente.
+  - `GET /usuarios?empresaId=`, `POST /usuarios`, `PATCH /usuarios/:id`, `POST /usuarios/:id/password` (reset, 204).
+  - `POST /cuenta/password` (cambio propio, CUALQUIER rol, en `api/src/auth/cuenta.controller.ts`): devuelve una sesión nueva y pone la cookie como el login. Throttle `login` 5/min.
+  - Sin DELETE en nada: baja = `activo=false`.
+- **Helper de scope** (la parte sensible):
+  - Altas por `ScopedPrismaService.admin(scope)` → `api/src/scope/escritura-admin.ts` (`EscrituraAdmin`): `crearEmpresa` (exige scope global), `crearSucursal` y `crearUsuario` (verifican la empresa CON scope → 404). Recibe el cliente con tipo `Prisma.TransactionClient`, no importa `PrismaClient`.
+  - Ediciones por `para(scope).X.updateMany` como siempre.
+  - **Arreglado el riesgo que dejó F1-012**: `validarEscritura` ahora usa `whereAcota()` (`scoped-prisma.service.ts`), que rechaza un where de puros `undefined`, incluidos operadores (`{id:{equals:undefined}}`), `AND` vacíos, `OR` con alguna rama vacía, y `NOT`/`not` solos. 12 casos nuevos en su spec.
+- **Sesiones**: migración `20260921081020_version_sesion` (`usuarios.version_sesion INT DEFAULT 0`).
+  - El refresh token lleva claim `ver`; el refresh lo compara con la base.
+  - Reset por admin, cambio propio y dar de baja la incrementan en la MISMA sentencia que escribe.
+  - Un refresh sin `ver` (emitido antes de este cambio) vale como 0; `ver` null, negativo, decimal o texto = 401.
+- **Auditoría** (`api/src/comun/auditoria.ts`): una línea JSON por cambio, `Logger('Auditoria')`: `{accion, actorId, actorRol, recurso, recursoId, empresaId, campos}`.
+  - `campos` son NOMBRES de columna, nunca valores.
+  - También la rotación de API key (F1-012): `ApiKeyService.rotar` ahora devuelve además `empresaId` para la auditoría; la respuesta HTTP no cambió.
+  - Sólo tras éxito. Un intento rechazado no deja línea (hay test).
+- **Web**:
+  - `Administracion.tsx` con pestañas en la URL (`?tab=`): Sucursales, Usuarios, Empresas (sólo admin_global). Sucursales y Usuarios trabajan sobre la empresa del selector del Topbar.
+  - API key: confirmación que avisa que el agente se corta en ese momento → modal "Cópiala ahora, no se volverá a mostrar" que NO se cierra con Escape ni clic afuera.
+  - "Mi cuenta" (`/cuenta`, enlace en el Topbar) para todos los roles.
+  - Los admin_global se listan aparte ("Administradores globales"), sólo para otro admin_global.
+- **Checks**:
+  - /api: lint y typecheck limpios, `prisma validate` ok, migrate "Already in sync", **599/599, 0 skips**.
+  - /web: build y lint limpios, **275/275, 0 skips** (13 nuevos en `Administracion.test.tsx`).
+  - OpenAPI regenerado.
+  - CI: no hay carril nuevo que encender.
+- **Revisor:** plan BLOQUEADO una vez (faltaba el arreglo de `updateMany` que dejó F1-012) y aprobado en la segunda pasada con 4 observaciones, todas atendidas. Entregable APROBADO CON OBSERVACIONES en la primera pasada. De las observaciones, arreglé dos después del veredicto:
+  - Un admin ya no puede resetear SU PROPIA contraseña por `POST /usuarios/:id/password` sin dar la actual: responde 400 y lo manda a `/cuenta/password`. En la web, el botón no aparece en tu fila. Hay tests en los dos lados.
+  - `cambiarPassword` escribe con `where: { id, activo: true }`: si lo dieron de baja entre la lectura y la escritura, responde 401 y no emite token.
+  El resto de las observaciones está abajo.
+
+**El "Listo cuando": qué se probó.**
+- "Un admin_empresa no puede tocar otra empresa ni crear admin_global": e2e en `administracion.e2e.spec.ts`, bloque "AC", contra Postgres real.
+  - Cada cruce da 404, idéntico al de un id inexistente, y la base queda intacta (se compara la fila antes y después).
+  - Crear admin_global da 403 con o sin empresa.
+  - Un admin_global es 404 para él, también con `rol` en el body.
+- "Auditoría mínima en log de api (quién creó/rotó qué)": e2e del bloque "auditoría".
+  - Espía `Logger.prototype.log` filtrando el contexto `Auditoria`.
+  - Compara la secuencia exacta de 9 eventos.
+  - Verifica que ni la API key, ni las contraseñas, ni `$argon2`, ni el nombre nuevo aparezcan en el log.
+- **No se probó en un navegador real** (igual que F1-040..051).
+
+**Decisiones que tomé y por qué.**
+- **Matriz de permisos:**
+  - Empresas: sólo admin_global. Un admin_empresa tampoco renombra la SUYA: 403 por ruta, que no filtra nada.
+  - Usuarios y sucursales: admin_empresa sólo en su empresa.
+  - El rol se edita sólo entre visor ↔ admin_empresa.
+  - Si un admin_empresa pide `admin_global`, es 403. Si lo pide un admin_global para un usuario de empresa, es 400.
+  - Cambiarle el rol a un admin_global es 400. Si no, el CHECK `usuarios_rol_empresa_chk` daría 500.
+  - Nadie se da de baja ni se cambia el rol a sí mismo (400).
+- **El destino de un PATCH de usuario se lee CON scope ANTES de evaluar cualquier regla de rol.** Así ningún 400/403 revela que existe un usuario ajeno. Hay mutación probada.
+- **Zona horaria:** sólo nombres que estén literalmente en `Intl.supportedValuesOf('timeZone')` del Node del API (`zona-horaria.ts`).
+  - `Intl.DateTimeFormat` acepta `+05:00`, y Postgres lo lee con signo POSIX invertido en `AT TIME ZONE`: los cortes saldrían corridos 10 h sin error.
+  - OJO: `UTC` NO está en esa lista en Node 24, así que no se puede dar de alta una sucursal en `UTC`. Para México no importa.
+- **Cambio propio en `/cuenta/password`, no en `/auth/`.** El cliente web no refresca ante un 401 de `/auth/*` (`cliente.ts`), y aquí un access vencido sí debe refrescarse. Contraseña actual mala = 400, no 401: el 401 significa "sin sesión".
+- **Las escrituras de la web NO usan `useMutation`** (`web/src/paginas/admin/consultas.ts`, `useAccion`). TanStack guarda variables y respuesta de cada mutación en su caché varios minutos, y ahí viajarían contraseñas y la API key en claro. Hay un test que revisa las cachés de queries y mutaciones después de mostrar la key.
+- **Modal propio** (`web/src/paginas/admin/Dialogo.tsx`) con el mismo comportamiento que el de F1-051. No toqué `Detalle.tsx`: una tarea por corrida.
+- **Contraseñas nuevas:** 12..128 caracteres (`PASSWORD_MIN/MAX`). La del login sigue aceptando 1..256, para no dejar fuera a usuarios existentes.
+
+**Trampas que encontré.**
+- **`python` en Windows escribe CRLF** al abrir en modo texto. Si editas con un script de Python, `prettier --check` marca el archivo. `npx prettier --write <tus archivos>` lo deja en LF y git no ve diferencia de contenido.
+- **Los heredocs largos siguen fallando en la herramienta Bash** (la trampa de F1-051/F1-011, me volvió a pasar con un .tsx). Usa Write desde el principio para archivos de más de ~100 líneas.
+- **`expect(fn()).rejects` truena si `fn` lanza en síncrono.** `EscrituraAdmin.crearEmpresa` tiene que ser `async` para que el throw de "exige scope global" sea un rechazo.
+- **supertest:** un helper `async` que devuelve un `request.Test` lo resuelve a `Response` (es thenable). En el e2e, `como(a, u).post()` resuelve adentro y devuelve la respuesta (misma trampa que F1-012).
+- **`claims.ver ?? 0` aceptaba `ver: null` como 0.** Lo atrapó el test; ahora es `'ver' in claims ? claims.ver : 0`.
+- **En los tests web, `POST /auth/refresh` también es un POST.** `llamadas.find(l => l.metodo === 'POST')` encuentra el refresh primero. Filtra por ruta.
+- **`npx jest a b` con dos suites de base SIN `--runInBand` da decenas de fallos falsos**: las dos comparten las fixtures de F1-011 y se pisan. `npm test` ya lleva `--runInBand`; si corres archivos sueltos, agrégalo tú.
+- La fixture `sucursalA2` está en `America/Mexico_City` (default), no en Tijuana como en la API falsa de la web. No asumas que coinciden.
+
+**Qué quedó abierto — decisiones para Ricardo** (ninguna es tarea nueva de la cola):
+- **CRUD del catálogo de formas de pago:** `schema.prisma` y `esquema-sr.md §4` decían "lo trae F1-060", pero el texto de F1-060 no lo pide. No se hizo. Corregí las dos notas. Si hace falta, es una tarea nueva: Ricardo decide dónde va.
+- **Un 409 por email duplicado revela que el email existe en OTRA empresa.** Se aceptó porque el email es único global. La alternativa sería emails únicos por empresa, que es un cambio de modelo.
+- **Los access tokens NO se revocan:** tras un reset, una baja o un cambio de contraseña, el access vigente vale hasta 15 min. Sólo los refresh mueren al instante.
+- **Cambiar la zona de una sucursal con historial reclasifica sus ventas pasadas** en los cortes por día. Se permite con aviso en la UI y en el OpenAPI.
+- **Carrera en el cambio propio (web):** se espera el refresh que ya esté en vuelo (`esperarRefreshEnVuelo`). Si el timer proactivo arranca un refresh DURANTE el POST y responde después, recibe 401 con la cookie vieja y puede cerrar la sesión recién emitida. La ventana es de milisegundos, una vez cada ~14 min.
+- **Una zona que el ICU de Node lista pero el tzdata de Postgres no conoce** (p. ej. `America/Ciudad_Juarez`, que es de 2022) haría fallar los agregados de esa sucursal. No lo verifiqué contra el Postgres de producción.
+- **Una empresa inactiva sigue aceptando altas** de sucursales y usuarios. Decisión conservadora: no inventé la regla. Desactivar la empresa ya deja fuera a sus usuarios y a sus agentes.
+- **`whereAcota` todavía acepta filtros que acotan poco:** `{ nombre: { contains: '' } }` o `{ id: { mode: 'insensitive' } }` pasan como "acota". Hoy no se llega desde HTTP, porque todo `updateMany` usa `{ id }` con `ParseUUIDPipe`. Quien use `updateMany` con filtros de texto tiene que endurecerlo.
+- **`editarUsuario` decide las reglas de rol con una lectura previa** y luego escribe con `updateMany`: es una carrera de lectura y escritura. El caso grave (tocar a un admin_global) lo cubren la regla y el CHECK de la base. Aceptado y anotado.
+- **Para F1-092:** logout en la API (sigue sin existir); un límite por IP para fallos; y que el reset por admin no tiene throttle propio (es ruta de admin autenticado).
+- **Hallazgos sobre SoftRestaurant: ninguno.** La tarea no toca SR. En `esquema-sr.md` sólo se corrigió la nota del catálogo.
+
+**Qué haría distinto.** Meter en el plan desde el principio las deudas que el log dejó asignadas a esta tarea. El bloqueo del plan fue exactamente eso: el log de F1-012 decía "F1-060 debe arreglar `updateMany`" y no lo leí antes de escribir el plan. Busca tu ID de tarea en `docs/nocturno-log.md` antes de planear.

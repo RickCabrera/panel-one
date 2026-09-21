@@ -557,6 +557,14 @@ describe('Administración (e2e, F1-060)', () => {
       expect(r.status).toBe(400);
     });
 
+    it('nadie resetea su propia contraseña por la ruta de admin: 400 y nada cambia', async () => {
+      const yo = await usuarioDePrueba('reset-propio', RolUsuario.admin_empresa, FX.empresaA);
+      const antes = await fila(yo.id);
+      const r = await como(a, yo).post(`/usuarios/${yo.id}/password`, { password: PASSWORD_NUEVA });
+      expect(r.status).toBe(400);
+      await expect(fila(yo.id)).resolves.toEqual(antes);
+    });
+
     it('nadie se da de baja ni se cambia el rol a sí mismo: 400; su nombre sí', async () => {
       const yo = await usuarioDePrueba('yo', RolUsuario.admin_empresa, FX.empresaA);
       const api = como(a, yo);

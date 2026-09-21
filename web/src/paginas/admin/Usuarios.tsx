@@ -115,13 +115,16 @@ function TablaUsuarios({
                       {u.activo ? 'Dar de baja' : 'Reactivar'}
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className={CLASE_BOTON}
-                    onClick={() => setAbierto({ tipo: 'reset', usuario: u })}
-                  >
-                    Restablecer contraseña
-                  </button>
+                  {/* La tuya se cambia en "Mi cuenta", con la actual (la API da 400 aquí). */}
+                  {u.id !== yo.id && (
+                    <button
+                      type="button"
+                      className={CLASE_BOTON}
+                      onClick={() => setAbierto({ tipo: 'reset', usuario: u })}
+                    >
+                      Restablecer contraseña
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

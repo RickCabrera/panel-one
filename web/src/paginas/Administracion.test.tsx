@@ -264,12 +264,15 @@ describe('Sucursales', () => {
 });
 
 describe('Usuarios', () => {
-  it('uno mismo: sin "Dar de baja" y con el rol bloqueado al editar', async () => {
+  it('uno mismo: sin "Dar de baja" ni "Restablecer contraseña", y con el rol bloqueado al editar', async () => {
     apiAdmin('admin_empresa');
     montar(`/admin?empresa=${A}&tab=usuarios`);
 
     const yo = await screen.findByRole('row', { name: 'ana@demo.local' });
     expect(within(yo).queryByRole('button', { name: 'Dar de baja' })).not.toBeInTheDocument();
+    expect(
+      within(yo).queryByRole('button', { name: 'Restablecer contraseña' }),
+    ).not.toBeInTheDocument();
     const otro = screen.getByRole('row', { name: VISOR.email });
     expect(within(otro).getByRole('button', { name: 'Dar de baja' })).toBeInTheDocument();
 

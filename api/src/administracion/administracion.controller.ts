@@ -220,7 +220,10 @@ export class UsuariosAdminController {
       'venza (15 min).',
   })
   @ApiNoContentResponse({ description: 'Contraseña restablecida.' })
-  @ApiBadRequestResponse({ type: ErrorDto, description: DESC_400 })
+  @ApiBadRequestResponse({
+    type: ErrorDto,
+    description: `${DESC_400} O es tu propia contraseña: ésa se cambia en /cuenta/password.`,
+  })
   @ApiForbiddenResponse({ type: ErrorDto, description: DESC_403_RUTA })
   @ApiNotFoundResponse({ type: ErrorDto, description: DESC_404 })
   resetPassword(

@@ -1920,7 +1920,7 @@
             "description": "Contraseña restablecida."
           },
           "400": {
-            "description": "Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo.",
+            "description": "Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo. O es tu propia contraseña: ésa se cambia en /cuenta/password.",
             "content": {
               "application/json": {
                 "schema": {

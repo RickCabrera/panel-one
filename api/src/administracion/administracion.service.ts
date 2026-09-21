@@ -253,6 +253,11 @@ export class AdministracionService {
    * servir en ese instante.
    */
   async resetPassword({ actor, scope }: Quien, id: string, password: string): Promise<void> {
+    // La propia se cambia en `/cuenta/password`, que pide la actual y tiene
+    // throttle: un access token robado no la resetea por aquí.
+    if (id === actor.id) {
+      throw new BadRequestException('Tu propia contraseña se cambia en /cuenta/password');
+    }
     const datos = this.datos.para(scope);
     const passwordHash = await hash(password, ARGON2_OPCIONES);
     const { count } = await datos.usuario.updateMany({
