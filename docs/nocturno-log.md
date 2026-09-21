@@ -2162,7 +2162,19 @@ GitHub Actions). El código y el revisor estaban bien. Ninguna de las dos falló
 para `backlog.md` y `docs/nocturno-log.md`. Un commit que sólo toca esos archivos (el `[x]`
 de cierre, una entrada SALTADA directa a main) ya no dispara CI. Un PR de tarea toca código,
 así que sigue corriendo el CI completo.
+
 ## 2026-09-21 05:27 — F1-026 · Instalador y guía de instalación
+> **Retomada tras la reapertura (2026-09-21, tarde).** Esta entrada es la original del
+> PR #22, que se cerró como SALTADA sólo porque GitHub Actions no arrancaba jobs
+> (facturación). La facturación ya está arreglada (`gh run list` en verde). La rama se
+> recuperó con `git fetch origin pull/22/head:feat/F1-026` y se **rebasó sobre 4b6aea5**.
+> **El código no cambió**; el único conflicto fue este log, y se resolvió conservando las
+> entradas SALTADA/REABIERTA de main y ésta al final. Checks tras el rebase: build Release
+> 0 advertencias, 328/328 tests, 0 omitidos. Revisor del entregable: APROBADO CON
+> OBSERVACIONES (sólo esta nota y un salto de línea). **El PR de cierre es uno nuevo** (el
+> número lo da `gh pr create`), no el #22. El `[x]` va con
+> `**PARCIAL:** falta ...` apuntando a F1-020b y F1-091.
+
 **Estado:** CERRADA PARCIAL (el número de PR lo da `gh pr create`). El `[x]` lleva
 **PARCIAL**. Lo que falta no cabe en una sesión nocturna y se sumó a **F1-020b** (Diurnas),
 cuyo "Listo cuando" se reescribió:
