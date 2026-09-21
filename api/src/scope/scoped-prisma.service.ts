@@ -3,7 +3,14 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import type { EmpresaScope } from './empresa-scope';
-import { LLAVE_EMPRESA, whereScoped, type WhereGenerico } from './scope.helper';
+import type { AgenteAutenticado } from '../auth/request-autenticado';
+import { EscrituraSucursal } from './escritura-sucursal';
+import {
+  COLUMNAS_INTOCABLES,
+  LLAVE_EMPRESA,
+  whereScoped,
+  type WhereGenerico,
+} from './scope.helper';
 
 /**
  * Las únicas operaciones que el cliente con scope deja pasar. Todas aceptan
@@ -24,25 +31,6 @@ const OPERACIONES_PERMITIDAS = [
   'updateMany',
 ] as const;
 type OperacionPermitida = (typeof OPERACIONES_PERMITIDAS)[number];
-
-/**
- * Columnas que una escritura con scope NUNCA puede tocar, además de la llave de
- * tenant del modelo (`LLAVE_EMPRESA`): la identidad de la fila y su pertenencia.
- * Una escritura con scope no mueve una fila a otra empresa ni a otra sucursal.
- *
- * Es una lista de PROHIBIDAS, no de permitidas: si un modelo futuro trae otra
- * columna de pertenencia, se agrega aquí con su test. F1-030 agregó `chequeId`
- * / `cheque`: una partida o un pago no se mueven a otro cheque.
- */
-const COLUMNAS_INTOCABLES: readonly string[] = [
-  'id',
-  'empresaId',
-  'sucursalId',
-  'chequeId',
-  'empresa',
-  'sucursal',
-  'cheque',
-];
 
 /**
  * Valida una escritura antes de mandarla: `where` no vacío (para admin_global el
@@ -131,5 +119,15 @@ export class ScopedPrismaService {
       return [clave, Object.freeze(Object.fromEntries(operaciones))] as const;
     });
     return Object.freeze(Object.fromEntries(delegados)) as unknown as DatosScoped;
+  }
+
+  /**
+   * Las escrituras de la ingesta (F1-031), clavadas a la SUCURSAL del agente,
+   * no sólo a su empresa: cada operación de `EscrituraSucursal` pone
+   * `sucursalId` y `empresaId` ella misma, desde la API key. Es el único lugar
+   * donde existe una transacción; `para(scope)` sigue sin exponer `$transaction`.
+   */
+  deSucursal(agente: AgenteAutenticado): EscrituraSucursal {
+    return new EscrituraSucursal((fn) => this.#prisma.$transaction((tx) => fn(tx)), agente);
   }
 }

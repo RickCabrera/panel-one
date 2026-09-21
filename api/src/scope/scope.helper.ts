@@ -21,6 +21,27 @@ export const LLAVE_EMPRESA = {
 
 export type WhereGenerico = Record<string, unknown>;
 
+/**
+ * Columnas que una escritura con scope NUNCA puede tocar, además de la llave de
+ * tenant del modelo (`LLAVE_EMPRESA`): la identidad de la fila y su pertenencia.
+ * Una escritura con scope no mueve una fila a otra empresa ni a otra sucursal.
+ *
+ * Es una lista de PROHIBIDAS, no de permitidas: si un modelo futuro trae otra
+ * columna de pertenencia, se agrega aquí con su test. F1-030 agregó `chequeId`
+ * / `cheque`: una partida o un pago no se mueven a otro cheque. La usan
+ * `updateMany` con scope (F1-012) y las escrituras de sucursal de la ingesta
+ * (F1-031, `escritura-sucursal.ts`).
+ */
+export const COLUMNAS_INTOCABLES: readonly string[] = [
+  'id',
+  'empresaId',
+  'sucursalId',
+  'chequeId',
+  'empresa',
+  'sucursal',
+  'cheque',
+];
+
 /** El filtro de tenant de un modelo: `{}` para admin_global, la empresa para los demás. */
 export function whereEmpresa(scope: EmpresaScope, modelo: Prisma.ModelName): WhereGenerico {
   if (scope.tipo === 'global') {

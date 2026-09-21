@@ -1,5 +1,6 @@
 import { Controller, Get, Param, ParseUUIDPipe, type INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { PrismaClient, RolUsuario } from '@prisma/client';
 import request from 'supertest';
@@ -73,7 +74,7 @@ async function crearApp(): Promise<INestApplication> {
     imports: [AppModule],
     controllers: [PruebaScopeController],
   }).compile();
-  const app = configurarApp(modulo.createNestApplication());
+  const app = configurarApp(modulo.createNestApplication<NestExpressApplication>());
   await app.init();
   return app;
 }
