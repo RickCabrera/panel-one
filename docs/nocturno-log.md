@@ -1022,6 +1022,8 @@ por escapado en Bash costaron más que todo el layout.
 - **Excel y los folios numéricos:** `000123` se abre como `123`, y un folio muy largo saldría en notación científica. La protección con `'` sólo cubre los que empiezan con `- + = @`. Si SR usa folios con ceros a la izquierda, habría que escribirlos como texto. Para F1-092 o F1-090.
 - **Del revisor de F1-041, sigue sin tocar** (era "de pasada" aquí): `aCentavos(x) ?? 0n` en `inicio/Tarjetas.tsx` (`TarjetaFormasPago`) y en `inicio/puntosHora.ts` convierte un importe inválido en $0.00 sin aviso. Para F1-092.
 - La decisión de la forma de pago (texto crudo o ENUM), para Ricardo.
+- **Cancelados en la lista, decisión de producto para Ricardo:** el backlog dice "tabla de cheques cerrados", pero la vista también lista los cancelados de `/ventas/tickets` (así los devuelve el contrato de F1-033), marcados y sin sumar. Si no los quiere ver, hace falta un filtro en la API (`incluirCancelados`) o en la vista. Anotado para F1-092.
+- **La anti-inyección del CSV sólo mira el primer carácter:** no cubre un texto que empieza con espacios y luego `=`, ni `|`. El riesgo es bajo, porque el texto viene del POS y no de terceros. Para F1-092, junto con lo de los folios.
 - La medida de 390 px en un navegador real, pendiente.
 - **Sin hallazgos nuevos sobre SoftRestaurant:** esta tarea sólo consume nuestra API. `docs/esquema-sr.md` no cambió.
 
