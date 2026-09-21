@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest --runInBand",
     "openapi": "ts-node src/openapi/generar.ts",
-    "seed:ventas": "ts-node prisma/seed-ventas.ts"
+    "seed:ventas": "ts-node prisma/seed-ventas.ts",
+    "seed:mesas": "ts-node prisma/seed-mesas.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.5",

@@ -1163,3 +1163,91 @@ por escapado en Bash costaron más que todo el layout.
 **Qué haría distinto.** Medir desde el principio el tiempo del spec contra Postgres al agregar
 una referencia a mano: el timeout de 5 s de Jest es el primer aviso de que la referencia es más
 cara que la consulta.
+
+## 2026-09-21 01:29 — F1-050 · Monitor de mesas en vivo
+**Estado:** CERRADA (PR de `feat/F1-050`, squash a main)
+
+**Qué quedó hecho.**
+- **`/mesas` ya es la vista de verdad.** Está en `web/src/paginas/Mesas.tsx` y `web/src/paginas/mesas/`:
+  - `mesa.ts`: lee la forma de cada mesa.
+  - `reglas.ts`: todas las reglas de tiempo y los KPIs, puras.
+  - `Monitor.tsx`: KPIs, avisos y grid.
+  - `consultas.ts`: polling de 20 s y `useAhora`.
+- **KPIs:**
+  - Mesas abiertas + $ en curso.
+  - Cuentas sin imprimir.
+  - Atención >60 min (con nota aparte de las mesas sin hora de apertura).
+  - Última lectura hh:mm con color de frescura.
+- **Grid:** una tarjeta por mesa con nº, total, mesero, minutos, borde por semáforo (con el texto también para lector de pantalla), las primeras 3 partidas y "n partidas más". Orden natural por nº de mesa.
+- **Polling:** cada 20 s, con punto/"Actualizando…" y botón Refrescar.
+- **Filtro por sucursal:** es el selector del topbar (F1-040), no se duplicó.
+- **Banner "sucursal desconectada"** en lugar de sus mesas. Una sucursal que nunca reportó tiene su propio aviso. Si no queda ninguna conectada, NO se pintan KPIs en cero: sólo el aviso.
+- **API:**
+  - `api/prisma/seed-mesas.ts` + `npm run seed:mesas`: snapshots SINTÉTICOS. Sucursal Centro en vivo con 8 mesas que cubren todo el semáforo; Sucursal Norte con su última lectura de hace 2 h.
+  - La descripción de `mesas` en `SnapshotMesasDto` ahora dice la forma provisional; `openapi.json` se regeneró y sólo cambia ese texto.
+  - Sin migración y sin cambio de endpoint.
+- `totalDe` de `inicio/ventaEnVivo.ts` ahora se exporta (sin tocar su lógica): el monitor lee el total con la misma regla que "Venta en vivo".
+- **Checks:**
+  - /web: build y lint limpios, **237/237, 0 skips** (41 nuevos).
+  - /api: lint y typecheck limpios, **511/511, 0 skips** (9 nuevos).
+  - CI: sin carril nuevo que encender.
+- **Revisor:**
+  - Plan aprobado con 10 observaciones, todas atendidas.
+  - Entregable aprobado con 6 observaciones; las que no se tocaron en código están abajo.
+
+**El "Listo cuando": qué se probó y qué NO.**
+- **NO probado:** "abrir una mesa en SR la muestra en ≤ 60 s". No hay SoftRestaurant ni agente (F1-020/F1-023 no existen). **La cadena real agente → API → vista no se ha ejercitado nunca.** Pendiente de F1-091.
+  - Lo que sí se sabe: la vista pregunta cada 20 s. Con el supuesto de 30 s de ciclo del agente, el peor caso es ~50 s más lo que tarde el envío.
+- **Probado, banner con dato viejo:**
+  - En vitest, con snapshots de 2 h, de 91 s contra 90 s, y con el API caído. En ese último caso, la última respuesta envejece sola y a los 10 + 85 s sale el banner.
+  - Con el seed real: `seed:mesas` en el Postgres local, la API compilada con secretos JWT SINTÉTICOS por variable de entorno, y un token firmado a mano para el admin del seed (no se tecleó ninguna contraseña).
+  - `GET /mesas/abiertas` dio 200 en 76 ms; sin token, 401.
+  - Esa respuesta real, pasada a la vista con un test temporal (ya borrado), dio 8 mesas, **$4,898.25** (cuadrado a mano), 5 sin imprimir, 2 en atención y el banner de Norte "hace 2 h".
+- No se abrió en un navegador ni se midió 390 px (igual que F1-040..043). El grid es de 1 columna en móvil.
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` en `web/src/paginas/mesas/mesa.ts`: **la forma de cada mesa del snapshot.**
+  - `{ mesa, mesero, folio, abiertoAt, total, comensales, impreso, partidas[] }`, detallada en esquema-sr.md §5.
+  - F1-023 tiene que mandarla así, o cambiarla aquí y en §5.
+  - Todo campo ilegible sale "Sin dato": nunca $0.00 ni 0 min.
+- `DECISION PROVISIONAL (nocturno)` en `web/src/paginas/mesas/reglas.ts` (`INTERVALO_AGENTE_S = 30`): **desconectada = más de 90 s.**
+  - La edad es `edadRecepcionSegundos` (reloj del servidor) más el tiempo que lleva la respuesta en el navegador, NO la del reloj del POS.
+  - **F1-020/F1-025:** si el intervalo es configurable por sucursal, hay que mandarlo en el heartbeat y volver esta constante un dato por sucursal.
+- **Minutos abierta** = `capturadoAt − abiertoAt` (el mismo reloj del POS, así que el desfase no importa) + la edad efectiva, **truncados** a minutos enteros antes del semáforo. 60 min con 59 s es 60, alerta. Un `abiertoAt` posterior a la captura sale como "Sin dato".
+- **La vista re-renderiza cada 5 s** (`useAhora`): los minutos y la edad avanzan entre consultas, y si el API se cae el banner llega solo.
+- **"$ en curso" y "sin imprimir" no dan cifras parciales:** si UNA mesa no trae el dato, dicen "Sin dato". "Atención" sí cuenta, pero avisa cuántas mesas no tienen hora.
+- **Sin `placeholderData`:** al cambiar de sucursal salen skeletons (hay test).
+  - La llave `['mesas','abiertas',empresa,sucursal]` es la misma de la tarjeta "Venta en vivo" de Inicio, así que comparten caché. Revisé que Inicio tampoco declara `placeholderData`.
+- **El seed marca sus snapshots con `payload.origen = 'seed'`** y sólo borra ésos (filtra además por empresa y sucursal). `mesasDe` del API ignora esa clave.
+
+**Trampas que encontré.**
+- **La sucursal Centro del seed sólo se ve "en vivo" 90 s.** Para verla viva, corre `npm run seed:mesas` justo antes. Mi primera consulta HTTP salió con las dos desconectadas por eso.
+- **El reloj de la vista puede ir hasta 5 s detrás de `dataUpdatedAt`** (el pulso es de 5 s). Por eso `edadEfectiva` recorta a ≥ 0 lo que pasó desde la respuesta. Si quitas el `Math.max`, la edad puede quedar menor que la del API.
+- **`prettier --write` reformatea los tests en LF** y git avisa de CRLF; el contenido no cambia (lo mismo que ya dijo F1-033).
+- **En un script temporal, `S=... node` pisó mi variable de ruta y el archivo fue a dar a otro lado.** Nombres distintos para el secreto y la ruta.
+- **Para verificar sin teclear contraseñas:** `jsonwebtoken` firma un access token con el mismo `JWT_ACCESS_SECRET` sintético con que arrancaste `node dist/main.js`. El `sub` es el id del usuario en la base.
+
+**Prueba de mutación** (hecha; todo quedó restaurado y las suites otra vez en verde). Qué se cambió y qué test la atrapó:
+- Web:
+  - umbral `>= 90`: fallan 4 (bordes 90/91 de `reglas.test` y el de 91 s de la vista);
+  - semáforo 60 = rojo: fallan 2 (`semaforo` 60 y el de 60 min 59 s);
+  - edad sin envejecer: fallan 4 (el de API caído en `reglas.test` y en la vista, más los de minutos);
+  - pintar las mesas de las desconectadas: fallan 5;
+  - `round` en vez de `floor`: fallan 2;
+  - suma parcial con ilegible = 0: fallan 2;
+  - polling a 60 s: fallan 2 (el de 20 s y el de API caído);
+  - `placeholderData` con el dato previo: falla 1 ("cambiar de sucursal muestra skeletons").
+- API:
+  - borrar sin el filtro `origen`: falla 1 ("no toca snapshots que no sembró").
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **Para F1-092, diferencia de cifras con el Panel:** "Venta en vivo" de Inicio suma TODAS las sucursales con snapshot, desconectadas incluidas; el Monitor las excluye. Con una desconectada no coinciden. No lo cambié aquí porque habría sido "de pasada". Está en §5.
+- **Para F1-092, KPI "Última lectura":** con "Todas", muestra la lectura MÁS VIEJA, desconectadas incluidas. Con Norte caída sale siempre en rojo con la hora de Norte, aunque Centro esté al día y sus KPIs sí se vean. Es a propósito (que no parezca que todo está fresco), pero puede leerse como "todo está viejo". Una opción: mostrar la de las conectadas y dejar el rojo al banner.
+- **`seed-mesas.spec.ts`:** los `it` de `sembrarMesas()` dependen del orden (el de "otro ahora" vuelve a sembrar al final). Funciona con `--runInBand`; si alguien los reordena, que cada uno siembre por su cuenta.
+- **`seed-mesas.ts` usa `PrismaClient` directo** (script de dev, con filtro explícito de empresa). No copiar ese patrón a `src/`: ahí todo pasa por el helper de scope.
+- **F1-051 (lo siguiente):** las tarjetas todavía no son botones. `mesa.ts` ya lee `folio` y `comensales`; las partidas sólo leen `producto` y `cantidad`. El modal tendrá que ampliar `leerPartida` (categoría, precio, modificadores). La `clave` de cada tarjeta es `sucursal:folio:índice`.
+- ¿Una mesa con varias cuentas abiertas en SR? Hoy cada cuenta es una tarjeta (§5). Lo confirma F1-023.
+- La medida de 390 px en un navegador real sigue pendiente, como en F1-040..043.
+- **Hallazgos sobre SoftRestaurant: ninguno visto en SR real.** §5 y §13 de esquema-sr.md ganaron los supuestos de esta tarea, marcados como tales.
+
+**Qué haría distinto.** Arrancar por `edadEfectiva`: la regla "la última respuesta también envejece" es la que hace honesto al banner, y es la que un test de "llega un snapshot viejo" no ve.

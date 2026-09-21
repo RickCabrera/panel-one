@@ -55,7 +55,7 @@ export function ventaEnVivo(filas: readonly MesasSucursal[]): VentaEnVivo {
   };
 }
 
-function totalDe(mesa: Record<string, unknown>): bigint | null {
+export function totalDe(mesa: Record<string, unknown>): bigint | null {
   const total = mesa.total;
   if (typeof total === 'string') return aCentavos(total);
   if (typeof total === 'number' && Number.isFinite(total)) return aCentavos(String(total));
