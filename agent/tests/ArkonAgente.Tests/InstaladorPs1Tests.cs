@@ -185,6 +185,21 @@ public class InstaladorPs1Tests
         Assert.Equal(valido, EsValida("Test-ValorCadena", valor));
     }
 
+    [Theory]
+    [InlineData("softrestaurant10", true)]
+    [InlineData("SR_Sucursal-2", true)]
+    [InlineData("x] ALTER SERVER ROLE sysadmin ADD MEMBER [monitor_lector", false)]
+    [InlineData("base]", false)]
+    [InlineData("base con espacio", false)]
+    [InlineData("base;x", false)]
+    [InlineData("base$(x)", false)]
+    [InlineData("baseñ", false)]
+    public void El_nombre_de_la_base_no_puede_escaparse_del_USE_del_TSQL(string valor, bool valido)
+    {
+        // Va dentro de `USE [$(BASE_SR)]`: un ']' cerraría el corchete e inyectaría T-SQL.
+        Assert.Equal(valido, EsValida("Test-NombreBase", valor));
+    }
+
     [Fact]
     public void Los_argumentos_de_sc_llevan_la_ruta_entre_comillas_y_la_cuenta_correcta()
     {

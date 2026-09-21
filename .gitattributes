@@ -29,3 +29,4 @@ api/openapi.json text eol=lf
 # restaurante. Van en UTF-8 CON BOM (sin BOM, 5.1 y sqlcmd los leen como ANSI y los acentos
 # salen rotos; InstaladorPs1Tests lo vigila). CRLF en el checkout, como pide .editorconfig.
 agent/instalador/*.ps1 text eol=crlf
+agent/instalador/*.sql text eol=crlf

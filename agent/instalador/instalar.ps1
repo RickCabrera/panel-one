@@ -178,6 +178,16 @@ function Invoke-Instalacion {
     # con los permisos heredados de ProgramData (que deja leer a todos los usuarios).
     Invoke-Icacls @($carpetaDatos, '/grant:r', '*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
     Invoke-Icacls @($carpetaDatos, '/inheritance:r')
+    # /grant:r sólo reemplaza a SYSTEM y Administradores: si una instalación a mano dejó a
+    # alguien más (p. ej. Usuarios), sigue ahí. No se quita a ciegas: se avisa.
+    $otros = @((Get-Acl -LiteralPath $carpetaDatos).Access | Where-Object {
+            $sid = try { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { '' }
+            $sid -ne 'S-1-5-18' -and $sid -ne 'S-1-5-32-544' -and $sid -notlike 'S-1-5-80-*'
+        })
+    foreach ($ace in $otros) {
+        Write-Problema "AVISO: $($ace.IdentityReference) también tiene permiso sobre la carpeta ($($ace.FileSystemRights)). Si no debe, quítalo:"
+        Write-Problema "  icacls `"$carpetaDatos`" /remove `"$($ace.IdentityReference)`""
+    }
     Write-Bien 'Sólo SYSTEM y Administradores (la cuenta del servicio se agrega en el paso 6).'
 
     # ---------------------------------------------------------------- 5
@@ -198,7 +208,7 @@ function Invoke-Instalacion {
 
         $sugerido = if ($Servidor) { $Servidor } else { Get-ServidorSugerido }
         $srv = Read-Valor -Pregunta '  Servidor SQL de SoftRestaurant' -Sugerido $sugerido -Validar { param($v) Test-ValorCadena $v 'el servidor' }
-        $bd = Read-Valor -Pregunta '  Base de SoftRestaurant' -Sugerido $Base -Validar { param($v) Test-ValorCadena $v 'la base' }
+        $bd = Read-Valor -Pregunta '  Base de SoftRestaurant' -Sugerido $Base -Validar { param($v) Test-NombreBase $v }
         $usr = Read-Valor -Pregunta '  Usuario SQL de solo lectura' -Sugerido $UsuarioSql -Validar { param($v) Test-ValorCadena $v 'el usuario' }
         $passwordSql = Read-Secreto -Pregunta "  Contraseña de $usr (no se ve al escribir)" -Validar { param($v) Test-PasswordCadena $v }
 
