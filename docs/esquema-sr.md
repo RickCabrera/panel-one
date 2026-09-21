@@ -113,6 +113,25 @@ esta sección.** Todo esto se valida en F1-090 contra los reportes nativos de SR
   (`DECISION PROVISIONAL (nocturno)` en el servicio) hasta que se resuelva la decisión abierta
   de arriba.
 
+**Lo que la lista de tickets (F1-033, `GET /ventas/tickets`) supone de esta sección.** No
+descubre nada nuevo de SR; hereda los supuestos de arriba y fija este criterio:
+
+- Un **ticket del rango** es una cuenta NO cancelada cerrada en el rango (por `cerrado_at`
+  local, igual que la venta) **o** una cancelada del rango (por `COALESCE(cerrado_at,
+  abierto_at)`, igual que `resumen.cancelados`). Las abiertas no aparecen. Es la CTE `tickets`
+  del helper de scope (`api/src/scope/consulta-ventas.ts`).
+- **Los cancelados se listan con `cancelado: true` y NO suman a nada.** F1-042 no debe sumar
+  su total en el pie de la tabla ni en el export CSV. Si al validar en F1-090 resulta que SR
+  "cancela" de otra forma (partidas sueltas, cheque en negativo), el criterio se ajusta aquí.
+- Orden: por ese mismo momento, del más reciente al más viejo. La búsqueda por folio es por
+  prefijo literal del `folio` (el que ve el cliente, §2), **dentro del rango de fechas**.
+  ⚠️ **SUPUESTO:** que el folio impreso es texto buscable por prefijo; si SR lo reinicia por
+  día o por serie, la búsqueda puede traer varios tickets con el mismo folio (se distinguen
+  por sucursal y fecha).
+- Los pagos de cada ticket traen la forma derivada AL LEER con el catálogo de §4, igual que
+  el desglose; los pagos no traen orden propio del POS (el contrato de ingesta no lo manda) y
+  salen en un orden estable pero arbitrario.
+
 ---
 
 ## 3. Partidas de cuentas cerradas
@@ -207,6 +226,15 @@ pago con un texto que se puede mapear. Mientras no haya catálogo, la ingesta (F
 **Lo que la ingesta (F1-031) ya supone de esta sección:** el snapshot llega completo en cada
 ciclo como `{ capturadoAt, mesas: object[] }` y se guarda sin validar la forma de cada mesa
 (⚠️ SUPUESTO, ver §13). El API conserva el último por sucursal más 24 h de histórico.
+
+**Lo que `GET /mesas/abiertas` (F1-033) supone:** devuelve el ÚLTIMO snapshot de cada
+sucursal con `mesas` **tal cual** las mandó el agente (la forma de cada mesa sigue siendo
+⚠️ SUPUESTO; la fijan F1-023/F1-050) y dos edades: `edadSegundos` desde `capturadoAt` (reloj
+de la PC del restaurante, recortada a ≥ 0 porque un reloj adelantado daría negativa) y
+`edadRecepcionSegundos` desde `recibidoAt` (reloj del servidor). ⚠️ **SUPUESTO — el reloj de
+la PC del POS puede estar desfasado**: para decidir si una sucursal está "desconectada"
+(F1-050) conviene la edad de recepción. El intervalo de lectura del agente no lo conoce el
+API: el umbral de "3 intervalos" lo fija F1-050/F1-020.
 
 ---
 

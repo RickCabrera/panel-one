@@ -3,7 +3,7 @@ import { FormaPago, Prisma } from '@prisma/client';
 
 import type { EmpresaScope } from '../scope/empresa-scope';
 import { validarFiltro, type ConsultaVentas, type FiltroVentas } from '../scope/consulta-ventas';
-import { encontradoOr404 } from '../scope/scope.helper';
+import { verificarAlcance } from '../scope/alcance';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 
 /**
@@ -23,7 +23,8 @@ import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 export interface Resumen {
   venta: string;
   cuentas: number;
-  ticketPromedio: string;
+  /** Null sin cuentas: un promedio sin divisor es null, nunca "0.00" (F1-033). */
+  ticketPromedio: string | null;
   subtotal: string;
   impuestos: string;
   propina: string;
@@ -63,7 +64,8 @@ export interface VentaSucursal {
   nombre: string;
   venta: string;
   cuentas: number;
-  ticketPromedio: string;
+  /** Null si la sucursal no tuvo cuentas en el rango. */
+  ticketPromedio: string | null;
   comensales: number;
 }
 
@@ -80,7 +82,7 @@ export const FORMAS: readonly FormaPago[] = [
 
 const CERO = new Prisma.Decimal(0);
 
-function pesos(d: Prisma.Decimal): string {
+export function pesos(d: Prisma.Decimal): string {
   return d.toFixed(2, Prisma.Decimal.ROUND_HALF_UP);
 }
 
@@ -101,8 +103,13 @@ function dividir(a: Prisma.Decimal, b: Prisma.Decimal.Value): Prisma.Decimal | n
   return a.div(divisor).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 }
 
-function promedio(venta: Prisma.Decimal, cuentas: number): string {
-  return pesos(dividir(venta, cuentas) ?? CERO);
+/**
+ * Convención de todos los promedios (F1-033): sin divisor, `null`. Un "0.00"
+ * diría que el ticket promedio fue de cero pesos, y no hubo tickets.
+ */
+function promedio(venta: Prisma.Decimal, cuentas: number): string | null {
+  const p = dividir(venta, cuentas);
+  return p === null ? null : pesos(p);
 }
 
 @Injectable()
@@ -115,20 +122,9 @@ export class AgregadosVentasService {
    * vuelven a filtrar por tenant: si esta verificación faltara, el SQL
    * devolvería vacío, no datos ajenos.
    */
-  private async consulta(scope: EmpresaScope, filtro: FiltroVentas): Promise<ConsultaVentas> {
+  async consulta(scope: EmpresaScope, filtro: FiltroVentas): Promise<ConsultaVentas> {
     validarFiltro(filtro);
-    const datos = this.datos.para(scope);
-    encontradoOr404(
-      await datos.empresa.findFirst({ where: { id: filtro.empresaId }, select: { id: true } }),
-    );
-    if (filtro.sucursalId !== undefined) {
-      encontradoOr404(
-        await datos.sucursal.findFirst({
-          where: { id: filtro.sucursalId, empresaId: filtro.empresaId },
-          select: { id: true },
-        }),
-      );
-    }
+    await verificarAlcance(this.datos.para(scope), filtro.empresaId, filtro.sucursalId);
     return this.datos.ventas(scope, filtro);
   }
 

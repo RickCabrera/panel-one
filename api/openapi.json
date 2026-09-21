@@ -310,6 +310,756 @@
           "agente"
         ]
       }
+    },
+    "/ventas/resumen": {
+      "get": {
+        "description": "Cache de 15 s por usuario-alcance y filtro.",
+        "operationId": "VentasController_resumen",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Venta total, cuentas, ticket promedio, comensales, descuentos y cancelados.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/ventas/por-hora": {
+      "get": {
+        "description": "Cache de 15 s por usuario-alcance y filtro.",
+        "operationId": "VentasController_porHora",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VentaHoraDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Venta por hora LOCAL de cierre: siempre 24 filas (0..23), con cero donde no hubo.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/ventas/formas-pago": {
+      "get": {
+        "description": "Cache de 15 s por usuario-alcance y filtro.",
+        "operationId": "VentasController_formasPago",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormasPagoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Desglose por forma de pago, con el catálogo de la empresa aplicado al leer.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/ventas/top-productos": {
+      "get": {
+        "description": "Cache de 15 s por usuario-alcance y filtro.",
+        "operationId": "VentasController_topProductos",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "por",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "importe",
+              "type": "string",
+              "enum": [
+                "importe",
+                "cantidad"
+              ]
+            }
+          },
+          {
+            "name": "limite",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductoTopDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Top productos por importe o por cantidad, agrupados por nombre.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/ventas/tickets": {
+      "get": {
+        "description": "Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag `cancelado`, no suman). Sin cache.",
+        "operationId": "VentasController_listarTickets",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "porPagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "folio",
+            "required": false,
+            "in": "query",
+            "description": "Búsqueda por PREFIJO del folio, literal (`%` y `_` no son comodines). Busca dentro del rango de fechas, no en todo el histórico.",
+            "schema": {
+              "maxLength": 40,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaTicketsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Tickets del rango, paginados, con partidas y pagos (la fila expandible).",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/mesas/abiertas": {
+      "get": {
+        "description": "Una fila por sucursal en alcance (también las que nunca mandaron snapshot, con `snapshot: null`). Sin cache: es el dato en vivo.",
+        "operationId": "MesasController_abiertas",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MesasSucursalDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cuentas abiertas: el último snapshot de cada sucursal y la edad del dato.",
+        "tags": [
+          "mesas"
+        ]
+      }
+    },
+    "/empresas": {
+      "get": {
+        "operationId": "EmpresasController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmpresaDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Empresas en tu alcance: la tuya, o todas si eres admin_global. Activas e inactivas.",
+        "tags": [
+          "organizacion"
+        ]
+      }
+    },
+    "/sucursales": {
+      "get": {
+        "operationId": "SucursalesController_listar",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": false,
+            "in": "query",
+            "description": "Sólo las sucursales de esta empresa. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SucursalDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`empresaId` no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa pedida no existe o no está en tu alcance. Misma respuesta (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Sucursales en tu alcance, activas e inactivas. Nunca incluye la API key ni su hash.",
+        "tags": [
+          "organizacion"
+        ]
+      }
     }
   },
   "info": {
@@ -888,6 +1638,563 @@
         "required": [
           "procesados",
           "rechazados"
+        ]
+      },
+      "DescuentosDto": {
+        "type": "object",
+        "properties": {
+          "monto": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas con descuento distinto de cero."
+          }
+        },
+        "required": [
+          "monto",
+          "cuentas"
+        ]
+      },
+      "ComensalesDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "cuentasConDato": {
+            "type": "number",
+            "description": "Cuentas que traían comensales (SR puede no reportarlos)."
+          },
+          "promedioPorComensal": {
+            "type": "string",
+            "nullable": true,
+            "description": "Venta de las cuentas con comensales / comensales. Null sin comensales."
+          }
+        },
+        "required": [
+          "total",
+          "cuentasConDato",
+          "promedioPorComensal"
+        ]
+      },
+      "CanceladosDto": {
+        "type": "object",
+        "properties": {
+          "cuentas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "cuentas"
+        ]
+      },
+      "ResumenDto": {
+        "type": "object",
+        "properties": {
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de las cuentas no canceladas, sin recalcular."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas no canceladas cerradas en el rango."
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "nullable": true,
+            "description": "venta / cuentas. Null sin cuentas: un promedio sin divisor es null."
+          },
+          "subtotal": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "impuestos": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "propina": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "descuentos": {
+            "$ref": "#/components/schemas/DescuentosDto"
+          },
+          "cortesias": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              null
+            ],
+            "description": "Siempre null: el modelo aún no distingue una cortesía (esquema-sr.md §2)."
+          },
+          "comensales": {
+            "$ref": "#/components/schemas/ComensalesDto"
+          },
+          "cancelados": {
+            "description": "Cancelados del rango; no suman a la venta.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CanceladosDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "venta",
+          "cuentas",
+          "ticketPromedio",
+          "subtotal",
+          "impuestos",
+          "propina",
+          "descuentos",
+          "cortesias",
+          "comensales",
+          "cancelados"
+        ]
+      },
+      "VentaHoraDto": {
+        "type": "object",
+        "properties": {
+          "hora": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 23,
+            "description": "Hora local de cierre en la sucursal."
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "cuentas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "hora",
+          "venta",
+          "cuentas"
+        ]
+      },
+      "FormaPago": {
+        "type": "string",
+        "enum": [
+          "efectivo",
+          "tarjeta",
+          "transferencia",
+          "otro"
+        ]
+      },
+      "MontoFormaDto": {
+        "type": "object",
+        "properties": {
+          "forma": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FormaPago"
+              }
+            ]
+          },
+          "monto": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          }
+        },
+        "required": [
+          "forma",
+          "monto"
+        ]
+      },
+      "SinCatalogoDto": {
+        "type": "object",
+        "properties": {
+          "formaRaw": {
+            "type": "string",
+            "description": "Texto de la forma de pago tal como viene de SR."
+          },
+          "monto": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          }
+        },
+        "required": [
+          "formaRaw",
+          "monto"
+        ]
+      },
+      "FormasPagoDto": {
+        "type": "object",
+        "properties": {
+          "formas": {
+            "description": "Las cuatro formas del ENUM, siempre y en este orden. Incluye `otro`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MontoFormaDto"
+            }
+          },
+          "sinCatalogo": {
+            "description": "Formas de SR sin entrada en el catálogo de la empresa (ya sumadas en `otro`).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SinCatalogoDto"
+            }
+          }
+        },
+        "required": [
+          "formas",
+          "sinCatalogo"
+        ]
+      },
+      "ProductoTopDto": {
+        "type": "object",
+        "properties": {
+          "producto": {
+            "type": "string",
+            "description": "Nombre del producto (se agrupa por nombre)."
+          },
+          "importe": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de las partidas, ANTES del descuento del cheque: no cuadra con la venta."
+          },
+          "cantidad": {
+            "type": "string",
+            "example": "2.000",
+            "description": "3 decimales, en texto."
+          }
+        },
+        "required": [
+          "producto",
+          "importe",
+          "cantidad"
+        ]
+      },
+      "PartidaTicketDto": {
+        "type": "object",
+        "properties": {
+          "producto": {
+            "type": "string"
+          },
+          "categoria": {
+            "type": "string",
+            "nullable": true
+          },
+          "cantidad": {
+            "type": "string",
+            "example": "2.000",
+            "description": "3 decimales, en texto."
+          },
+          "precioUnit": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "total": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "modificadores": {
+            "description": "Tal como los guardó la ingesta (esquema-sr.md §13: `{ nombre, precio }`).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModificadorDto"
+            }
+          }
+        },
+        "required": [
+          "producto",
+          "categoria",
+          "cantidad",
+          "precioUnit",
+          "total",
+          "modificadores"
+        ]
+      },
+      "PagoTicketDto": {
+        "type": "object",
+        "properties": {
+          "formaRaw": {
+            "type": "string",
+            "description": "Texto de SR."
+          },
+          "forma": {
+            "description": "Derivada AL LEER con el catálogo de la empresa; sin entrada = `otro`.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FormaPago"
+              }
+            ]
+          },
+          "monto": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          }
+        },
+        "required": [
+          "formaRaw",
+          "forma",
+          "monto"
+        ]
+      },
+      "TicketDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "mesa": {
+            "type": "string",
+            "nullable": true
+          },
+          "mesero": {
+            "type": "string",
+            "nullable": true
+          },
+          "comensales": {
+            "type": "number",
+            "nullable": true,
+            "description": "Null = SR no lo reportó."
+          },
+          "abiertoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+          },
+          "cerradoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "UTC."
+          },
+          "cancelado": {
+            "type": "boolean",
+            "description": "Los cancelados se listan (con este flag) pero NO suman a la venta: no los sumes en un total ni en un export."
+          },
+          "subtotal": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "impuestos": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "descuentos": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "propina": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "total": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "partidas": {
+            "description": "En el orden del POS.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartidaTicketDto"
+            }
+          },
+          "pagos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PagoTicketDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "folio",
+          "mesa",
+          "mesero",
+          "comensales",
+          "abiertoAt",
+          "cerradoAt",
+          "cancelado",
+          "subtotal",
+          "impuestos",
+          "descuentos",
+          "propina",
+          "total",
+          "partidas",
+          "pagos"
+        ]
+      },
+      "PaginaTicketsDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "Del más reciente al más viejo (por cierre; los cancelados sin cierre, por apertura). Vacío si la página pasa del final.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Tickets del filtro completo, no de esta página."
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "pagina",
+          "porPagina"
+        ]
+      },
+      "SnapshotMesasDto": {
+        "type": "object",
+        "properties": {
+          "capturadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cuándo leyó el agente las mesas, con el reloj de la PC del restaurante. UTC."
+          },
+          "recibidoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cuándo lo recibió el API por primera vez, con el reloj del servidor. UTC."
+          },
+          "edadSegundos": {
+            "type": "number",
+            "description": "Segundos desde `capturadoAt`, recortado a ≥ 0. Depende del reloj del agente: si está adelantado, el dato parece más fresco de lo que es."
+          },
+          "edadRecepcionSegundos": {
+            "type": "number",
+            "description": "Segundos desde `recibidoAt` (reloj del servidor), ≥ 0. Es la edad confiable para decidir si una sucursal está desconectada."
+          },
+          "mesas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "Las cuentas abiertas tal como las mandó el agente. La forma de cada mesa todavía no se fija (supuesto, esquema-sr.md §5; la fijan F1-023/F1-050)."
+          }
+        },
+        "required": [
+          "capturadoAt",
+          "recibidoAt",
+          "edadSegundos",
+          "edadRecepcionSegundos",
+          "mesas"
+        ]
+      },
+      "MesasSucursalDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA de la sucursal."
+          },
+          "snapshot": {
+            "nullable": true,
+            "description": "El último snapshot recibido, o null si nunca ha llegado uno.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SnapshotMesasDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sucursalId",
+          "nombre",
+          "zonaHoraria",
+          "snapshot"
+        ]
+      },
+      "EmpresaDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "activo"
+        ]
+      },
+      "SucursalDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA. Es la que corta \"hoy\" en los agregados de esta sucursal."
+          },
+          "activo": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "empresaId",
+          "nombre",
+          "zonaHoraria",
+          "activo"
         ]
       }
     }

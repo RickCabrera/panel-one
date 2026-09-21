@@ -655,3 +655,93 @@ server.
 
 **Qué haría distinto.** Correr desde el principio los specs de base de datos con `--runInBand`,
 y medir rendimiento con varias muestras desde el primer día. Las dos cosas costaron una vuelta.
+
+## 2026-09-20 23:26 — F1-033 · Endpoints de lectura para el frontend
+**Estado:** CERRADA (PR de `feat/F1-033`, squash a main)
+
+**Qué quedó hecho.**
+- Endpoints nuevos, todos con Bearer y para cualquier rol:
+  - `GET /ventas/resumen`, `/ventas/por-hora`, `/ventas/formas-pago` y `/ventas/top-productos`.
+    Reciben `empresaId` (obligatorio), `sucursalId?`, `desde` y `hasta` (días locales), y el top
+    además `por` y `limite`. Pasan por `CacheAgregados` (15 s).
+  - `GET /ventas/tickets`: paginado (`pagina` ≤ 10000, `porPagina` ≤ 100, default 50), con
+    `folio?` por prefijo y el detalle inline (partidas en orden del POS y pagos con la forma
+    derivada del catálogo).
+  - `GET /mesas/abiertas`: el último snapshot de cada sucursal, con su edad.
+  - `GET /empresas` y `GET /sucursales?empresaId?`.
+- `/docs` (Swagger UI y `/docs/openapi.json`) protegido con HTTP Basic (`DOCS_USUARIO` /
+  `DOCS_PASSWORD`). Sin las dos variables **no se monta**. Con una sola, o con una contraseña de
+  menos de 16 caracteres, la API no arranca.
+- `api/openapi.json` regenerado. Hay e2e de scoping por rol en cada endpoint
+  (`src/ventas/lectura.e2e.spec.ts`, 104 casos), y además unitarios del cache, e2e de `/docs` y
+  el test de la CTE `tickets`. `npm test` da 464/464, 0 skips. Lint, typecheck,
+  `prisma validate` y build limpios. Sin migración. El revisor aprobó el plan y el entregable,
+  los dos con observaciones, que están aquí.
+
+**Decisiones que tomé y por qué.**
+- **Un promedio sin divisor es `null`.** F1-032 lo dejó abierto. `ticketPromedio` (resumen y
+  comparativo) era `"0.00"` sin cuentas y ahora es `null`, igual que `promedioPorComensal`. Un
+  "0.00" diría que el ticket promedio fue de cero pesos. El test de F1-032 se adaptó a la
+  convención; no se aflojó.
+- **`verificarAlcance()` (`api/src/scope/alcance.ts`)** es la verificación única que responde
+  404 a una empresa fuera del scope o a una sucursal que no es de esa empresa. La usan los
+  agregados, los tickets, las mesas y `/sucursales?empresaId`. Ni `admin_global` puede mezclar
+  la empresa A con una sucursal de B. `AgregadosVentasService.consulta()` pasó a ser pública
+  para que `TicketsService` la reuse.
+- **Qué cuenta como ticket:** la CTE nueva `tickets` = `ventas` ∪ `cancelados`.
+  - `cancelados` ahora expone `empresa_id`, `folio` y `momento = COALESCE(cerrado_at, abierto_at)`,
+    y ganó un prefiltro grueso sargable partido en dos ramas.
+  - Los cancelados se listan con su flag y **no suman**. F1-042 no debe sumarlos en el pie ni en
+    el CSV.
+  - Está en esquema-sr.md §2.
+- **La búsqueda por folio** usa `starts_with(folio, $1)`, con el valor como parámetro: literal, sin
+  comodines que escapar. Busca **dentro del rango de fechas**, no en todo el histórico.
+- **Cache:** la llave lleva el scope del token (`global` o `empresa:<id>`) más el endpoint y
+  todos los parámetros. Se consulta en el controller, después del ValidationPipe, y sólo guarda
+  lo exitoso. Los valores se congelan. El tope es de 1000 entradas. Tickets y mesas no se
+  cachean.
+- **`Reloj` (`api/src/comun/reloj.ts`, módulo global)** es inyectable. Los e2e lo reemplazan con
+  `overrideProvider(Reloj)`, que es el mismo provider que usan el cache y las mesas.
+- **Mesas:** `edadSegundos` sale de `capturadoAt`, que usa el reloj del agente, y se recorta a
+  ≥ 0. `edadRecepcionSegundos` sale de `recibidoAt`, que usa el reloj del servidor, y **es la que
+  F1-050 debería usar para "desconectada"**. `mesas` va tal cual; su forma sigue siendo
+  SUPUESTO (§5).
+- **Basic en `/docs` y no JWT:** el navegador no manda Bearer al abrir la UI, y los guards de
+  Nest no corren en las rutas de Swagger. El JSON vive en `/docs/openapi.json`, dentro del
+  prefijo protegido, y no existen `/docs-json` ni `/docs-yaml`.
+- `/sucursales?empresaId=` de otra empresa da 404, no `[]`, para ser consistente con el resto.
+
+**Trampas que encontré.**
+- **NO corras `npx prettier --write src`.** Reescribe en LF todos los archivos del árbol y git
+  marca 50 archivos como modificados. Su diff de contenido está vacío: es la caché de stat, y
+  `git update-index --really-refresh` lo limpia. Formatea sólo los archivos que tocaste.
+- **En los e2e, `get(ruta)` es una función `async`:** devuelve una Promise, no el Test de
+  supertest, así que `.expect(401)` no existe. Usa `expect((await get(...)).status)`.
+- `openapi.spec.ts` lista los paths a mano y rompe con cada endpoint nuevo, a propósito.
+- Un heredoc largo con backticks y `${}` rompió el Bash tool (`unexpected EOF`). Para archivos
+  TS grandes usa Write.
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **F1-043 va a llegar sin API.** Necesita un endpoint de comparativo entre sucursales (el
+  servicio ya existe: `comparativoSucursales`) y otro de **ventas por día** (no existe). No
+  estaban en la lista de F1-033. F1-043 es sólo `/web`: quien la tome tiene que decidir si los
+  agrega en esa tarea o si se abre una `F1-033b`. Lo anoto, no lo creo.
+- **Tickets no es una foto consistente:** el conteo, la página y el detalle son lecturas
+  separadas. Si la ingesta reescribe un cheque entre ellas, `total` puede no coincidir con la
+  unión de las páginas, y si un cheque desaparece entre la página y el detalle, sale 500 (a
+  propósito, en vez de un hueco silencioso). F1-042 no debe tratar el total como exacto al peso.
+- **Rendimiento:** medí tickets con 10k cheques en A: 65–110 ms por request (página 1, 100, 199 y
+  búsqueda por folio, en esta máquina). No se midió con más volumen ni en el VPS.
+- El detalle de tickets (`findMany`) y las lecturas de mesas corren con Prisma, **sin
+  `statement_timeout`**. Es nuestra base, no la de SR, pero conviene revisarlo en F1-092.
+- La llave del cache no normaliza mayúsculas de los UUID: dos entradas para el mismo filtro. No
+  filtra datos entre tenants; sólo ocupa espacio.
+- `/mesas/abiertas` hace una consulta por sucursal (N+1). Con pocas sucursales está bien.
+- En `lectura.e2e.spec.ts`, "tickets no se cachea" reusa el cheque que crea el test de cache.
+  Depende del orden y es frágil si alguien filtra tests.
+- Sigue pendiente de F1-060 validar `zona_horaria` como IANA (una inválida hace 500 en
+  agregados y tickets).
+
+**Qué haría distinto.** Hacer la prueba de mutación (quitar un filtro de scope y ver que los
+tests truenan) desde el primer verde, no al final. 104 verdes al primer intento no prueban que
+los tests muerdan.
