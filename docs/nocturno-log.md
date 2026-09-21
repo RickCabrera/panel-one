@@ -50,3 +50,47 @@ de esta tarea. Si es una tarea nueva, dilo y di dónde debería ir en la cola.
 ---
 
 <!-- Las entradas empiezan aquí. La primera sesión nocturna escribe debajo de esta línea. -->
+
+## 2026-09-20 20:25 — F1-001 · Monorepo y tooling base
+**Estado:** CERRADA PARCIAL (corte por máquina, no por tiempo) — falta verificar
+`docker compose up`; el resto queda en **F1-001b**, que está en **Diurnas**.
+
+> Sesión interactiva con Ricardo presente, no nocturna. Se retomó después de que un
+> reinicio mató la sesión original con todo el andamiaje en staging en `feat/F1-001`.
+> Por decisión explícita de Ricardo (andamiaje, él presente): sin pase de revisor y merge
+> sin esperar al CI, en cuanto pasaron los checks locales. No es precedente para el bucle.
+
+**Qué quedó hecho.** Carpetas `/agent`, `/api`, `/web`, `/infra` con su tooling:
+`.editorconfig`, `.gitignore` por carpeta, ESLint + Prettier en `/api` y `/web`,
+`Directory.Build.props` con nullable en `/agent`, README raíz, `infra/docker-compose.yml`
+con Postgres 16 vacío. Los carriles `api`, `web` y `agent` de `.github/workflows/ci.yml`
+quedaron encendidos sin sus pasos de test (cada uno anota la tarea que lo enciende:
+F1-011, F1-041, F1-021).
+
+Verificado en local, sobre el commit de la rama:
+- `npm run dev` en `/api`: Nest arranca, `GET http://localhost:3000/` → 200
+  `{"servicio":"monitor-api","estado":"arriba"}`.
+- `npm run dev` en `/web`: Vite arranca, `GET http://localhost:5173/` → 200.
+- `dotnet build --configuration Release` en `/agent`: 0 advertencias, 0 errores.
+- `/api`: lint limpio, typecheck limpio, jest 1/1. `/web`: lint limpio, build (tsc + vite)
+  limpio, vitest 1/1. `prettier --check .` limpio.
+- `docker compose config -q` en `/infra`: válido.
+
+**Por qué el corte.** Esta máquina no tiene la virtualización habilitada en la BIOS, así
+que Docker Desktop no puede arrancar el engine: `docker compose config` valida, pero
+`docker compose up` no se puede correr. Lo único del "Listo cuando" que no se verificó es
+"`docker compose up` en `/infra` levanta postgres vacío".
+
+**Trampas que encontré.** `npm ci` avisa de postinstall bloqueados por `allow-scripts`
+(`unrs-resolver`); no afecta lint/build/test hoy, pero si algo de ESLint empieza a fallar
+raro en otra máquina, empieza por ahí.
+
+**Qué quedó abierto.** **F1-001b** (Diurnas): correr `docker compose up -d` en `/infra` en
+una máquina con virtualización y confirmar que Postgres queda healthy y vacío. Es diurna
+porque depende del hardware de la máquina, no de código. **Ojo:** F1-010 (`prisma migrate
+dev`) necesita un Postgres corriendo; si la máquina sigue sin virtualización, esa tarea
+también se va a topar con esto (alternativa: Postgres nativo de Windows en el 5432 con las
+credenciales de `infra/.env.example`).
+
+**Qué haría distinto.** Commitear el andamiaje en cuanto compila, aunque falten checks:
+un reinicio con todo en staging es trabajo que sólo sobrevivió de milagro.
