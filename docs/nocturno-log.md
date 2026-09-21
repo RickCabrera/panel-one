@@ -468,3 +468,103 @@ volver a caer en la trampa del heredoc que F1-011 ya había dejado anotada.
 
 **Qué haría distinto.** Nada relevante. Escribir los tests de errores comparando SQLSTATE
 desde el principio me habría ahorrado una vuelta.
+
+## 2026-09-20 22:24 — F1-031 · Endpoint de ingesta idempotente
+**Estado:** CERRADA (PR de `feat/F1-031`, squash a main)
+
+**Qué quedó hecho.**
+- `POST /ingesta/eventos` con `@AutenticacionAgente()` (X-Api-Key, 120/min por sucursal).
+  Recibe `{ eventos: [...] }` con 1 a 100 eventos `{ id, tipo: cheque|snapshot|heartbeat,
+  datos }` y responde **200** con `{ procesados: [ids], rechazados: [{ id, indice, motivo,
+  reintentable }] }`. El contrato está en `api/openapi.json` (esquemas `Evento*Dto`,
+  `RechazoDto`).
+- `ScopedPrismaService.deSucursal(agente)` → `EscrituraSucursal.enTransaccion(fn)`
+  (`api/src/scope/escritura-sucursal.ts`). Es la única forma de escribir de la ingesta y la
+  única transacción del helper. Cada operación pone `sucursalId`/`empresaId` desde la key.
+  Los filtros vacíos o `undefined` truenan, y los datos no pueden traer columnas de
+  `COLUMNAS_INTOCABLES`, que se mudó a `scope.helper.ts`.
+- Tests: `normalizar.spec.ts`, `escritura-sucursal.spec.ts`, `ingesta.service.spec.ts` e
+  `ingesta.e2e.spec.ts`, todos contra Postgres real salvo el primero. En total, `npm test`
+  da 232/232 con 0 skips. Lint, typecheck, `prisma validate` y build limpios. El revisor
+  aprobó el plan y el entregable, los dos con observaciones, que están aquí abajo.
+
+**Decisiones que tomé y por qué.**
+- **El ValidationPipe global valida sólo el SOBRE**, y cada evento se valida a mano en el
+  servicio (`plainToInstance` + `validate`, con `forbidNonWhitelisted`). Si el pipe validara
+  los eventos anidados, uno malo tumbaría el lote entero con un 400. Un sobre malo (vacío,
+  más de 100 eventos, no-arreglo, un campo de más) sí es 400.
+- **Una transacción por evento, en orden.** Si un evento falla, sólo se revierte el suyo.
+- **`reintentable`:** `false` para eventos inválidos y errores deterministas (desbordamiento,
+  FK, un bug nuestro); `true` sólo para la lista cerrada de `esTransitorio()`
+  (`ingesta.service.ts`: P1001/P1002/P1008/P1017/P2002/P2024/P2028/P2034, más los errores de
+  inicialización y panic de Prisma). **F1-024 construye contra esto:** un rechazo con
+  `false` no se reenvía en bucle.
+- **Idempotencia literal:** en la misma tx se lee el cheque guardado y, si su forma canónica
+  (`ingesta/canonico.ts`) es igual a la del entrante, **no se escribe nada**. Así no cambian
+  ni los ids de partidas y pagos ni `updated_at`, y la ventana de relectura de 2 h de F1-022
+  no genera escrituras. La forma canónica usa fechas en ms, importes a 2 decimales,
+  cantidades a 3, llaves de jsonb ordenadas y pagos ordenados. Si hubo cambios, hace un
+  `upsert` por la unique `(sucursal_id, folio_sr)` y luego borra y recrea partidas y pagos.
+  **La lectura previa es sólo un atajo, la llave la pone la constraint.** Hay un test que
+  confirma que Prisma emite el `INSERT ... ON CONFLICT` nativo, que no depende de la forma
+  del where. Si alguien le agrega una escritura anidada al upsert, Prisma cae en select+insert
+  y ese test truena.
+- **El dinero viaja en texto** (regex `DINERO`: 10 enteros, hasta 4 decimales) y se redondea
+  en código con `Prisma.Decimal` `ROUND_HALF_UP`, que es mitad lejos de cero, igual que
+  NUMERIC. Lo que ya no cabe tras redondear se rechaza con `reintentable:false`, así el
+  agente no lo reenvía para siempre. **El total del cheque nunca se recalcula.**
+- **Fechas:** se exige zona (`Z` u offset); una sin zona se rechaza.
+- `DECISION PROVISIONAL (nocturno)` en `api/src/ingesta/normalizar.ts#derivarFormaPago`:
+  la forma de pago es siempre `otro` y el crudo va en `forma_raw`. F1-032 trae el catálogo.
+- **Snapshots:** upsert por `(sucursal_id, capturado_at)` (un reenvío no mueve
+  `recibido_at`). La purga, en la misma tx, borra los de esa sucursal con más de 24 h
+  **salvo el último**, aunque sea viejo. Se sigue sin convertir en una sola fila, como
+  decidió F1-030.
+- **Heartbeat:** upsert de `AgenteEstado`. Si llega uno con `ultimaLecturaAt` anterior a la
+  guardada, **se descarta completo**, incluidos `versionAgente` y `ultimoError`; es una
+  decisión consciente y está en el OpenAPI. Uno con `ultimaLecturaAt: null` no borra la
+  última lectura conocida. Si nada cambió, no se escribe.
+- **Body JSON de hasta 5 MB** (`configurar-app.ts`, `LIMITE_BODY_JSON`). El default de
+  Express, 100 KB, no alcanza para 100 cheques. Gzip se infla solo, y el tope se mide ya
+  inflado: una bomba gzip da 413, y hay test.
+- `configurarApp` ahora recibe `NestExpressApplication`, porque `useBodyParser` es de ahí.
+  Por eso los e2e de auth y agentes crean la app con `createNestApplication<NestExpressApplication>()`.
+- `escritura-sucursal.ts` **no** está en la allowlist de eslint: sólo importa tipos. Hay un
+  test que prueba que la regla muerde ahí y en `src/ingesta`.
+
+**Trampas que encontré.**
+- **Supertest/superagent re-serializa un `Buffer` como JSON** si el Content-Type es JSON.
+  Un body gzip llega como `{"type":"Buffer","data":[...]}` y body-parser responde 400
+  ("incorrect header check"), aunque el server está bien. El e2e de gzip usa `node:http`
+  crudo (`postCrudo`). `.serialize((b) => b)` también sirve, pero no tipa.
+- Para requests en paralelo con supertest (el ECONNREFUSED de F1-012), el e2e hace
+  `app.listen(0)` y usa `app.getUrl()`, en vez de `getHttpServer()`.
+- `limpiarFixtures` no borraba `agente_estado`. Con FK Restrict, el primer heartbeat de un
+  test rompía la limpieza de sucursales. Ya lo borra.
+- `openapi.spec.ts` lista **todos** los paths a mano: cada endpoint nuevo lo rompe a
+  propósito, y hay que agregarlo ahí.
+- **Prettier reescribe los archivos en LF** y git avisa "LF will be replaced by CRLF". No
+  es un problema (autocrlf).
+
+**Qué quedó abierto** (nada es tarea nueva):
+- **F1-024, orden entre lotes:** si dos lotes en vuelo traen versiones distintas del mismo
+  cheque, gana el último commit, no la versión más reciente de SR, y el API no tiene cómo
+  ordenarlos. **El agente debe mandar los lotes en serie, nunca dos a la vez por sucursal.**
+  También debe partir el lote si recibe 413, y no reenviar los `reintentable:false`.
+- **F1-025:** el heartbeat sólo acepta los 4 campos que hoy tiene `AgenteEstado`. Latencia
+  de query y tamaño de cola necesitan migración y ampliar `DatosHeartbeatDto`. Ojo: con
+  `forbidNonWhitelisted`, un agente que mande campos nuevos contra un api viejo recibe sus
+  heartbeats rechazados; hay que desplegar primero el api.
+- **Folios reiniciados (esquema-sr.md §2 y §13):** el upsert por `(sucursal_id, folio_sr)`
+  pisa en silencio un cheque viejo si SR reinicia folios. **Es lo primero que hay que validar
+  en F1-090.**
+- **F1-092:** el tope de 5 MB aplica a todas las rutas, `/auth/login` incluida. Si se
+  vuelve superficie de abuso, hay que acotarlo por ruta.
+- **F1-032:** la forma de pago está en `otro` para todo; el desglose por forma necesita el
+  catálogo sobre `forma_raw`. El índice `(sucursal_id, cerrado_at)` sigue pendiente, como
+  anotó F1-030.
+- La forma de cada mesa del snapshot no se valida: la fijan F1-023/F1-050.
+
+**Qué haría distinto.** Probar el transporte (gzip, tamaño) con un cliente HTTP crudo desde
+el principio. Me costó una vuelta descubrir que el 400 era del cliente de test y no del
+server.
