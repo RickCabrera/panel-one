@@ -1,18 +1,25 @@
+import { useRef, useState } from 'react';
+
 import { ErrorApi } from '../api/cliente';
 import { useAlcance } from '../filtros/alcance';
 import { horaEn, zonaDelPanel } from '../filtros/periodo';
 import type { Filtro } from './inicio/consultas';
 import { Esqueleto } from './inicio/Tarjeta';
 import { useAhora, useMonitorMesas } from './mesas/consultas';
-import { Avisos, GridMesas, TarjetasKpi } from './mesas/Monitor';
+import { DetalleMesa } from './mesas/Detalle';
+import { Avisos, GridMesas, TarjetasKpi, type AbrirDetalle } from './mesas/Monitor';
 import { armarMonitor } from './mesas/reglas';
+import { buscarSeleccion, seleccionDe, type Seleccion } from './mesas/seleccion';
+import { nombreMesa } from './mesas/textos';
 import { Vista } from './Vista';
 
 /**
  * Monitor de mesas en vivo (F1-050): el último snapshot de cada sucursal, consultado
  * cada 20 s. Una sucursal cuya última lectura pasó el umbral (reglas.ts) NO pinta sus
  * mesas: sale un aviso de desconectada en su lugar, nunca datos viejos como vivos.
- * El filtro por sucursal es el del topbar (F1-040).
+ * El filtro por sucursal es el del topbar (F1-040). Clic en una mesa abre su detalle
+ * de consumo (F1-051) con los datos de esta MISMA consulta: abrir o cerrar el modal no
+ * pide nada al API ni desmonta el grid.
  */
 export function Mesas() {
   const { empresa, sucursal, sucursalId, sucursales } = useAlcance();
@@ -25,6 +32,30 @@ export function Mesas() {
       ? { empresaId: empresa.id, sucursalId: sucursal?.id }
       : null;
   const consulta = useMonitorMesas(filtro);
+
+  // La selección vale sólo en el alcance en que se hizo: al cambiar de empresa o
+  // sucursal se descarta (reset en render, sin efecto).
+  const alcance = `${empresa?.id ?? ''}|${sucursalId ?? ''}`;
+  const [seleccion, setSeleccion] = useState<{ alcance: string; sel: Seleccion } | null>(null);
+  if (seleccion !== null && seleccion.alcance !== alcance) setSeleccion(null);
+  const abridor = useRef<HTMLButtonElement | null>(null);
+  const contenido = useRef<HTMLDivElement>(null);
+
+  const abrir: AbrirDetalle = (mesa, boton) => {
+    abridor.current = boton;
+    setSeleccion({
+      alcance,
+      sel: seleccionDe(mesa, consulta.dataUpdatedAt, nombreMesa(mesa, !sucursal)),
+    });
+  };
+  const cerrar = () => {
+    setSeleccion(null);
+    // El foco vuelve a la tarjeta que lo abrió; si ya no está, al contenido.
+    const boton = abridor.current;
+    abridor.current = null;
+    if (boton?.isConnected) boton.focus();
+    else contenido.current?.focus();
+  };
 
   return (
     <Vista titulo="Monitor de Mesas">
@@ -52,7 +83,17 @@ export function Mesas() {
         </button>
       </div>
 
-      <Contenido consulta={consulta} ahora={ahora} zona={zona} varias={!sucursal} />
+      <div ref={contenido} tabIndex={-1} className="outline-none">
+        <Contenido
+          consulta={consulta}
+          ahora={ahora}
+          zona={zona}
+          varias={!sucursal}
+          seleccion={seleccion?.alcance === alcance ? seleccion.sel : null}
+          onAbrir={abrir}
+          onCerrar={cerrar}
+        />
+      </div>
     </Vista>
   );
 }
@@ -62,11 +103,17 @@ function Contenido({
   ahora,
   zona,
   varias,
+  seleccion,
+  onAbrir,
+  onCerrar,
 }: {
   consulta: ReturnType<typeof useMonitorMesas>;
   ahora: number;
   zona: string;
   varias: boolean;
+  seleccion: Seleccion | null;
+  onAbrir: AbrirDetalle;
+  onCerrar: () => void;
 }) {
   if (consulta.data === undefined) {
     if (consulta.isError) {
@@ -109,9 +156,19 @@ function Contenido({
             <TarjetasKpi kpis={monitor.kpis} zona={zona} />
           </div>
           <div className="mt-6">
-            <GridMesas mesas={monitor.mesas} conSucursal={varias} />
+            <GridMesas mesas={monitor.mesas} conSucursal={varias} onAbrir={onAbrir} />
           </div>
         </>
+      )}
+      {/* Fuera del condicional del grid: si la sucursal se desconecta con el modal
+          abierto, el modal lo dice en vez de desaparecer. */}
+      {seleccion !== null && (
+        <DetalleMesa
+          mesa={buscarSeleccion(monitor.mesas, consulta.dataUpdatedAt, seleccion)}
+          titulo={seleccion.titulo}
+          conSucursal={varias}
+          onCerrar={onCerrar}
+        />
       )}
     </>
   );

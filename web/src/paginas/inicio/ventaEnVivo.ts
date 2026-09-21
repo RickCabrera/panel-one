@@ -56,9 +56,16 @@ export function ventaEnVivo(filas: readonly MesasSucursal[]): VentaEnVivo {
 }
 
 export function totalDe(mesa: Record<string, unknown>): bigint | null {
-  const total = mesa.total;
-  if (typeof total === 'string') return aCentavos(total);
-  if (typeof total === 'number' && Number.isFinite(total)) return aCentavos(String(total));
+  return importeDe(mesa.total);
+}
+
+/**
+ * Un importe del snapshot: texto decimal de hasta 2 cifras (`"350.50"`) o número
+ * finito, en centavos. Cualquier otra cosa es `null` ("Sin dato"), nunca 0.
+ */
+export function importeDe(v: unknown): bigint | null {
+  if (typeof v === 'string') return aCentavos(v);
+  if (typeof v === 'number' && Number.isFinite(v)) return aCentavos(String(v));
   return null;
 }
 

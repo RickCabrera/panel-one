@@ -5,6 +5,7 @@ import { horaEn } from '../../filtros/periodo';
 import { Tarjeta } from '../inicio/Tarjeta';
 import { edadLegible } from '../inicio/ventaEnVivo';
 import type { Frescura, Kpis, MesaMonitor, Semaforo, SucursalMonitor } from './reglas';
+import { nombreMesa, TEXTO_SEMAFORO } from './textos';
 
 /** Cuántas partidas se ven en la tarjeta antes del "n partidas más". */
 export const PARTIDAS_VISIBLES = 3;
@@ -134,23 +135,35 @@ const BORDE: Record<Semaforo, string> = {
   'sin-dato': 'border-slate-300',
 };
 
-const TEXTO_SEMAFORO: Record<Semaforo, string> = {
-  ok: 'a tiempo',
-  alerta: 'en alerta',
-  rojo: 'requiere atención',
-  'sin-dato': 'sin hora de apertura',
-};
+/** Abre el detalle; `boton` es a donde vuelve el foco al cerrarlo. */
+export type AbrirDetalle = (mesa: MesaMonitor, boton: HTMLButtonElement) => void;
 
-function TarjetaMesa({ mesa, conSucursal }: { mesa: MesaMonitor; conSucursal: boolean }) {
+function TarjetaMesa({
+  mesa,
+  conSucursal,
+  onAbrir,
+}: {
+  mesa: MesaMonitor;
+  conSucursal: boolean;
+  onAbrir: AbrirDetalle;
+}) {
   const partidas = mesa.partidas ?? [];
   const resto = partidas.length - PARTIDAS_VISIBLES;
-  const nombre = `Mesa ${mesa.mesa ?? 'sin número'}`;
+  const nombre = nombreMesa(mesa, conSucursal);
   return (
     <li
-      aria-label={conSucursal ? `${nombre} · ${mesa.sucursal}` : nombre}
+      aria-label={nombre}
       data-semaforo={mesa.semaforo}
-      className={`min-w-0 rounded-lg border-2 bg-white p-3 shadow-sm ${BORDE[mesa.semaforo]}`}
+      className={`relative min-w-0 rounded-lg border-2 bg-white p-3 shadow-sm hover:bg-slate-50 ${BORDE[mesa.semaforo]}`}
     >
+      {/* Botón "estirado" sobre toda la tarjeta: un <button> no puede contener la
+          lista de partidas, así que no envuelve el contenido. */}
+      <button
+        type="button"
+        aria-label={`Ver consumo de ${nombre}`}
+        onClick={(e) => onAbrir(mesa, e.currentTarget)}
+        className="absolute inset-0 z-10 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600"
+      />
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="truncate text-lg font-semibold">{mesa.mesa ?? 'Sin dato'}</h3>
         <span className="shrink-0 font-semibold tabular-nums" data-testid="mesa-total">
@@ -185,7 +198,15 @@ function TarjetaMesa({ mesa, conSucursal }: { mesa: MesaMonitor; conSucursal: bo
   );
 }
 
-export function GridMesas({ mesas, conSucursal }: { mesas: MesaMonitor[]; conSucursal: boolean }) {
+export function GridMesas({
+  mesas,
+  conSucursal,
+  onAbrir,
+}: {
+  mesas: MesaMonitor[];
+  conSucursal: boolean;
+  onAbrir: AbrirDetalle;
+}) {
   if (mesas.length === 0) {
     return <p className="py-6 text-center text-sm text-slate-500">No hay mesas abiertas.</p>;
   }
@@ -195,7 +216,7 @@ export function GridMesas({ mesas, conSucursal }: { mesas: MesaMonitor[]; conSuc
       className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
     >
       {mesas.map((m) => (
-        <TarjetaMesa key={m.clave} mesa={m} conSucursal={conSucursal} />
+        <TarjetaMesa key={m.clave} mesa={m} conSucursal={conSucursal} onAbrir={onAbrir} />
       ))}
     </ul>
   );
