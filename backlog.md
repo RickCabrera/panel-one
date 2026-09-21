@@ -210,7 +210,7 @@ por folio; export CSV del filtro actual (generado en cliente).
 abre bien en Excel (BOM UTF-8).
 
 ## 12 · F1-043 · Reportes básicos
-`[ ]` **Epic 4 — Frontend: Panel de ventas**
+`[x]` **Epic 4 — Frontend: Panel de ventas**
 
 Vista con: top productos (tabla + barra), ventas por día del rango (barras), comparativo
 entre sucursales (tabla con venta, tickets, ticket promedio). Export CSV por reporte.
