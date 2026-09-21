@@ -95,6 +95,24 @@ de esto se ha visto en una instalación real; cada punto es una
   dentro de un cheque que sigue vivo, hoy no hay dónde guardarlo. Hay que saber cómo lo
   representa SR.
 
+**Lo que los agregados (F1-032, `api/src/ventas/agregados-ventas.service.ts`) suponen de
+esta sección.** Todo esto se valida en F1-090 contra los reportes nativos de SR del mismo día,
+**peso a peso**:
+
+- ⚠️ **SUPUESTO — "venta" = suma de `cheques.total` tal como lo reporta SR, y ese total NO
+  incluye la propina.** La propina se reporta aparte (`resumen.propina`). Si el reporte nativo
+  de SR incluye la propina en la venta, o aplica los descuentos de otra forma, el panel no va a
+  cuadrar: hay que ajustar la definición en `resumen`, no el dato.
+- ⚠️ **SUPUESTO — el día de una venta es el día LOCAL de la sucursal en que se CERRÓ la cuenta**
+  (`cerrado_at` en `Sucursal.zona_horaria`), y la hora de la serie por hora también. Una cuenta
+  abierta a las 23:30 y cerrada a las 00:20 cuenta para el día siguiente. Falta confirmar que
+  SR corta igual (algunos POS cortan por turno o por "fecha de negocio").
+- ⚠️ **SUPUESTO — los cancelados sin `cerrado_at` se ubican por su `abierto_at`** para contarlos
+  (`resumen.cancelados`). Nunca entran en la venta.
+- ❓ **Cortesías: siguen sin representarse.** `resumen.cortesias` sale siempre `null`
+  (`DECISION PROVISIONAL (nocturno)` en el servicio) hasta que se resuelva la decisión abierta
+  de arriba.
+
 ---
 
 ## 3. Partidas de cuentas cerradas
@@ -146,6 +164,21 @@ guardamos en `forma_raw` y su mapeo a nuestro ENUM `efectivo/tarjeta/transferenc
 |---|---|---|
 | | | |
 
+**Dónde vive el mapeo (F1-032):** en la tabla `formas_pago_catalogo(empresa_id, forma_raw,
+forma)`, y se aplica **al leer**: el desglose por forma de pago hace `LEFT JOIN` del pago con el
+catálogo de su empresa y lo que no está mapeado cuenta como `otro` y además se lista aparte
+(`sinCatalogo`), para que se vea qué texto de SR falta mapear. Corregir el catálogo reclasifica
+todo el histórico sin reingerir. La columna `cheque_pagos.forma` que guarda la ingesta **no** la
+usa ningún agregado.
+
+- `DECISION PROVISIONAL (nocturno)` — **un catálogo por EMPRESA, no por sucursal**, y **match
+  exacto** del texto (sin normalizar mayúsculas, acentos ni espacios): normalizar es adivinar.
+  Si resulta que dos sucursales de la misma empresa nombran distinto la misma forma, basta con
+  dar de alta los dos textos. Si nombran IGUAL formas distintas, hace falta catálogo por sucursal.
+- Los textos del seed de desarrollo (`EFECTIVO`, `TARJETA DE CREDITO`, `VALES DESPENSA`, ...) son
+  **sintéticos**, no de SR. No los copies a la tabla de arriba como si fueran reales.
+- El catálogo todavía no tiene CRUD: lo trae F1-060.
+
 **Cuentas con pago mixto:** _(pendiente — cómo se reparten los montos)_
 
 **Lo que el modelo de Postgres (F1-030, tabla `cheque_pagos`) ya supone de esta sección:**
@@ -188,6 +221,12 @@ ciclo como `{ capturadoAt, mesas: object[] }` y se guarda sin validar la forma d
 | | | | |
 
 **Productos vendidos que no están en catálogo:** _(pendiente — si pasa, y cómo se ven)_
+
+**Lo que el top de productos (F1-032) supone:** ⚠️ **SUPUESTO — el nombre del producto es
+estable.** El contrato de ingesta no trae un id de producto de SR, así que el top agrupa por
+`cheque_partidas.producto` (texto). Si SR renombra un producto, aparece como dos. Su `importe`
+es la suma de `partidas.total`, **antes** del descuento del cheque: no cuadra con la venta total
+y no debe compararse con ella.
 
 ---
 
@@ -280,7 +319,8 @@ _(pendiente)_
 - `DECISION PROVISIONAL (nocturno)` — **la forma de pago se guarda como `otro`** siempre
   (`api/src/ingesta/normalizar.ts#derivarFormaPago`). Sin catálogo de ninguna instalación
   (§4), adivinar por el texto metería errores silenciosos en el desglose. El texto crudo
-  queda en `forma_raw`; F1-032 deriva el ENUM con su catálogo.
+  queda en `forma_raw`. F1-032 deriva el ENUM **al leer** con el catálogo
+  `formas_pago_catalogo` (§4); la columna `forma` guardada no la usa ningún agregado.
 - ⚠️ **SUPUESTO — la forma de una mesa en el snapshot todavía no se conoce** (§5, F1-023
   bloqueada por F1-090). El API sólo exige `mesas: object[]` y guarda `{ mesas }` en el
   `payload` tal cual, sin validar lo de adentro. F1-023/F1-050 fijan la forma.

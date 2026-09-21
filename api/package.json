@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest --runInBand",
-    "openapi": "ts-node src/openapi/generar.ts"
+    "openapi": "ts-node src/openapi/generar.ts",
+    "seed:ventas": "ts-node prisma/seed-ventas.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.5",

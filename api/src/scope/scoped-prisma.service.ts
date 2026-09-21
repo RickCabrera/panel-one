@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { EmpresaScope } from './empresa-scope';
 import type { AgenteAutenticado } from '../auth/request-autenticado';
+import { ConsultaVentas, type FiltroVentas } from './consulta-ventas';
 import { EscrituraSucursal } from './escritura-sucursal';
 import {
   COLUMNAS_INTOCABLES,
@@ -129,5 +130,27 @@ export class ScopedPrismaService {
    */
   deSucursal(agente: AgenteAutenticado): EscrituraSucursal {
     return new EscrituraSucursal((fn) => this.#prisma.$transaction((tx) => fn(tx)), agente);
+  }
+
+  /**
+   * SQL crudo de los agregados de ventas (F1-032), con scope. El helper arma
+   * las CTEs ya filtradas por el tenant del usuario, la empresa y sucursal
+   * pedidas y el rango en la zona de cada sucursal; el caller sólo escribe el
+   * cuerpo que lee de ellas (ver `consulta-ventas.ts`). Cada consulta corre con
+   * `statement_timeout` local, en una transacción de sólo esas dos sentencias.
+   */
+  ventas(scope: EmpresaScope, filtro: FiltroVentas): ConsultaVentas {
+    return new ConsultaVentas(
+      async (sql, timeoutMs) => {
+        const [, filas] = await this.#prisma.$transaction([
+          this.#prisma
+            .$queryRaw`SELECT set_config('statement_timeout', ${String(timeoutMs)}, true)`,
+          this.#prisma.$queryRaw<unknown[]>(sql),
+        ]);
+        return filas;
+      },
+      scope,
+      filtro,
+    );
   }
 }

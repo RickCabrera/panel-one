@@ -7,9 +7,10 @@ import { AuthModule } from './auth/auth.module';
 import { IngestaModule } from './ingesta/ingesta.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ScopeModule } from './scope/scope.module';
+import { VentasModule } from './ventas/ventas.module';
 
 @Module({
-  imports: [PrismaModule, ScopeModule, AuthModule, AgentesModule, IngestaModule],
+  imports: [PrismaModule, ScopeModule, AuthModule, AgentesModule, IngestaModule, VentasModule],
   controllers: [AppController],
   providers: [AppService],
 })

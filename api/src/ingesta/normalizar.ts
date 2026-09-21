@@ -51,11 +51,11 @@ export function cantidad(texto: string): Prisma.Decimal {
  * DECISION PROVISIONAL (nocturno): siempre `otro`. No hay catálogo de formas
  * de pago de ninguna instalación real (esquema-sr.md §4); adivinar por el texto
  * ("EFECTIVO", "TARJETA") metería errores silenciosos en el desglose. El crudo
- * se guarda SIEMPRE en `forma_raw`, así que F1-032 puede derivar el ENUM con su
+ * se guarda SIEMPRE en `forma_raw`, y los agregados de F1-032 derivan el ENUM AL LEER con su
  * catálogo sin perder nada.
  */
 export function derivarFormaPago(formaRaw: string): FormaPago {
-  void formaRaw; // el catálogo de F1-032 lo va a leer; hoy no se usa a propósito
+  void formaRaw; // el catálogo de F1-032 se aplica al leer; aquí no se usa a propósito
   return FormaPago.otro;
 }
 

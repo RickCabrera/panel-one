@@ -100,6 +100,7 @@ cp api/.env.example api/.env   # ajusta DATABASE_URL si cambiaste algo en infra/
 cd api
 npx prisma migrate dev         # aplica las migraciones y genera el cliente
 npx prisma db seed             # 1 admin global, 1 empresa demo, 2 sucursales (idempotente)
+npm run seed:ventas            # 500 cheques sintéticos, 2 sucursales × 30 días hasta hoy (idempotente)
 cd ..
 npm run dev:api                # o: npm run dev --workspace @monitor/api
 ```
