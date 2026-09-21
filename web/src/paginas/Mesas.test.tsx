@@ -541,7 +541,21 @@ describe('Detalle de consumo (modal, F1-051)', () => {
     await usuarioEvt.tab({ shift: true });
     expect(cerrar).toHaveFocus();
 
-    await usuarioEvt.click(cerrar);
+    // Un clic sobre texto del modal no saca el foco a <body>: Tab vuelve a entrar y
+    // Escape sigue cerrando.
+    await usuarioEvt.click(within(dialogo).getByText('Paquete familiar'));
+    expect(document.activeElement).not.toBe(document.body);
+    await usuarioEvt.tab();
+    expect(cerrar).toHaveFocus();
+    await usuarioEvt.click(within(dialogo).getByText('Paquete familiar'));
+    await usuarioEvt.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe('scroll');
+
+    await usuarioEvt.click(screen.getByRole('button', { name: 'Ver consumo de Mesa 5' }));
+    await usuarioEvt.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Cerrar' }),
+    );
     expect(document.body.style.overflow).toBe('scroll');
     document.body.style.overflow = '';
   });

@@ -55,7 +55,11 @@ export function DetalleMesa({
     if (enfocables.length === 0) return;
     const primero = enfocables[0];
     const ultimo = enfocables[enfocables.length - 1];
-    if (e.shiftKey && document.activeElement === primero) {
+    // Con el foco en el panel mismo (clic sobre texto), Tab entra al modal, no al grid.
+    if (!enfocables.includes(document.activeElement as HTMLElement)) {
+      e.preventDefault();
+      (e.shiftKey ? ultimo : primero).focus();
+    } else if (e.shiftKey && document.activeElement === primero) {
       e.preventDefault();
       ultimo.focus();
     } else if (!e.shiftKey && document.activeElement === ultimo) {
@@ -77,8 +81,11 @@ export function DetalleMesa({
         role="dialog"
         aria-modal="true"
         aria-labelledby="detalle-mesa-titulo"
+        // Enfocable por código y por clic: así un clic sobre texto deja el foco DENTRO
+        // del modal y Escape/Tab lo siguen escuchando.
+        tabIndex={-1}
         onKeyDown={teclado}
-        className="flex max-h-full w-full max-w-2xl min-w-0 flex-col rounded-lg bg-white shadow-xl"
+        className="flex max-h-full w-full max-w-2xl min-w-0 flex-col rounded-lg bg-white shadow-xl outline-none"
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
           <h2 id="detalle-mesa-titulo" className="min-w-0 text-lg font-semibold break-words">
