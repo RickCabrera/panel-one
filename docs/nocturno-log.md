@@ -745,3 +745,114 @@ y medir rendimiento con varias muestras desde el primer día. Las dos cosas cost
 **Qué haría distinto.** Hacer la prueba de mutación (quitar un filtro de scope y ver que los
 tests truenan) desde el primer verde, no al final. 104 verdes al primer intento no prueban que
 los tests muerdan.
+
+## 2026-09-20 23:59 — F1-040 · Base de la SPA
+**Estado:** CERRADA (PR de `feat/F1-040`, squash a main)
+
+**Qué quedó hecho.**
+- `/web` ya es la SPA de verdad: React Router 7 (modo librería), TanStack Query 5 y Tailwind 4
+  (`@tailwindcss/vite`).
+  - Rutas: `/`, `/mesas`, `/tickets`, `/reportes`, `/admin` (sólo `admin_global`/`admin_empresa`),
+    `/login` y `*`. Las vistas son cascarones con título y alcance activo; su contenido es de
+    F1-041/042/043/050/060.
+  - Layout con sidebar (fijo en ≥ md, off-canvas en móvil con hamburguesa, overlay, Escape y
+    cierre al navegar) y topbar con los selectores de empresa y sucursal, el usuario y "Salir".
+- **Alcance en la URL** (`?empresa=&sucursal=`), todo en `web/src/filtros/alcance.ts`:
+  - Los enlaces del sidebar conservan sólo esos dos parámetros.
+  - Sin empresa, o con una que no está en tu lista → la primera de la lista (con `replace`). Una
+    sucursal de otra empresa se quita. Cambiar de empresa borra la sucursal.
+  - **Sólo se normaliza con la lista cargada con éxito.** Si `/empresas` falla, la URL no se toca.
+  - Las inactivas se muestran con "(inactiva)". Si hay una sola empresa, sale como texto.
+- **Auth**:
+  - `web/src/auth/sesion.ts`: access token SÓLO en memoria. Refresh single-flight compartido por
+    los tres caminos (401, timer proactivo a `expiresIn - 60 s` y arranque) y contador de
+    generación para que un refresh tardío no reviva una sesión cerrada.
+  - `web/src/api/cliente.ts` (`pedir`): Bearer, refresh + un reintento ante 401.
+  - `RutaProtegida` manda a `/login?siguiente=<ruta+query codificada>`, y `destinoSeguro` evita
+    el open redirect.
+- `VITE_COLOR_ACENTO` (hex validado) → `--color-acento` → clases `*-acento`.
+- Tests: `npm test` en `/web` da 69/69, 0 skips (vitest + jsdom). La API se simula sobre `fetch`
+  con `src/test/apiFalsa.ts`, que registra cada llamada. Build, lint y prettier limpios.
+- **CI: encendí el paso `npm test` del carril `web`.** El backlog se lo asigna a F1-041 ("Y
+  además"), así que **F1-041 ya no tiene que hacerlo**: no lo busques comentado. El README y la
+  cabecera del `ci.yml` están al día.
+- El revisor aprobó el plan en el 2º intento (el 1º lo bloqueó por B1, abajo) y el entregable al
+  1º, con observaciones. Atendí dos: el proxy exige `/api/` con barra, y hay un comentario en
+  `test-setup.ts`. La tercera está en "Qué quedó abierto".
+
+**Decisiones que tomé y por qué.**
+- **Mismo origen vía proxy, no CORS** (F1-011 lo dejó abierto).
+  - La SPA llama siempre a `/api/...`. `web/vite.config.ts` lo proxya a `API_PROXY_TARGET`
+    (default `http://localhost:3000`, sin `VITE_`: no entra al bundle), quita `/api` y reescribe
+    el `Path` de la cookie de `/auth` a `/api/auth`. Lo verifiqué con curl contra la API real: el
+    login da `Set-Cookie ... Path=/api/auth; HttpOnly; SameSite=Strict` y el refresh con esa cookie
+    da 200.
+  - **F1-002 (Caddy) TIENE que replicarlo:** `handle_path /api/*` hacia la API y reescribir
+    `Path=/auth` → `Path=/api/auth` en el `Set-Cookie`. Sin eso el login funciona pero el refresh
+    silencioso no, y cada recarga pide contraseña. Está en el README.
+- **B1, el bloqueo del revisor en el plan: las rutas `/auth/*` NUNCA disparan refresh ante un 401.**
+  Tras "Salir", la cookie del usuario anterior sigue viva. Si el 401 de un login con contraseña
+  mala hiciera refresh, esa persona entraría COMO EL USUARIO ANTERIOR, y además gastaría dos
+  intentos del límite de 5/min. Hay un unitario y una integración que lo cubren, y la mutación lo
+  confirma. **No quites esa exclusión.**
+- **Logout sólo en el cliente**, porque la API no tiene `POST /auth/logout` y agregarlo era cruzar
+  de carril. "Salir" borra el token, cancela el timer, limpia el caché de Query y pone
+  `monitor.sesionCerrada=1` en localStorage (`web/src/auth/marcaCierre.ts`). Con esa marca el
+  arranque no hace refresh silencioso, y si el storage no se puede leer, tampoco.
+- En la pantalla de rol, a quien no le toca la vista le sale "No encontrada", nunca "prohibido":
+  es la misma regla del 404 de la API.
+- `react-router` **7**, no el 8 (que es la latest): elegí la línea 7, que declara soporte para
+  React 18. `@tailwindcss/vite` 4.3.3 declara peer `vite ^5.2 || … || ^8` y se instaló sin
+  `--force`.
+- Los tipos del contrato están escritos a mano en `web/src/api/tipos.ts`, campo por campo contra
+  `api/openapi.json`. Si el OpenAPI cambia, cámbialos en el mismo entregable.
+
+**Trampas que encontré.**
+- **Escribir archivos desde Bash rompió cosas tres veces:**
+  1. Un heredoc largo con `<<EOF` anidado dentro de un `for` cortó `main.tsx` a la mitad, y
+     además se tragó el `index.css` y el resto del comando, sin error claro.
+  2. `sed` de GNU interpreta `\x00` en el reemplazo y metió bytes de control reales en una regex.
+  3. Los `node -e` con backticks y `\` dentro de comillas dobles no hacen match, y encima
+     `ci.yml` y `README.md` tienen CRLF.
+  **Usa Write/Edit para todo lo que tenga backticks, barras o regex.**
+- **El `<output>` de HTML tiene rol implícito `status`.** Un helper de test que lo usaba se robaba
+  el `findByRole('status')`.
+- **Contraseñas en el navegador: no se puede.** Para medir a 390 px las vistas autenticadas monté
+  un arnés temporal (`web/arnes-390.html`) que reemplaza `fetch` con datos sintéticos. Lo borré y
+  no está en el commit.
+- **La ventana de Chrome no baja de 819 px de viewport** (escalado de pantalla). Medí dentro de un
+  iframe de 390 px del mismo origen.
+- `api/.env` sigue sin los secretos JWT (ya lo dijo F1-011). Para levantar la API local se los
+  pasé por variable de entorno, con valores sintéticos, sin tocar el archivo. La contraseña del
+  admin del seed es la de desarrollo de `api/prisma/seed.ts`.
+
+**Evidencia de 390 px (el criterio de "Listo cuando").**
+- Login con la API real, y las vistas `/`, `/mesas`, `/tickets`, `/reportes` y `/admin` con el
+  arnés. Usé nombres largos de empresa, sucursal y usuario a propósito.
+- En todas, `scrollWidth == clientWidth == 390` y ningún elemento pasa del borde derecho.
+- El menú móvil abre y cierra. Lo confirmé con captura: con el menú abierto el sidebar tapa el
+  contenido y el overlay oscurece el resto.
+- Las medidas de posición del sidebar durante la transición no fueron fiables (el renderer del
+  iframe se congela). Valen las capturas, no esos números.
+
+**Prueba de mutación** (hecha, código restaurado, suite otra vez 69/69):
+- Sin la exclusión de `/auth/` → fallan 3.
+- `destinoSeguro` aceptando `//` → fallan 3.
+- Normalizar la URL aunque `/empresas` falle → fallan 3.
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **RIESGO DE SEGURIDAD, para F1-092:** "Salir" no revoca nada. La cookie de refresh sigue válida
+  hasta 7 días. En una PC compartida, quien borre el localStorage, o llame
+  `fetch('/api/auth/refresh', {method:'POST'})` desde la consola, entra como el usuario anterior.
+  Hace falta `POST /auth/logout`, que borre la cookie y, mejor, que revoque (tabla de sesiones o
+  versión de token).
+- Si el reintento después de un refresh exitoso vuelve a dar 401, `pedir()` lanza el error pero no
+  termina la sesión, y cada request siguiente hace otro refresh. No es bucle, y el caso es raro
+  (una API que emite tokens que ella misma rechaza). Para F1-092.
+- **F1-041** usa `useAlcance()` (`empresaId`/`sucursalId` ya validados) y
+  `pedir('/ventas/resumen', { query })`. Recuerda que los agregados reciben `empresaId`
+  obligatorio y que el `staleTime` de 15 s ya está puesto por defecto en `crearQueryClient`.
+- Ninguna vista usa todavía la zona horaria de la sucursal; el selector de periodo es de F1-041.
+
+**Qué haría distinto.** Escribir todos los archivos con Write desde el principio. Las tres roturas
+por escapado en Bash costaron más que todo el layout.

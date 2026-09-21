@@ -17,10 +17,11 @@ import { defineConfig } from 'vitest/config';
  */
 function proxyApi(target: string): Record<string, ProxyOptions> {
   return {
-    '/api': {
+    // Con '^' Vite lo trata como regex: exige la barra, así '/apixyz' no entra.
+    '^/api/': {
       target,
       changeOrigin: true,
-      rewrite: (ruta) => ruta.replace(/^\/api/, ''),
+      rewrite: (ruta) => ruta.replace(/^\/api(?=\/)/, ''),
       cookiePathRewrite: { '/auth': '/api/auth' },
     },
   };
