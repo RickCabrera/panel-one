@@ -341,7 +341,7 @@ completos y en orden; la cola no crece sin límite por snapshots.
 > el wifi a mano.
 
 ## 20 · F1-025 · Heartbeat y auto-diagnóstico
-`[ ]` **Epic 2 — Agente Windows (.NET 8)**
+`[x]` **Epic 2 — Agente Windows (.NET 8)**
 
 Cada ciclo, evento `heartbeat`: versión agente, versión SR, latencia de query, tamaño de
 cola, último error. El API lo persiste en `AgenteEstado`.
