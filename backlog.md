@@ -112,7 +112,7 @@ sucursal inactiva. Rate limit 120 req/min por sucursal.
 quedan ligados a la sucursal correcta **sin que el agente mande IDs de tenant**.
 
 ## 5 · F1-030 · Esquema de ventas en Postgres
-`[ ]` **Epic 3 — API de ingesta y modelo de ventas**
+`[x]` **Epic 3 — API de ingesta y modelo de ventas**
 
 Modelos Prisma: `Cheque(id, sucursal_id, empresa_id, folio, folio_sr único por sucursal,
 abierto_at, cerrado_at, mesa, mesero, comensales, subtotal, impuestos, descuentos, propina,
