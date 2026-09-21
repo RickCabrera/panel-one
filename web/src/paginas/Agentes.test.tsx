@@ -170,7 +170,7 @@ describe('Administración › Agentes: la tabla', () => {
     await waitFor(() => expect(pedidas(api).length).toBeGreaterThan(antes));
   });
 
-  it('AC (lógica de frescura): el agente deja de reportar y el API se cae → "Desconectado" en < 1 min, sin respuesta buena nueva', async () => {
+  it('lógica de frescura: pasa sola a "Desconectado" al cruzar 90 s desde el último contacto, sin respuesta buena nueva', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], shouldAdvanceTime: true });
     vi.setSystemTime(AHORA);
     let caido = false;

@@ -18,15 +18,16 @@ import type {
 
 /**
  * Estado de los agentes de una empresa (F1-061), cada 20 s como el Monitor de Mesas.
- * La tabla y el badge del sidebar comparten la llave: una sola petición. `habilitado`
- * es false para el visor, que no tiene acceso (la API le da 403).
+ * La tabla y el badge del sidebar comparten la llave: una sola petición. Sólo la
+ * montan vistas de admin (el badge cuelga de la entrada "Administración", que el
+ * visor no ve); para el visor la API da 403.
  */
-export function useEstadoAgentes(empresaId: string | undefined, habilitado = true) {
+export function useEstadoAgentes(empresaId: string | undefined) {
   return useQuery({
     queryKey: ['agentes', 'estado', empresaId],
     queryFn: ({ signal }) =>
       pedir<EstadoAgenteSucursal[]>('/agentes/estado', { query: { empresaId }, signal }),
-    enabled: habilitado && empresaId !== undefined,
+    enabled: empresaId !== undefined,
     refetchInterval: POLLING_MS,
   });
 }

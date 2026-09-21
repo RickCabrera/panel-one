@@ -1424,3 +1424,90 @@ cara que la consulta.
 - **Hallazgos sobre SoftRestaurant: ninguno.** La tarea no toca SR. En `esquema-sr.md` sólo se corrigió la nota del catálogo.
 
 **Qué haría distinto.** Meter en el plan desde el principio las deudas que el log dejó asignadas a esta tarea. El bloqueo del plan fue exactamente eso: el log de F1-012 decía "F1-060 debe arreglar `updateMany`" y no lo leí antes de escribir el plan. Busca tu ID de tarea en `docs/nocturno-log.md` antes de planear.
+
+## 2026-09-21 03:40 — F1-061 · Estado de agentes
+**Estado:** CERRADA (PR en esta rama; el número lo da `gh pr create`)
+
+**Qué quedó hecho.**
+- **"Contacto" del agente** (la pieza que faltaba para saber si un agente está vivo):
+  - Tabla nueva `agente_contacto (sucursal_id PK, empresa_id, ultimo_contacto_at)` en la migración `20260921085338_agente_contacto`. Tiene FK compuesta Restrict e índice por empresa, igual que `agente_estado`.
+  - La escribe **todo lote con sobre válido** de `POST /ingesta/eventos`, con `Reloj.ahora()`, aunque todos sus eventos salgan rechazados (el agente está vivo). Un 400 del sobre o un 401 no cuentan.
+  - La escritura es `OperacionesSucursal.registrarContacto` (`api/src/scope/escritura-sucursal.ts`): un `INSERT ... ON CONFLICT DO UPDATE SET ... = GREATEST(...)`. Dos lotes en paralelo no chocan y el contacto nunca retrocede.
+  - Si falla, se loguea y el lote se procesa igual (`IngestaService.registrarContacto`, con spec).
+- **Heartbeat con `tamanoCola`** (entero 0..2^31−1; ausente = null). Columna `agente_estado.tamano_cola` con CHECK `agente_estado_tamano_cola_chk` escrito a mano en la migración. Entra en `mismoEstado` y sigue la regla de siempre: un heartbeat que llega tarde se descarta completo.
+- **`GET /agentes/estado?empresaId=`** (`api/src/agentes/estado-agentes.*`):
+  - Sólo admins. El visor recibe 403 por ruta, como en F1-060.
+  - Otra empresa da 404, con el mismo body que un uuid inexistente.
+  - Una fila por sucursal ACTIVA. Trae `ultimoContactoAt`/`edadContactoSegundos` (reloj del servidor), `ultimaLecturaAt`/`edadLecturaSegundos` (reloj del POS, recortado a ≥ 0), versiones, cola y último error. Si la sucursal nunca reportó, todo va en null.
+  - El API NO decide "conectado": devuelve edades, igual que `/mesas/abiertas`.
+- **Web**:
+  - Pestaña **Agentes** en Administración (`?tab=agentes`, los dos roles admin): `web/src/paginas/admin/Agentes.tsx`.
+  - Badge en el sidebar junto a "Administración" (`AlertaAgentes` en `layout/Sidebar.tsx`), con el número de sucursales que llevan > 10 min sin reportar. Enlaza a esa pestaña y conserva el alcance.
+  - Las reglas puras están en `admin/reglasAgentes.ts`. La consulta es `useEstadoAgentes` (`admin/consultas.ts`), cada 20 s, con una llave que comparten la tabla y el badge.
+- OpenAPI regenerado; `openapi.spec.ts` tiene el path nuevo. `esquema-sr.md` §5 ganó una nota (no hay hallazgo de SR).
+- **Checks:**
+  - /api: lint y typecheck limpios, `prisma validate` ok, migrate in sync, **631/631, 0 skips**.
+  - /web: build y lint limpios, **294/294, 0 skips**.
+  - CI: no hay carril nuevo que encender.
+- **Revisor:**
+  - Plan: APROBADO CON OBSERVACIONES (13), todas atendidas.
+  - Entregable: APROBADO CON OBSERVACIONES en la primera pasada, con cero bloqueos.
+    - Corregí el título de un test web que prometía "< 1 min". Ahora dice "al cruzar 90 s desde el último contacto".
+    - Quité un parámetro `habilitado` que nadie usaba en `useEstadoAgentes`. El visor queda fuera porque el badge cuelga de la entrada "Administración", que él no ve.
+    - Agregué una nota en la ficha de F1-025 del `backlog.md`, en esta misma rama.
+
+**El "Listo cuando": qué se probó y qué NO.**
+- **AC "refleja en < 1 min la caída del agente": NO cumplido literalmente. Decisión abierta para Ricardo.**
+  - La detección llega a los **90 s del último contacto**, más ≤ 5 s de re-render: en el peor caso, ≤ 95 s.
+  - Se siguió la regla explícita de F1-025 ("desconectado tras 3 intervalos sin heartbeat", 3 × 30 s). Es el mismo umbral del Monitor de Mesas (`UMBRAL_DESCONEXION_S`, que se importa, no se duplica).
+  - Para cumplir < 1 min desde la caída hace falta una de dos: que el intervalo del agente sea ≤ ~18 s, o bajar el umbral a menos de 2 intervalos, con riesgo de falsos "desconectado".
+- **"Probado matando el servicio": PENDIENTE.** No hay agente (F1-020/F1-025/F1-026). La cadena real agente → API → panel no se ha ejercitado nunca.
+- Lo que sí se probó, como pide el backlog ("lógica de frescura con el estado manipulado en base"):
+  - e2e `api/src/agentes/estado-agentes.e2e.spec.ts`, contra Postgres real con `Reloj` fijo:
+    - contacto registrado → reloj + 91 s → el endpoint da 91;
+    - edades exactas con 89/90/91/600/601 s escritos en base;
+    - agente vivo sin lectura de SR (contacto 5 s, lectura 45 min);
+    - reloj del POS adelantado → 0;
+    - reenvío ×3: `agente_estado` idéntico y el contacto avanza;
+    - dos lotes en paralelo → una fila;
+    - el contacto no retrocede.
+  - vitest `web/src/paginas/Agentes.test.tsx`: con el API caído después de una respuesta de 40 s, la fila pasa sola a "Desconectado" a los 50 s de la última respuesta buena. Los refetch fallidos no rejuvenecen el dato.
+  - Badge: aparece a 601 s y no a 600, no aparece con "nunca reportó", y se prende solo al envejecer. El visor ni siquiera pide `/agentes/estado`.
+- No se abrió en un navegador ni se midió a 390 px (igual que F1-040..060). La tabla va en un `overflow-x-auto`.
+
+**Decisiones que tomé y por qué.**
+- **`agente_contacto` queda FUERA de la foto de idempotencia a propósito** (decisión abierta para Ricardo; hay un comentario en `foto()` de `ingesta.e2e.spec.ts`).
+  - El contacto es "cuándo nos habló el agente", como el `last_used_at` de una API key, no dato de la ingesta. Un reenvío lo mueve porque el agente sí nos volvió a hablar. Cheques, partidas, pagos, snapshots y `agente_estado` siguen idénticos, y el e2e de idempotencia de F1-031 no se tocó y sigue verde.
+  - **No es precedente** para excluir otra tabla de la foto.
+  - Alternativas descartadas:
+    - (a) Una columna en `agente_estado` actualizada en cada heartbeat: mueve `updated_at` en un reenvío y rompe la foto.
+    - (b) El id del evento como identidad del heartbeat: un lote con dos heartbeats reenviado mueve el contacto igual.
+    - (c) Un `generadoAt` del agente para ordenar: depende del reloj del POS, y un reloj que se atrasa daría "desconectado" falso.
+  - Por qué no bastaba lo que había: `agente_estado.updated_at` sólo cambia si el heartbeat cambia algo. `ultima_lectura_at` es del reloj del POS y se congela cuando el agente vive pero no lee SR.
+- `DECISION PROVISIONAL (nocturno)` en `web/src/paginas/admin/reglasAgentes.ts` (`sinReportar`): **una sucursal que NUNCA reportó no prende el badge.** Sale "Sin reporte" en la tabla. Si no, una sucursal recién dada de alta sin agente dejaría el badge prendido para siempre.
+- **El badge mira sólo la empresa del selector del Topbar** (el endpoint exige `empresaId`, como todos). Un admin_global no ve alertas de otras empresas. Mientras no haya empresa elegida, no hay badge; la normalización del alcance elige la primera de la lista en cuanto carga. Decisión abierta para Ricardo.
+- **Sólo sucursales activas.** Una inactiva tiene la key rechazada y saldría "desconectada" para siempre.
+- **El contacto cuenta cualquier lote aceptado**, no sólo los que traen heartbeat. Consecuencia para F1-024/F1-025: el agente debe mandar al menos un heartbeat por ciclo aunque no haya cheques. Si no, el contacto no avanza.
+- **No se agregó la latencia de query** del heartbeat: es de F1-025, una tarea por corrida.
+
+**Trampas que encontré.**
+- **Windows no distingue mayúsculas: `admin/agentes.ts` y `admin/Agentes.tsx` chocan.** `tsc` da TS1149 ("differs only in casing"). Por eso las reglas se llaman `reglasAgentes.ts`.
+- **Agregar un modelo de Prisma rompe a propósito dos inventarios:** `scope.helper.spec.ts` (`LLAVE_EMPRESA`) y `scoped-prisma.service.spec.ts` (lista de delegados). Además hay que borrar la tabla nueva en `limpiarFixtures` (`test/fixtures-auth.ts`), antes que las sucursales (FK Restrict).
+- **En el test web del badge, `findByRole('link', {name:'Administración'})` aparece ANTES de que llegue `/agentes/estado`.** Si "tiras" el API en ese momento, la primera respuesta ya es 503 y nunca hay dato. Espera `pedidas(api).length === 1` y un `advanceTimersByTimeAsync(0)`.
+- **Con `shouldAdvanceTime` y un pulso de 5 s, los bordes de tiempo se corren ~1 s.** Deja margen de un pulso completo en los tests de envejecimiento.
+- `prettier --check` sobre carpetas enteras marca archivos que no tocaste (CRLF, la trampa de F1-051). Pásalo sólo por tus archivos.
+
+**Prueba de mutación** (todo restaurado y las suites en verde). Qué se cambió y qué test la atrapó:
+- sin `GREATEST`: 1 ("el contacto nunca retrocede");
+- `edadAhora` sin envejecer: 4 (2 de reglas, el AC de la tabla, el badge que se prende solo);
+- badge contando "nunca reportó": 2.
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **Decisiones para Ricardo:** el AC < 1 min contra los 3 intervalos; `agente_contacto` fuera de la foto de idempotencia; el badge por empresa del selector; "nunca reportó" sin badge.
+- **F1-025:** latencia de query en el heartbeat (migración + DTO). Si el intervalo termina siendo configurable, que viaje en el heartbeat y `UMBRAL_DESCONEXION_S` se vuelva un dato por sucursal (ya lo decía F1-050). Recordar que primero se despliega el api (`forbidNonWhitelisted`).
+- **F1-024:** el agente manda `tamanoCola` en el heartbeat.
+- **F1-025** tiene ahora una nota en su ficha del `backlog.md`: el agente manda un lote por ciclo aunque no haya cheques, o la sucursal sale "Desconectado" en falso.
+- **F1-092:** el badge re-renderiza el sidebar cada 5 s para los admins (`useAhora`). Es barato, pero es un poll de 20 s en todas las vistas de un admin.
+- Hallazgos sobre SoftRestaurant: ninguno (la tarea no lee SR).
+
+**Qué haría distinto.** Leer primero cómo se escribe `agente_estado` (el "si nada cambió, no escribe") antes de diseñar la frescura. Ahí estaba el bug que el backlog anunciaba, y cambia todo el diseño.
