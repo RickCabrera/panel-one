@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
 import { pedir } from '../../api/cliente';
+import { POLLING_MS } from '../mesas/reglas';
 import type {
   ApiKeyEmitida,
   CrearSucursal,
@@ -10,9 +11,25 @@ import type {
   EditarSucursal,
   EditarUsuario,
   Empresa,
+  EstadoAgenteSucursal,
   Sucursal,
   UsuarioAdmin,
 } from '../../api/tipos';
+
+/**
+ * Estado de los agentes de una empresa (F1-061), cada 20 s como el Monitor de Mesas.
+ * La tabla y el badge del sidebar comparten la llave: una sola petición. `habilitado`
+ * es false para el visor, que no tiene acceso (la API le da 403).
+ */
+export function useEstadoAgentes(empresaId: string | undefined, habilitado = true) {
+  return useQuery({
+    queryKey: ['agentes', 'estado', empresaId],
+    queryFn: ({ signal }) =>
+      pedir<EstadoAgenteSucursal[]>('/agentes/estado', { query: { empresaId }, signal }),
+    enabled: habilitado && empresaId !== undefined,
+    refetchInterval: POLLING_MS,
+  });
+}
 
 /** Usuarios de una empresa (F1-060). La API da 404 si la empresa no es tuya. */
 export function useUsuarios(empresaId: string | undefined) {

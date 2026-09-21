@@ -308,6 +308,13 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
   aparece. Si el intervalo termina siendo configurable por sucursal, F1-020/F1-025 tienen
   que mandarlo (por ejemplo en el heartbeat) y esta constante pasa a ser un dato por
   sucursal.
+  - **El estado de agentes (F1-061) usa el mismo supuesto** (`UMBRAL_DESCONEXION_S`,
+    importado de `reglas.ts`), pero medido sobre el **contacto** del agente (tabla
+    `agente_contacto`: el último lote aceptado por la ingesta, reloj del servidor), no
+    sobre la lectura del POS. Un agente vivo que no puede leer SR sale "Conectado" con su
+    último error y la lectura vieja a la vista. Esto no es un hallazgo de SR: la tarea no
+    leyó SR. Lo que sí depende del agente real (F1-020/F1-025): que mande un lote por
+    ciclo aunque no tenga cheques, para que el contacto avance.
 - **Diferencia conocida con el Panel (no es un error de cuadre):** la tarjeta "Venta en
   vivo" de Inicio (F1-041) suma **todas** las sucursales que tienen snapshot, también las
   desconectadas. El Monitor excluye las desconectadas. Con una sucursal desconectada, las

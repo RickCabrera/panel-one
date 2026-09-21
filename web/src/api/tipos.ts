@@ -206,6 +206,27 @@ export interface MesasSucursal {
   snapshot: SnapshotMesas | null;
 }
 
+/**
+ * `EstadoAgenteSucursalDto`: una fila de `GET /agentes/estado` (F1-061). Todo null
+ * si la sucursal nunca ha reportado.
+ */
+export interface EstadoAgenteSucursal {
+  sucursalId: string;
+  nombre: string;
+  zonaHoraria: string;
+  /** Último lote aceptado, reloj del servidor. */
+  ultimoContactoAt: string | null;
+  /** Edad del contacto según el servidor: la confiable para "desconectado". */
+  edadContactoSegundos: number | null;
+  /** Última lectura de SR, reloj de la PC del POS. */
+  ultimaLecturaAt: string | null;
+  edadLecturaSegundos: number | null;
+  versionAgente: string | null;
+  versionSr: string | null;
+  tamanoCola: number | null;
+  ultimoError: string | null;
+}
+
 /** `ModificadorDto`: como los guardó la ingesta (esquema-sr.md §13). */
 export interface Modificador {
   nombre: string;

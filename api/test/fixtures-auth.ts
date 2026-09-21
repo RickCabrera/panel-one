@@ -81,6 +81,8 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   await prisma.mesaSnapshot.deleteMany(deEstas);
   // El estado del agente (F1-031: lo escribe el heartbeat de la ingesta).
   await prisma.agenteEstado.deleteMany(deEstas);
+  // El último contacto del agente (F1-061: lo escribe todo lote aceptado).
+  await prisma.agenteContacto.deleteMany(deEstas);
   // El catálogo de formas de pago (F1-032) cuelga de la empresa.
   await prisma.formaPagoCatalogo.deleteMany(deEstas);
   await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });

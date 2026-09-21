@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 
 import { crearFixtures, FX, limpiarFixtures } from '../../test/fixtures-auth';
+import { Reloj } from '../comun/reloj';
 import type { PrismaService } from '../prisma/prisma.service';
 import { OperacionesSucursal } from '../scope/escritura-sucursal';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
@@ -60,7 +61,10 @@ describe('esTransitorio()', () => {
 
 describe('IngestaService, fallas de base (contra Postgres, F1-031)', () => {
   const prisma = new PrismaClient();
-  const servicio = new IngestaService(new ScopedPrismaService(prisma as unknown as PrismaService));
+  const servicio = new IngestaService(
+    new ScopedPrismaService(prisma as unknown as PrismaService),
+    new Reloj(),
+  );
 
   beforeAll(async () => {
     await prisma.$connect();
@@ -116,4 +120,19 @@ describe('IngestaService, fallas de base (contra Postgres, F1-031)', () => {
       expect(guardados.map((c) => c.folioSr)).toEqual([`${prefijo}-1`, `${prefijo}-3`]);
     },
   );
+  it('si falla el registro del CONTACTO (F1-061), se loguea y el lote se procesa igual', async () => {
+    // Los tests de arriba ya registraron contacto de A1: se parte de cero.
+    await prisma.agenteContacto.deleteMany({ where: { sucursalId: FX.sucursalA1 } });
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    jest
+      .spyOn(OperacionesSucursal.prototype, 'registrarContacto')
+      .mockRejectedValue(errorPrisma('P1001'));
+
+    const r = await servicio.procesarLote(A1, [cheque('c1', 'SVC-CONTACTO-1')]);
+
+    expect(r).toEqual({ procesados: ['c1'], rechazados: [] });
+    expect(await prisma.cheque.count({ where: { folioSr: 'SVC-CONTACTO-1' } })).toBe(1);
+    expect(await prisma.agenteContacto.count({ where: { sucursalId: FX.sucursalA1 } })).toBe(0);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('No se registró el contacto'));
+  });
 });

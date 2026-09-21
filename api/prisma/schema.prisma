@@ -61,14 +61,15 @@ model Sucursal {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  empresa       Empresa        @relation(fields: [empresaId], references: [id], onDelete: Restrict)
-  agenteEstado  AgenteEstado?
-  cheques       Cheque[]
-  mesaSnapshots MesaSnapshot[]
+  empresa        Empresa         @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  agenteEstado   AgenteEstado?
+  agenteContacto AgenteContacto?
+  cheques        Cheque[]
+  mesaSnapshots  MesaSnapshot[]
 
-  // Destino de las FK compuestas (`agente_estado`, `cheques`, `mesa_snapshots`):
-  // garantiza que la empresa que guarda una tabla hija sea la empresa real de
-  // la sucursal.
+  // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
+  // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
+  // la empresa real de la sucursal.
   @@unique([id, empresaId], map: "sucursales_id_empresa_id_key")
   @@index([empresaId])
   @@map("sucursales")
@@ -110,6 +111,9 @@ model AgenteEstado {
   versionSr       String?   @map("version_sr")
   ultimaLecturaAt DateTime? @map("ultima_lectura_at") @db.Timestamptz(3)
   ultimoError     String?   @map("ultimo_error")
+  // Tamaño de la cola local del agente (F1-061), como lo reporta el heartbeat.
+  // CHECK >= 0 escrito a mano en la migración 20260921085338_agente_contacto.
+  tamanoCola      Int?      @map("tamano_cola")
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "agente_estado_sucursal_empresa_fkey")
@@ -119,6 +123,23 @@ model AgenteEstado {
   @@unique([sucursalId, empresaId], map: "agente_estado_sucursal_id_empresa_id_key")
   @@index([empresaId])
   @@map("agente_estado")
+}
+
+// Cuándo nos habló por última vez el agente de una sucursal (F1-061), con el
+// reloj del SERVIDOR: lo escribe todo lote aceptado por `POST /ingesta/eventos`.
+// Es metadato de conexión (como el `last_used_at` de una API key), no dato de la
+// ingesta: por eso vive fuera de `agente_estado` y fuera de la foto de
+// idempotencia. Un reenvío SÍ lo mueve, porque el agente sí nos habló.
+model AgenteContacto {
+  sucursalId       String   @id @map("sucursal_id") @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  ultimoContactoAt DateTime @map("ultimo_contacto_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "agente_contacto_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, empresaId], map: "agente_contacto_sucursal_id_empresa_id_key")
+  @@index([empresaId])
+  @@map("agente_contacto")
 }
 
 // ---------------------------------------------------------------------------

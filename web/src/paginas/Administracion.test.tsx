@@ -97,7 +97,8 @@ describe('Administración: lo que se ofrece según el rol', () => {
     montar(`/admin?empresa=${A}&tab=empresas`);
 
     await screen.findByRole('row', { name: 'Centro' });
-    expect(pestanas()).toEqual(['Sucursales', 'Usuarios']);
+    // F1-061 agregó Agentes; Empresas sigue fuera.
+    expect(pestanas()).toEqual(['Sucursales', 'Usuarios', 'Agentes']);
     expect(screen.getByRole('tab', { name: 'Sucursales' })).toHaveAttribute(
       'aria-selected',
       'true',
