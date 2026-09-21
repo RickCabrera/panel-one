@@ -60,11 +60,14 @@ model Sucursal {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  empresa      Empresa       @relation(fields: [empresaId], references: [id], onDelete: Restrict)
-  agenteEstado AgenteEstado?
+  empresa       Empresa        @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  agenteEstado  AgenteEstado?
+  cheques       Cheque[]
+  mesaSnapshots MesaSnapshot[]
 
-  // Destino de la FK compuesta de `agente_estado`: garantiza que la empresa que
-  // guarda una tabla hija sea la empresa real de la sucursal.
+  // Destino de las FK compuestas (`agente_estado`, `cheques`, `mesa_snapshots`):
+  // garantiza que la empresa que guarda una tabla hija sea la empresa real de
+  // la sucursal.
   @@unique([id, empresaId], map: "sucursales_id_empresa_id_key")
   @@index([empresaId])
   @@map("sucursales")
@@ -110,4 +113,140 @@ model AgenteEstado {
   @@unique([sucursalId, empresaId], map: "agente_estado_sucursal_id_empresa_id_key")
   @@index([empresaId])
   @@map("agente_estado")
+}
+
+// ---------------------------------------------------------------------------
+// Ventas (F1-030): lo que el agente lee de SoftRestaurant y manda por la
+// ingesta (F1-031). Las tablas se llenan SÓLO desde la ingesta; nada de aquí
+// se escribe de vuelta al POS.
+//
+// - Todo importe es NUMERIC(12,2) (`Decimal`), nunca float.
+// - Todo timestamp es timestamptz en UTC. Los cortes de "hoy" se calculan en
+//   la zona de la sucursal (F1-032), no aquí.
+// - Cada tabla lleva su propio `empresa_id` indexado (helper de scope) y una FK
+//   COMPUESTA hacia su padre `(padre_id, empresa_id) → padre(id, empresa_id)`:
+//   la empresa de una hija no puede divergir de la de su padre. Mismo patrón
+//   que `agente_estado` (F1-010).
+// - Sin CHECK de signo en importes ni cantidades: ver DECISION PROVISIONAL en
+//   `Cheque`.
+// ---------------------------------------------------------------------------
+
+enum FormaPago {
+  efectivo
+  tarjeta
+  transferencia
+  otro
+
+  @@map("forma_pago")
+}
+
+model Cheque {
+  id         String    @id @default(uuid()) @db.Uuid
+  sucursalId String    @map("sucursal_id") @db.Uuid
+  empresaId  String    @map("empresa_id") @db.Uuid
+  // DECISION PROVISIONAL (nocturno): `folio` (el que ve el cliente en el
+  // ticket) y `folio_sr` (la llave estable del cheque dentro de SR) se guardan
+  // como texto. No se ha visto una instalación real (docs/esquema-sr.md §2):
+  // texto acepta tanto un entero como un alfanumérico sin perder ceros.
+  folio      String
+  folioSr    String    @map("folio_sr")
+  abiertoAt  DateTime  @map("abierto_at") @db.Timestamptz(3)
+  // DECISION PROVISIONAL (nocturno): nulo permitido. Un cheque cancelado en SR
+  // podría no tener fecha de cierre (supuesto, esquema-sr.md §2). Los
+  // agregados de F1-032 filtran por `cerrado_at` y un nulo simplemente no
+  // entra en ningún rango.
+  cerradoAt  DateTime? @map("cerrado_at") @db.Timestamptz(3)
+  mesa       String?
+  mesero     String?
+  // DECISION PROVISIONAL (nocturno): nulo = "SR no lo reportó", distinto de
+  // cero. Con default 0 un dato ausente contaminaría "comensales totales" y el
+  // promedio por comensal de F1-032 (supuesto, esquema-sr.md §2).
+  comensales Int?
+  // DECISION PROVISIONAL (nocturno): sin CHECK >= 0 en importes. Devoluciones
+  // o ajustes del POS podrían llegar negativos (supuesto, esquema-sr.md §2);
+  // un CHECK que rechace datos reales tumbaría la ingesta de ese cheque.
+  subtotal   Decimal   @db.Decimal(12, 2)
+  impuestos  Decimal   @db.Decimal(12, 2)
+  descuentos Decimal   @db.Decimal(12, 2)
+  propina    Decimal   @db.Decimal(12, 2)
+  total      Decimal   @db.Decimal(12, 2)
+  cancelado  Boolean   @default(false)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal        @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cheques_sucursal_empresa_fkey")
+  partidas ChequePartida[]
+  pagos    ChequePago[]
+
+  // La llave de idempotencia de la ingesta (F1-031): upsert por aquí.
+  @@unique([sucursalId, folioSr], map: "cheques_sucursal_id_folio_sr_key")
+  // Destino de las FK compuestas de partidas y pagos.
+  @@unique([id, empresaId], map: "cheques_id_empresa_id_key")
+  // Agregados por empresa y rango de cierre (F1-032). Empieza por empresa_id,
+  // así que también es el índice por empresa de esta tabla.
+  @@index([empresaId, cerradoAt], map: "cheques_empresa_id_cerrado_at_idx")
+  @@map("cheques")
+}
+
+model ChequePartida {
+  id            String  @id @default(uuid()) @db.Uuid
+  chequeId      String  @map("cheque_id") @db.Uuid
+  // Denormalizado para el helper de scope; la FK compuesta lo ata al cheque.
+  empresaId     String  @map("empresa_id") @db.Uuid
+  // Posición de la partida en el ticket (0..n), tal como llega en el lote. Las
+  // UUID no ordenan, y el detalle del ticket se muestra en el orden del POS.
+  orden         Int
+  producto      String
+  categoria     String?
+  // No es dinero: NUMERIC(12,3) porque SR podría vender fraccionado (kg, litros).
+  // DECISION PROVISIONAL (nocturno): supuesto, esquema-sr.md §3.
+  cantidad      Decimal @db.Decimal(12, 3)
+  precioUnit    Decimal @map("precio_unit") @db.Decimal(12, 2)
+  total         Decimal @db.Decimal(12, 2)
+  // Lista de modificadores tal como la arma la ingesta (incluidos los de $0.00).
+  modificadores Json    @default("[]")
+
+  cheque Cheque @relation(fields: [chequeId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cheque_partidas_cheque_empresa_fkey")
+
+  @@unique([chequeId, orden], map: "cheque_partidas_cheque_id_orden_key")
+  @@index([empresaId])
+  @@map("cheque_partidas")
+}
+
+model ChequePago {
+  id        String    @id @default(uuid()) @db.Uuid
+  chequeId  String    @map("cheque_id") @db.Uuid
+  // Denormalizado para el helper de scope; la FK compuesta lo ata al cheque.
+  empresaId String    @map("empresa_id") @db.Uuid
+  forma     FormaPago
+  // El nombre de la forma de pago tal como viene de SR. El ENUM `forma` se
+  // deriva de aquí con el catálogo de F1-032; el crudo se guarda siempre.
+  formaRaw  String    @map("forma_raw")
+  monto     Decimal   @db.Decimal(12, 2)
+
+  cheque Cheque @relation(fields: [chequeId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cheque_pagos_cheque_empresa_fkey")
+
+  @@index([chequeId])
+  @@index([empresaId])
+  @@map("cheque_pagos")
+}
+
+// Foto de las mesas abiertas de una sucursal. Se conserva el último por
+// sucursal más 24 h de histórico para depurar: la purga de lo más viejo la
+// hace la ingesta (F1-031) al recibir uno nuevo. El "último" es el de mayor
+// `capturado_at`, y el único de abajo lo resuelve con un index scan.
+model MesaSnapshot {
+  id          String   @id @default(uuid()) @db.Uuid
+  sucursalId  String   @map("sucursal_id") @db.Uuid
+  empresaId   String   @map("empresa_id") @db.Uuid
+  capturadoAt DateTime @map("capturado_at") @db.Timestamptz(3)
+  payload     Json
+  recibidoAt  DateTime @default(now()) @map("recibido_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "mesa_snapshots_sucursal_empresa_fkey")
+
+  // Reenviar el mismo snapshot no lo duplica.
+  @@unique([sucursalId, capturadoAt], map: "mesa_snapshots_sucursal_id_capturado_at_key")
+  @@index([empresaId])
+  @@map("mesa_snapshots")
 }

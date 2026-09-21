@@ -72,6 +72,13 @@ export const USUARIOS = {
 export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   const empresas = [FX.empresaA, FX.empresaB, FX.empresaC];
   await prisma.usuario.deleteMany({ where: { email: { endsWith: DOMINIO } } });
+  // Ventas de prueba (F1-030) colgadas de estas sucursales: las FK son Restrict,
+  // así que se borran de las hojas hacia arriba antes que las sucursales.
+  const deEstas = { where: { empresaId: { in: empresas } } };
+  await prisma.chequePartida.deleteMany(deEstas);
+  await prisma.chequePago.deleteMany(deEstas);
+  await prisma.cheque.deleteMany(deEstas);
+  await prisma.mesaSnapshot.deleteMany(deEstas);
   await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });
   await prisma.empresa.deleteMany({ where: { id: { in: empresas } } });
 }
