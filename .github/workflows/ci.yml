@@ -22,10 +22,19 @@ name: CI
 # que el CI exista, se vea en verde en cada PR y falle si alguien commitea un
 # secreto o un centinela.
 
+# paths-ignore: los commits de cierre (el `[x]` de backlog.md) y las entradas
+# SALTADA del log van directo a main y no tocan código; no corren CI. Si un
+# commit o PR toca cualquier otro archivo además de éstos, el CI corre completo.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - backlog.md
+      - docs/nocturno-log.md
   pull_request:
+    paths-ignore:
+      - backlog.md
+      - docs/nocturno-log.md
 
 jobs:
   # ---------------------------------------------------------------------------
