@@ -396,7 +396,7 @@ heartbeat.
 >   eventos cada 10 min. No se pierde nada, pero tiene que verse en `ultimoError`.
 
 ## 21 · F1-026 · Instalador y guía de instalación
-`[ ]` **Epic 2 — Agente Windows (.NET 8)**
+`[x]` **Epic 2 — Agente Windows (.NET 8)** · **PARCIAL:** falta ejecutar el T-SQL del lector y `instalar.ps1` con consola elevada (cuenta virtual, `sc.exe`, `icacls`), que quedan en F1-020b (Diurnas); y medir la instalación de < 15 min con una persona no técnica, que queda en F1-091.
 
 Script PowerShell `instalar.ps1`: copia binarios, crea carpeta de config con plantilla,
 registra el servicio, lo arranca, corre `test`. Guía en `/docs/instalacion-agente.md` con:
