@@ -102,7 +102,7 @@ obligatorio, no opcional**).
 > base real del proyecto.
 
 ## 4 · F1-012 · Auth de agentes (API key)
-`[ ]` **Epic 1 — Modelo de datos, auth y multitenancy**
+`[x]` **Epic 1 — Modelo de datos, auth y multitenancy**
 
 Generación de API key por sucursal desde el panel admin (se muestra una sola vez, se
 guarda hash). Guard `AgentAuthGuard`: header `X-Api-Key` → resuelve sucursal, rechaza si
