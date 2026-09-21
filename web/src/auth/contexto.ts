@@ -11,7 +11,8 @@ export interface ContextoAuth {
   auth: EstadoAuth;
   /** Lanza `ErrorApi` con el status de la API (401, 429...) o 0 si no hubo red. */
   iniciarSesion: (email: string, password: string) => Promise<void>;
-  cerrarSesion: () => void;
+  /** Revoca la sesión en la API (best-effort) y limpia el cliente. Nunca lanza. */
+  cerrarSesion: () => Promise<void>;
 }
 
 export const AuthContexto = createContext<ContextoAuth | null>(null);

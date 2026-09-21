@@ -2,11 +2,13 @@
  * Marca "el usuario cerró sesión en este navegador". Mientras está puesta, el
  * arranque NO intenta el refresh silencioso.
  *
- * Por qué hace falta: la API todavía no tiene logout (F1-092), así que la cookie
- * httpOnly de refresh sigue viva hasta 7 días después de "cerrar sesión" y la SPA no
- * la puede borrar. Esto NO es revocación: quien borre el localStorage en esa máquina
- * entra como el usuario anterior mientras la cookie viva. Es un riesgo abierto y
- * está anotado en docs/nocturno-log.md para F1-092.
+ * Por qué sigue haciendo falta aunque la API ya tiene logout (F1-093): "Salir"
+ * llama a `POST /auth/logout`, que revoca la sesión y borra la cookie httpOnly de
+ * refresh, pero ese POST puede no llegar (sin red, API caída, pestaña cerrada a
+ * media salida). Entonces la cookie sigue viva hasta 7 días y la SPA no la puede
+ * borrar; esta marca evita que el arranque la use para reanudar la sesión. NO es
+ * revocación: quien borre el localStorage en esa máquina entraría como el usuario
+ * anterior, pero sólo si el logout no llegó a la API.
  */
 const CLAVE = 'monitor.sesionCerrada';
 

@@ -96,6 +96,30 @@
         ]
       }
     },
+    "/auth/logout": {
+      "post": {
+        "description": "Revoca en el servidor la sesión de la cookie `monitor_refresh`: su refresh vigente y los anteriores de esa misma sesión reciben 401 en `/auth/refresh`. Las demás sesiones del usuario (otros navegadores) siguen. Siempre borra la cookie (Path=/auth). Idempotente: sin cookie, con una inválida o ya revocada también responde 204. Los access tokens ya emitidos siguen valiendo hasta que venzan (15 min).",
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "Sesión cerrada (o no había ninguna) y cookie borrada."
+          },
+          "429": {
+            "description": "Más de 30 logout por minuto desde la misma IP."
+          }
+        },
+        "security": [
+          {
+            "monitor_refresh": []
+          }
+        ],
+        "summary": "Cierra la sesión de este navegador (F1-093).",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/me": {
       "get": {
         "operationId": "AuthController_me",

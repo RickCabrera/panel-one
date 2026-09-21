@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { UsuarioActual } from './api/tipos';
 import { Proveedores, Rutas } from './App';
-import { terminarSesion } from './auth/sesion';
+import { terminarSesion, tokenActual } from './auth/sesion';
 import { crearQueryClient } from './consultas/queryClient';
 import {
   EMPRESA_A,
@@ -39,6 +39,11 @@ function apiDePrueba({ u, cookieViva }: { u: UsuarioActual; cookieViva: boolean 
       if (password !== PASSWORD_BUENA) return noAutorizado();
       estado.cookieViva = true;
       return json(200, sesion(u));
+    },
+    // F1-093: la API revoca la sesión de la cookie y la borra.
+    'POST /auth/logout': () => {
+      estado.cookieViva = false;
+      return new Response(null, { status: 204 });
     },
     'GET /empresas': () =>
       json(200, u.rol === 'admin_global' ? [EMPRESA_A, EMPRESA_B] : [EMPRESA_A]),
@@ -182,6 +187,7 @@ describe('cerrar sesión', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Salir' }));
 
     expect(await screen.findByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+    expect(api.contar('POST', '/auth/logout')).toBe(1);
     const refreshAntes = api.contar('POST', '/auth/refresh');
 
     primera.unmount();
@@ -191,10 +197,90 @@ describe('cerrar sesión', () => {
     expect(api.contar('POST', '/auth/refresh')).toBe(refreshAntes);
   });
 
-  // B1 del revisor: la cookie del usuario anterior sigue viva (la API no tiene
-  // logout). Un login malo NO puede terminar dentro como ese usuario.
+  // F1-093: "Salir" revoca en la API ANTES de limpiar el cliente, con la marca de
+  // "cerró sesión" ya puesta (por si la pestaña se cierra a media salida).
+  it('revoca la sesión en la API antes de limpiar el cliente, con la marca ya puesta', async () => {
+    const api = apiDePrueba({ u: usuario('admin_global', 'Ricardo Anterior'), cookieViva: true });
+    let alLlegar: { marca: string | null; conToken: boolean; seguiaDentro: boolean } | null = null;
+    api.manejadores['POST /auth/logout'] = () => {
+      alLlegar = {
+        marca: window.localStorage.getItem('monitor.sesionCerrada'),
+        // El cliente todavía no se limpió: el access token sigue en memoria. (El DOM
+        // no basta: React re-renderiza después y no delataría el orden invertido.)
+        conToken: tokenActual() !== null,
+        seguiaDentro: screen.queryByText('Ricardo Anterior') !== null,
+      };
+      api.estado.cookieViva = false;
+      return new Response(null, { status: 204 });
+    };
+    montar(`/?empresa=${A}`);
+    await screen.findByText('Ricardo Anterior');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Salir' }));
+
+    await screen.findByRole('button', { name: 'Entrar' });
+    expect(alLlegar).toEqual({ marca: '1', conToken: true, seguiaDentro: true });
+    expect(api.contar('POST', '/auth/logout')).toBe(1);
+    expect(screen.queryByText('Ricardo Anterior')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['responde 500', () => json(500, { statusCode: 500, message: 'Internal server error' })],
+    [
+      'no hay red',
+      () => {
+        throw new TypeError('Failed to fetch');
+      },
+    ],
+  ])('si el logout %s, igual vuelve al login y no reanuda la sesión', async (_caso, falla) => {
+    const api = apiDePrueba({ u: usuario('admin_global'), cookieViva: true });
+    // La cookie sigue viva en el servidor: el logout no llegó.
+    api.manejadores['POST /auth/logout'] = falla;
+    const primera = montar(`/?empresa=${A}`);
+    await screen.findByRole('heading', { name: 'Panel de ventas' });
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Salir' }));
+
+    expect(await screen.findByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+    expect(api.contar('POST', '/auth/logout')).toBe(1);
+    expect(window.localStorage.getItem('monitor.sesionCerrada')).toBe('1');
+
+    // Al recargar, la marca impide el refresh silencioso con la cookie viva.
+    const refreshAntes = api.contar('POST', '/auth/refresh');
+    primera.unmount();
+    montar(`/?empresa=${A}`);
+    expect(await screen.findByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+    expect(api.contar('POST', '/auth/refresh')).toBe(refreshAntes);
+  });
+
+  it('mientras sale, un segundo clic en "Salir" no manda otro logout', async () => {
+    const api = apiDePrueba({ u: usuario('admin_global'), cookieViva: true });
+    let responder: () => void = () => {};
+    api.manejadores['POST /auth/logout'] = () =>
+      new Promise<Response>((resolver) => {
+        responder = () => resolver(new Response(null, { status: 204 }));
+      });
+    montar(`/?empresa=${A}`);
+    await screen.findByRole('heading', { name: 'Panel de ventas' });
+    const evt = userEvent.setup();
+    const salir = screen.getByRole('button', { name: 'Salir' });
+
+    await evt.click(salir);
+    await waitFor(() => expect(salir).toBeDisabled());
+    await evt.click(salir);
+    expect(api.contar('POST', '/auth/logout')).toBe(1);
+
+    responder();
+    expect(await screen.findByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+    expect(api.contar('POST', '/auth/logout')).toBe(1);
+  });
+
+  // B1 del revisor: la cookie del usuario anterior puede seguir viva (si su logout
+  // no llegó a la API). Un login malo NO puede terminar dentro como ese usuario.
   it('tras cerrar sesión, un login malo nunca entra como el usuario anterior', async () => {
     const api = apiDePrueba({ u: usuario('admin_global', 'Ricardo Anterior'), cookieViva: true });
+    // El peor caso: el logout no llegó y la cookie del anterior sigue viva.
+    api.manejadores['POST /auth/logout'] = () => json(503, { statusCode: 503, message: 'x' });
     montar(`/?empresa=${A}`);
     await screen.findByText('Ricardo Anterior');
     await userEvent.setup().click(screen.getByRole('button', { name: 'Salir' }));

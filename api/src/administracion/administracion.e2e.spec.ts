@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Logger, type INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -626,9 +628,20 @@ describe('Administración (e2e, F1-060)', () => {
     });
     it('un refresh sin `ver` (emitido antes de F1-060) vale como versión 0; un `ver` raro es 401', async () => {
       const u = await usuarioDePrueba('ver', RolUsuario.visor, FX.empresaA);
+      // Desde F1-093 todo refresh lleva la sesión (`sid`) y ésta tiene que estar
+      // viva en base; aquí se prueba sólo el claim `ver`, así que la sesión existe.
+      const sid = randomUUID();
+      await prisma.sesionUsuario.create({
+        data: {
+          id: sid,
+          usuarioId: u.id,
+          empresaId: u.empresaId,
+          expiraEn: new Date(Date.now() + 60 * 60_000),
+        },
+      });
       const firmar = (claims: Record<string, unknown>) =>
         a.get(JwtService).signAsync(
-          { typ: 'refresh', ...claims },
+          { typ: 'refresh', sid, ...claims },
           {
             subject: u.id,
             secret: process.env.JWT_REFRESH_SECRET!,

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Controller, Get, Param, ParseUUIDPipe, type INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -279,7 +281,9 @@ describe('Auth de usuarios (e2e, F1-011)', () => {
     });
 
     it('un refresh token usado como bearer → 401', async () => {
-      await me(await a.get(TokensService).firmarRefresh(USUARIOS.visorA.id, 0)).expect(401);
+      await me(
+        await a.get(TokensService).firmarRefresh(USUARIOS.visorA.id, 0, randomUUID()),
+      ).expect(401);
     });
 
     it('usuario desactivado con access token aún vigente → 401 en /me', async () => {
@@ -327,8 +331,20 @@ describe('Auth de usuarios (e2e, F1-011)', () => {
     });
 
     it('refresh de un usuario ya inactivo → 401', async () => {
-      const token = await a.get(TokensService).firmarRefresh(USUARIOS.visorInactivo.id, 0);
+      // Con una sesión VIVA en base (F1-093): el 401 sale de que el usuario está
+      // inactivo, no de que la sesión no exista.
+      const sid = randomUUID();
+      await prisma.sesionUsuario.create({
+        data: {
+          id: sid,
+          usuarioId: USUARIOS.visorInactivo.id,
+          empresaId: USUARIOS.visorInactivo.empresaId,
+          expiraEn: new Date(Date.now() + 60 * 60_000),
+        },
+      });
+      const token = await a.get(TokensService).firmarRefresh(USUARIOS.visorInactivo.id, 0, sid);
       await refresh(`${COOKIE_REFRESH}=${token}`).expect(401);
+      await expect(prisma.sesionUsuario.count({ where: { id: sid } })).resolves.toBe(1);
     });
   });
 

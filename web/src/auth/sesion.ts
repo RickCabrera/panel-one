@@ -20,6 +20,8 @@ export type EventoSesion =
 
 type Oyente = (evento: EventoSesion) => void;
 
+/** Tope del logout en el servidor: "Salir" no se queda colgado si la red no responde. */
+const TOPE_LOGOUT_MS = 5000;
 /** Cuánto antes de que venza el access token se pide uno nuevo. */
 const MARGEN_REFRESH_SEGUNDOS = 60;
 /** Piso del timer proactivo, por si la API manda una vida absurda de corta. */
@@ -104,6 +106,28 @@ export function refrescarSesion(): Promise<Sesion | null> {
   };
   promesa.then(limpiar, limpiar);
   return promesa;
+}
+
+/**
+ * `POST /auth/logout` (F1-093): la API revoca la sesión de la cookie de refresh y
+ * la borra. Es best-effort y nunca lanza: si falla la red, la API responde un error
+ * o tarda más que el tope, quien cierra la sesión limpia el cliente igual, y la
+ * marca de `marcaCierre.ts` evita que el arranque la reanude con la cookie.
+ */
+export async function cerrarSesionEnServidor(): Promise<void> {
+  const control = new AbortController();
+  const tope = setTimeout(() => control.abort(), TOPE_LOGOUT_MS);
+  try {
+    await fetch(`${BASE_API}/auth/logout`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      signal: control.signal,
+    });
+  } catch {
+    // Sin red o abortado por el tope: la limpieza local sigue igual.
+  } finally {
+    clearTimeout(tope);
+  }
 }
 
 /**

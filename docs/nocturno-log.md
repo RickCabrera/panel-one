@@ -2506,3 +2506,118 @@ corrija.
 
 **Estado de la cola al cerrar:** con F1-092 `[x]` no queda nada en la Cola nocturna. La siguiente
 sesión debe crear `COLA_VACIA.txt` y terminar, salvo que Ricardo agregue tareas (p. ej. el logout).
+
+## 2026-09-21 12:09 — F1-093 · Logout y revocación de refresh tokens
+**Estado:** CERRADA si el PR se mergea (el número lo da `gh pr create`). Plan: APROBADO CON
+OBSERVACIONES (sin bloqueo). Entregable: ver "Revisor del entregable" al final.
+
+**Qué quedó hecho.**
+- **`POST /auth/logout`** (`api/src/auth/auth.controller.ts`):
+  - `@Public()`: lo que identifica la sesión es la cookie de refresh, que sólo viaja a `/auth`, y
+    el access puede haber vencido.
+  - Responde 204 y **siempre** borra la cookie, con los mismos atributos con que se puso.
+  - Idempotente: sin cookie, con basura, con un access en la cookie o con una sesión ya revocada,
+    también 204.
+  - Throttle: el cubo `refresh` (30/min por IP, con su propio contador de ruta).
+  - OpenAPI regenerado.
+- **Tabla `sesiones_usuario`** (migración `20260921120000_sesiones_usuario`): una fila por login.
+  - El refresh lleva un claim `sid` con el id de la fila, y **lo conserva al rotar**.
+  - El logout pone `revocada_en`. Con eso mueren el refresh vigente y todos los anteriores ya
+    rotados de esa sesión, y **sólo** los de esa sesión: el mismo usuario sigue dentro en otro
+    navegador.
+  - `version_sesion` (F1-060) sigue igual y sigue invalidando TODAS las sesiones: cambio o reset de
+    contraseña, y baja.
+  - El refresh exige las dos cosas: la versión igual y la sesión viva.
+- **SPA.** "Salir" pone la marca de localStorage, luego hace `POST /auth/logout` (best-effort, tope
+  de 5 s, nunca lanza) y al final limpia el cliente, en ese orden (`web/src/auth/AuthProvider.tsx`).
+  El botón se deshabilita mientras sale.
+  - Comentarios "logout (F1-092)" de `marcaCierre.ts` y `cliente.ts` corregidos. La marca **se
+    queda**: es la red cuando el POST no llega (sin red o pestaña cerrada), porque en ese caso la
+    cookie sigue viva.
+
+**Decisiones que tomé y por qué.**
+- **Tabla de sesiones, no subir `version_sesion` en el logout.** Subir la versión no cuesta
+  esquema, pero "Salir" en la PC sacaría también al celular del dueño. Y en restaurantes donde
+  varios encargados comparten una cuenta, cada "Salir" sacaría a todos. La ficha pide revocar "el
+  refresh de esa sesión".
+- **Un refresh sin `sid` (emitido antes de esta migración) recibe 401.** Ese token no tiene fila que
+  el logout pueda revocar, y aceptarlo dejaría sesiones imposibles de cerrar.
+  **⚠️ Al desplegar esto, TODOS los usuarios tienen que volver a hacer login una vez.** Hoy no hay
+  producción, así que no afecta a nadie. Un `sid` que no es UUID también es 401: si pasara a la
+  columna UUID daría 500.
+- **`sesiones_usuario.empresa_id` denormalizado** (nulo sólo para admin_global).
+  - `LLAVE_EMPRESA` (`scope.helper.ts`) obliga por tipo a registrar todo modelo con `id` o
+    `empresaId`. Es el mismo patrón que `AgenteEstado`.
+  - FK compuesta `(usuario_id, empresa_id) → usuarios(id, empresa_id)`, llamada
+    `sesiones_usuario_usuario_empresa_fkey`, con `ON DELETE CASCADE ON UPDATE CASCADE`. Por eso
+    `usuarios` ganó `@@unique([id, empresaId])`.
+  - Hoy ningún endpoint cambia `usuarios.empresa_id`. Si algún día lo hace, el `ON UPDATE CASCADE`
+    arrastra las sesiones en lugar de fallar.
+  - Con `empresa_id` NULL la FK compuesta no aplica (MATCH SIMPLE). Queda la FK simple sobre
+    `usuario_id`, también en cascada.
+- **Las sesiones se leen FUERA del helper de scope, a propósito.** Es infraestructura de auth, no
+  dato de negocio.
+  - Sólo `AuthService` las toca (`api/src/auth/auth.service.ts`, que ya estaba en la allowlist de
+    Prisma crudo; la allowlist NO creció, sólo su comentario).
+  - Siempre por `sid` + `usuario_id` sacados de un JWT firmado por nosotros, o del usuario que se
+    acaba de autenticar.
+  - El logout y el refresh ponen `usuarioId` en el WHERE. Un `sid` de otro usuario no revoca ni
+    refresca nada; hay test con A usando el `sid` de B, que es de otra empresa.
+- **Efecto colateral que el revisor debe ver:** `ScopedPrismaService.para(scope)` expone un delegado
+  por cada modelo de `Prisma.ModelName`, así que ahora también expone `sesionUsuario` (lecturas y
+  `updateMany`, filtrado por `empresa_id` como todos). Nadie lo usa.
+  - Quitarlo exigía tocar el tipado del helper de scope, y no era parte de esta tarea.
+  - El test `scoped-prisma.service.spec.ts` se adaptó a la lista nueva.
+- **Rotar el refresh desliza `expira_en` 7 días**, con UNA sentencia `updateMany` con
+  `revocadaEn: null, expiraEn > ahora` y `count !== 1` → 401. Un logout concurrente gana o pierde
+  entero.
+- **Limpieza.** Cada login borra las sesiones vencidas de ESE usuario, revocadas o no, en la misma
+  transacción que crea la nueva. No hay cron; la tabla crece como mucho con las sesiones vivas y las
+  revocadas que aún no vencen.
+
+**Lo "relacionado" de la ficha que NO entró (sigue abierto, decisión para Ricardo):**
+1. **Rotar no invalida el refresh anterior mientras la sesión vive.** Tras el logout sí mueren
+   todos. Invalidarlo al rotar (guardar el `jti` vigente por fila) choca con varias pestañas
+   refrescando a la vez con la misma cookie: el single-flight de la SPA es por pestaña, así que la
+   segunda recibiría 401 y sacaría al usuario. Necesita una ventana de gracia y detección de reúso.
+   Sería una tarea aparte.
+2. **Un usuario desactivado sigue entrando a rutas de datos con su access hasta 15 min.** Resolverlo
+   pide leer la base en cada request (en el guard global) o una lista de revocación en memoria. No
+   es gratis. Si se quiere, que sea tarea propia.
+
+**Trampas que encontré.**
+- **`prisma migrate dev` se niega en modo no interactivo** porque agregar un `@@unique` a `usuarios`
+  dispara un aviso de confirmación. Ni `--create-only` lo salta. Lo que funcionó:
+  1. `npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel
+     prisma/schema.prisma --script > .../migration.sql`, con la base local al día.
+  2. `npx prisma migrate deploy`.
+  3. `npx prisma migrate dev`, que ya dice "Already in sync".
+
+  `--from-migrations` pide una shadow DB y falla por credenciales.
+- **Un test de "orden" que pasaba por el motivo equivocado.** Comprobaba, dentro del manejador de
+  `/auth/logout`, que el usuario siguiera en el DOM. Con el orden invertido (limpiar y luego POST)
+  también pasaba, porque React re-renderiza después. Ahora comprueba `tokenActual() !== null`, y la
+  mutación sí lo tumba (probado).
+- **El test viejo "refresh de un usuario ya inactivo → 401"** habría pasado sólo porque la sesión no
+  existe. Ahora crea una sesión viva en base, para que el 401 salga del usuario inactivo.
+- También verifiqué con una mutación que quitar `usuarioId` del WHERE del logout hace fallar el test
+  de aislamiento.
+- **`npx prettier --write` sobre un glob reescribe archivos que no tocaste** (CRLF → LF): aparecen
+  como modificados sin diff real. Antes de commitear, revierte los que `git diff --name-only` no
+  lista.
+- **`cat > archivo` sin redirección de entrada en un comando de Bash se queda esperando stdin** y el
+  comando muere a los 120 s. Me pasó una vez; no dejó rastro en el repo.
+
+**Qué haría distinto.** Revisar desde el plan qué tests existentes firman tokens a mano o dependen de
+la lista de modelos (`LLAVE_EMPRESA`, los delegados del helper de scope, el contrato OpenAPI). Los
+cuatro que rompieron eran previsibles.
+
+**Revisor del entregable: APROBADO CON OBSERVACIONES**, sin obligatorias. Re-corrió 239/239 de auth,
+scope, esquema y administración. Verificó las tres obligatorias del plan y la revisión aparte de
+scope: no hay fuga entre empresas. De sus observaciones queda abierta una, **para Ricardo**:
+- El delegado `sesionUsuario` del helper de scope permite `updateMany`. Un servicio futuro con scope
+  podría tocar `revocadaEn`/`expiraEn` de las sesiones de su propia empresa (sin cruzar empresas).
+- Valdría la pena una lista de modelos "de infraestructura" que `para(scope)` no exponga. No se hizo
+  aquí: sería "de pasada" y toca el helper de scope.
+
+**Estado de la cola al cerrar:** sigue **F1-094** (pendientes que quedaron "para F1-092", /web).

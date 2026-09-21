@@ -3,6 +3,7 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiCookieAuth,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -87,6 +88,41 @@ export class AuthController {
   ): Promise<SesionDto> {
     const cookies = req.cookies as Record<string, string | undefined> | undefined;
     return this.responder(await this.auth.refrescar(cookies?.[COOKIE_REFRESH]), res);
+  }
+
+  @Post('logout')
+  // Pública: el access pudo haber vencido, y lo que identifica la sesión es la
+  // cookie de refresh, que sólo viaja a `/auth`.
+  @Public()
+  // Rate limit: el cubo `refresh` (30/min por IP, contador propio de esta ruta).
+  @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ [THROTTLER_LOGIN]: true, [THROTTLER_AGENTE]: true })
+  @HttpCode(204)
+  @ApiCookieAuth(COOKIE_REFRESH)
+  @ApiOperation({
+    summary: 'Cierra la sesión de este navegador (F1-093).',
+    description:
+      `Revoca en el servidor la sesión de la cookie \`${COOKIE_REFRESH}\`: su refresh vigente y ` +
+      'los anteriores de esa misma sesión reciben 401 en `/auth/refresh`. Las demás sesiones ' +
+      `del usuario (otros navegadores) siguen. Siempre borra la cookie (Path=${COOKIE_REFRESH_PATH}). ` +
+      'Idempotente: sin cookie, con una inválida o ya revocada también responde 204. Los access ' +
+      'tokens ya emitidos siguen valiendo hasta que venzan (15 min).',
+  })
+  @ApiNoContentResponse({ description: 'Sesión cerrada (o no había ninguna) y cookie borrada.' })
+  @ApiTooManyRequestsResponse({ description: 'Más de 30 logout por minuto desde la misma IP.' })
+  async logout(
+    @Req() req: RequestAutenticado,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    const cookies = req.cookies as Record<string, string | undefined> | undefined;
+    await this.auth.cerrarSesion(cookies?.[COOKIE_REFRESH]);
+    // Mismos atributos que al ponerla (sin maxAge): si no coinciden, el navegador no la borra.
+    res.clearCookie(COOKIE_REFRESH, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: this.config.cookieSegura,
+      path: COOKIE_REFRESH_PATH,
+    });
   }
 
   @Get('me')

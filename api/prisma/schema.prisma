@@ -96,8 +96,46 @@ model Usuario {
 
   empresa Empresa? @relation(fields: [empresaId], references: [id], onDelete: Restrict)
 
+  // Sesiones de login (F1-093). La segunda relación es la FK compuesta que
+  // impide que `sesiones_usuario.empresa_id` diverja de la del usuario.
+  sesiones        SesionUsuario[]
+  sesionesEmpresa SesionUsuario[] @relation("SesionUsuarioEmpresa")
+
+  // Redundante con el PK, pero Prisma lo exige para la FK compuesta de
+  // `sesiones_usuario` (usuario_id, empresa_id).
+  @@unique([id, empresaId], map: "usuarios_id_empresa_id_key")
   @@index([empresaId])
   @@map("usuarios")
+}
+
+// Una fila por login (F1-093). El refresh token lleva su `id` en el claim `sid`
+// y lo CONSERVA al rotar: el logout marca `revocada_en` y mueren el refresh
+// vigente y todos los anteriores de esa sesión, sólo de esa. `version_sesion`
+// del usuario sigue invalidando TODAS (cambio/reset de contraseña, baja).
+//
+// No es dato de negocio: sólo la lee y escribe `AuthService`, por `sid` y
+// `usuario_id` sacados de un JWT firmado, nunca por el helper de scope.
+model SesionUsuario {
+  id         String    @id @db.Uuid
+  usuarioId  String    @map("usuario_id") @db.Uuid
+  // Denormalizado de `usuarios.empresa_id` (nulo sólo para admin_global) para
+  // que LLAVE_EMPRESA (scope.helper.ts) no tenga casos especiales, como en
+  // AgenteEstado. La FK compuesta impide que diverja cuando no es nulo; con
+  // NULL (admin_global) no aplica (MATCH SIMPLE) y queda la simple.
+  empresaId  String?   @map("empresa_id") @db.Uuid
+  creadaEn   DateTime  @default(now()) @map("creada_en") @db.Timestamptz(3)
+  // Deslizante: cada rotación del refresh la corre 7 días, como el refresh.
+  expiraEn   DateTime  @map("expira_en") @db.Timestamptz(3)
+  revocadaEn DateTime? @map("revocada_en") @db.Timestamptz(3)
+
+  usuario        Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade, map: "sesiones_usuario_usuario_id_fkey")
+  // `usuarios.empresa_id` no cambia hoy (ningún endpoint lo edita); si algún
+  // día cambia, ON UPDATE CASCADE arrastra las sesiones en vez de fallar.
+  usuarioEmpresa Usuario? @relation("SesionUsuarioEmpresa", fields: [usuarioId, empresaId], references: [id, empresaId], onDelete: Cascade, onUpdate: Cascade, map: "sesiones_usuario_usuario_empresa_fkey")
+
+  @@index([usuarioId])
+  @@index([empresaId])
+  @@map("sesiones_usuario")
 }
 
 model AgenteEstado {

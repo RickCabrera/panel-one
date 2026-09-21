@@ -21,6 +21,7 @@ describe('Contrato OpenAPI', () => {
         '/agente/yo',
         '/agentes/estado',
         '/auth/login',
+        '/auth/logout',
         '/auth/me',
         '/auth/refresh',
         '/cuenta/password',
@@ -45,6 +46,12 @@ describe('Contrato OpenAPI', () => {
     );
     expect(paths['/auth/login']?.post?.responses).toHaveProperty('429');
     expect(paths['/auth/me']?.get?.security).toEqual([{ bearer: [] }]);
+    // F1-093: público (lo identifica la cookie), 204 idempotente y con rate limit.
+    expect(Object.keys(paths['/auth/logout']?.post?.responses ?? {}).sort()).toEqual([
+      '204',
+      '429',
+    ]);
+    expect(paths['/auth/logout']?.post?.security).toEqual([{ monitor_refresh: [] }]);
   });
 
   it('documenta la administración (F1-060): 404 por alcance, 403 sólo por rol, y el cambio propio', async () => {

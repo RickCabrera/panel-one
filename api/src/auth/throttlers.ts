@@ -18,7 +18,8 @@ export const OPCIONES_THROTTLER_LOGIN: ThrottlerOptions = {
 };
 
 /**
- * `POST /auth/refresh`: 30 por minuto por IP. La SPA refresca una vez por pestaña
+ * `POST /auth/refresh` y `POST /auth/logout` (F1-093): 30 por minuto por IP,
+ * con un contador por ruta (un logout no gasta refresh). La SPA refresca una vez por pestaña
  * cada ~15 min (al vencer el access) y al abrir; 30 deja holgura a una oficina con
  * varias personas detrás de la misma IP y corta a quien lo martille.
  */

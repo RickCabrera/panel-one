@@ -78,6 +78,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'empresa',
       'formaPagoCatalogo',
       'mesaSnapshot',
+      'sesionUsuario',
       'sucursal',
       'usuario',
     ]);

@@ -29,7 +29,9 @@ export default tseslint.config(
   //   - src/auth/auth.service.ts: el login busca por email antes de saber quién
   //     es el usuario; no hay scope que aplicar. El refresh y el cambio de
   //     contraseña propio (F1-060) leen y ESCRIBEN sólo la fila del usuario del
-  //     token, por su id: sin datos de negocio ni de otra empresa.
+  //     token, por su id: sin datos de negocio ni de otra empresa. Las sesiones
+  //     (F1-093, `sesiones_usuario`) igual: por `sid` + `usuario_id` de un JWT
+  //     firmado o del usuario recién autenticado.
   //   - src/agentes/agentes-auth.service.ts: igual que el login, busca la
   //     sucursal por el hash de la API key ANTES de saber de qué empresa es el
   //     request (F1-012). Sólo tiene esa lectura.
