@@ -203,6 +203,79 @@ describe('Esquema núcleo (F1-010)', () => {
     });
   });
 
+  describe('SesionUsuario (F1-093)', () => {
+    const expiraEn = new Date(Date.now() + 60_000);
+
+    /** Un usuario de la empresa demo sólo para este bloque; se borra en `finally`. */
+    async function conUsuarioTemporal(prueba: (usuarioId: string) => Promise<void>) {
+      const usuario = await prisma.usuario.create({
+        data: {
+          email: `sesion-${randomUUID()}@prueba.local`,
+          passwordHash: 'x',
+          nombre: 'Usuario sintético',
+          rol: RolUsuario.visor,
+          empresaId: SEED_IDS.empresaDemo,
+        },
+      });
+      try {
+        await prueba(usuario.id);
+      } finally {
+        await prisma.usuario.deleteMany({ where: { id: usuario.id } });
+      }
+    }
+
+    it('empresa_id no puede ser distinta de la del usuario (FK compuesta)', async () => {
+      await conUsuarioTemporal(async (usuarioId) => {
+        const otraEmpresa = randomUUID();
+        await esperarCodigo(
+          prisma.sesionUsuario.create({
+            data: { id: randomUUID(), usuarioId, empresaId: otraEmpresa, expiraEn },
+          }),
+          'P2003',
+        );
+        await esperarConstraintSql(
+          prisma.$executeRaw`INSERT INTO sesiones_usuario (id, usuario_id, empresa_id, expira_en)
+            VALUES (${randomUUID()}::uuid, ${usuarioId}::uuid, ${otraEmpresa}::uuid, now())`,
+          '23503',
+          'sesiones_usuario_usuario_empresa_fkey',
+        );
+        await expect(prisma.sesionUsuario.count({ where: { usuarioId } })).resolves.toBe(0);
+
+        // Con la empresa del usuario, sí.
+        await prisma.sesionUsuario.create({
+          data: { id: randomUUID(), usuarioId, empresaId: SEED_IDS.empresaDemo, expiraEn },
+        });
+        await expect(prisma.sesionUsuario.count({ where: { usuarioId } })).resolves.toBe(1);
+      });
+    });
+
+    it('no puede apuntar a un usuario que no existe', async () => {
+      await esperarConstraintSql(
+        prisma.$executeRaw`INSERT INTO sesiones_usuario (id, usuario_id, expira_en)
+          VALUES (${randomUUID()}::uuid, ${randomUUID()}::uuid, now())`,
+        '23503',
+        'sesiones_usuario_usuario_id_fkey',
+      );
+    });
+
+    it('borrar al usuario borra sus sesiones (cascada)', async () => {
+      let usuarioBorrado = '';
+      await conUsuarioTemporal(async (usuarioId) => {
+        usuarioBorrado = usuarioId;
+        await prisma.sesionUsuario.createMany({
+          data: [
+            { id: randomUUID(), usuarioId, empresaId: SEED_IDS.empresaDemo, expiraEn },
+            { id: randomUUID(), usuarioId, empresaId: SEED_IDS.empresaDemo, expiraEn },
+          ],
+        });
+        await expect(prisma.sesionUsuario.count({ where: { usuarioId } })).resolves.toBe(2);
+      });
+      await expect(
+        prisma.sesionUsuario.count({ where: { usuarioId: usuarioBorrado } }),
+      ).resolves.toBe(0);
+    });
+  });
+
   describe('CHECK usuarios_rol_empresa_chk', () => {
     const base = { passwordHash: 'x', nombre: 'Usuario sintético' };
 

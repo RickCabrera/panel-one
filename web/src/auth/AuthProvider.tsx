@@ -9,7 +9,13 @@ import {
   quitarMarcaSesionCerrada,
   sesionCerradaEnEsteNavegador,
 } from './marcaCierre';
-import { establecerSesion, refrescarSesion, suscribirSesion, terminarSesion } from './sesion';
+import {
+  cerrarSesionEnServidor,
+  establecerSesion,
+  refrescarSesion,
+  suscribirSesion,
+  terminarSesion,
+} from './sesion';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -64,8 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     establecerSesion(sesion);
   }, []);
 
-  const cerrarSesion = useCallback(() => {
+  // En este orden (F1-093): la marca primero, por si la pestaña se cierra a media
+  // salida; luego la API revoca la sesión y borra la cookie; al final se limpia el
+  // cliente, responda o no la API.
+  const cerrarSesion = useCallback(async () => {
     marcarSesionCerrada();
+    await cerrarSesionEnServidor();
     terminarSesion('cerrada');
   }, []);
 

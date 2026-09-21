@@ -19,7 +19,7 @@ import { TokensService } from './tokens.service';
     JwtModule.register({}),
     // Tres throttlers con nombre, y cada ruta salta los que no son suyos:
     // - `login`: 5/min por IP, `POST /auth/login` y `POST /cuenta/password`.
-    // - `refresh`: 30/min por IP, `POST /auth/refresh` (F1-092).
+    // - `refresh`: 30/min por IP, `POST /auth/refresh` (F1-092) y `POST /auth/logout` (F1-093).
     // - `agente`: 120/min por sucursal, las rutas `@AutenticacionAgente()` (F1-012).
     // La IP es `req.ip`: detrás de Caddy sale de `TRUST_PROXY_SALTOS` (configurarApp).
     // Storage en memoria: vale por proceso.

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { useAuth, useUsuario } from '../auth/contexto';
@@ -9,6 +10,8 @@ export function Topbar({ menuAbierto, onMenu }: { menuAbierto: boolean; onMenu: 
   const usuario = useUsuario();
   const { cerrarSesion } = useAuth();
   const [parametros] = useSearchParams();
+  // Mientras sale (el POST de logout puede tardar), un segundo clic no manda otro.
+  const [saliendo, setSaliendo] = useState(false);
 
   return (
     <header className="flex min-w-0 flex-wrap items-start gap-3 border-b border-slate-200 bg-white px-4 py-2 md:items-center">
@@ -39,8 +42,12 @@ export function Topbar({ menuAbierto, onMenu }: { menuAbierto: boolean; onMenu: 
         </Link>
         <button
           type="button"
-          onClick={cerrarSesion}
-          className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
+          onClick={() => {
+            setSaliendo(true);
+            void cerrarSesion();
+          }}
+          disabled={saliendo}
+          className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-60"
         >
           Salir
         </button>

@@ -14,6 +14,8 @@ import type { UsuarioToken } from './request-autenticado';
 
 const ALGORITMO = 'HS256' as const;
 const ROLES_VALIDOS: ReadonlySet<string> = new Set(Object.values(RolUsuario));
+/** El `sid` va a una columna UUID: otra cosa haría tronar la consulta (500), no un 401. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Claims = Record<string, unknown> & { sub: string };
 
@@ -43,10 +45,12 @@ export class TokensService {
   /**
    * `version` es la `versionSesion` del usuario al emitir (F1-060): el refresh
    * la compara con la base y un token de una versión anterior ya no sirve.
+   * `sesionId` es la fila de `sesiones_usuario` (F1-093, claim `sid`): se
+   * conserva al rotar y el logout la revoca.
    */
-  firmarRefresh(usuarioId: string, version: number): Promise<string> {
+  firmarRefresh(usuarioId: string, version: number, sesionId: string): Promise<string> {
     return this.jwt.signAsync(
-      { typ: 'refresh', ver: version },
+      { typ: 'refresh', ver: version, sid: sesionId },
       {
         subject: usuarioId,
         // `jti` aleatorio: dos refresh emitidos en el mismo segundo son distintos,
@@ -72,18 +76,28 @@ export class TokensService {
   }
 
   /**
-   * Devuelve el id del usuario y la versión de sesión del refresh token. Un
-   * token emitido antes de F1-060 no trae `ver`: vale como versión 0, la
-   * inicial de todo usuario, así que sigue sirviendo hasta el primer cambio de
-   * contraseña. Un `ver` que no es entero no negativo se rechaza.
+   * Devuelve el id del usuario, la versión de sesión y la sesión (`sid`) del
+   * refresh token. Un token emitido antes de F1-060 no trae `ver`: vale como
+   * versión 0, la inicial de todo usuario. Un `ver` que no es entero no
+   * negativo se rechaza.
+   *
+   * Sin `sid` (emitido antes de F1-093) se RECHAZA: ese token no tiene fila que
+   * el logout pueda revocar, y aceptarlo dejaría una sesión imposible de
+   * cerrar. Al desplegar, todos vuelven a hacer login una vez.
    */
-  async verificarRefresh(token: string): Promise<{ usuarioId: string; version: number }> {
+  async verificarRefresh(
+    token: string,
+  ): Promise<{ usuarioId: string; version: number; sesionId: string }> {
     const claims = await this.verificar(token, this.config.refreshSecret, 'refresh');
     const version = 'ver' in claims ? claims.ver : 0;
     if (typeof version !== 'number' || !Number.isInteger(version) || version < 0) {
       throw new UnauthorizedException('No autenticado');
     }
-    return { usuarioId: claims.sub, version };
+    const sesionId = claims.sid;
+    if (typeof sesionId !== 'string' || !UUID.test(sesionId)) {
+      throw new UnauthorizedException('No autenticado');
+    }
+    return { usuarioId: claims.sub, version, sesionId };
   }
 
   private async verificar(

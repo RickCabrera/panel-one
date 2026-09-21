@@ -19,6 +19,8 @@ export const LLAVE_EMPRESA = {
   ChequePago: 'empresaId',
   MesaSnapshot: 'empresaId',
   FormaPagoCatalogo: 'empresaId',
+  // F1-093. Nunca se lee con scope: sólo AuthService, por `sid` y usuario.
+  SesionUsuario: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

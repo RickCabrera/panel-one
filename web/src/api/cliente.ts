@@ -69,8 +69,9 @@ async function errorDe(respuesta: Response): Promise<ErrorApi> {
  * Las rutas de auth NUNCA disparan el refresh ante un 401, y es a propósito:
  *
  * - `/auth/login`: un 401 son credenciales malas. Si se refrescara, en una máquina
- *   donde otro usuario cerró sesión (su cookie de refresh sigue viva: la API no
- *   tiene logout todavía) una contraseña mal escrita entraría COMO ESE OTRO USUARIO.
+ *   donde otro usuario cerró sesión sin que su logout llegara a la API (sin red: su
+ *   cookie de refresh sigue viva, ver `marcaCierre.ts`) una contraseña mal escrita
+ *   entraría COMO ESE OTRO USUARIO.
  *   Además cada reintento contaría contra el límite de 5 intentos por minuto.
  * - `/auth/refresh`: refrescar para reintentar el refresh es un bucle.
  * - `/auth/me`: el estado de sesión sale del `SesionDto` del login/refresh, no de
