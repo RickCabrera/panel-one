@@ -100,6 +100,20 @@ function Test-ValorCadena {
     return $null
 }
 
+# El nombre de la base va DENTRO del T-SQL (`USE [$(BASE_SR)]`), no sólo en la cadena: un
+# `]` permitiría cerrar el corchete y meter otra sentencia. Lista cerrada de caracteres.
+function Test-NombreBase {
+    param([string] $Valor)
+
+    if ([string]::IsNullOrWhiteSpace($Valor)) {
+        return 'Falta la base.'
+    }
+    if ($Valor -cnotmatch '^[A-Za-z0-9_\-]{1,128}$') {
+        return 'El nombre de la base sólo puede llevar letras sin acento, números, "_" y "-" (por ejemplo softrestaurant10).'
+    }
+    return $null
+}
+
 function Test-ApiKey {
     param([string] $ApiKey)
 

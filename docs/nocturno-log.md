@@ -2066,3 +2066,183 @@ lectura" hoy es una **sonda**, no una lectura de ventas (ver Decisiones).
 
 **Qué haría distinto.** Commitear antes de cualquier mutación. Y revisar la base local
 (`agente_estado`) antes de correr la suite del api.
+
+## 2026-09-21 05:27 — F1-026 · Instalador y guía de instalación
+**Estado:** CERRADA PARCIAL (el número de PR lo da `gh pr create`). El `[x]` lleva
+**PARCIAL**. Lo que falta no cabe en una sesión nocturna y se sumó a **F1-020b** (Diurnas),
+cuyo "Listo cuando" se reescribió:
+- **el T-SQL nunca se ha ejecutado**;
+- **`instalar.ps1` nunca corrió con elevación**: ni `sc.exe create`, ni `icacls` en
+  ProgramData, ni la cuenta virtual;
+- **la medición de "< 15 min con una persona no técnica" es de F1-091** (nota en su ficha).
+
+No se creó `F1-026b`: el resto es exactamente lo que F1-020b ya iba a verificar con consola
+elevada. Se siguió el precedente de F1-001b.
+
+**Qué quedó hecho.** Todo en `agent/instalador/`, que es el paquete junto con `agente.exe`.
+Cómo se arma está en `agent/README.md` ("Armar el paquete del instalador").
+- **`crear-usuario-lector.sql`**: T-SQL compatible con SQL 2008. Crea el login
+  `monitor_lector` (`CHECK_POLICY=ON`), su usuario en la base y `sp_addrolemember
+  'db_datareader'`. **Nada más.** Antes de tocar nada se detiene con `RAISERROR` + `RETURN`
+  en estos casos:
+  - el servidor es "sólo Windows";
+  - la base es de sistema;
+  - el login ya tiene un rol o un permiso de servidor (distinto de CONNECT SQL);
+  - el login es dueño de la base;
+  - el usuario tiene otro rol o un GRANT propio (distinto de CONNECT);
+  - el usuario pertenece a otro sid.
+  
+  Además:
+  - **avisa**, sin detenerse, si `public` puede escribir;
+  - si el login ya existía, sólo repone la contraseña;
+  - si el login está deshabilitado **no lo habilita**, sólo avisa;
+  - lleva `:on error exit` y los mensajes van sin acentos.
+- **`crear-usuario-lector.ps1`** es el paso 3 de la guía:
+  - Busca `sqlcmd`. Si no lo encuentra, ofrece la alternativa con SSMS en modo SQLCMD.
+  - Propone la instancia a partir del servicio `MSSQL$X`.
+  - Lista las bases leyendo `sys.databases` y propone la `softrestaurant*`.
+  - Pide la contraseña dos veces con `-AsSecureString` y la valida con reglas estrictas.
+  - Corre el `.sql` con `-E -b -l 10 -t 30`. `-UsuarioAdmin sa` pide la contraseña de sa y
+    la pasa por `SQLCMDPASSWORD`.
+  - **Las contraseñas viajan por variables de entorno** (`BASE_SR`, `PASSWORD_LECTOR`), no
+    en la línea de comando, y se borran en `finally`.
+- **`instalar.ps1`** es el paso 4, en 8 pasos:
+  1. Revisa que la consola sea de admin y que el exe exista.
+  2. Detiene el servicio si ya existe.
+  3. Copia el exe a `Program Files\ArkonAgente`, con reintentos.
+  4. Aplica siempre el `icacls` por SID en `ProgramData\ArkonAgente` y **avisa** si queda
+     otra entrada explícita.
+  5. Escribe `config.json` en UTF-8 sin BOM, `intervaloSegundos: 30`, sólo si no existe o
+     con `-ReemplazarConfig`. La key y la contraseña se piden seguras. **No hay parámetros
+     para secretos, a propósito.**
+  6. Registra el servicio: `sc.exe create`/`config` con `binPath` entre comillas internas,
+     `delayed-auto`, `obj=` según la cuenta, `description`, `failure`, `failureflag 1`,
+     `sidtype unrestricted` y `icacls` Modificar para el SID del servicio.
+  7. Lo arranca. Si no arranca, muestra la cola del log y sugiere `-CuentaServicio
+     LocalSystem`.
+  8. Corre `agente test` y comprueba que el servicio siga `RUNNING` a los 5 s.
+  
+  Códigos de salida: 0 / 1 / 2 / 3. **Nunca borra `cola.db` ni los logs.**
+- **`funciones-instalador.ps1`**: las funciones compartidas. Las puras son las que se
+  prueban:
+  - validaciones de URL, contraseña nueva, contraseña de la cadena, valores y **nombre de la
+    base**;
+  - armado de la cadena y del JSON;
+  - los argumentos de `sc.exe`.
+- **`docs/instalacion-agente.md`**: guía para una persona no técnica.
+  - Pasos con tiempos y tablas de "si sale X, haz Y" con los textos reales de `agente test`.
+  - El checklist de firewall.
+  - Cómo actualizar y desinstalar, y "qué NO hacer".
+- **Tests**: 262 → **328**, 0 omitidos.
+  - `InstaladorSqlTests` parsea el `.sql` con **ScriptDom `TSql100Parser`** (paquete nuevo,
+    sólo en el proyecto de tests). Tiene una lista cerrada de sentencias, prohíbe el SQL
+    dinámico, sólo permite `sp_addrolemember('db_datareader','monitor_lector')`, y ALTER
+    LOGIN sólo con PASSWORD. Incluye 14 mutaciones que la guardia debe detectar.
+  - `InstaladorPs1Tests` corre PowerShell de verdad (`powershell.exe` en Windows, `pwsh` en
+    el CI; si no hay, falla). Cubre:
+    - parseo de los 3 `.ps1` y un recorrido del AST que prohíbe `sc`/`iex`;
+    - BOM en los 4 archivos;
+    - **config que escribe el `.ps1` → `CargadorConfiguracion` real**;
+    - validaciones, `sc` args y la instancia.
+- **Otros**:
+  - `VerificacionSql.AvisoAutenticacionWindows` ya menciona la cuenta virtual.
+  - README actualizado.
+  - `docs/esquema-sr.md` §11, subsección "Usuario de solo lectura e instalador".
+  - `.gitattributes`/`.editorconfig`: CRLF y BOM en `agent/instalador`.
+  - Comentario del carril agent en `ci.yml` (pwsh).
+
+**Qué se probó y qué NO.**
+- **Probado:**
+  - build Release con 0 advertencias y 328/328 tests;
+  - **mutaciones** (restauradas): JSON sin doblar `\` → 1 rojo; `db_owner` en el `.sql` →
+    13; `sc stop` en `instalar.ps1` → 1; `binPath` sin comillas → 1;
+  - los 3 `.ps1` parsean en PS 5.1;
+  - sin elevación, los dos scripts salen con 3 y el mensaje de "consola de administrador".
+- **Contra la SR local**, sólo lectura: la consulta de catálogo de §11 (modo mixto; `public`
+  sólo con SELECT) y un `PRINT` para ver que `sqlcmd` 2014 lee UTF-8 con BOM y toma
+  variables de entorno. Una variable que falta → exit 1 sin mandar el lote.
+- **NO probado. Que nadie lo lea como hecho:**
+  - el T-SQL (ninguna rama, ni la buena ni las de ALTO);
+  - `sc.exe` de verdad;
+  - `icacls` sobre ProgramData y el aviso de entradas extra;
+  - la cuenta virtual `NT SERVICE\ArkonAgente`: si el servicio arranca y puede escribir
+    logs y `cola.db`;
+  - `Get-ServidorSugerido` y `Find-Sqlcmd` en una PC real;
+  - `-UsuarioAdmin sa`;
+  - la medición de 15 min.
+  
+  Todo eso está en F1-020b / F1-091.
+
+**Decisiones que tomé y por qué.**
+- **`DECISION PROVISIONAL (nocturno)` en `instalar.ps1`, paso 6: cuenta virtual por
+  defecto**, con `-CuentaServicio LocalSystem` como salida. Es de menor privilegio. El
+  revisor lo aprobó: LocalSystem tampoco está probada como servicio. Si F1-020b ve que no
+  funciona, se cambia el default y se quita la marca.
+- **Un wrapper `crear-usuario-lector.ps1` en vez de enseñar `sqlcmd -v PASSWORD=...`**
+  (obligatoria del revisor). Así la contraseña no queda en el historial de PSReadLine.
+- **Funciones en un archivo aparte** (`funciones-instalador.ps1`). Si se hace dot-source de
+  un script con `param()`, se pisan las variables del que lo llama: `$Servidor`/`$Base` del
+  wrapper se volvían `$null`.
+- **Contraseña nueva con una lista cerrada** (`A-Za-z0-9` y `-_.!@#*+=?`, de 12 a 64). Viaja
+  dentro del T-SQL entre comillas, en la cadena de conexión y por la consola, y así no hay
+  nada que escapar. La de la cadena es más permisiva (sin `;`, `'` ni `"`), por si el
+  usuario se creó a mano.
+- **Nombre de la base con una lista cerrada** (`A-Za-z0-9_-`), obligatoria del revisor del
+  entregable. Va dentro de `USE [$(BASE_SR)]`, y un `]` inyectaba T-SQL (`-Base "x] ALTER
+  SERVER ROLE sysadmin ADD MEMBER [monitor_lector"`). **Una base de SR con espacios o
+  acentos no pasaría.** No se ha visto ninguna así; si aparece, hay que escapar `]` → `]]` en
+  vez de rechazar.
+- **Sin `db_denydatawriter`**: el backlog dice literalmente "sólo db_datareader", y en la
+  instalación vista `public` no escribe. Queda como **DECISIÓN ABIERTA para Ricardo** en
+  §11.
+- **`sp_addrolemember` y no `ALTER ROLE ADD MEMBER`**, y nada de `IS_ROLEMEMBER`: SR puede
+  ir sobre SQL 2008.
+- **Mensajes del `.sql` sin acentos.** Con BOM `sqlcmd` los lee bien, pero la consola OEM
+  igual puede romperlos.
+- **`sc.exe` con `Start-Process -ArgumentList "<línea literal>"`**: en 5.1, pasar
+  `"\"C:\...\""` como argumento de un exe pierde las comillas internas.
+
+**Observaciones del revisor y cómo quedaron.**
+- **Plan: APROBADO CON OBSERVACIONES**, 8 obligatorias. Todas atendidas (ver arriba), más
+  las recomendadas 9, 11, 12 y 13. De la 10 (avisar si `public` escribe) quedó el aviso.
+- **Entregable: APROBADO CON OBSERVACIONES** en la primera pasada, sin bloqueo:
+  1. (oblig.) Inyección por `-Base`: **arreglado**, con `Test-NombreBase` y 8 casos de test.
+  2. (oblig.) Faltaba `-t` en la corrida del T-SQL: **`-t 30`**.
+  3. (oblig.) Esta entrada.
+  4. `icacls /grant:r` no quita entradas explícitas previas: **aviso en pantalla** con el
+     `icacls /remove` a correr. No se quita a ciegas.
+  5. `*.sql` en `.gitattributes`: **hecho**.
+  6. Repetir los supuestos en el PR: **hecho**.
+
+**Trampas que encontré.**
+- **Heredoc con barras invertidas, cuarta sesión seguida.** Un script de mutación en
+  `python - <<'EOF'` convirtió `'\\\\'` en otra cosa y el `assert` falló. Lo que lleve `\`,
+  escríbelo con Write en un `.py` del scratchpad y córrelo.
+- **Con `python -c "..."` bash hace la sustitución de `$(VAR)`** dentro de las comillas
+  dobles: el archivo de prueba de `sqlcmd` salió sin la variable y parecía que "sqlcmd la
+  dejaba vacía". Falso: si no existe, falla.
+- **PowerShell 5.1 lee un `.ps1` sin BOM como ANSI.** Los `.ps1` y el `.sql` del instalador
+  llevan BOM (hay test). Si los editas con Write, vuelve a ponérselo:
+  `scratchpad/normalizar.py`, o pon BOM + CRLF a mano.
+- **En PowerShell 5.1, `sc` es `Set-Content`**: `sc stop X` crea un archivo "stop". Hay un
+  test que lo prohíbe en el AST.
+- **`$pwd` es una variable automática** (`$PWD`, sin importar mayúsculas). Casi la uso para la
+  contraseña.
+- **La salida de un exe dentro de una función de PS se vuelve parte del valor de retorno.**
+  `& agente.exe test` sin `| Out-Host` habría convertido el código de salida en un arreglo.
+- **Con `$ErrorActionPreference='Stop'` en 5.1, `& exe 2>&1` corta el script en la primera
+  línea de stderr.** Dentro de esas funciones se pone `'Continue'`.
+- `git config core.autocrlf` = true en esta máquina: el índice guarda LF y el checkout pone
+  CRLF. El BOM sí sobrevive (verificado con `git show`).
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **F1-020b** (Diurnas, reescrita): lector en la SR local con autorización de Ricardo,
+  `instalar.ps1` elevado con la cuenta virtual, y lo de F1-020.
+- **F1-091**: medir los 15 min con la guía y corregirla.
+- **Ricardo**: `db_denydatawriter` (§11); y si una base de SR con caracteres raros obliga a
+  escapar `]` en vez de rechazar.
+- Lo de F1-021 sigue pendiente: la cancelación a media query en `DetectorVersionSr`.
+
+**Qué haría distinto.** Pensar desde el plan dónde se interpola cada entrada del usuario
+(T-SQL, cadena, JSON, línea de comando), no sólo la contraseña. La inyección por `-Base` la
+encontró el revisor, y era el mismo razonamiento que ya había hecho para la contraseña.

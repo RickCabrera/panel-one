@@ -130,11 +130,11 @@ function Invoke-CrearLector {
         $bd = Read-Valor -Pregunta '  Base de SoftRestaurant' -Sugerido $sugeridaBase -Validar {
             param($v)
             if ($bases -notcontains $v) { return "No existe la base '$v' en ese servidor." }
-            Test-ValorCadena $v 'la base'
+            Test-NombreBase $v
         }
     }
-    elseif (Test-ValorCadena $bd 'la base') {
-        Write-Problema (Test-ValorCadena $bd 'la base')
+    elseif (Test-NombreBase $bd) {
+        Write-Problema (Test-NombreBase $bd)
         return 3
     }
 
@@ -150,7 +150,9 @@ function Invoke-CrearLector {
     $env:PASSWORD_LECTOR = $password
     try {
         $acceso = Get-ArgumentosAcceso
-        & $sqlcmd -S $srv @acceso -b -l 10 -i $archivoSql | Out-Host
+        # -t 30: CREATE USER y sp_addrolemember toman bloqueos de metadatos en la base del
+        # POS; si algo los hace esperar, mejor fallar que quedarse colgado.
+        & $sqlcmd -S $srv @acceso -b -l 10 -t 30 -i $archivoSql | Out-Host
         $codigo = $LASTEXITCODE
     }
     finally {
