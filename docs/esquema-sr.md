@@ -29,15 +29,67 @@ mirando una instalación real y que no está en ningún otro lado.**
 
 | Versión SR | Cómo se detecta (tabla/columna) | Reader | Estado |
 |---|---|---|---|
-| _(pendiente)_ | | | |
+| 10 (exe `softrestaurant.exe` 10.0.323) | `dbo.parametros2.versiondb` = `10.021800` | `SrV11Reader` | ✅ **VALIDADO** 2026-09-21, instalación local de desarrollo (F1-021) |
+| 11 | ⚠️ se supone la misma columna, con parte entera 11 | `SrV11Reader` + Warning en el log | ⚠️ **SUPUESTO** — nunca vista |
+| cualquier otra | parte entera ≠ 10 y ≠ 11 | ninguno: log de error, el agente no lee | — |
 
-**Query de detección:**
+**Query de detección** (el agente la corre en dos pasos, `agent/src/ArkonAgente/Sql/Consultas/`):
 
 ```sql
--- pendiente: F1-021 / F1-090
+-- 1) sr_estructura.sql: sólo catálogo. Qué tablas candidatas hay en dbo.
+SELECT t.name AS tabla,
+       CAST(CASE WHEN EXISTS (SELECT 1 FROM sys.columns AS c WITH (NOLOCK)
+            WHERE c.object_id = t.object_id AND c.name = N'versiondb') THEN 1 ELSE 0 END AS bit) AS tiene_versiondb
+FROM sys.tables AS t WITH (NOLOCK)
+JOIN sys.schemas AS s WITH (NOLOCK) ON s.schema_id = t.schema_id
+WHERE s.name = N'dbo'
+  AND t.name IN (N'parametros2', N'cheques', N'cheqdet', N'chequespagos', N'tempcheques', N'tempcheqdet');
+
+-- 2) sr_version.sql: sólo si (1) confirmó dbo.parametros2.versiondb (si no, error 208).
+SELECT TOP (2) CAST(p.versiondb AS nvarchar(40)) AS version_db
+FROM dbo.parametros2 AS p WITH (NOLOCK);
 ```
 
-**Diferencias conocidas entre versiones:** _(pendiente)_
+**Lo que se vio en SR 10.0.323** (✅ VALIDADO 2026-09-21, sólo metadatos y la columna de
+versión; no se copió ningún dato de negocio):
+
+- `dbo.parametros2` tiene **una** fila. `versiondb` es `numeric(15,6) NOT NULL` y vale
+  `10.021800`.
+- **Columnas señuelo con el mismo nombre, que NO son la versión:**
+  - `dbo.configuracion.versiondb` (`varchar(10)`) vale **NULL**;
+  - `dbo.configuracion.revisiondb` (`varchar(2)`) vale **NULL**;
+  - `dbo.parametros.versiondb` (`varchar(5)`) vale **`'0'`**.
+  
+  Quien busque "la tabla de versión" por nombre cae en éstas primero.
+- Otras columnas con "version" que son de **módulos**, no de la base:
+  - `parametros2`: sólo `versiondb`, la buena;
+  - `parametros3.versionMIT` y `parametros3.versionfacturacion`;
+  - `facturas*.versionfacturacion` y `facturascomplementoine.version`;
+  - `ws_cloud.Version`, `AxConfig.ApiVersion`, `registro_dispositivos.app_version`;
+  - `configuracion.hotelversionsistema`;
+  - `FKVersionControlId` en `CancellationReason`, `Month`, `Periodicity` y `TaxSubject`.
+- Existen en `dbo`: `cheques`, `cheqdet`, `chequespagos`, `tempcheques`, `tempcheqdet`,
+  `tempchequespagos`, `productos`, `meseros`, `formasdepago`, `turnos`, `configuracion`.
+  **Sólo se confirmó que existen**; sus columnas siguen sin mapear (§2–§7, F1-090).
+- La base se llama `softrestaurant10`. El agente **no** depende del nombre: toma el de
+  `Database` en la cadena.
+
+**Supuestos de la detección** (⚠️ ninguno se ha visto; el código los marca igual):
+
+- ⚠️ **SUPUESTO — la parte entera de `versiondb` es la versión mayor de SR.** Cuadra con
+  SR 10, pero no se sabe cómo se relaciona `021800` con el `10.0.323` del ejecutable. Por
+  eso el agente reporta el texto tal cual (`10.021800`), sin redondear ni reformatear.
+- ⚠️ **SUPUESTO — SR 11 guarda la versión en la misma columna y comparte el esquema de la
+  10.** Si una v11 no tiene `parametros2.versiondb`, el agente la reporta como "no
+  soportada", con las tres causas posibles: base equivocada, falta de permiso o versión
+  desconocida. No la lee a ciegas.
+- ⚠️ **Nunca visto — `parametros2` con más de una fila.** Si todas dicen la misma versión,
+  se usa ésa. Si difieren, el agente no elige: error "versiones distintas".
+- ⚠️ **Con `db_datareader`, `sys.tables` sólo lista lo que el usuario puede leer.** Una
+  tabla "faltante" puede ser falta de permiso. Esto no se ha probado: la validación se hizo
+  con un login sysadmin (ver §11).
+
+**Diferencias conocidas entre versiones:** ninguna todavía. Sólo se ha visto la 10.
 
 ---
 
@@ -428,8 +480,54 @@ _(pendiente — no se toca hasta que F1-091 cierre)_
 
 ### Conexión al SQL Server del POS (F1-020)
 
-Nada de esto se ha visto en una instalación real: son los supuestos con los que F1-020
-escribió la plantilla (`infra/config.example.json`) y el diagnóstico de `agente test`.
+F1-020 escribió esto sin instalación real, como supuestos, al hacer la plantilla
+(`infra/config.example.json`) y el diagnóstico de `agente test`. F1-021 lo contrastó con una
+instalación de SR 10 (ver el recuadro de abajo). Lo que no aparece ahí sigue siendo supuesto.
+
+> **Lo que se vio en la instalación local de desarrollo (F1-021, 2026-09-21, SR 10.0.323,
+> `versiondb` 10.021800).** ✅ VALIDADO sólo para esa instalación.
+>
+> **Cómo se validó.** Consola, no servicio, con autenticación de Windows y el usuario del
+> desarrollador, que es **sysadmin**. No hay usuario de solo lectura: crearlo habría sido
+> escribir en el servidor del POS. Como se esperaba, `agente test` y el diagnóstico del
+> servicio marcaron **FALLA** por permisos de escritura. **No es la configuración de
+> producción.**
+>
+> **Servidor y base:**
+> - Instancia `.\NATIONALSOFT` (servicio `MSSQL$NATIONALSOFT`).
+> - SQL Server **2014 SP1 Express**, `12.0.4100.1`, nivel de compatibilidad 120.
+> - Collation de la base: `Modern_Spanish_CI_AS`.
+> - Las **354 tablas** de la base están en el esquema **`dbo`**. `diagnostico.sql` revisa
+>   el esquema correcto.
+>
+> **Conexión:**
+> - **Sin `TrustServerCertificate=True` la conexión falla.** El certificado es autofirmado,
+>   así que la plantilla hace bien en traerlo.
+>   - El error trae el número `-2146893019` (`CERT_E_UNTRUSTEDROOT`). En un Windows en
+>     español el texto es "*La cadena de certificación fue emitida por una entidad en la
+>     que no se confía*" (provider: "Proveedor de SSL").
+>   - Ese texto no contiene "certificate" ni "certificado", así que `agente test` lo
+>     clasificaba como "falló el cifrado / TLS 1.2" y sugería otra cosa. F1-021 lo
+>     corrigió: ahora lo reconoce por el número.
+> - **Con `TrustServerCertificate=True` conecta, pero el canal negocia TLS 1.0.**
+>   SqlClient lo avisa por consola: "*el elemento TLS 1.0 negociado es un protocolo
+>   inseguro*". El supuesto de abajo sobre TLS 1.2 se confirma a medias: este SQL 2014 SP1
+>   no ofreció 1.2, pero SqlClient 5.2 **sí conecta** con 1.0 en Windows 11.
+> - **`diagnostico.sql` corrió contra un servidor real** y `FilaDiagnostico.Leer` leyó bien
+>   los tipos que devuelven `IS_SRVROLEMEMBER`, `IS_ROLEMEMBER` y `HAS_PERMS_BY_NAME`. Era
+>   un pendiente de F1-020.
+>
+> **Permisos:** en esta instalación `IS_SRVROLEMEMBER('sysadmin', 'NT AUTHORITY\SYSTEM')`
+> = **0**. El dato sale de la consulta: el servicio no se corrió como SYSTEM. **Varía entre
+> instalaciones**, así que el supuesto de abajo sigue en pie como precaución.
+>
+> **Lenguaje:** SQL Server 2014 **no tiene `STRING_AGG`** (ni `STRING_SPLIT`, que llegó en
+> 2016). Toda query del agente tiene que ser T-SQL de 2014 o anterior.
+>
+> **Lo que NO se validó:**
+> - el codepage y `InvariantGlobalization`: ver la collation no es haber decodificado un
+>   texto con acentos;
+> - el comportamiento con un usuario `db_datareader`.
 
 - **`agente test` no toca tablas de SR.** Su única query, `Sql/Consultas/diagnostico.sql`,
   lee funciones de sistema: versión y edición del servidor, base, login, `IS_SRVROLEMEMBER`,
@@ -460,9 +558,9 @@ escribió la plantilla (`infra/config.example.json`) y el diagnóstico de `agent
   modo invariante no se pudo comprobar que SqlClient decodifique bien acentos y eñes, porque
   no hay SQL Server en la máquina donde se escribió. F1-090 lo confirma leyendo un producto
   con acento.
-- ⚠️ **SUPUESTO — la instancia se llama `.\SQLEXPRESS` o algo como `.\NATIONALSOFT`.** Es
-  sólo el ejemplo de la plantilla y del mensaje de `test`. El nombre real se anota aquí
-  cuando se vea.
+- ✅ **La instancia se llamó `.\NATIONALSOFT`** en la única instalación vista (SR 10, F1-021).
+  Otras instalaciones pueden usar otro nombre, por ejemplo `.\SQLEXPRESS` si SR se montó
+  sobre un SQL ya existente. El técnico lo pone en la cadena.
 
 ---
 
@@ -472,7 +570,20 @@ escribió la plantilla (`infra/config.example.json`) y el diagnóstico de `agent
 > alguien si no está escrito: columnas mal nombradas, fechas en formatos distintos entre
 > tablas, valores centinela, campos que la interfaz muestra pero la base no guarda.
 
-_(pendiente)_
+- **`versiondb` está en tres tablas y sólo una sirve** (F1-021, ✅ SR 10):
+  - `parametros2.versiondb` es la versión (`10.021800`);
+  - `configuracion.versiondb` vale NULL;
+  - `parametros.versiondb` vale `'0'`.
+  
+  Detalle en §1.
+- **En la instalación vista, los nombres de tablas y columnas están en minúsculas**, y la
+  base es CI (`Modern_Spanish_CI_AS`). Dentro de SQL no importa, pero **el agente compara
+  EXACTO los nombres que le devuelve el catálogo** (`HuellaSr.Desde`).
+  ⚠️ No se ha visto ninguna instalación con collation CS ni con otras mayúsculas. Si
+  aparece una, la detección la reporta como "faltan tablas" y no la lee a ciegas.
+- **Hay identificadores que no son ASCII**, por ejemplo la columna
+  `configuracion.contraseñainventarios`, con eñe. El agente no la lee. Queda anotado para
+  cuando alguna query tenga que nombrar una columna así: el `.sql` embebido es UTF-8.
 
 ---
 
@@ -523,4 +634,4 @@ _(pendiente)_
 
 | Fecha | Versión SR | Restaurante / entorno | Qué se validó |
 |---|---|---|---|
-| | | | |
+| 2026-09-21 | 10 (exe 10.0.323, `versiondb` 10.021800) | Instalación local de desarrollo (SQL Server 2014 SP1 Express, instancia `.\NATIONALSOFT`). Sin datos de negocio: sólo catálogo y la columna de versión. Login sysadmin (no es config de producción) | Detección de versión y elección del reader (F1-021); conexión, certificado y TLS; `diagnostico.sql` (§1, §11, §12). **No** valida el mapeo de cuentas, pagos ni productos: eso es F1-090. |

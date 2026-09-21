@@ -4,9 +4,10 @@ Servicio de Windows que corre en la PC del restaurante, lee la base SQL Server d
 SoftRestaurant en **solo lectura** y sube los datos al API del monitor con la API key de
 la sucursal.
 
-Estado: F1-020 entrega el esqueleto (servicio, configuración, logs y `agente test`). La
-lectura de SoftRestaurant, la cola local y el envío llegan en F1-021 / F1-024 / F1-025. El
-instalador (`instalar.ps1`) y la guía para personas no técnicas son F1-026.
+Estado: F1-020 entrega el esqueleto (servicio, configuración, logs y `agente test`) y F1-021
+la detección de la versión de SoftRestaurant. La lectura de ventas, la cola local y el envío
+llegan en F1-022 / F1-023 / F1-024 / F1-025. El instalador (`instalar.ps1`) y la guía para
+personas no técnicas son F1-026.
 
 ## Compilar, probar y publicar
 
@@ -141,6 +142,7 @@ sc.exe query ArkonAgente
 - **Con `config.json` inválido el servicio no se cae**: registra el error en el log y vuelve
   a leer el archivo cada minuto. En cuanto se corrige, sigue solo, sin reiniciar nada.
 - Al arrancar deja en el log el mismo diagnóstico de `agente test`.
+- Después **detecta la versión de SoftRestaurant** y elige con qué la va a leer (ver abajo).
 
 Para quitarlo:
 
@@ -152,3 +154,30 @@ sc.exe delete ArkonAgente
 > **Pendiente de verificar (F1-020b, diurna):** el arranque con Windows y el reinicio tras
 > una caída no se han probado con `sc create` real. La sesión que escribió esto no tenía
 > consola de administrador.
+
+## Detección de la versión de SoftRestaurant (F1-021)
+
+Al arrancar, y en cada ciclo mientras no lo logre, el servicio corre dos consultas de
+**solo lectura** (`WITH (NOLOCK)`, timeout de 5 s):
+
+1. `Sql/Consultas/sr_estructura.sql`: sólo vistas de catálogo. Revisa si en `dbo` existen
+   `parametros2` con la columna `versiondb` y las tablas de cuentas (`cheques`, `cheqdet`,
+   `chequespagos`, `tempcheques`, `tempcheqdet`).
+2. `Sql/Consultas/sr_version.sql`: lee `dbo.parametros2.versiondb`, y sólo si existe.
+
+Qué deja en el log:
+
+| Caso | Nivel | Mensaje (resumido) |
+|---|---|---|
+| Versión 10 | Information | `SoftRestaurant versión 10.021800 detectado; se lee con SrV11Reader.` |
+| Versión 11 | Information + Warning | lo mismo, más "no se ha validado contra una instalación real" |
+| Otra versión, base equivocada, tablas faltantes | Error | la causa, y "el agente no leerá ventas hasta resolverlo" |
+| No se pudo consultar (servidor apagado, certificado, credenciales) | Warning | la causa y qué hacer |
+
+- **Nunca tumba el servicio.** Reintenta en cada ciclo y registra cada mensaje distinto
+  una sola vez.
+- **Con el reader elegido ya no vuelve a detectar.** Si se actualiza SoftRestaurant,
+  reinicia el servicio.
+- La versión y el último error quedan en `EstadoSoftRestaurant`. Ahí los toma el heartbeat
+  (F1-025).
+- Qué se sabe de cada versión, y qué es sólo supuesto: `docs/esquema-sr.md` §1.

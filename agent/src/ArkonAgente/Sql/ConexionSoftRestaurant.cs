@@ -65,7 +65,24 @@ internal sealed class ConexionSoftRestaurant
         return $"servidor={_constructor.DataSource}, base={_constructor.InitialCatalog}, usuario={usuario}";
     }
 
+    /// <summary>Base de SoftRestaurant de la cadena (<c>Database</c>), para los mensajes.</summary>
+    public string BaseDatos => _constructor.InitialCatalog;
+
     public SqlConnection CrearConexion() => new(CadenaEfectiva);
+
+    /// <summary>
+    /// Comando con una consulta embebida (<c>Sql/Consultas/&lt;nombre&gt;.sql</c>) y el
+    /// timeout corto de <see cref="TimeoutComandoSegundos"/>. Toda query contra SR se
+    /// arma aquí: así ninguna se queda con el default de 30 s de SqlClient.
+    /// </summary>
+    public static SqlCommand CrearComando(SqlConnection conexion, string consulta)
+    {
+        var comando = conexion.CreateCommand();
+        comando.CommandText = ConsultasEmbebidas.Leer(consulta);
+        comando.CommandType = System.Data.CommandType.Text;
+        comando.CommandTimeout = TimeoutComandoSegundos;
+        return comando;
+    }
 
     private static bool TieneTimeoutExplicito(string cadena)
     {

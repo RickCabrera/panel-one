@@ -1,6 +1,7 @@
 using ArkonAgente;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
+using ArkonAgente.SoftRestaurant;
 using Serilog;
 using Serilog.Events;
 
@@ -35,7 +36,9 @@ try
     var builder = Host.CreateApplicationBuilder();
     builder.Services.AddWindowsService(o => o.ServiceName = LineaDeComandos.NombreServicio);
     builder.Services.AddSerilog();
-    builder.Services.AddSingleton(DependenciasWorker.Reales(rutas));
+    var estadoSr = new EstadoSoftRestaurant();
+    builder.Services.AddSingleton(estadoSr);
+    builder.Services.AddSingleton(DependenciasWorker.Reales(rutas, estadoSr));
     builder.Services.AddHostedService<Worker>();
 
     await builder.Build().RunAsync();

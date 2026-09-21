@@ -68,6 +68,45 @@ public class VerificacionSqlTests
     }
 
     [Fact]
+    public void Certificado_no_confiable_en_Windows_en_espanol_sugiere_TrustServerCertificate()
+    {
+        // Número y texto reales de SqlClient 5.2.3 contra SQL Server 2014 Express (SR 10)
+        // sin TrustServerCertificate, en un Windows en español (F1-021).
+        const string mensaje =
+            "La conexión con el servidor se ha establecido correctamente, pero se ha producido un error durante el " +
+            "proceso de inicio de sesión. (provider: Proveedor de SSL, error: 0 - La cadena de certificación fue " +
+            "emitida por una entidad en la que no se confía.)";
+
+        var (detalle, sugerencia) = VerificacionSql.ClasificarError(-2146893019, mensaje, Conexion);
+
+        Assert.Contains("certificado TLS no es de confianza", detalle);
+        Assert.Contains("TrustServerCertificate=True", sugerencia);
+    }
+
+    [Theory]
+    [InlineData(-2146893019, "texto que no se entiende")] // sólo el número
+    [InlineData(0, "The certificate chain was issued by an authority that is not trusted.")]
+    [InlineData(0, "La cadena de certificación fue emitida por una entidad en la que no se confía.")]
+    public void El_certificado_se_reconoce_por_numero_o_por_texto(int numero, string mensaje)
+    {
+        Assert.Contains("TrustServerCertificate", VerificacionSql.ClasificarError(numero, mensaje, Conexion).Sugerencia);
+    }
+
+    [Theory]
+    [InlineData(229, "permiso de lectura", "db_datareader")]
+    [InlineData(18456, "usuario o la contraseña", "User ID")]
+    [InlineData(4060, "no pudo abrir la base", "'Database'")]
+    [InlineData(10054, "No se pudo llegar al servidor SQL", "TCP/IP")]
+    public void Cada_numero_de_error_tiene_su_mensaje(int numero, string enDetalle, string enSugerencia)
+    {
+        var (detalle, sugerencia) = VerificacionSql.ClasificarError(numero, "error", Conexion);
+
+        Assert.Contains(enDetalle, detalle);
+        Assert.Contains(enSugerencia, sugerencia);
+        Assert.DoesNotContain(Datos.Password, detalle);
+    }
+
+    [Fact]
     public async Task Servidor_inalcanzable_falla_rapido_y_dice_que_no_llego()
     {
         // tcp: explícito para que SqlClient no intente Named Pipes en Windows.
