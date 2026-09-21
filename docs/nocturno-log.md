@@ -568,3 +568,90 @@ desde el principio me habría ahorrado una vuelta.
 **Qué haría distinto.** Probar el transporte (gzip, tamaño) con un cliente HTTP crudo desde
 el principio. Me costó una vuelta descubrir que el 400 era del cliente de test y no del
 server.
+
+## 2026-09-20 22:57 — F1-032 · Servicio de agregados de ventas
+**Estado:** CERRADA (PR de `feat/F1-032`, squash a main)
+
+**Qué quedó hecho.**
+- `AgregadosVentasService` (`api/src/ventas/`) con `resumen`, `porHora`, `formasPago`,
+  `topProductos` y `comparativoSucursales`, todos con filtro `{ empresaId, sucursalId?, desde,
+  hasta }` (días LOCALES de cada sucursal, inclusivos). **No hay endpoints:** son de F1-033, y
+  el `VentasModule` sólo exporta el servicio. `openapi.json` no cambió.
+- **SQL crudo con scope:** `ScopedPrismaService.ventas(scope, filtro)` → `ConsultaVentas`
+  (`api/src/scope/consulta-ventas.ts`). El helper arma TODO el `WITH`: `sucursales_alcance`,
+  `ventas`, `cancelados`, `partidas_ventas`, `pagos_ventas` y `catalogo_formas`, ya filtradas por el
+  tenant del usuario, por la empresa y sucursal pedidas y por el rango
+  (`AT TIME ZONE s.zona_horaria` por sucursal). El caller sólo escribe el cuerpo, y
+  `guardiaCuerpo()` lo rechaza si nombra una tabla real (la lista sale de `Prisma.dmmf`, así que
+  un modelo nuevo queda prohibido solo), comillas, esquemas, `;` o comentarios, o si pone después
+  de FROM/JOIN algo que no sea una CTE. Cada consulta corre con `statement_timeout` de 5 s
+  (`set_config(..., true)` en una transacción batch).
+- Migración `agregados_ventas`: tabla `formas_pago_catalogo` e índice
+  `cheques(sucursal_id, cerrado_at)`.
+- Seed `api/prisma/seed-ventas.ts` (`npm run seed:ventas`, después de `npx prisma db seed`):
+  500 cheques sintéticos, 250 por sucursal, en 30 días que terminan HOY. `generarVentas()` es puro
+  y determinista, con ids UUID derivados de la sucursal. `sembrarVentas()` borra sólo lo `SEED-%`
+  de esas sucursales y lo recrea: es idempotente, ids incluidos.
+- Tests (contra Postgres): `consulta-ventas.spec.ts`, `seed-ventas.spec.ts` y
+  `agregados-ventas.service.spec.ts`. `npm test` da 342/342, 0 skips. Lint, typecheck,
+  `prisma validate`, migrate y build limpios. El revisor aprobó el plan y el entregable, los dos
+  con observaciones, que están resueltas o anotadas aquí.
+
+**Decisiones que tomé y por qué.**
+- **La forma de pago se deriva AL LEER** con `LEFT JOIN catalogo_formas` (match exacto de
+  `forma_raw`); lo no mapeado es `otro` y se lista aparte en `sinCatalogo`. La columna
+  `cheque_pagos.forma` (siempre `otro` desde la ingesta) **no la usa ningún agregado**. Así,
+  corregir el catálogo reclasifica el histórico sin reingerir. No toqué la ingesta: habría sido
+  "de pasada".
+- `DECISION PROVISIONAL (nocturno)`:
+  - catálogo por EMPRESA y sin normalizar el texto (`api/prisma/schema.prisma`, modelo
+    `FormaPagoCatalogo`);
+  - `resumen.cortesias` siempre `null` (`agregados-ventas.service.ts`, interfaz `Resumen`).
+  Las dos están en `docs/esquema-sr.md` §2 y §4.
+- **Venta = Σ `cheques.total` tal cual, sin propina.** Los cancelados nunca cuentan; los que no
+  traen `cerrado_at` se ubican por `abierto_at`, sólo para contarlos. El día y la hora son los del
+  CIERRE en la zona de la sucursal. Todo esto es SUPUESTO en esquema-sr.md §2: **el cuadre peso a
+  peso contra los reportes nativos de SR no está validado; depende de F1-090.**
+- **El filtro se valida primero (400) y después se resuelven la empresa y la sucursal con
+  `para(scope)` (404).** Así un id que no es UUID no llega a Postgres, donde saldría 500. Además
+  las CTEs vuelven a filtrar por tenant: aunque faltara la verificación, se devuelve vacío, no
+  datos ajenos (hay test).
+- Ninguna división en SQL. Los promedios se hacen en código con `Decimal` ROUND_HALF_UP, y el
+  dinero sale como string con 2 decimales y las cantidades con 3.
+- El empate del top y el orden del comparativo usan `COLLATE ucs_basic` (orden por code point),
+  no `"C"`: la guardia prohíbe las comillas.
+- Top productos agrupa por NOMBRE (el contrato no trae id de producto) y su `importe` va antes
+  del descuento del cheque: **no cuadra con la venta y no se debe comparar**.
+
+**Trampas que encontré.**
+- **`npx jest` sin `--runInBand` corre los archivos en paralelo** y los specs se pisan los
+  fixtures (`crearFixtures`/`limpiarFixtures` de las mismas empresas). Salen 5 o 26 rojos que
+  parecen bugs. Siempre `npm test` o `npx jest --runInBand ...`.
+- El test de < 300 ms dio un rojo intermitente (553 ms) con una sola muestra justo después del
+  seed: estadísticas viejas y ruido de Windows. Ahora corre `ANALYZE` en el `beforeAll` y compara
+  la mediana de 5 corridas. **El umbral sigue en 300 ms.** Ojo: sólo se midió en esta máquina y
+  con 500 cheques.
+- Los tests `scope.helper.spec.ts` (`LLAVE_EMPRESA`) y `scoped-prisma.service.spec.ts` (lista de
+  delegados) rompen **a propósito** con cada modelo nuevo: hay que agregarlo ahí.
+- Los archivos `.ts` nuevos no están en git hasta el commit: `git checkout -- archivo` no los
+  restaura. Si haces un mutation test, respalda antes.
+- Tijuana sí tiene horario de verano (reglas de EE. UU.) y el resto de México no. Es la zona que
+  sirve para probar que el corte se hace por sucursal.
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **F1-060:** validar `zona_horaria` como zona IANA en el CRUD de sucursales. Hoy una zona
+  inválida en la base hace fallar `AT TIME ZONE` en Postgres y el agregado sale 500. Y el CRUD del
+  catálogo de formas de pago (`formas_pago_catalogo`) tampoco existe todavía.
+- **F1-033, antes de fijar el OpenAPI:** sin cuentas, `ticketPromedio` es `"0.00"`, pero sin
+  comensales `promedioPorComensal` es `null`. Es inconsistente: decide una convención. Además los
+  DTOs tienen que validar `por` y `limite` del top (el servicio lanza `Error` plano, que saldría
+  500), y hay que armar el cache de 15 s.
+- La CTE `cancelados` filtra por `COALESCE(cerrado_at, abierto_at)` sin prefiltro sargable. Con
+  volumen real conviene un prefiltro o un índice.
+- La guardia protege contra descuidos, no contra alguien que quiera saltarla (está dicho en el
+  comentario de `guardiaCuerpo`). El cuerpo lo escribe siempre nuestro código.
+- El seed demo termina HOY, así que incluye cheques "de hoy" con hora futura. Correrlo otro día
+  mueve las fechas.
+
+**Qué haría distinto.** Correr desde el principio los specs de base de datos con `--runInBand`,
+y medir rendimiento con varias muestras desde el primer día. Las dos cosas costaron una vuelta.

@@ -125,6 +125,13 @@ const ESQUEMAS_DE_SISTEMA = /\b(public|pg_catalog|information_schema|pg_[a-z0-9_
  *   `generate_series(`.
  * - Nada de identificadores entre comillas (`"cheques"`, `U&"..."`), esquemas
  *   (`public.`, `pg_catalog`), `;` ni comentarios.
+ *
+ * Es una red contra DESCUIDOS de nuestro propio código, no contra un atacante:
+ * el cuerpo lo escribe siempre este repo y nunca viene del request (lo que sí
+ * viene, viaja como parámetro). SQL dinámico armado adentro (p. ej. una cadena
+ * concatenada dentro de `query_to_xml(...)`) la brincaría. Es conservadora a
+ * propósito y rechaza SQL válido como `JOIN LATERAL (` o `extract(x FROM y)` en
+ * el cuerpo: lo que haga falta de eso se calcula en las CTEs de aquí abajo.
  */
 export function guardiaCuerpo(cuerpo: Prisma.Sql): void {
   const texto = cuerpo.strings.join(' ? ');

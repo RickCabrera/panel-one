@@ -204,6 +204,9 @@ describe('AgregadosVentasService (contra Postgres, seed de 500 cheques)', () => 
     await prisma.sucursal.update({ where: { id: FX.sucursalA2 }, data: { zonaHoraria: TIJUANA } });
     await sembrarVentas(prisma, OPCIONES_A);
     await sembrarVentas(prisma, OPCIONES_B);
+    // Estadísticas frescas tras la inserción masiva: sin esto, las primeras
+    // consultas planean con tablas "vacías" y la medición de abajo mide eso.
+    await prisma.$executeRaw`ANALYZE cheques, cheque_partidas, cheque_pagos, formas_pago_catalogo`;
   }, 60_000);
 
   afterAll(async () => {
@@ -403,11 +406,18 @@ describe('AgregadosVentasService (contra Postgres, seed de 500 cheques)', () => 
       () => servicio.topProductos(A, filtro),
       () => servicio.comparativoSucursales(A, filtro),
     ];
+    // Mediana de 5 corridas tras un calentamiento: una sola muestra en Windows o
+    // en un runner compartido da rojos por ruido. El umbral NO se afloja.
     for (const llamada of llamadas) {
       await llamada(); // calentamiento: conexión y plan
-      const t0 = performance.now();
-      await llamada();
-      expect(performance.now() - t0).toBeLessThan(300);
+      const tiempos: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const t0 = performance.now();
+        await llamada();
+        tiempos.push(performance.now() - t0);
+      }
+      tiempos.sort((a, b) => a - b);
+      expect(tiempos[2]).toBeLessThan(300);
     }
   });
 });
