@@ -439,26 +439,34 @@ describe('Administración (e2e, F1-060)', () => {
     it('visor: 403 en toda ruta de administración, y nada cambia', async () => {
       const visor = como(a, USUARIOS.visorA);
       const antes = await fila(USUARIOS.visorA.id);
-      const respuestas = await Promise.all([
-        visor.post('/empresas', { nombre: 'x' }),
-        visor.patch(`/empresas/${FX.empresaA}`, { nombre: 'x' }),
-        visor.post('/sucursales', {
-          empresaId: FX.empresaA,
-          nombre: 'x',
-          zonaHoraria: 'America/Mexico_City',
-        }),
-        visor.patch(`/sucursales/${FX.sucursalA1}`, { nombre: 'x' }),
-        visor.get('/usuarios'),
-        visor.post('/usuarios', {
-          email: emailNuevo('visor'),
-          nombre: 'x',
-          rol: RolUsuario.visor,
-          empresaId: FX.empresaA,
-          password: PASSWORD_NUEVA,
-        }),
-        visor.patch(`/usuarios/${USUARIOS.visorA.id}`, { nombre: 'x' }),
-        visor.post(`/usuarios/${USUARIOS.visorA.id}/password`, { password: PASSWORD_NUEVA }),
-      ]);
+      // En serie, no con Promise.all: cada request de supertest abre su propio
+      // listener sobre el mismo server, y en paralelo el CI dio ECONNRESET.
+      const pedidos = [
+        () => visor.post('/empresas', { nombre: 'x' }),
+        () => visor.patch(`/empresas/${FX.empresaA}`, { nombre: 'x' }),
+        () =>
+          visor.post('/sucursales', {
+            empresaId: FX.empresaA,
+            nombre: 'x',
+            zonaHoraria: 'America/Mexico_City',
+          }),
+        () => visor.patch(`/sucursales/${FX.sucursalA1}`, { nombre: 'x' }),
+        () => visor.get('/usuarios'),
+        () =>
+          visor.post('/usuarios', {
+            email: emailNuevo('visor'),
+            nombre: 'x',
+            rol: RolUsuario.visor,
+            empresaId: FX.empresaA,
+            password: PASSWORD_NUEVA,
+          }),
+        () => visor.patch(`/usuarios/${USUARIOS.visorA.id}`, { nombre: 'x' }),
+        () => visor.post(`/usuarios/${USUARIOS.visorA.id}/password`, { password: PASSWORD_NUEVA }),
+      ];
+      const respuestas = [];
+      for (const pedir of pedidos) {
+        respuestas.push(await pedir());
+      }
       expect(respuestas.map((r) => r.status)).toEqual(Array(8).fill(403));
       await expect(fila(USUARIOS.visorA.id)).resolves.toEqual(antes);
     });

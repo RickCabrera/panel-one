@@ -1407,6 +1407,7 @@ cara que la consulta.
 - **`claims.ver ?? 0` aceptaba `ver: null` como 0.** Lo atrapó el test; ahora es `'ver' in claims ? claims.ver : 0`.
 - **En los tests web, `POST /auth/refresh` también es un POST.** `llamadas.find(l => l.metodo === 'POST')` encuentra el refresh primero. Filtra por ruta.
 - **`npx jest a b` con dos suites de base SIN `--runInBand` da decenas de fallos falsos**: las dos comparten las fixtures de F1-011 y se pisan. `npm test` ya lleva `--runInBand`; si corres archivos sueltos, agrégalo tú.
+- **El CI dio `read ECONNRESET` con 8 requests de supertest en `Promise.all`** contra la misma app, que en local pasaban. Cada `request(server)` abre su propio listener. En los e2e, manda los requests EN SERIE. Me costó un intento de CI.
 - La fixture `sucursalA2` está en `America/Mexico_City` (default), no en Tijuana como en la API falsa de la web. No asumas que coinciden.
 
 **Qué quedó abierto — decisiones para Ricardo** (ninguna es tarea nueva de la cola):
