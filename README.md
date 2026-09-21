@@ -129,7 +129,20 @@ cp web/.env.example web/.env.local
 npm run dev:web                # o: npm run dev --workspace @monitor/web
 ```
 
-Queda en `http://localhost:5173`.
+Queda en `http://localhost:5173`, con la API del paso 3 corriendo detrás. Entra con el
+admin global del seed.
+
+La SPA habla con la API **siempre en el mismo origen, bajo `/api`**. En local lo resuelve
+el proxy de Vite (`web/vite.config.ts`): quita el prefijo `/api`, manda a
+`API_PROXY_TARGET` (por defecto `http://localhost:3000`) y reescribe el `Path` de la cookie
+de refresh de `/auth` a `/api/auth`. Así no hace falta CORS con credenciales y la cookie
+`HttpOnly; SameSite=Strict` viaja sola a `/api/auth/refresh`.
+
+> **Producción (F1-002):** Caddy tiene que hacer lo mismo: `handle_path /api/*` hacia la
+> API y reescribir el `Path=/auth` del `Set-Cookie` a `Path=/api/auth`. Sin eso el login
+> funciona pero el refresh silencioso no, y cada recarga pide contraseña.
+
+El color de acento se configura con `VITE_COLOR_ACENTO` (hex); ver `web/.env.example`.
 
 ### 5 · Agente
 
@@ -164,8 +177,9 @@ Formato: `npm run format` (prettier). Sólo toca `/api` y `/web`; `scripts/`, `.
   si el hook `pre-push` pierde sus finales LF.
 - **`api`**, **`web`**, **`agent`** — activos desde F1-001: lint, typecheck y build.
 
-Los pasos de **test** siguen comentados, cada uno con la tarea que lo enciende anotada
-encima: F1-011 (api, con su servicio de postgres), F1-041 (web) y F1-021 (agent).
+Los pasos de **test** se encienden con la tarea que los habilita: F1-011 encendió el de
+`api` (con su servicio de postgres) y F1-040 el de `web`. Sigue comentado el de `agent`,
+que enciende F1-021.
 Encender un carril es parte del entregable de la tarea que lo habilita.
 
 ## Notas de dependencias

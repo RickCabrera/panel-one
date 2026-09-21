@@ -1,14 +1,43 @@
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { loadEnv, type ProxyOptions } from 'vite';
 import { defineConfig } from 'vitest/config';
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 5173,
-  },
-  test: {
-    environment: 'jsdom',
-    include: ['src/**/*.test.{ts,tsx}'],
-    setupFiles: ['./src/test-setup.ts'],
-  },
+/**
+ * La SPA habla con la API SIEMPRE en el mismo origen, bajo `/api`. En local lo hace
+ * este proxy; en producción lo tendrá que hacer Caddy igual (F1-002).
+ *
+ * Por qué mismo origen y no CORS: la cookie de refresh de la API es
+ * `HttpOnly; SameSite=Strict; Path=/auth`. Con el proxy no hace falta abrir CORS con
+ * credenciales, y `cookiePathRewrite` cambia el `Path` a `/api/auth` para que el
+ * navegador la mande a `/api/auth/refresh`, que es donde la SPA la pide.
+ *
+ * `API_PROXY_TARGET` no lleva el prefijo `VITE_`: se queda en este proceso y nunca
+ * entra al bundle.
+ */
+function proxyApi(target: string): Record<string, ProxyOptions> {
+  return {
+    '/api': {
+      target,
+      changeOrigin: true,
+      rewrite: (ruta) => ruta.replace(/^\/api/, ''),
+      cookiePathRewrite: { '/auth': '/api/auth' },
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  const entorno = loadEnv(mode, process.cwd(), '');
+  const proxy = proxyApi(entorno.API_PROXY_TARGET || 'http://localhost:3000');
+
+  return {
+    plugins: [react(), tailwindcss()],
+    server: { port: 5173, proxy },
+    preview: { proxy },
+    test: {
+      environment: 'jsdom',
+      include: ['src/**/*.test.{ts,tsx}'],
+      setupFiles: ['./src/test-setup.ts'],
+    },
+  };
 });

@@ -14,9 +14,9 @@ name: CI
 # de la tarea que lo habilita, no un "ya luego".
 #
 # F1-001 creó el monorepo y encendió los tres carriles con su gate mínimo (lint,
-# typecheck y build). Lo que sigue comentado son SÓLO los pasos de test, cada uno
-# con la tarea que lo enciende anotada encima: F1-041 (web) y F1-021 (agent).
-# F1-011 encendió los del carril api (servicio postgres, migrate deploy y npm test).
+# typecheck y build). Lo que sigue comentado es SÓLO el paso de test del agente,
+# con la tarea que lo enciende anotada encima: F1-021. F1-011 encendió los del
+# carril api (servicio postgres, migrate deploy y npm test) y F1-040 el de web.
 #
 # El job `guardia` sí corre desde el minuto cero. No es de adorno: es lo que hace
 # que el CI exista, se vea en verde en cada PR y falle si alguien commitea un
@@ -142,9 +142,10 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # CARRIL /web (React 18 + Vite + TS)
-  # ACTIVO desde F1-001: corre lint + build (tsc). El paso `test` sigue comentado
-  # hasta F1-041, que es donde llega el primer componente con lógica que vale la
-  # pena probar.
+  # ACTIVO desde F1-001: corre lint + build (tsc). El paso `test` lo encendió
+  # F1-040 (el backlog se lo asignaba a F1-041): la base de la SPA ya trae lógica
+  # de seguridad que no puede quedar sin gate (refresh de sesión, open redirect
+  # del login, guardas de ruta y roles).
   # ---------------------------------------------------------------------------
   web:
     name: Web (React + Vite)
@@ -164,8 +165,8 @@ jobs:
       - run: npm run lint
       # tsc + vite build: el gate mínimo de tipos del frontend.
       - run: npm run build
-      # DESCOMENTAR EN F1-041.
-      # - run: npm test
+      # F1-040: vitest + jsdom, sin red (la API se simula sobre fetch).
+      - run: npm test
 
   # ---------------------------------------------------------------------------
   # CARRIL /agent (.NET 8 Worker Service)
