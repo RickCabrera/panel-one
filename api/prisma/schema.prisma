@@ -1,0 +1,113 @@
+// Esquema núcleo del monitor (F1-010): empresas, sucursales, usuarios y el
+// estado del agente de cada sucursal.
+//
+// Convenciones que valen para todo lo que se agregue después:
+// - Campos camelCase en TypeScript, snake_case en la base (`@map`/`@@map`).
+// - IDs UUID generados por Prisma.
+// - Todo timestamp es `timestamptz` y se guarda en UTC. La presentación en
+//   `America/Mexico_City` y los cortes de "hoy" en la zona de la sucursal son
+//   cosa del código, nunca de la base.
+// - Toda tabla de datos lleva `empresa_id` con índice: el helper de scope de
+//   F1-011 filtra por esa columna en TODO query.
+// - Las FK son `onDelete: Restrict`: nada se borra en cascada. Dar de baja es
+//   `activo = false`.
+//
+// Hay un CHECK que Prisma no modela y que vive sólo en la migración
+// `..._esquema_nucleo`: `usuarios_rol_empresa_chk`. Si alguna vez se regenera
+// la migración inicial, hay que volver a ponerlo a mano.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RolUsuario {
+  admin_global
+  admin_empresa
+  visor
+
+  @@map("rol_usuario")
+}
+
+model Empresa {
+  id        String   @id @default(uuid()) @db.Uuid
+  nombre    String
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sucursales Sucursal[]
+  usuarios   Usuario[]
+
+  @@map("empresas")
+}
+
+model Sucursal {
+  id          String   @id @default(uuid()) @db.Uuid
+  empresaId   String   @map("empresa_id") @db.Uuid
+  nombre      String
+  // Zona IANA de la sucursal. Es la que corta "ventas de hoy", no la del servidor.
+  zonaHoraria String   @default("America/Mexico_City") @map("zona_horaria")
+  // Hash de la API key del agente. Nulo hasta que F1-012 la genere. Ojo F1-012:
+  // tiene que ser un hash determinista (SHA-256 de una key de alta entropía)
+  // para poder buscar por igualdad; argon2 lleva sal y no sirve para eso.
+  apiKeyHash  String?  @unique @map("api_key_hash")
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  empresa      Empresa       @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  agenteEstado AgenteEstado?
+
+  // Destino de la FK compuesta de `agente_estado`: garantiza que la empresa que
+  // guarda una tabla hija sea la empresa real de la sucursal.
+  @@unique([id, empresaId], map: "sucursales_id_empresa_id_key")
+  @@index([empresaId])
+  @@map("sucursales")
+}
+
+model Usuario {
+  id           String     @id @default(uuid()) @db.Uuid
+  // Siempre en minúsculas: lo normaliza quien escribe (seed, y login en F1-011).
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  nombre       String
+  rol          RolUsuario
+  // Nulo sólo para admin_global, obligatorio para los demás roles. Lo garantiza
+  // el CHECK `usuarios_rol_empresa_chk` de la migración, no este schema.
+  empresaId    String?    @map("empresa_id") @db.Uuid
+  activo       Boolean    @default(true)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa? @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+
+  @@index([empresaId])
+  @@map("usuarios")
+}
+
+model AgenteEstado {
+  sucursalId      String    @id @map("sucursal_id") @db.Uuid
+  // DECISION PROVISIONAL (nocturno): el backlog define AgenteEstado sólo con
+  // sucursal_id, pero toda tabla de datos lleva empresa_id indexado para que el
+  // helper de scope no tenga casos especiales. Se denormaliza y la FK compuesta
+  // (sucursal_id, empresa_id) impide que diverja de la empresa de la sucursal.
+  empresaId       String    @map("empresa_id") @db.Uuid
+  versionAgente   String?   @map("version_agente")
+  versionSr       String?   @map("version_sr")
+  ultimaLecturaAt DateTime? @map("ultima_lectura_at") @db.Timestamptz(3)
+  ultimoError     String?   @map("ultimo_error")
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "agente_estado_sucursal_empresa_fkey")
+
+  // Redundante con el PK, pero Prisma lo exige para que la relación 1:1 use
+  // la FK compuesta.
+  @@unique([sucursalId, empresaId], map: "agente_estado_sucursal_id_empresa_id_key")
+  @@index([empresaId])
+  @@map("agente_estado")
+}

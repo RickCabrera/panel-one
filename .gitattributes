@@ -14,3 +14,9 @@ infra/Caddyfile text eol=lf
 # guarda ASCII con BOM a propósito (ver la cabecera del propio archivo). `-text`
 # le dice a git que no le toque los finales de línea en ningún checkout.
 scripts/nocturno-v2.ps1 -text
+
+# Las migraciones de Prisma llevan checksum en `_prisma_migrations`, calculado
+# sobre los bytes del archivo. Si un checkout de Windows las convierte a CRLF,
+# el checksum deja de coincidir con el de una base migrada desde Linux (CI, VPS)
+# y `migrate dev` pide RESETEAR la base. LF fijo en todos lados.
+api/prisma/migrations/** text eol=lf
