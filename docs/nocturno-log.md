@@ -2066,3 +2066,40 @@ lectura" hoy es una **sonda**, no una lectura de ventas (ver Decisiones).
 
 **Qué haría distinto.** Commitear antes de cualquier mutación. Y revisar la base local
 (`agente_estado`) antes de correr la suite del api.
+
+## 2026-09-21 05:40 — F1-026 · Instalador y guía de instalación
+**Estado:** SALTADA (el CI no arranca ningún job por la facturación de GitHub Actions; 2 reintentos, sigue rojo). **El código está hecho y aprobado**: el problema no es la tarea.
+
+**Qué pasó.**
+- Entregable completo en la rama `feat/F1-026`, **PR #22**:
+  - instalador `agent/instalador/`;
+  - guía `docs/instalacion-agente.md`;
+  - `dotnet test` 328/328, 0 omitidos;
+  - revisor: plan y entregable APROBADOS CON OBSERVACIONES, todas atendidas.
+- Iba a cerrar como `[x] PARCIAL`, con el resto en F1-020b (T-SQL nunca ejecutado,
+  `instalar.ps1` nunca corrido elevado, cuenta virtual sin probar) y la medición de 15 min
+  en F1-091.
+- **Los 4 jobs del CI (guardia, api, web, agent) fallan en 2-3 s sin arrancar**, con este
+  mensaje: "*The job was not started because recent account payments have failed or your
+  spending limit needs to be increased. Please check the 'Billing & plans' section in your
+  settings*". Relancé dos veces (`gh run rerun 35594239424`) y dio lo mismo.
+- **Ya pasaba antes de esta tarea:** el push a main de F1-025 (#21, 11:03 UTC) y el del
+  `[x]` de F1-025 fallaron igual. El último CI verde fue el PR de F1-025, a las 11:01 UTC.
+- Por el protocolo (CI rojo tras 2 intentos → SALTA): cerré el PR #22 con un comentario y
+  borré la rama. **No se marcó nada en el backlog.**
+
+**Para retomar F1-026 (Ricardo):**
+1. Arreglar la facturación de GitHub Actions: Settings → Billing & plans.
+2. Restaurar la rama: botón "Restore branch" en el PR #22, o
+   `git fetch origin pull/22/head:feat/F1-026`.
+3. Reabrir el PR #22 y esperar el CI.
+4. Quitar esta línea SALTADA, o dejarla y marcar `[x] **PARCIAL:** falta ...` (el texto
+   exacto está en la entrada de la rama).
+
+**El detalle completo está en la entrada de F1-026 dentro del PR #22** (en
+`docs/nocturno-log.md` de la rama): decisiones, trampas y lo que no se probó.
+
+**⚠️ Para la sesión siguiente, y para Ricardo: mientras la facturación siga así, NINGÚN PR
+puede ponerse verde.** F1-092, la única que queda en la cola, va a chocar con lo mismo y se
+va a saltar igual. Antes de construir nada, revisa `gh run list --limit 3`. Si el último run
+dice "*job was not started ... payments*", la tarea no se va a poder cerrar esta noche.
