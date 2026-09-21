@@ -314,7 +314,7 @@ si la versión no está soportada, log claro + heartbeat con error, sin crashear
 > timeout corto para las queries.
 
 ## 19 · F1-024 · Cola local resiliente + envío
-`[ ]` **Epic 2 — Agente Windows (.NET 8)**
+`[x]` **Epic 2 — Agente Windows (.NET 8)**
 
 SQLite (`cola.db`) con tabla `eventos(id, tipo[cheque|snapshot|heartbeat], payload json,
 creado_at, intentos, enviado_at null)`. Envío por lotes de hasta 100 eventos, orden FIFO,
