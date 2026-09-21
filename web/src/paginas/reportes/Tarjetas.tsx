@@ -160,7 +160,7 @@ export function ReportePorDia({
                       >
                         <td className="px-2 py-1">
                           {etiquetaDia(f.dia)}{' '}
-                          <span className="text-xs text-slate-400">{f.dia}</span>
+                          <span className="text-xs text-slate-500">{f.dia}</span>
                         </td>
                         <td className={NUM}>{pesos(f.venta)}</td>
                         <td className={NUM}>{f.cuentas}</td>
@@ -366,7 +366,7 @@ export function ReporteTop({
                         className="border-t border-slate-100"
                         data-testid={`top-${i + 1}`}
                       >
-                        <td className="px-2 py-1 text-slate-400 tabular-nums">{i + 1}</td>
+                        <td className="px-2 py-1 text-slate-500 tabular-nums">{i + 1}</td>
                         <td className="max-w-[14rem] truncate px-2 py-1">{f.producto}</td>
                         <td className={NUM}>{pesos(f.importe)}</td>
                         <td className={NUM}>{cantidadLegible(f.cantidad)}</td>

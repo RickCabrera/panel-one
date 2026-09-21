@@ -80,6 +80,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Más de 30 refresh por minuto desde la misma IP."
           }
         },
         "security": [

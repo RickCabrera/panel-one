@@ -1,0 +1,90 @@
+# Snippets de Caddy del panel (F1-092). Los IMPORTA el Caddyfile de producción de
+# F1-002 (tarea diurna: necesita VPS y DNS); aquí sólo se escriben y se prueban en
+# local con `Caddyfile.local`. NO es un Caddyfile completo ni se despliega.
+#
+# Uso en F1-002, dentro del sitio app.DOMINIO:
+#
+#     import /ruta/a/seguridad.caddy          # define los snippets
+#     app.DOMINIO {
+#         import cabeceras_seguridad
+#         import api api:3000                  # /api/* → la API, sin el prefijo
+#         import spa /srv/web                  # el build de /web
+#     }
+#
+# Y la API detrás de este proxy arranca con TRUST_PROXY_SALTOS=1 (api/.env.example):
+# sin eso todos los usuarios comparten la IP de Caddy: el login admite 5 intentos
+# por minuto PARA TODO EL SISTEMA y el refresh silencioso (30/min) se agota en hora
+# pico y saca a usuarios legítimos al login. NO es opcional. Caddy, por su lado, NO debe confiar en el
+# X-Forwarded-For que manda el cliente: es su comportamiento por defecto mientras no
+# se configure `trusted_proxies`, así que no lo configures sobre el origen público.
+
+# Para TODA respuesta del sitio (SPA y API).
+(cabeceras_seguridad) {
+	# Con un borrado (`-Server`) el bloque entero se aplica al FINAL de la respuesta:
+	# pisa (no duplica) las cabeceras que ya manda la API. A propósito, en /api/* el
+	# `Referrer-Policy: no-referrer` de la API queda como `strict-origin-when-cross-origin`:
+	# un JSON no navega a ningún lado, así que da igual y el sitio queda con una sola.
+	header {
+		# HSTS de 1 año SIN includeSubDomains ni preload: los dos afectan a subdominios
+		# del dominio de Ricardo que todavía no conocemos, y preload no tiene vuelta
+		# atrás rápida. Es decisión de Ricardo en F1-002 (docs/nocturno-log.md).
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		-Server
+	}
+}
+
+# /api/* → la API ({args[0]} = host:puerto), quitando el prefijo como el proxy de
+# Vite (web/vite.config.ts). La cookie de refresh sale de la API con Path=/auth y el
+# navegador la pide en /api/auth/refresh: se reescribe el Path. Sin esto el login
+# funciona pero el refresh silencioso no, y cada recarga pide contraseña.
+(api) {
+	handle_path /api/* {
+		reverse_proxy {args[0]} {
+			header_down Set-Cookie "Path=/auth" "Path=/api/auth"
+			# Node cierra una conexión ociosa a los 5 s (keepAliveTimeout); Caddy, por
+			# defecto, la reusa hasta 2 min. En la carrera, Caddy manda el request por un
+			# socket que Node acaba de cerrar y responde 502; un POST (el refresh) no se
+			# reintenta y el usuario vuelve al login. Visto en la prueba local de F1-092.
+			# Caddy suelta las ociosas ANTES que Node.
+			transport http {
+				keepalive 4s
+			}
+		}
+	}
+}
+
+# La SPA ({args[0]} = carpeta del build de /web). La CSP va SÓLO aquí: en /api/*
+# rompería el Swagger de /api/docs y a un JSON no le sirve.
+(spa) {
+	handle {
+		root * {args[0]}
+		# Comprimido: el JS pesa ~660 kB crudo y ~200 kB en gzip; sin esto Lighthouse
+		# móvil no pasa de ~77. Sólo la SPA (estáticos): en /api/* no, porque ahí van
+		# tokens junto a datos que el usuario controla (BREACH).
+		encode zstd gzip
+		# CSP estricta, sin 'unsafe-inline' ni 'unsafe-eval': el build de Vite no trae
+		# scripts ni estilos inline, y los estilos que pone React (y Recharts) van por
+		# CSSOM (`element.style`), que la CSP no bloquea. Probado con Lighthouse (Chrome
+		# headless) contra este snippet en local, sobre las vistas con gráficas (docs/nocturno-log.md, F1-092). web/src/seguridad/csp.test.ts
+		# vigila que siga así.
+		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		# Los assets llevan hash en el nombre: caché de un año. index.html (y todo lo
+		# demás) se revalida siempre, para que un deploy se vea en la siguiente carga.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@noAssets not path /assets/*
+		header @noAssets Cache-Control "no-cache"
+		# Las rutas de la SPA caen en index.html; un asset que no existe (un chunk viejo
+		# pedido tras un deploy) NO: da 404 en vez de un index.html disfrazado de JS.
+		@rutaSpa {
+			not path /assets/*
+			not file
+		}
+		rewrite @rutaSpa /index.html
+		file_server
+	}
+}
