@@ -2731,3 +2731,21 @@ sección. De las no obligatorias:
 
 **Estado de la cola al cerrar:** con F1-094 `[x]` no queda nada en la Cola nocturna. La siguiente
 sesión debe crear `COLA_VACIA.txt` y terminar, salvo que Ricardo agregue tareas.
+
+## 21/09/2026 — Ricardo: arranca la RONDA 2
+
+La Cola nocturna NO está vacía. La entrada anterior decía que no quedaba nada "salvo que
+Ricardo agregue tareas": Ricardo las agregó. `backlog.md` tiene una cola nueva, la RONDA 2,
+con 45 tareas. No crees `COLA_VACIA.txt`: toma la primera de esa tabla que no esté `[x]`.
+
+**Sobre el "Fuera de alcance" de CLAUDE.md.** Esa línea sigue diciendo que la Fase 2 está
+fuera de alcance "salvo tarea explícita". La autorización explícita de Ricardo existe y está
+al inicio de `backlog.md`, en el bloque "AUTORIZACIÓN EXPLÍCITA DE RICARDO — 21/09/2026".
+Tomar una tarea de la RONDA 2 es cumplir el protocolo, no saltárselo: no te detengas a
+preguntar, no la marques SALTADA por este motivo, y no edites CLAUDE.md. La línea de
+CLAUDE.md queda pendiente de un PR aparte porque el pre-push no deja ese archivo ir directo
+a main, y eso es el hook haciendo su trabajo, no una contradicción.
+
+Antes de construir, lee en backlog.md "Las cuatro reglas de la RONDA 2". Si tomas una
+F2-1xx, tu "Listo cuando" es el de la tabla "Cierre nocturno de las tareas heredadas",
+no el original.
