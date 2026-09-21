@@ -4,6 +4,9 @@
     Tests del agente (xUnit). Corren en el CI de Linux: nada aqui depende de
     Windows, de un SQL Server real ni de red (el API se simula con un
     HttpMessageHandler falso y el SQL se prueba contra un puerto cerrado).
+    Excepcion (F1-026): los tests del instalador corren PowerShell (powershell.exe
+    en Windows, pwsh en Linux; ubuntu-latest lo trae). Sin PowerShell FALLAN, no
+    se saltan. ScriptDom sirve para parsear el T-SQL del instalador, solo en tests.
   -->
 
   <PropertyGroup>
@@ -15,6 +18,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.107.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>

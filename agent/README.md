@@ -5,10 +5,10 @@ SoftRestaurant en **solo lectura** y sube los datos al API del monitor con la AP
 la sucursal.
 
 Estado: F1-020 entrega el esqueleto (servicio, configuración, logs y `agente test`), F1-021
-la detección de la versión de SoftRestaurant y F1-024 la cola local con el envío al API. La
-lectura de ventas y mesas (lo que llena la cola) llega en F1-022 / F1-023, y el heartbeat en
-F1-025: **hasta entonces la cola siempre está vacía** y el envío no manda nada. El
-instalador (`instalar.ps1`) y la guía para personas no técnicas son F1-026.
+la detección de la versión de SoftRestaurant, F1-024 la cola local con el envío al API y
+F1-025 el heartbeat. La lectura de ventas y mesas (lo que llena la cola) llega en F1-022 /
+F1-023. El instalador está en [`instalador/`](instalador/) y la guía para personas no
+técnicas en [`docs/instalacion-agente.md`](../docs/instalacion-agente.md) (F1-026).
 
 ## Compilar, probar y publicar
 
@@ -22,6 +22,30 @@ dotnet publish src/ArkonAgente -c Release -r win-x64 -o publish
 ```
 
 `publish/` queda con `agente.exe` (y su `.pdb`, que no hace falta copiar).
+
+### Armar el paquete del instalador
+
+Lo que se le entrega al restaurante es una carpeta (o un `.zip`) con `agente.exe` y los
+cuatro archivos de [`instalador/`](instalador/), todos juntos:
+
+```powershell
+cd agent
+dotnet publish src/ArkonAgente -c Release -r win-x64 -o publish
+New-Item -ItemType Directory paquete -Force | Out-Null
+Copy-Item publish\agente.exe, instalador\* paquete\
+Compress-Archive paquete\* ArkonAgente-instalador.zip -Force
+```
+
+| Archivo | Qué es |
+|---|---|
+| `agente.exe` | El agente. |
+| `crear-usuario-lector.ps1` | Paso 3 de la guía: crea el usuario SQL de solo lectura. Pide la contraseña sin mostrarla y corre el `.sql` con `sqlcmd`. |
+| `crear-usuario-lector.sql` | El T-SQL. **Sólo otorga `db_datareader`** (lo vigila `InstaladorSqlTests`). |
+| `instalar.ps1` | Paso 4: copia el exe, protege la carpeta, escribe `config.json`, registra y arranca el servicio y corre `agente test`. |
+| `funciones-instalador.ps1` | Funciones compartidas de los dos scripts (las prueba `InstaladorPs1Tests`). |
+
+Los `.ps1` y el `.sql` van en **UTF-8 con BOM** (PowerShell 5.1 y `sqlcmd` leen un archivo
+sin BOM como ANSI y los acentos salen rotos); hay un test que lo vigila.
 
 ## Configuración
 
@@ -50,9 +74,9 @@ Plantilla: [`infra/config.example.json`](../infra/config.example.json).
   sola vez.
 - `connectionString`: cadena de SQL Server hacia la base de SoftRestaurant, con un usuario
   **de solo lectura** (sólo el rol `db_datareader`). Con autenticación SQL (`User ID` /
-  `Password`), no de Windows: el servicio corre como LocalSystem, y con
-  `Integrated Security=True` entraría a SQL Server como `NT AUTHORITY\SYSTEM`, que en los
-  SQL Express viejos suele ser sysadmin. `TrustServerCertificate=True` es lo normal en un
+  `Password`), no de Windows: con `Integrated Security=True` el servicio entraría a SQL
+  Server con la cuenta del servicio, y si se instaló como LocalSystem, como
+  `NT AUTHORITY\SYSTEM`, que en los SQL Express viejos suele ser sysadmin. `TrustServerCertificate=True` es lo normal en un
   SQL Express local con certificado autofirmado (ver `docs/esquema-sr.md` §11).
   El agente agrega por su cuenta `Application Name=ArkonAgente` (para verlo en
   `sp_who2`) y un `Connect Timeout` de 5 s si no se puso uno (tope: 15 s).
@@ -65,13 +89,16 @@ Para desarrollo, la variable de entorno `ARKON_AGENTE_DIR` cambia la carpeta.
 
 ### Permisos de la carpeta
 
-`config.json` trae la API key y el password de SQL. Deja la carpeta sólo para SYSTEM y
-Administradores (consola de administrador):
+`config.json` trae la API key y el password de SQL. La carpeta queda sólo para SYSTEM,
+Administradores y la cuenta del servicio (Modificar: lee el config, escribe logs y cola).
+`instalar.ps1` lo hace solo; a mano, en una consola de administrador:
 
 ```powershell
 mkdir C:\ProgramData\ArkonAgente
 icacls C:\ProgramData\ArkonAgente /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F"
 icacls C:\ProgramData\ArkonAgente /inheritance:r
+# Ya creado el servicio (su SID sólo existe desde entonces):
+icacls C:\ProgramData\ArkonAgente /grant "NT SERVICE\ArkonAgente:(OI)(CI)M"
 ```
 
 Van por SID y no por nombre (`S-1-5-18` = SYSTEM, `S-1-5-32-544` = Administradores),
@@ -118,12 +145,18 @@ Resultado: FALLA la conexión a SQL Server (SoftRestaurant). La otra funciona.
 
 ## Instalar como servicio de Windows
 
+**Lo normal es `instalar.ps1`** (guía: [`docs/instalacion-agente.md`](../docs/instalacion-agente.md)).
+Corre exactamente estos comandos, más la carpeta y el `config.json`. Lo que sigue es la
+referencia para hacerlo a mano o para depurar.
+
 Consola **de administrador**. Supone el exe copiado en `C:\Program Files\ArkonAgente\`.
-Ojo: en `sc` el espacio después de `=` es obligatorio.
+Ojo: en `sc.exe` el espacio después de `=` es obligatorio, y en PowerShell hay que escribir
+`sc.exe`: `sc` a secas es `Set-Content`.
 
 ```powershell
-sc.exe create ArkonAgente binPath= "\"C:\Program Files\ArkonAgente\agente.exe\"" start= delayed-auto DisplayName= "ArkonAgente (monitor SoftRestaurant)"
+sc.exe create ArkonAgente binPath= "\"C:\Program Files\ArkonAgente\agente.exe\"" start= delayed-auto DisplayName= "ArkonAgente (monitor SoftRestaurant)" obj= "NT SERVICE\ArkonAgente"
 sc.exe description ArkonAgente "Lee SoftRestaurant en solo lectura y reporta al monitor."
+sc.exe sidtype ArkonAgente unrestricted
 
 # Si el proceso se cae, el administrador de servicios lo levanta al minuto (tres veces;
 # el contador se reinicia cada 24 h). failureflag 1: también si se detiene con error.
@@ -136,8 +169,13 @@ sc.exe query ArkonAgente
 
 - `start= delayed-auto`: arranca con Windows, un poco después de los servicios críticos,
   para que el SQL Server de SoftRestaurant ya esté arriba.
-- Corre como **LocalSystem** (el default de `sc create`). La cuenta virtual
-  `NT SERVICE\ArkonAgente` con ACLs propias queda para F1-026.
+- Corre como la **cuenta virtual `NT SERVICE\ArkonAgente`** (F1-026): sin contraseña, sin
+  permisos fuera de su carpeta de datos y del exe. Al SQL Server entra con el usuario SQL de
+  `config.json`, no con la cuenta de Windows, y para salir a internet no necesita más.
+  `DECISION PROVISIONAL (nocturno)`: **nunca se ha corrido como servicio** (F1-020b). Si con
+  ella no arranca, `instalar.ps1 -CuentaServicio LocalSystem` (o `obj= LocalSystem`).
+- `sidtype unrestricted` pone el SID del servicio en su token: es a quien se le da permiso
+  sobre `C:\ProgramData\ArkonAgente`.
 - **Una falla interna no prevista mata el proceso con código 1** (queda como `Critical` en
   el log), para que `sc failure` lo levante. Sin eso, .NET 8 detendría el servicio "limpio"
   y Windows no lo reiniciaría.
@@ -153,9 +191,11 @@ sc.exe stop ArkonAgente
 sc.exe delete ArkonAgente
 ```
 
-> **Pendiente de verificar (F1-020b, diurna):** el arranque con Windows y el reinicio tras
-> una caída no se han probado con `sc create` real. La sesión que escribió esto no tenía
-> consola de administrador.
+> **Pendiente de verificar (F1-020b, diurna):** nada de esta sección ni de `instalar.ps1`
+> se ha corrido con elevación: ni `sc.exe create`, ni el `icacls`, ni la cuenta virtual,
+> ni el arranque con Windows, ni el reinicio tras una caída. Las sesiones que lo
+> escribieron no tenían consola de administrador. Tampoco se ha ejecutado nunca
+> `crear-usuario-lector.sql`.
 
 ## Detección de la versión de SoftRestaurant (F1-021)
 
