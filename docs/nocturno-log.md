@@ -2103,3 +2103,37 @@ lectura" hoy es una **sonda**, no una lectura de ventas (ver Decisiones).
 puede ponerse verde.** F1-092, la única que queda en la cola, va a chocar con lo mismo y se
 va a saltar igual. Antes de construir nada, revisa `gh run list --limit 3`. Si el último run
 dice "*job was not started ... payments*", la tarea no se va a poder cerrar esta noche.
+
+## 2026-09-21 12:10 — F1-092 · Hardening y pulido final
+**Estado:** SALTADA (el CI no arranca ningún job por la facturación de GitHub Actions; 2 reintentos, sigue rojo). **El código está hecho y aprobado**: el problema no es la tarea.
+
+**Qué pasó.**
+- Entregable completo en la rama `feat/F1-092`, **PR #23**:
+  - API: cabeceras de seguridad, `trust proxy` con `TRUST_PROXY_SALTOS` y rate limit de refresh;
+  - Caddy: snippets en `infra/caddy/seguridad.caddy`;
+  - web: marca, login y 404, `check:bundle` en el CI, contraste.
+  - Checks locales verdes: jest 651/651 y vitest verde, sin skips.
+  - Revisor: plan y entregable APROBADOS CON OBSERVACIONES, las obligatorias atendidas.
+  - Lighthouse móvil en local ≥ 92 en todas las vistas.
+- El CI del PR (run `35596936229`) falló igual que el de F1-026: "*The job was not started because
+  recent account payments have failed or your spending limit needs to be increased*". Lo relancé
+  dos veces con `gh run rerun` y dio lo mismo.
+- Por el protocolo: PR #23 cerrado con comentario, rama borrada, **nada marcado en el backlog**.
+
+**Para retomar F1-092 (Ricardo):**
+1. Arreglar la facturación de GitHub Actions (Settings → Billing & plans).
+2. Restaurar la rama: "Restore branch" en el PR #23, o
+   `git fetch origin pull/23/head:feat/F1-092`.
+3. Reabrir el PR #23 y esperar el CI.
+4. Quitar esta línea SALTADA.
+
+Lo mismo vale para F1-026 (PR #22).
+
+**El detalle completo está en la entrada de F1-092 dentro del PR #23:**
+- lo que **F1-002 tiene que saber**: que `TRUST_PROXY_SALTOS=1` no es opcional, la decisión de
+  HSTS y el `keepalive 4s`;
+- los números de Lighthouse;
+- las trampas.
+
+**Estado de la cola:** con F1-026 y F1-092 SALTADAS, la Cola nocturna ya no tiene tareas tomables.
+La siguiente sesión debería crear `COLA_VACIA.txt`, salvo que Ricardo reabra alguna.
