@@ -1809,3 +1809,149 @@ se manda".
   por SQL) en vez de creerle al log anterior. Eso convirtió la tarea de "supuestos" en
   "validada".
 - No volver a escribir código con barras invertidas en un heredoc.
+
+## 2026-09-21 04:25 — F1-024 · Cola local resiliente + envío
+**Estado:** CERRADA (el número de PR lo da `gh pr create`). Sin PARCIAL. **Ojo:** en
+producción, hoy, **la cola siempre está vacía**. Nadie encola todavía: los cheques los
+produce F1-022, los snapshots F1-023 (las dos Diurnas, bloqueadas por F1-090) y el heartbeat
+F1-025. El envío está cableado en el Worker y probado, pero **nunca se ha usado con datos
+reales de un restaurante**.
+
+**Qué quedó hecho.**
+- **`agent/src/ArkonAgente/Cola/ColaLocal.cs`**: la cola en `C:\ProgramData\ArkonAgente\cola.db`
+  (SQLite, `Microsoft.Data.Sqlite` 8.0.11). Tabla `eventos` con las columnas del backlog más
+  tres: `clave` (el `folioSr` de los cheques), `rechazado_at` y `motivo_rechazo`.
+  - WAL, `synchronous=FULL`, `Pooling=False` (el archivo no queda abierto).
+  - Fechas UTC como texto de ancho fijo (`yyyy-MM-ddTHH:mm:ss.fffffffZ`), para que comparar
+    textos sea comparar instantes (la purga depende de eso).
+  - `Encolar` valida que el payload sea un objeto JSON y que un cheque traiga `folioSr`; si
+    no, truena (bug del productor, no basura en la cola).
+  - **Sólo el último pendiente cuenta** para: snapshot, heartbeat y cada `folioSr`. Encolar
+    borra el pendiente anterior en la misma transacción.
+  - `Purgar`: enviados y rechazados de más de 7 días. Nunca un pendiente.
+  - `ContarPendientes` existe para el `tamanoCola` de F1-025.
+- **`agent/src/ArkonAgente/Cola/EnviadorCola.cs`**: vacía la cola hacia
+  `POST {apiUrl}/ingesta/eventos`.
+  - Lotes de hasta 100, FIFO, body en gzip con `Content-Encoding: gzip`, `X-Api-Key`.
+  - `min(intervaloSegundos, 20)` lotes por ciclo: nunca más de 60 peticiones por minuto
+    (el API permite 120 por sucursal). **Esto no estaba en el plan**: con 20 fijos y el
+    intervalo mínimo de 5 s eran 240 por minuto. Lo encontré construyendo.
+  - 2xx: `procesados` → enviado; `reintentable:false` → rechazado (con motivo, Error en el
+    log); `reintentable:true` o ausente de las dos listas → sigue pendiente y backoff. Los
+    rechazos se ubican por `indice`, no por `id` (el id puede venir nulo).
+  - 413: parte el lote a la mitad; un evento solo que da 413 → rechazado.
+  - Red, timeout (30 s por petición), 400, 401, 429, 5xx, cualquier otro código, 2xx
+    ilegible: nada se descarta, `intentos+1`, backoff 30 s → 60 → … → 10 min, medido con
+    `TimeProvider`. Se reinicia con un envío bueno; en memoria (reiniciar = intento inmediato).
+  - La parada del servicio a media petición propaga `OperationCanceledException` (no cuenta
+    como falla).
+- **`Worker.cs`**: nuevo `DependenciasWorker.CrearEnvio`. En `CicloAsync` crea el envío una
+  vez, lo corre al arrancar (lo pendiente de antes de un reinicio sale sin esperar) y en cada
+  tick después de la detección. Una excepción de SQLite no se atrapa: código 1 y `sc failure`.
+- **`RutasAgente.ArchivoCola`**. `agent/README.md`: sección "Cola local y envío (F1-024)".
+- **`backlog.md`**: notas "cómo encolar" en F1-022 y F1-023, y en F1-025 una nota que también
+  es "Listo cuando" (encolar el heartbeat antes de enviar, `tamanoCola`, reportar rechazos y la
+  falla vigente en `ultimoError`, rate limit).
+- **`docs/esquema-sr.md`:** la tarea no lee SoftRestaurant y no hubo hallazgos. Sólo se
+  anotó en la decisión abierta de folios repetidos que la cola también depende de ella.
+
+**Qué se probó y qué NO.**
+- `dotnet build -c Release`: 0 advertencias. `dotnet test`: **222/222, 0 omitidos** (eran 173).
+- **El AC** (`EnviadorColaTests.AC_una_hora_sin_internet_...`): 120 ciclos de 30 s con reloj
+  falso y el cliente HTTP lanzando `HttpRequestException` (así lo pide el backlog). Cada ciclo
+  encola un cheque, un snapshot y un heartbeat; cada 4 ciclos reprocesa un folio viejo; en el
+  ciclo 45 una ráfaga de 30; en el 60 **reinicio** (se reabre `cola.db`). Comprueba en cada
+  ciclo que pendientes = folios distintos + 2, que el backoff acota los intentos (5..20, no
+  120), y al reconectar: los 150 cheques, en el orden de su último encolado, cada uno en su
+  última versión, más un solo snapshot y un solo heartbeat.
+- **Respuesta perdida** (el API guarda y la respuesta no llega): cero pérdidas y se reenvía.
+  **La garantía es "al menos una vez", no "exactamente una vez"**: la idempotencia la pone el
+  API con su upsert por `(sucursal, folioSr)`.
+- **Versión vieja reintentable vs. nueva** (observación obligatoria del revisor): la v1 vuelve
+  como reintentable, se encola la v2, y al API sólo llega la v2.
+- **Mutaciones** (todo restaurado): sin colapso por folio → 3 tests rojos; sin colapso de
+  snapshot/heartbeat → 3; sin la guardia del backoff → 2; reintentable tratado como enviado → 1.
+- **Contra el API real, en esta máquina** (Postgres 16 local, servicio `postgresql-x64-16`;
+  api con `node -r dotenv/config dist/main.js` en el puerto 3999; key nueva de "Sucursal
+  Centro" del seed, generada con el admin del seed):
+  - `dotnet publish -r win-x64` da un solo `agente.exe` y **el SQLite nativo va dentro** (el
+    exe creó `cola.db` sin DLL al lado).
+  - Metí 5 eventos sintéticos en `cola.db` con Python (folios `E2E-F1024-*`, uno con
+    `total: "cien"`) y corrí el exe: 4 enviados; el malo rechazado con el motivo real del
+    API (`datos.total: total debe ser un importe decimal…`). **El gzip lo acepta el API real.**
+  - Maté el API, encolé otra vez, corrí el exe: `Error ... No se pudo conectar con el API
+    (ConnectionError). Nada se pierde…`, 5 pendientes con `intentos=1`. Levanté el API y
+    corrí el exe: se mandó todo. En Postgres quedaron **2 cheques con 1 partida cada uno**
+    tras el reenvío: la idempotencia se sostiene de punta a punta.
+  - **Quedaron en la base local de desarrollo** los cheques `E2E-F1024-1` y `-2` de la
+    "Sucursal Centro" del seed, y la key de esa sucursal rotada. Son sintéticos; no los borré.
+- **NO probado:**
+  - El servicio instalado (`sc create`) con la cola: sigue pendiente F1-020b.
+  - Un `cola.db` corrupto de verdad o el disco lleno: sólo está razonado (código 1 y
+    `sc failure`), documentado en el README.
+  - Un corte de red real de una hora con el servicio corriendo: el AC se probó con reloj
+    falso y la caída simulada en el cliente, y el corte real duró segundos.
+
+**Decisiones que tomé y por qué.**
+- **`DECISION PROVISIONAL (nocturno)` en `ColaLocal.Encolar`**: el heartbeat también se
+  colapsa, aunque el backlog sólo lo dice del snapshot. El API sólo guarda el último estado
+  (e ignora uno que llega tarde) y el contacto del agente sale del lote, no del heartbeat.
+  Sin esto, un corte de días acumula 2 880 heartbeats diarios. El revisor estuvo de acuerdo.
+- **Colapso por `folioSr`** (lo pidió el revisor): el API sobrescribe sin mirar versiones,
+  así que un reintento de la versión vieja pisaba a la nueva. Efecto colateral: al
+  reprocesarse, el folio se va al final de la cola FIFO. Es a propósito.
+- **Un 400 no se bisecta**: el sobre lo arma el agente y un 400 masivo (proxy, API de otra
+  versión) descartaría la cola entera. Precio: un 400 permanente la detiene para siempre
+  (reintento cada 10 min). Está en el README y en la ficha de F1-025.
+- **Sentencias de SQLite en constantes de `ColaLocal`**, no en `Sql/Consultas/`: ésas son las
+  de SoftRestaurant, sólo lectura, con la guardia que prohíbe `INSERT`/`DELETE`. Si alguien
+  las mueve ahí, la guardia truena, y está bien que truene.
+- **API sincrónica** en `ColaLocal` (Microsoft.Data.Sqlite no tiene I/O asíncrono real).
+
+**Observaciones del revisor y cómo quedaron.**
+- **Plan: APROBADO CON OBSERVACIONES.** Todas atendidas:
+  1. (obligatoria) clave por `folioSr`, con su test;
+  2. heartbeat colapsado con la marca de decisión provisional;
+  3. los rechazos definitivos, obligatorios en la ficha de F1-025;
+  4. el 400 que no se va, en el README y en F1-025;
+  5. la composición real probada (`La_composicion_real_crea_la_cola_en_cola_db...`) y este
+     log dice que la cola hoy está vacía;
+  6. el backoff sólo con `TimeProvider`, la respuesta perdida y el reinicio a mitad del corte
+     en el test del AC;
+  7. fechas de ancho fijo, `e_sqlite3` dentro del exe (verificado), `cola.db` corrupto en el
+     README y el rate limit anotado.
+- **Entregable: APROBADO CON OBSERVACIONES** en la primera pasada, sin bloqueo. Las cuatro
+  eran documentales y quedaron en la rama:
+  1. La decisión abierta "¿SR reinicia folios?" (`docs/esquema-sr.md`) ahora dice que la
+     `clave` de la cola depende de ella, igual que el upsert del API.
+  2. Un evento siempre `reintentable: true` frena la cola (~99 eventos cada 10 min): nota
+     en F1-025.
+  3. La bisección por 413 no respeta el tope de peticiones (hasta ~199 en un ciclo; un 429
+     es falla con backoff): nota en F1-025.
+  4. La limpieza de la base local de desarrollo va también en el PR.
+
+**Trampas que encontré.**
+- **Otra vez las barras invertidas en un heredoc**: un `python - <<EOF` (sin comillas) con
+  `.\\NATIONALSOFT` dio `SyntaxError: malformed \N`. Para cualquier cosa con `\`, un archivo
+  escrito con Write. Ya van tres sesiones seguidas con esta trampa.
+- **`rm -rf` en el scratchpad lo niega el permiso de la sesión.** No hace falta: las carpetas
+  de prueba se pueden reutilizar.
+- **La tabla de cheques en Postgres es `cheques`** (`@@map`), no `cheque`. Mejor consultar con
+  Prisma (`p.cheque.findMany`) que con SQL a mano.
+- **El Postgres local sí existe** como servicio de Windows (`postgresql-x64-16`), aunque
+  F1-001 no pudo levantar el de Docker. Con él se puede probar el agente contra el API real.
+- Una `TaskCanceledException` que no viene de la parada del servicio se trata como timeout;
+  así la ve `HttpClient` cuando vence el CTS de la petición.
+
+**Qué quedó abierto** (nada es tarea nueva de la cola):
+- **F1-025**: todo lo de su ficha (nota de F1-024). Lo más importante: los rechazos
+  definitivos hoy sólo llegan al log local.
+- **F1-022 / F1-023**: encolar según sus notas.
+- **F1-026**: `instalar.ps1` no debe borrar `cola.db` al reinstalar, y el `icacls` de la
+  carpeta ya lo cubre (vive junto al `config.json`).
+- La observación de F1-021 sobre la cancelación a media query en `DetectorVersionSr` sigue
+  pendiente: esta tarea no tocó el detector.
+
+**Qué haría distinto.** Hacer la cuenta del rate limit con el intervalo **mínimo** desde el
+plan, no sólo con el de 30 s. Y buscar desde el principio qué servicios hay en la máquina
+(Postgres local) para planear la prueba contra el API real.

@@ -1,3 +1,4 @@
+using ArkonAgente.Cola;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
 using ArkonAgente.SoftRestaurant;
@@ -21,6 +22,7 @@ public class WorkerTests
             _ => throw new InvalidOperationException("no debe diagnosticar sin config"),
             DetectaSr10,
             new EstadoSoftRestaurant(),
+            SinEnvio,
             Reintento,
             NoTermina);
         var worker = new Worker(log, dep);
@@ -53,6 +55,7 @@ public class WorkerTests
             _ => [sql, api],
             DetectaSr10,
             new EstadoSoftRestaurant(),
+            SinEnvio,
             Reintento,
             NoTermina);
         var worker = new Worker(log, dep);
@@ -77,6 +80,7 @@ public class WorkerTests
         var api = new VerificacionFija("API", true);
         var dep = new DependenciasWorker(
             carpeta.Rutas, _ => new ResultadoConfiguracion(Datos.Config(), [], []), _ => [api], DetectaSr10, new EstadoSoftRestaurant(),
+            SinEnvio,
             Reintento, NoTermina);
         var worker = new Worker(log, dep);
 
@@ -96,8 +100,46 @@ public class WorkerTests
             _ => [],
             (_, _) => Task.FromResult(detectar()),
             estado,
+            SinEnvio,
             Reintento,
             NoTermina);
+
+    [Fact]
+    public async Task Vacia_la_cola_al_arrancar_y_en_cada_ciclo_y_la_libera_al_detenerse()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var envio = new EnvioFalso();
+        var dep = ConDeteccion(carpeta, () => ResultadoDeteccion.Soportada(new SrV11Reader(new VersionSr("10.021800", 10))),
+            new EstadoSoftRestaurant()) with { CrearEnvio = (_, _) => envio };
+        var worker = new Worker(new LogEnMemoria(), dep);
+
+        await worker.StartAsync(CancellationToken.None);
+        await Esperar(() => envio.Ciclos >= 3); // el de arranque y dos ticks de 1 s
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.True(worker.ExecuteTask!.IsCompletedSuccessfully);
+        Assert.True(envio.Liberado);
+    }
+
+    [Fact]
+    public void La_composicion_real_crea_la_cola_en_cola_db_de_la_carpeta_del_agente()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var dep = DependenciasWorker.Reales(carpeta.Rutas, new EstadoSoftRestaurant());
+
+        using var envio = dep.CrearEnvio(Datos.Config(), new LogEnMemoria());
+
+        var real = Assert.IsType<EnviadorCola>(envio);
+        Assert.Equal(Path.Combine(carpeta.Ruta, "cola.db"), real.Cola.Ruta);
+        Assert.True(File.Exists(Path.Combine(carpeta.Ruta, "cola.db")));
+        Assert.Equal(0, real.Cola.ContarPendientes());
+    }
+
+    [Fact]
+    public void RutasAgente_pone_la_cola_junto_al_config()
+    {
+        Assert.Equal(Path.Combine("C:\\x", "cola.db"), new RutasAgente("C:\\x").ArchivoCola);
+    }
 
     [Fact]
     public async Task Version_de_SR_no_soportada_se_registra_una_vez_y_el_servicio_sigue()
@@ -193,6 +235,8 @@ public class WorkerTests
     private static Task<ResultadoDeteccion> DetectaSr10(ConfiguracionAgente config, CancellationToken cancelacion) =>
         Task.FromResult(ResultadoDeteccion.Soportada(new SrV11Reader(new VersionSr("10.021800", 10))));
 
+    private static ICicloEnvio SinEnvio(ConfiguracionAgente config, ILogger logger) => new EnvioFalso();
+
     private static void NoTermina(int codigo) => Assert.Fail($"El worker no debía terminar el proceso (código {codigo}).");
 
     [Fact]
@@ -209,6 +253,7 @@ public class WorkerTests
             _ => [],
             DetectaSr10,
             new EstadoSoftRestaurant(),
+            SinEnvio,
             Reintento,
             c => codigo = c);
         var worker = new Worker(log, dep);

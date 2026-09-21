@@ -4,10 +4,11 @@ Servicio de Windows que corre en la PC del restaurante, lee la base SQL Server d
 SoftRestaurant en **solo lectura** y sube los datos al API del monitor con la API key de
 la sucursal.
 
-Estado: F1-020 entrega el esqueleto (servicio, configuración, logs y `agente test`) y F1-021
-la detección de la versión de SoftRestaurant. La lectura de ventas, la cola local y el envío
-llegan en F1-022 / F1-023 / F1-024 / F1-025. El instalador (`instalar.ps1`) y la guía para
-personas no técnicas son F1-026.
+Estado: F1-020 entrega el esqueleto (servicio, configuración, logs y `agente test`), F1-021
+la detección de la versión de SoftRestaurant y F1-024 la cola local con el envío al API. La
+lectura de ventas y mesas (lo que llena la cola) llega en F1-022 / F1-023, y el heartbeat en
+F1-025: **hasta entonces la cola siempre está vacía** y el envío no manda nada. El
+instalador (`instalar.ps1`) y la guía para personas no técnicas son F1-026.
 
 ## Compilar, probar y publicar
 
@@ -30,6 +31,7 @@ Carpeta del agente: **`C:\ProgramData\ArkonAgente`**.
 |---|---|
 | `config.json` | La configuración. **Trae secretos** (API key y password de SQL): nunca va al repo. |
 | `logs\agente-AAAAMMDD.log` | Log diario (Serilog). Se guardan 14 días; los más viejos se borran solos. |
+| `cola.db` (+ `cola.db-wal`, `cola.db-shm`) | La cola local (SQLite): lo que falta mandar al API. Ver [Cola local y envío](#cola-local-y-envío-f1-024). |
 
 Plantilla: [`infra/config.example.json`](../infra/config.example.json).
 
@@ -181,3 +183,64 @@ Qué deja en el log:
 - La versión y el último error quedan en `EstadoSoftRestaurant`. Ahí los toma el heartbeat
   (F1-025).
 - Qué se sabe de cada versión, y qué es sólo supuesto: `docs/esquema-sr.md` §1.
+
+## Cola local y envío (F1-024)
+
+Todo lo que el agente manda al API pasa primero por `cola.db`, un SQLite en la carpeta del
+agente. Es el **estado propio del agente**: nunca se escribe nada en la base de
+SoftRestaurant.
+
+Tabla `eventos`:
+
+| Columna | Qué es |
+|---|---|
+| `id` | Autoincremental. Es el orden FIFO y el `id` del evento en el lote. |
+| `tipo` | `cheque`, `snapshot` o `heartbeat`. |
+| `clave` | El `folioSr` en los cheques; nulo en los demás. |
+| `payload` | El `datos` del contrato de `POST /ingesta/eventos`, en JSON. |
+| `creado_at`, `enviado_at`, `rechazado_at` | UTC, texto de ancho fijo. |
+| `intentos` | Envíos fallidos. |
+| `motivo_rechazo` | Por qué el API lo rechazó para siempre. |
+
+Cada ciclo (`intervaloSegundos`) el servicio:
+
+1. **Purga** lo enviado o rechazado hace más de 7 días. Un pendiente nunca se purga.
+2. **Manda lo pendiente** a `POST {apiUrl}/ingesta/eventos`, en lotes de hasta 100 eventos,
+   en orden de llegada, con el body en **gzip** y el header `X-Api-Key`. Manda como máximo
+   `min(intervaloSegundos, 20)` lotes por ciclo, así que nunca pasa de 60 peticiones por
+   minuto (el API permite 120 por sucursal).
+
+Qué garantiza:
+
+- **Nada sale de la cola sin que el API lo confirme.** Es "al menos una vez": si el API
+  guardó un lote y la respuesta se perdió, se reenvía, y el API lo deja igual (upsert por
+  folio).
+- **Sólo el último pendiente cuenta** para el snapshot de mesas, para el heartbeat y para
+  cada `folioSr`. Encolar uno nuevo borra el pendiente anterior en la misma transacción.
+  Así la cola no crece por snapshots durante un corte, y un reintento de una versión vieja
+  de un cheque no puede pisar a la nueva.
+- **Red caída, timeout, 5xx, 401, 429, 400 o respuesta ilegible:** no se descarta nada.
+  Se vuelve a intentar con espera creciente: 30 s, 1, 2, 4, 8 min y luego cada 10 min.
+  Queda un `Error` en el log, una vez por cada falla distinta, y un `Information` cuando se
+  restablece. Al reiniciar el servicio se intenta de inmediato.
+- **Un 400 que no se va** (un proxy, un API de otra versión) detiene la cola sin perder
+  nada. Se reintenta cada 10 min para siempre: revisa el log y `apiUrl`.
+- **Rechazo definitivo** (`reintentable: false` del API, o un evento que ni solo cabe en
+  los 5 MB): sale de la cola con `rechazado_at` y su motivo, y queda un `Error` en el log.
+  **Un cheque rechazado es una venta que falta en el panel.** Se guarda 7 días.
+
+Para mirarla sin tocar nada (con el servicio corriendo también funciona):
+
+```powershell
+sqlite3 -readonly "C:\ProgramData\ArkonAgente\cola.db" "SELECT tipo, COUNT(*) FROM eventos WHERE enviado_at IS NULL AND rechazado_at IS NULL GROUP BY tipo;"
+sqlite3 -readonly "C:\ProgramData\ArkonAgente\cola.db" "SELECT id, tipo, clave, motivo_rechazo FROM eventos WHERE rechazado_at IS NOT NULL;"
+```
+
+- **Borrar `cola.db` pierde lo que no se había mandado.** Hazlo sólo con el servicio
+  detenido y si el archivo está dañado.
+- **Si `cola.db` está dañado o el disco está lleno**, el servicio registra un `Critical`,
+  termina con código 1 y `sc failure` lo levanta, en ciclo. Para salir: detén el servicio,
+  mueve `cola.db*` a otro lado (no lo borres: puede tener cheques sin mandar) y arráncalo.
+  Se crea una cola nueva y vacía.
+- El SQLite nativo (`e_sqlite3`) va dentro de `agente.exe` al publicar en un solo archivo.
+  No hay DLL que copiar.

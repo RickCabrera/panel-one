@@ -1,3 +1,4 @@
+using ArkonAgente.Cola;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
 using ArkonAgente.SoftRestaurant;
@@ -12,6 +13,7 @@ internal sealed record DependenciasWorker(
     Func<ConfiguracionAgente, IReadOnlyList<IVerificacion>> CrearVerificaciones,
     Func<ConfiguracionAgente, CancellationToken, Task<ResultadoDeteccion>> DetectarSr,
     EstadoSoftRestaurant EstadoSr,
+    Func<ConfiguracionAgente, ILogger, ICicloEnvio> CrearEnvio,
     TimeSpan ReintentoConfig,
     Action<int> TerminarProceso)
 {
@@ -19,7 +21,11 @@ internal sealed record DependenciasWorker(
 
     public static DependenciasWorker Reales(RutasAgente rutas, EstadoSoftRestaurant estadoSr) =>
         new(rutas, CargadorConfiguracion.Cargar, Diagnosticador.VerificacionesPara, DetectarDeVerdad, estadoSr,
-            ReintentoConfigPorDefecto, TerminarDeVerdad);
+            (config, logger) => CrearEnvioDeVerdad(rutas, config, logger), ReintentoConfigPorDefecto, TerminarDeVerdad);
+
+    /// <summary>La cola real: <c>cola.db</c> en la carpeta del agente, y el envío al API.</summary>
+    internal static EnviadorCola CrearEnvioDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger) =>
+        new(ColaLocal.Abrir(rutas.ArchivoCola, TimeProvider.System), config, logger, TimeProvider.System);
 
     private static Task<ResultadoDeteccion> DetectarDeVerdad(ConfiguracionAgente config, CancellationToken cancelacion) =>
         new DetectorVersionSr(new ConexionSoftRestaurant(config.ConnectionString)).DetectarAsync(cancelacion);
@@ -41,8 +47,9 @@ internal sealed record DependenciasWorker(
 /// <summary>
 /// El servicio. Carga la config, deja en el log un diagnóstico de las dos
 /// conexiones, detecta la versión de SoftRestaurant y elige el reader (F1-021), y
-/// entra al ciclo cada <c>intervaloSegundos</c>. Leer ventas, encolar en el SQLite
-/// local y enviar al API llega en F1-022 / F1-023 / F1-024.
+/// entra al ciclo cada <c>intervaloSegundos</c>, donde vacía la cola local hacia el
+/// API (F1-024). Leer ventas y encolarlas llega en F1-022 / F1-023; el heartbeat, en
+/// F1-025.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -169,15 +176,21 @@ internal sealed class Worker : BackgroundService
 
     private async Task CicloAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
     {
+        // Una falla de la cola (disco lleno, cola.db corrupto) no se atrapa: es falla
+        // interna, el proceso muere con código 1 y `sc failure` lo levanta.
+        using var envio = _dep.CrearEnvio(config, _logger);
         await DetectarSiFaltaAsync(config, stoppingToken);
+        // Lo que quedó pendiente de antes de un reinicio sale sin esperar al primer tick.
+        await envio.CicloAsync(stoppingToken);
 
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
             await DetectarSiFaltaAsync(config, stoppingToken);
 
-            // F1-022 / F1-023 / F1-024: leer SR con el reader elegido, encolar y enviar.
-            _logger.LogDebug("Ciclo sin lectura de ventas todavía.");
+            // F1-022 / F1-023 / F1-025: leer SR con el reader elegido y encolar
+            // (cheques, snapshot, heartbeat) aquí, ANTES de enviar.
+            await envio.CicloAsync(stoppingToken);
         }
     }
 
