@@ -53,3 +53,19 @@ export function porcentaje(parte: bigint, total: bigint): string | null {
 export function paraGrafica(centavos: bigint): number {
   return Number(centavos) / 100;
 }
+
+const COMPACTO = new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 });
+
+/** Cantidad compacta para ejes de gráfica (`12500` → `"12.5 k"`). No es un importe. */
+export function compacto(valor: number): string {
+  return COMPACTO.format(valor);
+}
+
+/**
+ * Pesos compactos para ejes de gráfica (`-12500` → `"-$12.5 k"`), con el signo
+ * ANTES del `$` como `formatearPesos`. Recibe el `number` de `paraGrafica()`: sólo
+ * rotula el eje, nunca muestra un importe exacto.
+ */
+export function pesosCompactos(valor: number): string {
+  return `${valor < 0 ? '-' : ''}$${COMPACTO.format(Math.abs(valor))}`;
+}

@@ -140,7 +140,16 @@ de refresh de `/auth` a `/api/auth`. Así no hace falta CORS con credenciales y 
 
 > **Producción (F1-002):** Caddy tiene que hacer lo mismo: `handle_path /api/*` hacia la
 > API y reescribir el `Path=/auth` del `Set-Cookie` a `Path=/api/auth`. Sin eso el login
-> funciona pero el refresh silencioso no, y cada recarga pide contraseña.
+> funciona pero el refresh silencioso no, y cada recarga pide contraseña. **Ya está escrito**
+> en los snippets de [`infra/caddy/seguridad.caddy`](infra/caddy/seguridad.caddy) (F1-092),
+> junto con las cabeceras de seguridad (HSTS, CSP estricta de la SPA), la compresión y la
+> caché de los assets: el Caddyfile de F1-002 sólo los importa. La API detrás de Caddy
+> arranca con `TRUST_PROXY_SALTOS=1` (ver `api/.env.example`), o el rate limit del login
+> cuenta a todos los usuarios como una sola IP.
+>
+> Para probarlo en local (con la API en :3000 y `npm run build` hecho en `/web`), desde la
+> raíz: `caddy run --config infra/caddy/Caddyfile.local --adapter caddyfile` y abre
+> `http://localhost:8080`.
 
 El color de acento se configura con `VITE_COLOR_ACENTO` (hex); ver `web/.env.example`.
 
@@ -159,7 +168,7 @@ Todavía no lee nada: es el esqueleto del Worker Service. La configuración real
 | Carril | Lint | Tipos | Tests | Build |
 |---|---|---|---|---|
 | `/api` | `npm run lint -w @monitor/api` | `npm run typecheck -w @monitor/api` | `npm test -w @monitor/api` | `npm run build -w @monitor/api` |
-| `/web` | `npm run lint -w @monitor/web` | (va dentro del build: `tsc -b`) | `npm test -w @monitor/web` | `npm run build -w @monitor/web` |
+| `/web` | `npm run lint -w @monitor/web` | (va dentro del build: `tsc -b`) | `npm test -w @monitor/web` | `npm run build -w @monitor/web` + `npm run check:bundle -w @monitor/web` (tope 400 kB gzip) |
 | `/agent` | `dotnet format` | — | `dotnet test` (desde F1-021) | `dotnet build -c Release` |
 
 Desde la raíz, `npm run lint`, `npm run typecheck`, `npm test` y `npm run build` corren

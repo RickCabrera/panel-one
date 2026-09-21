@@ -3,6 +3,7 @@ import { Link, NavLink, useSearchParams } from 'react-router';
 import { useUsuario } from '../auth/contexto';
 import { ROLES_ADMIN } from '../auth/roles';
 import { queryAlcance, useAlcance } from '../filtros/alcance';
+import { Marca } from '../marca/Marca';
 import { sinReportar, UMBRAL_ALERTA_S } from '../paginas/admin/reglasAgentes';
 import { useEstadoAgentes } from '../paginas/admin/consultas';
 import { useAhora } from '../paginas/mesas/consultas';
@@ -37,7 +38,7 @@ export function Sidebar({ abierto, onNavegar }: { abierto: boolean; onNavegar: (
       }`}
     >
       <div className="flex h-14 items-center border-b border-slate-200 px-4">
-        <span className="truncate font-semibold text-acento">Monitor SoftRestaurant</span>
+        <Marca />
       </div>
       <nav aria-label="Principal" className="p-2">
         <ul className="space-y-1">

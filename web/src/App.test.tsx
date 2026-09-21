@@ -129,6 +129,17 @@ describe('deep-link y login', () => {
     expect(api.contar('POST', '/auth/login')).toBe(0);
   });
 
+  it('el login presenta la marca propia y dice a quién pedir acceso', async () => {
+    apiDePrueba({ u: usuario('admin_global'), cookieViva: false });
+    montar('/');
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Monitor SoftRestaurant' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/pídeselo al administrador de tu empresa/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeEnabled();
+  });
+
   it('credenciales malas: mensaje y se queda en el login', async () => {
     apiDePrueba({ u: usuario('admin_global'), cookieViva: false });
     montar('/');
@@ -239,6 +250,8 @@ describe('sidebar y roles', () => {
     montar(`/no-existe?empresa=${A}`);
 
     expect(await screen.findByRole('heading', { name: 'No encontrada' })).toBeInTheDocument();
+    expect(screen.getByText('404')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ir al inicio' })).toHaveAttribute('href', '/');
   });
 
   it('el menú móvil abre, cierra con Escape y al navegar', async () => {

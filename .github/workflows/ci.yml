@@ -174,6 +174,8 @@ jobs:
       - run: npm run lint
       # tsc + vite build: el gate mínimo de tipos del frontend.
       - run: npm run build
+      # F1-092: el bundle entero (lazy incluido) no pasa de 400 kB en gzip.
+      - run: npm run check:bundle
       # F1-040: vitest + jsdom, sin red (la API se simula sobre fetch).
       - run: npm test
 

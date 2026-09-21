@@ -82,7 +82,7 @@ export function TablaTickets({
               <Fragment key={t.id}>
                 <tr
                   data-testid={`ticket-${t.folio}`}
-                  className={`border-b border-slate-100 ${t.cancelado ? 'bg-slate-50 text-slate-400' : ''}`}
+                  className={`border-b border-slate-100 ${t.cancelado ? 'bg-slate-50 text-slate-500' : ''}`}
                 >
                   <td className={CELDA}>
                     <button
