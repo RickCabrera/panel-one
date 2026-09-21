@@ -1,5 +1,7 @@
-import { Algorithm, hash } from '@node-rs/argon2';
+import { hash } from '@node-rs/argon2';
 import { Prisma, PrismaClient, RolUsuario } from '@prisma/client';
+
+import { ARGON2_OPCIONES } from '../src/auth/argon2';
 
 /**
  * Seed de DESARROLLO: 1 admin global, 1 empresa demo con 2 sucursales. Datos
@@ -22,14 +24,9 @@ export const SEED_ADMIN_EMAIL = 'admin@monitor.local';
 /** Valor obvio de desarrollo. Nunca se usa en producción: `main` se niega. */
 export const SEED_ADMIN_PASSWORD_DEFAULT = 'cambiar-en-local';
 
-// Parámetros recomendados por OWASP para argon2id (19 MiB, 2 iteraciones).
-// F1-011 debe verificar con la misma librería.
-export const ARGON2_OPCIONES = {
-  algorithm: Algorithm.Argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1,
-} as const;
+// Las opciones de argon2 viven en `src/auth/argon2.ts`: el login verifica con
+// las mismas. Se re-exportan para no romper a quien las importaba de aquí.
+export { ARGON2_OPCIONES };
 
 // Acepta también un cliente de transacción: los tests lo corren dentro de una
 // transacción que se revierte para probar la rama de creación.

@@ -20,3 +20,7 @@ scripts/nocturno-v2.ps1 -text
 # el checksum deja de coincidir con el de una base migrada desde Linux (CI, VPS)
 # y `migrate dev` pide RESETEAR la base. LF fijo en todos lados.
 api/prisma/migrations/** text eol=lf
+
+# El contrato OpenAPI lo genera `npm run openapi` con LF y `openapi.spec.ts` lo
+# compara contra el código; con CRLF en un checkout de Windows no coincidiría.
+api/openapi.json text eol=lf

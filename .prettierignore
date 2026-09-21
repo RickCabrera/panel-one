@@ -25,3 +25,7 @@ docs/
 
 # Configuración de Claude Code: la versiona el equipo, no la formatea prettier.
 .claude/
+
+# Contrato OpenAPI: lo genera `npm run openapi` (JSON.stringify) y un test exige
+# que sea byte a byte lo que produce el código. Prettier no lo toca.
+api/openapi.json

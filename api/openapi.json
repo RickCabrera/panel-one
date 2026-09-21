@@ -1,0 +1,275 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SesionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credenciales inválidas. Misma respuesta para email inexistente, contraseña mala, usuario inactivo o empresa inactiva.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 5 intentos por minuto desde la misma IP."
+          }
+        },
+        "summary": "Inicia sesión. Pone la cookie `monitor_refresh` (httpOnly, SameSite=Strict, Path=/auth, 7 días; Secure en producción) con el refresh token.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SesionDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin cookie, cookie inválida o vencida, o usuario/empresa ya inactivos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "monitor_refresh": []
+          }
+        ],
+        "summary": "Emite un access token nuevo a partir de la cookie de refresh y la rota. Pone la cookie `monitor_refresh` (httpOnly, SameSite=Strict, Path=/auth, 7 días; Secure en producción) con el refresh token.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioActualDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "El usuario autenticado, leído de la base.",
+        "tags": [
+          "auth"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Monitor SoftRestaurant API",
+    "description": "Contrato de la API del monitor. Fuente única: el frontend construye contra este documento. Lo genera `npm run openapi` en /api a partir de los decoradores.",
+    "version": "0.0.1",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      },
+      "cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "monitor_refresh"
+      }
+    },
+    "schemas": {
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "admin@monitor.local",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "format": "password"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "RolUsuario": {
+        "type": "string",
+        "enum": [
+          "admin_global",
+          "admin_empresa",
+          "visor"
+        ]
+      },
+      "UsuarioActualDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "example": "admin@monitor.local"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "rol": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RolUsuario"
+              }
+            ]
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Nulo sólo para admin_global."
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "nombre",
+          "rol",
+          "empresaId"
+        ]
+      },
+      "SesionDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "Access token JWT. Va en `Authorization: Bearer <token>`."
+          },
+          "expiresIn": {
+            "type": "number",
+            "example": 900,
+            "description": "Vida del access token, en segundos."
+          },
+          "usuario": {
+            "$ref": "#/components/schemas/UsuarioActualDto"
+          }
+        },
+        "required": [
+          "accessToken",
+          "expiresIn",
+          "usuario"
+        ]
+      },
+      "ErrorDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 401
+          },
+          "message": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "example": "Credenciales inválidas"
+          },
+          "error": {
+            "type": "string",
+            "example": "Unauthorized"
+          }
+        },
+        "required": [
+          "statusCode",
+          "message"
+        ]
+      }
+    }
+  }
+}

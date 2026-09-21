@@ -1,0 +1,105 @@
+import { hash } from '@node-rs/argon2';
+import { RolUsuario, type PrismaClient } from '@prisma/client';
+
+import { ARGON2_OPCIONES } from '../src/auth/argon2';
+
+/**
+ * Fixtures SINTÉTICAS de los tests de auth y scope (F1-011). No dependen del
+ * seed: en CI sólo corre `migrate deploy` y la base llega vacía. UUIDs fijos y
+ * un dominio de email propio, para poder limpiarlas sin tocar nada más.
+ *
+ * Tres empresas: A y B activas (el cruce que prueba el 404) y C inactiva.
+ */
+export const FX = {
+  empresaA: 'f1011000-0000-4000-8000-00000000000a',
+  empresaB: 'f1011000-0000-4000-8000-00000000000b',
+  empresaC: 'f1011000-0000-4000-8000-00000000000c',
+  sucursalA1: 'f1011000-0000-4000-8000-0000000000a1',
+  sucursalA2: 'f1011000-0000-4000-8000-0000000000a2',
+  sucursalB1: 'f1011000-0000-4000-8000-0000000000b1',
+  /** Un UUID válido que no es de nadie. */
+  inexistente: 'f1011000-0000-4000-8000-0000000000ff',
+} as const;
+
+export const DOMINIO = '@f1-011.test';
+export const PASSWORD = 'contrasena-sintetica-F1-011';
+
+export const USUARIOS = {
+  visorA: {
+    id: 'f1011000-0000-4000-8000-000000000101',
+    email: `visor.a${DOMINIO}`,
+    rol: RolUsuario.visor,
+    empresaId: FX.empresaA,
+    activo: true,
+  },
+  visorB: {
+    id: 'f1011000-0000-4000-8000-000000000102',
+    email: `visor.b${DOMINIO}`,
+    rol: RolUsuario.visor,
+    empresaId: FX.empresaB,
+    activo: true,
+  },
+  adminEmpresaA: {
+    id: 'f1011000-0000-4000-8000-000000000103',
+    email: `admin.a${DOMINIO}`,
+    rol: RolUsuario.admin_empresa,
+    empresaId: FX.empresaA,
+    activo: true,
+  },
+  adminGlobal: {
+    id: 'f1011000-0000-4000-8000-000000000104',
+    email: `admin.global${DOMINIO}`,
+    rol: RolUsuario.admin_global,
+    empresaId: null,
+    activo: true,
+  },
+  visorInactivo: {
+    id: 'f1011000-0000-4000-8000-000000000105',
+    email: `visor.inactivo${DOMINIO}`,
+    rol: RolUsuario.visor,
+    empresaId: FX.empresaA,
+    activo: false,
+  },
+  visorEmpresaInactiva: {
+    id: 'f1011000-0000-4000-8000-000000000106',
+    email: `visor.c${DOMINIO}`,
+    rol: RolUsuario.visor,
+    empresaId: FX.empresaC,
+    activo: true,
+  },
+} as const;
+
+export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
+  const empresas = [FX.empresaA, FX.empresaB, FX.empresaC];
+  await prisma.usuario.deleteMany({ where: { email: { endsWith: DOMINIO } } });
+  await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });
+  await prisma.empresa.deleteMany({ where: { id: { in: empresas } } });
+}
+
+export async function crearFixtures(prisma: PrismaClient): Promise<void> {
+  // Por si una corrida anterior murió a medias.
+  await limpiarFixtures(prisma);
+
+  await prisma.empresa.createMany({
+    data: [
+      { id: FX.empresaA, nombre: 'Empresa Prueba A (F1-011)', activo: true },
+      { id: FX.empresaB, nombre: 'Empresa Prueba B (F1-011)', activo: true },
+      { id: FX.empresaC, nombre: 'Empresa Prueba C inactiva (F1-011)', activo: false },
+    ],
+  });
+  await prisma.sucursal.createMany({
+    data: [
+      { id: FX.sucursalA1, empresaId: FX.empresaA, nombre: 'A1' },
+      { id: FX.sucursalA2, empresaId: FX.empresaA, nombre: 'A2' },
+      { id: FX.sucursalB1, empresaId: FX.empresaB, nombre: 'B1' },
+    ],
+  });
+  const passwordHash = await hash(PASSWORD, ARGON2_OPCIONES);
+  await prisma.usuario.createMany({
+    data: Object.entries(USUARIOS).map(([clave, u]) => ({
+      ...u,
+      nombre: `Prueba ${clave}`,
+      passwordHash,
+    })),
+  });
+}
