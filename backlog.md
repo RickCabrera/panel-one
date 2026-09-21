@@ -218,7 +218,7 @@ entre sucursales (tabla con venta, tickets, ticket promedio). Export CSV por rep
 **Listo cuando:** totales cuadran con el dashboard para el mismo rango.
 
 ## 13 · F1-050 · Monitor de mesas en vivo
-`[ ]` **Epic 5 — Frontend: Monitor de mesas**
+`[x]` **Epic 5 — Frontend: Monitor de mesas**
 
 Réplica funcional del Monitor de Mesas de Arkhon: tarjetas KPI (Mesas abiertas + $ en
 curso, Cuentas sin imprimir, Atención >60 min, Última lectura hh:mm con color según
