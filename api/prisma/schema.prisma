@@ -40,8 +40,9 @@ model Empresa {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sucursales Sucursal[]
-  usuarios   Usuario[]
+  sucursales         Sucursal[]
+  usuarios           Usuario[]
+  formasPagoCatalogo FormaPagoCatalogo[]
 
   @@map("empresas")
 }
@@ -185,6 +186,8 @@ model Cheque {
   // Agregados por empresa y rango de cierre (F1-032). Empieza por empresa_id,
   // así que también es el índice por empresa de esta tabla.
   @@index([empresaId, cerradoAt], map: "cheques_empresa_id_cerrado_at_idx")
+  // Agregados de UNA sucursal por rango de cierre (F1-032).
+  @@index([sucursalId, cerradoAt], map: "cheques_sucursal_id_cerrado_at_idx")
   @@map("cheques")
 }
 
@@ -249,4 +252,27 @@ model MesaSnapshot {
   @@unique([sucursalId, capturadoAt], map: "mesa_snapshots_sucursal_id_capturado_at_key")
   @@index([empresaId])
   @@map("mesa_snapshots")
+}
+
+// Catálogo de formas de pago (F1-032): traduce el texto crudo que SR guarda en
+// `cheque_pagos.forma_raw` a nuestro ENUM. Los agregados lo aplican AL LEER,
+// así que corregir el catálogo reclasifica el histórico sin reingerir nada.
+// Un `forma_raw` sin entrada aquí cuenta como `otro` y se reporta aparte.
+//
+// DECISION PROVISIONAL (nocturno): un catálogo por EMPRESA (no por sucursal) y
+// match EXACTO del texto, sin normalizar mayúsculas ni espacios: normalizar es
+// adivinar (docs/esquema-sr.md §4). Sin CRUD todavía: lo trae F1-060.
+model FormaPagoCatalogo {
+  id        String    @id @default(uuid()) @db.Uuid
+  empresaId String    @map("empresa_id") @db.Uuid
+  formaRaw  String    @map("forma_raw")
+  forma     FormaPago
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+
+  // Empieza por empresa_id: también es el índice por empresa de esta tabla.
+  @@unique([empresaId, formaRaw], map: "formas_pago_catalogo_empresa_id_forma_raw_key")
+  @@map("formas_pago_catalogo")
 }
