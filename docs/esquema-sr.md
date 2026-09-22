@@ -244,6 +244,9 @@ descubre nada de SR: son supuestos del modelo, sin validar, y se revisan en F1-0
   en $0.00 con cuentas > 0.
 - Los cancelados se atribuyen al `mesero` que trae el cheque cancelado, ubicado por
   `COALESCE(cerrado_at, abierto_at)`, igual que `resumen.cancelados`.
+- ⚠️ **SUPUESTO — texto vacío no es "sin dato".** Una `mesa` en `''` sale como una mesa sin
+  nombre y cuenta en la rotación; un `mesero` en `''` sale separado de "Sin mesero". No se
+  normaliza: si SR manda vacíos en vez de nulos, se decide en F2-231 / F2-222 (o en la ingesta).
 
 
 ---
