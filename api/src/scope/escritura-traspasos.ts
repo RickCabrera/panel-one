@@ -416,9 +416,17 @@ export class EscrituraTraspasos {
         porTraspaso.set(p.traspasoId, lista);
       });
 
-      const desde = Math.min(...renglones.map((r) => r.enviadoAt)) - VENTANA_ESPEJO_MS;
-      const hasta =
-        Math.max(...renglones.map((r) => r.recibidoAt ?? r.enviadoAt)) + VENTANA_ESPEJO_MS;
+      // Una ventana POR traspaso (no la unión de la más vieja a la más nueva): un traspaso que SR
+      // nunca registró no arrastra la búsqueda hacia atrás para siempre.
+      const ventanas = [
+        ...new Map(
+          traspasos.map((t) => {
+            const desde = t.enviadoAt.getTime() - VENTANA_ESPEJO_MS;
+            const hasta = (t.recibidoAt ?? t.enviadoAt).getTime() + VENTANA_ESPEJO_MS;
+            return [`${desde}|${hasta}`, { fecha: { gte: new Date(desde), lte: new Date(hasta) } }];
+          }),
+        ).values(),
+      ];
       const sucursales = [
         ...new Set(traspasos.flatMap((t) => [t.sucursalId, t.sucursalDestinoId])),
       ];
@@ -428,7 +436,7 @@ export class EscrituraTraspasos {
           empresaId,
           sucursalId: { in: sucursales },
           insumoOrigenSrId: { in: insumos },
-          fecha: { gte: new Date(desde), lte: new Date(hasta) },
+          OR: ventanas,
           poliza: {
             tipo: { in: ['traspaso_salida', 'traspaso_entrada'] },
             cancelada: false,

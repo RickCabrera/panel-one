@@ -417,7 +417,7 @@ describe('Traspasos (e2e, F2-124)', () => {
           ],
           { referencia: 'TR-1' },
         ),
-        // t3: a +25 h de su envío (T0 + 1 h): fuera.
+        // t3 se envió a T0 + 1 h: una póliza a T0 + 26 h está a +25 h de su envío (fuera).
         poliza('S-T3-LEJOS', 'traspaso_salida', 'GEN', T0 + 26 * H, [['I2', '-0.5']]),
         // t4: cantidad distinta.
         poliza('S-T4', 'traspaso_salida', 'GEN', T0 + 2 * H, [['I2', '-0.7']]),

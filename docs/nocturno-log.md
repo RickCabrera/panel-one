@@ -5763,3 +5763,119 @@ contra el corte de SR y el ajuste en SR regresando como póliza `ajuste` son de 
 
 **Qué haría distinto.** Empezar el web por la clase de envío pura en vez de un hook con refs: el
 linter del compilador de React la iba a exigir igual, y se prueba mucho más fácil.
+
+## 2026-09-22 23:30 — F2-124 · Traspasos
+**Estado:** CERRADA (PR por abrir al escribir esta nota; se mergea con CI verde)
+
+**Qué quedó hecho.**
+- **Modelo** (migración `20260923000000_traspasos`, CHECKs a mano): enum `estado_traspaso` (`enviado`,
+  `recibido`, `cancelado`), `traspasos` (folio POR EMPRESA, origen = `sucursal_id`, destino
+  `sucursal_destino_id` con FK compuesta a la misma empresa, `conciliado_at`) y `partidas_traspaso`
+  (cantidad > 0, costo congelado de la foto de origen, y el ESPEJO como `(poliza_salida_id,
+  renglon_salida)` / `(poliza_entrada_id, renglon_entrada)`). Alta de `tipo_alerta.traspaso_sin_conciliar`.
+- **FK compuestas del espejo:** salida → póliza de la sucursal ORIGEN, entrada → de la DESTINO, ambas
+  de la misma empresa, ON DELETE RESTRICT; `sucursal_destino_id` de la partida atado a su traspaso.
+  Únicos (póliza, renglón): un renglón de SR concilia UN renglón del panel. Hay e2e que lo intenta con
+  SQL crudo y truena.
+- **Escritura** sólo por `ScopedPrismaService.traspasos(scope)` → `api/src/scope/escritura-traspasos.ts`
+  (enviar, recibir, cancelar, conciliar), todo con `whereScoped` y UN candado por empresa.
+- **Regla pura** `api/src/inventario/traspasos.ts` (`sirveDeSalida`, `sirveDeEntrada`,
+  `conciliarRenglones`, `estadoConciliacion`, `importeDe`).
+- **API** `api/src/inventario/traspasos.{controller,service}.ts`: `GET /inventario/traspasos`,
+  `GET /inventario/traspasos/sr` (leídos de SR, agrupados por referencia, rango por zona de cada
+  sucursal), `GET /:id`, `POST`, `POST /:id/recibir`, `POST /:id/cancelar`. Visor 403 al escribir,
+  otra empresa 404, key del agente 401. Auditoría `traspaso.enviar|recibir|cancelar`. OpenAPI regenerado.
+- **Alerta** `traspaso_sin_conciliar` (unidad nueva `horas`, 1–720, 48 por defecto, advertencia):
+  `alertas/{reglas,evaluador,alertas.service}.ts`, `reportes/plantillas.ts`, web `alertas/textos.ts`,
+  `admin/ReglasAlertas.tsx` (muestra "h").
+- **Seed** `api/prisma/seed-traspasos.ts` (desde `seed-ventas.ts` tras conteos): 4 traspasos — espejo
+  del último `TR-` del seed (queda conciliado), pendiente (−3 h), en alerta (−72 h) e interno GEN→BAR
+  recibido. Reconocidos por nota + actor `…f124`.
+- **Web**: `/traspasos` (`paginas/Traspasos.tsx`, pestañas "Del panel" / "Leídos de SoftRestaurant"),
+  `/traspasos/nuevo` (`TraspasoNuevo.tsx`, artículos desde `GET /inventario/existencias` del origen),
+  `/traspasos/:id` (`TraspasoDetalle.tsx`: espejos, recibir/cancelar con confirmación en página,
+  "Imprimir reporte" con firmas; `print:hidden` agregado a Sidebar y Topbar). Menú ya navega.
+- **Docs**: `esquema-sr.md` §10 "Traspasos" (todas las DECISION/SUPUESTO); backlog "Y además (de
+  F2-124)" en F2-193 y F2-241.
+
+**Decisiones que tomé y por qué.** Todas en esquema-sr §10 "Traspasos".
+- Espejo = (póliza, renglón), NO el id del movimiento: `EscrituraMovimientos.reemplazar` borra y recrea
+  los movimientos en cualquier corrección (ids nuevos); la póliza conserva su id. El primer plan (FK
+  simple al movimiento con SET NULL) lo BLOQUEÓ el revisor por eso y por la fuga multiempresa.
+- "± 1 día" = 24 h ABSOLUTAS; cantidad EXACTA a 3 decimales; NO se exige `referencia`
+  (`inventario/traspasos.ts`, cabecera). Salida contra el envío; entrada en [envío − 24 h,
+  (recibido ?? envío) + 24 h]. Conciliado = TODOS los renglones con salida y entrada.
+- NO hay `TraspasosProgramador`: la conciliación corre dentro de la vuelta del centro de alertas,
+  ANTES de observar (`AlertasService.evaluarEmpresa` y también el cambio de una regla), con el scope de
+  la EMPRESA. Sólo se traga el 503 del candado ocupado (se registra); cualquier otro error se propaga y
+  la vuelta de esa empresa falla (el programador lo registra y sigue con las demás). El revisor sugirió
+  tragar también esos y observar igual; lo dejé propagando (no dejar las alertas ciegas en silencio).
+  Si se cambia, anotarlo.
+- Una empresa inactiva sin alertas abiertas no se evalúa (`empresasAEvaluar`) → sus traspasos no se
+  concilian. No es bug.
+- Conciliados se re-verifican 90 días desde su envío (`REVERIFICAR_CONCILIADOS_MS`); los no
+  conciliados, siempre. La búsqueda de candidatos va con UNA ventana por traspaso (no la unión), así un
+  pendiente viejo no hace crecer la consulta.
+- Los GET no concilian, pero re-verifican cada espejo guardado al leer (`#espejosVigentes`): si SR
+  canceló la póliza hace un minuto, la vista ya no lo pinta.
+- Cancelar = 409 si SR ya tiene CUALQUIER espejo (aunque sea parcial): cancelarlo dejaría a SR con un
+  movimiento que el panel no explica.
+- Costo = promedio de la foto de origen al enviar (nulo si no venía); no se valida contra existencia
+  (el web sólo avisa, comparando en milésimas BigInt, sin float).
+- SUPUESTOS no validados: la fecha de las pólizas trae hora; la clave del insumo es la misma en las dos
+  sucursales; un traspaso de SR llega como dos pólizas.
+
+**Trampas que encontré.**
+- `prisma migrate dev --create-only` le puso el timestamp REAL (20260922171417), que ordena ANTES de
+  las migraciones "futuras" de sesiones anteriores → falla en la shadow DB. Genera el SQL con
+  `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel
+  prisma/schema.prisma --script -o prisma/migrations/<timestamp mayor>_x/migration.sql`, agrega los
+  CHECKs y luego `migrate dev`. No leas `.env` (el permiso lo niega).
+- Los renglones de póliza de la ingesta cuentan desde 0.
+- Heredocs grandes con comillas simples dentro fallan en esta shell: para archivos usa la herramienta
+  Write.
+- `Test.createTestingModule` + `overrideProvider(Reloj)` mueve el reloj de la ingesta también: las
+  pólizas no pueden ir > 5 min en el futuro del reloj fijo.
+- Un `beforeAll` que siembra la ventana completa de movimientos pasa de 5 s: dale `LENTO_MS`; si se
+  vence, la limpieza corre en paralelo con la siembra y truena con FK.
+- El seed de movimientos BORRA sus pólizas viejas al sembrar otro día: con el RESTRICT nuevo hay que
+  soltar los espejos antes (ya está en `seed-movimientos.ts`). Si alguien agrega otro borrado de
+  pólizas, va a tronar por la FK: es a propósito.
+- `.wt-main/` sigue en la raíz. ACCIÓN PARA RICARDO: borrarla. Agregar por ruta, nunca `git add -A`.
+- Prettier marca "issues" en TODOS los archivos existentes (CRLF de la copia de trabajo); los nuevos sí
+  van formateados. CI no corre prettier.
+
+**Qué quedó abierto.**
+- Editar cantidades al recibir (faltantes en el camino): no está; hoy recibir confirma todo.
+- F2-193 (validación en piloto) y F2-241 (el lector manda las dos pólizas con referencia, fecha con hora
+  y `cancelada`), ya anotado en sus fichas.
+- La alerta abre por la sucursal de ORIGEN (una sola alerta por traspaso).
+
+**Tests.**
+- api: `inventario/traspasos.spec.ts` (11, puro: bordes de ±24 h, destino, desempate, conservar/soltar,
+  idempotencia), `inventario/traspasos.e2e.spec.ts` (18: alta y 400/404/403/401, folio por empresa,
+  conciliación con +23 h sí / +25 h no, cantidad distinta, póliza cancelada, uno solo de dos idénticos,
+  otra sucursal/almacén/empresa/consumo no, ×3 idéntico, FK con SQL crudo, 48 h exactas no / +1 s sí,
+  corrección de costo NO desconcilia, cancelación en SR sí y abre alerta, llega la salida y cierra la
+  alerta, recibir/cancelar y espejo de SR intacto, `/sr` con póliza de las 23:30 locales),
+  `prisma/seed-traspasos.spec.ts` (7, esperado a mano desde el universo), `evaluador.spec` (+3),
+  `reglas.spec` (+1), `openapi.spec` (+1).
+- web: `traspasos/reglas.test.ts` (6), `Traspasos.test.tsx` (10: lista, vacíos, SR, alta con aviso y
+  cuerpo del POST, visor, detalle, imprimir, recibir, cancelar con 409), `textos.test` (+1).
+- Adaptados, no aflojados: `alertas.e2e` (la lista de reglas trae el tipo nuevo; se agregó su unidad y
+  rango), `seed-alertas.spec` (el tipo nuevo tampoco tiene historial sintético), `menu.test`,
+  `Sidebar.test` (la pendiente de ejemplo pasa a Recetas, F2-125), `scope.helper.spec`,
+  `scoped-prisma.service.spec`.
+- Mutaciones: quitar `conciliarTraspasos` de `evaluarEmpresa` → 4 rojos en el e2e; quitar el chequeo de
+  sucursal de origen en `sirveDeSalida` → 9 rojos.
+- Números: /api lint, typecheck, `prisma validate` limpios, migrate diff sin deriva; jest 1573/1576
+  antes de adaptar los dos de arriba (después 25/25 en esas dos suites); el ÚNICO rojo que queda es el
+  preexistente `prisma/esquema.spec.ts` (argon2id del admin: FK al borrar el usuario en la base local
+  de dev), igual que en F2-120 a F2-123 — NO es verde. /web build, lint, check:bundle (278.7 kB)
+  limpios; vitest 1011/1011. Tras el cambio de ventana por traspaso se corrieron las suites de
+  traspasos y el seed (36/36).
+- Revisor: plan BLOQUEADO 1 vez (FK simple / ids de movimiento) y aprobado en el 2.º pase; entregable
+  BLOQUEADO 1 vez sólo por faltar esta nota.
+
+**Qué haría distinto.** Leer `escritura-movimientos.ts#reemplazar` ANTES de diseñar el espejo: el
+borrado y recreación de movimientos decidía todo el modelo y me costó un bloqueo del plan.
