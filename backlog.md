@@ -818,7 +818,7 @@ distintos); un periodo sin ventas muestra "sin ventas en el periodo" y no `$0.00
 sucursal sin datos en el periodo de comparación muestra "—" en el Δ, no un `+100%`.
 
 ### F2-221 · Análisis
-`[ ]` **Bloque C** · /web + /api
+`[x]` **ALCANCE:** sin el desglose por área y canal (no hay dato: lo completa F2-233, ver su nota "Y además (de F2-221)"); el test de suma del AC "para los tres" quedó para mesero y producto más los sustitutos hora × día y tiempo de mesa, y el de área va con F2-233. Cortesías siguen sin representarse (decisión abierta, esquema-sr §2). **Bloque C** · /web + /api
 
 La vista que hoy no existe y que es la que convierte el panel en una herramienta de dirección:
 
