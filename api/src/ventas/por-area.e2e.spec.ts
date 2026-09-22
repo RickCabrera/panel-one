@@ -380,6 +380,8 @@ describe('Áreas y canales (e2e, F2-233)', () => {
     });
   });
 
+  // OJO: depende del orden del archivo. Corre DESPUÉS de AC3 (la última sincronización completa
+  // es la del 3-sep y los nombres son los que dejó). Suelto con `-t` falla; no es un test roto.
   describe('GET /catalogos/areas/mapeo', () => {
     it('todas las áreas de la empresa con su canal, y la sincronización por sucursal', async () => {
       const r = await get('/catalogos/areas/mapeo', USUARIOS.visorA, { empresaId: FX.empresaA });
