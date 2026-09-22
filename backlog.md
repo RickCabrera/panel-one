@@ -771,7 +771,7 @@ no navega a una pantalla rota; el foco se mueve con `Tab` por todo el menú en o
 el contenido.
 
 ### F2-211 · Modo oscuro
-`[ ]` **Bloque B** · /web
+`[x]` **Bloque B** · /web
 
 Interruptor claro / oscuro / sistema en la cabecera, con preferencia persistida por usuario.
 Tokens de color en un solo lugar (hoy los colores viven sueltos en clases de Tailwind por toda
