@@ -5873,7 +5873,8 @@ linter del compilador de React la iba a exigir igual, y se prueba mucho más fá
   preexistente `prisma/esquema.spec.ts` (argon2id del admin: FK al borrar el usuario en la base local
   de dev), igual que en F2-120 a F2-123 — NO es verde. /web build, lint, check:bundle (278.7 kB)
   limpios; vitest 1011/1011. Tras el cambio de ventana por traspaso se corrieron las suites de
-  traspasos y el seed (36/36).
+  traspasos y el seed (36/36), y antes del push el jest COMPLETO: 1575/1576, el único rojo es el
+  preexistente `prisma/esquema.spec.ts`.
 - Revisor: plan BLOQUEADO 1 vez (FK simple / ids de movimiento) y aprobado en el 2.º pase; entregable
   BLOQUEADO 1 vez sólo por faltar esta nota.
 
