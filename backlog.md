@@ -937,7 +937,7 @@ y cancelaciones y descuentos se muestran como conteo e importe, nunca escondidos
 venta.
 
 ### F2-232 · Clientes
-`[ ]` **Bloque D** · /web + /api
+`[x]` **ALCANCE:** sin el enlace con `ReceptorFrecuente` por RFC (el modelo nace en F2-100: ver su nota "Y además (de F2-232)"); el id del cliente en el cheque es supuesto no validado (esquema-sr §2, F2-192). **Bloque D** · /web + /api
 
 > **Datos del seed:** persistir desde `api/prisma/seed-maestro/generarUniverso()` (F2-201),
 > no inventar otros. Ver la nota "De dónde salen los datos del seed" bajo la tabla de
