@@ -319,7 +319,19 @@ describe('sidebar y roles', () => {
     expect(await screen.findByRole('heading', { name: 'No encontrada' })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Principal' });
     expect(within(nav).getByRole('link', { name: 'Tickets' })).toBeInTheDocument();
+    // F2-210: Administración es una sección del menú. El visor no ve ni su encabezado ni
+    // ninguna de sus entradas, ni siquiera las pendientes (Facturación).
+    expect(within(nav).queryByRole('button', { name: 'Administración' })).not.toBeInTheDocument();
     expect(within(nav).queryByRole('link', { name: 'Administración' })).not.toBeInTheDocument();
+    for (const texto of ['Usuarios', 'Agentes', 'Facturación']) {
+      expect(within(nav).queryByRole('link', { name: texto })).not.toBeInTheDocument();
+      expect(within(nav).queryByRole('button', { name: texto })).not.toBeInTheDocument();
+    }
+    expect(
+      within(nav)
+        .queryAllByRole('link')
+        .map((a) => a.getAttribute('href')),
+    ).not.toContainEqual(expect.stringContaining('/admin'));
   });
 
   it('admin_empresa ve Administración y entra', async () => {
@@ -328,7 +340,12 @@ describe('sidebar y roles', () => {
 
     expect(await screen.findByRole('heading', { name: 'Administración' })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Principal' });
-    expect(within(nav).getByRole('link', { name: 'Administración' })).toBeInTheDocument();
+    // F2-210: la entrada única pasó a ser la sección Administración con una entrada por
+    // pestaña; en `/admin` sin `tab` la activa es Sucursales (la pestaña por defecto).
+    expect(within(nav).getByRole('button', { name: 'Administración' })).toBeInTheDocument();
+    const sucursales = within(nav).getByRole('link', { name: 'Sucursales' });
+    expect(sucursales).toHaveAttribute('href', `/admin?empresa=${A}&tab=sucursales`);
+    expect(sucursales).toHaveAttribute('aria-current', 'page');
   });
 
   it('una ruta que no existe es "No encontrada" dentro del layout', async () => {
