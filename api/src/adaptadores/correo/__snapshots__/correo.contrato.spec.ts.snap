@@ -1,0 +1,64 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`Contrato Brevo (F2-202) envío con destinatario con nombre y dos adjuntos 1`] = `
+[
+  {
+    "cuerpo": {
+      "attachment": [
+        {
+          "content": "PGNmZGkvPg==",
+          "name": "A-1024.xml",
+        },
+        {
+          "content": "JVBERi0xLjQ=",
+          "name": "A-1024.pdf",
+        },
+      ],
+      "htmlContent": "<p>Adjuntamos tu factura.</p>",
+      "sender": {
+        "email": "facturas@ejemplo.test",
+        "name": "Monitor SoftRestaurant",
+      },
+      "subject": "Tu factura A-1024",
+      "tags": [
+        "factura-emitida",
+      ],
+      "textContent": "Adjuntamos tu factura.",
+      "to": [
+        {
+          "email": "cliente@ejemplo.test",
+          "name": "Cliente de Prueba",
+        },
+      ],
+    },
+    "metodo": "POST",
+    "url": "https://api.brevo.com/v3/smtp/email",
+  },
+]
+`;
+
+exports[`Contrato Brevo (F2-202) sin adjuntos no manda \`attachment\` (Brevo rechaza un arreglo vacío) 1`] = `
+[
+  {
+    "cuerpo": {
+      "htmlContent": "<p>Adjuntamos tu factura.</p>",
+      "sender": {
+        "email": "facturas@ejemplo.test",
+        "name": "Monitor SoftRestaurant",
+      },
+      "subject": "Tu factura A-1024",
+      "tags": [
+        "factura-emitida",
+      ],
+      "textContent": "Adjuntamos tu factura.",
+      "to": [
+        {
+          "email": "a@ejemplo.test",
+        },
+      ],
+    },
+    "metodo": "POST",
+    "url": "https://api.brevo.com/v3/smtp/email",
+  },
+]
+`;

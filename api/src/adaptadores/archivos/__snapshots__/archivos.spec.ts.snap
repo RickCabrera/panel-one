@@ -1,0 +1,3 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`Archivos en disco (F2-202) URL firmada CONTRATO: forma exacta de la URL (secreto y reloj fijos) 1`] = `"https://panel.ejemplo.test/api/archivos/empresa/e1/cfdi/A-1024.pdf?expira=1790044500&firma=IS1r2C7EiZrtrjo1piozn5Dwj8x9sG3D67EvX8tBJuk"`;

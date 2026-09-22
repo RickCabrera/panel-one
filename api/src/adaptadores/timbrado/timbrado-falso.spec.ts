@@ -1,0 +1,288 @@
+import { RELOJ_FIJO, solicitudCfdi } from '../../../test/fixtures-cfdi';
+import { ErrorTimbrado } from './puerto';
+import {
+  LEYENDA_NO_FISCAL,
+  RFC_CON_ERROR,
+  SELLO_FALSO,
+  TimbradoFalso,
+  uuidDeterminista,
+} from './timbrado-falso';
+
+const UUID_V4 = /^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/;
+
+/**
+ * Verificador mínimo de XML bien formado, sin dependencias: etiquetas balanceadas y
+ * anidadas, atributos entre comillas sin `<` ni `&` suelto, y un solo elemento raíz.
+ * Devuelve los elementos con sus atributos (ya desescapados) para las aserciones.
+ */
+function analizarXml(xml: string): Array<{ nombre: string; attrs: Record<string, string> }> {
+  const cuerpo = xml
+    .replace(/^<\?xml[^?]*\?>\s*/, '')
+    .replace(/<!--[\s\S]*?-->\s*/g, '')
+    .trim();
+  const pila: string[] = [];
+  const elementos: Array<{ nombre: string; attrs: Record<string, string> }> = [];
+  const token = /<(\/?)([A-Za-z_][\w:.-]*)((?:\s+[\w:.-]+="[^"<]*")*)\s*(\/?)>|([^<]+)/gy;
+  let raices = 0;
+  let pos = 0;
+  let m: RegExpExecArray | null;
+  while ((m = token.exec(cuerpo))) {
+    pos = token.lastIndex;
+    const [, cierre, nombre, attrsTxt, autocierre, texto] = m;
+    if (texto !== undefined) {
+      if (pila.length === 0 && texto.trim()) throw new Error('texto fuera de la raíz');
+      if (/&(?!(amp|lt|gt|quot|apos);)/.test(texto)) throw new Error('& suelto en texto');
+      continue;
+    }
+    if (cierre) {
+      if (pila.pop() !== nombre) throw new Error(`cierre desbalanceado: ${nombre}`);
+      continue;
+    }
+    if (pila.length === 0) raices += 1;
+    const attrs: Record<string, string> = {};
+    for (const a of attrsTxt.matchAll(/([\w:.-]+)="([^"]*)"/g)) {
+      if (/&(?!(amp|lt|gt|quot|apos);)/.test(a[2])) throw new Error(`& suelto en ${a[1]}`);
+      if (a[1] in attrs) throw new Error(`atributo repetido ${a[1]}`);
+      attrs[a[1]] = a[2]
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, '&');
+    }
+    elementos.push({ nombre, attrs });
+    if (!autocierre) pila.push(nombre);
+  }
+  if (pos !== cuerpo.length)
+    throw new Error(`XML inválido cerca de: ${cuerpo.slice(pos, pos + 40)}`);
+  if (pila.length > 0) throw new Error(`sin cerrar: ${pila.join(', ')}`);
+  if (raices !== 1) throw new Error(`raíces: ${raices}`);
+  return elementos;
+}
+
+function elemento(xml: string, nombre: string): Record<string, string> {
+  const e = analizarXml(xml).find((x) => x.nombre === nombre);
+  if (!e) throw new Error(`falta ${nombre}`);
+  return e.attrs;
+}
+
+describe('PAC falso (F2-202)', () => {
+  it('el verificador de XML del test sí muerde', () => {
+    expect(() => analizarXml('<a><b></a></b>')).toThrow();
+    expect(() => analizarXml('<a x="1 & 2"/>')).toThrow();
+    expect(() => analizarXml('<a/><b/>')).toThrow();
+    expect(() => analizarXml('<a x="1" x="2"/>')).toThrow();
+    expect(analizarXml('<a x="&amp;"><b/></a>')).toHaveLength(2);
+  });
+
+  describe('UUID', () => {
+    it('es un UUID v4 válido y el mismo cheque da siempre el mismo', async () => {
+      const a = await new TimbradoFalso(RELOJ_FIJO).emitir(solicitudCfdi());
+      const b = await new TimbradoFalso(RELOJ_FIJO).emitir(solicitudCfdi());
+      expect(a.uuid).toMatch(UUID_V4);
+      expect(b.uuid).toBe(a.uuid);
+      expect(a.uuid).toBe(uuidDeterminista(solicitudCfdi().referencia));
+      expect(a.idPac).toBe(a.uuid);
+    });
+
+    it('cheques distintos dan UUID distintos', async () => {
+      const pac = new TimbradoFalso(RELOJ_FIJO);
+      const uuids = new Set<string>();
+      for (let i = 0; i < 200; i++) {
+        uuids.add((await pac.emitir(solicitudCfdi({ referencia: `cheque-${i}` }))).uuid);
+      }
+      expect(uuids.size).toBe(200);
+    });
+
+    it('todo es determinista: mismo cheque y mismo reloj → mismo XML y mismo PDF', async () => {
+      const a = await new TimbradoFalso(RELOJ_FIJO).emitir(solicitudCfdi());
+      const b = await new TimbradoFalso(RELOJ_FIJO).emitir(solicitudCfdi());
+      expect(b.xml).toBe(a.xml);
+      expect(b.pdf.equals(a.pdf)).toBe(true);
+      expect(a.fechaTimbrado.toISOString()).toBe('2026-09-22T02:20:00.000Z');
+    });
+  });
+
+  describe('XML', () => {
+    it('es CFDI 4.0 bien formado con los atributos que exige el SAT', async () => {
+      const { xml, uuid } = await new TimbradoFalso(RELOJ_FIJO).emitir(solicitudCfdi());
+      expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
+      expect(xml).toContain('NO FISCAL');
+
+      const comprobante = elemento(xml, 'cfdi:Comprobante');
+      expect(comprobante).toMatchObject({
+        'xmlns:cfdi': 'http://www.sat.gob.mx/cfd/4',
+        Version: '4.0',
+        Serie: 'A',
+        Folio: '1024',
+        // Hora LOCAL del lugar de expedición, sin offset.
+        Fecha: '2026-09-21T20:15:30',
+        FormaPago: '04',
+        MetodoPago: 'PUE',
+        SubTotal: '202.59',
+        Moneda: 'MXN',
+        Total: '235.01',
+        TipoDeComprobante: 'I',
+        Exportacion: '01',
+        LugarExpedicion: '06700',
+        Sello: SELLO_FALSO,
+      });
+      expect(elemento(xml, 'cfdi:Emisor')).toEqual({
+        Rfc: 'EKU9003173C9',
+        Nombre: 'ESCUELA KEMPER URGATE',
+        RegimenFiscal: '601',
+      });
+      expect(elemento(xml, 'cfdi:Receptor')).toEqual({
+        Rfc: 'XOJI740919U48',
+        // Escapado en el XML, idéntico al desescapar.
+        Nombre: 'Cliente "de prueba" & <Hijos>',
+        DomicilioFiscalReceptor: '76028',
+        RegimenFiscalReceptor: '612',
+        UsoCFDI: 'G03',
+      });
+
+      const elementos = analizarXml(xml);
+      const conceptos = elementos.filter((e) => e.nombre === 'cfdi:Concepto');
+      expect(conceptos.map((c) => c.attrs)).toEqual([
+        {
+          ClaveProdServ: '90101500',
+          NoIdentificacion: 'P001',
+          Cantidad: '2.000000',
+          ClaveUnidad: 'E48',
+          Unidad: 'Servicio',
+          Descripcion: 'Tacos al pastor (orden)',
+          ValorUnitario: '86.21',
+          Importe: '172.42',
+          ObjetoImp: '02',
+        },
+        expect.objectContaining({ NoIdentificacion: 'P020', Importe: '30.17' }),
+      ]);
+      const traslados = elementos.filter((e) => e.nombre === 'cfdi:Traslado').map((e) => e.attrs);
+      // Uno por concepto + el resumen del comprobante.
+      expect(traslados).toHaveLength(3);
+      expect(traslados[2]).toEqual({
+        Base: '202.59',
+        Impuesto: '002',
+        TipoFactor: 'Tasa',
+        TasaOCuota: '0.160000',
+        Importe: '32.42',
+      });
+      expect(
+        elementos.find(
+          (e) => e.nombre === 'cfdi:Impuestos' && 'TotalImpuestosTrasladados' in e.attrs,
+        )?.attrs,
+      ).toEqual({ TotalImpuestosTrasladados: '32.42' });
+
+      expect(elemento(xml, 'tfd:TimbreFiscalDigital')).toMatchObject({
+        Version: '1.1',
+        UUID: uuid,
+        FechaTimbrado: '2026-09-21T20:20:00',
+        RfcProvCertif: 'FALSO',
+        SelloSAT: SELLO_FALSO,
+      });
+    });
+
+    it('la fecha sale en la zona de la sucursal, no en la del servidor', async () => {
+      const { xml } = await new TimbradoFalso(RELOJ_FIJO).emitir(
+        solicitudCfdi({ zonaHoraria: 'America/Tijuana' }),
+      );
+      // 02:15:30Z = 19:15:30 en Tijuana (UTC-7 en septiembre).
+      expect(elemento(xml, 'cfdi:Comprobante').Fecha).toBe('2026-09-21T19:15:30');
+    });
+  });
+
+  describe('PDF', () => {
+    it('es un PDF válido marcado claramente como NO FISCAL', async () => {
+      const { pdf, uuid } = await new TimbradoFalso(RELOJ_FIJO).emitir(solicitudCfdi());
+      const texto = pdf.toString('latin1');
+      expect(texto.startsWith('%PDF-1.4\n')).toBe(true);
+      expect(texto.trimEnd().endsWith('%%EOF')).toBe(true);
+      expect(texto).toContain(`(${LEYENDA_NO_FISCAL})`);
+      expect(texto).toContain(uuid);
+      expect(texto).toContain('Total: $235.01 MXN');
+
+      // La xref apunta al byte exacto donde empieza cada objeto.
+      const startxref = Number(/startxref\n(\d+)\n%%EOF/.exec(texto)?.[1]);
+      expect(texto.slice(startxref, startxref + 4)).toBe('xref');
+      const entradas = [...texto.slice(startxref).matchAll(/^(\d{10}) 00000 n $/gm)].map((m) =>
+        Number(m[1]),
+      );
+      expect(entradas).toHaveLength(5);
+      entradas.forEach((offset, i) => {
+        expect(texto.slice(offset, offset + `${i + 1} 0 obj`.length)).toBe(`${i + 1} 0 obj`);
+      });
+      // El /Length del stream es el largo real del contenido.
+      const stream = /<< \/Length (\d+) >>\nstream\n([\s\S]*?)\nendstream/.exec(texto);
+      expect(Number(stream?.[1])).toBe(Buffer.byteLength(stream?.[2] ?? '', 'latin1'));
+    });
+  });
+
+  describe('errores simulados por RFC reservado', () => {
+    it.each(Object.entries(RFC_CON_ERROR))('%s → %s', async (rfc, esperado) => {
+      const pac = new TimbradoFalso(RELOJ_FIJO);
+      const base = solicitudCfdi();
+      const promesa = pac.emitir({ ...base, receptor: { ...base.receptor, rfc } });
+      await expect(promesa).rejects.toBeInstanceOf(ErrorTimbrado);
+      await expect(promesa).rejects.toMatchObject({
+        codigo: esperado.codigo,
+        message: esperado.mensaje,
+        reintentable: esperado.reintentable,
+      });
+    });
+
+    it('XEXX010101000 da "RFC no inscrito"', () => {
+      expect(RFC_CON_ERROR.XEXX010101000.codigo).toBe('RFC_NO_INSCRITO');
+    });
+
+    it('el RFC genérico de público en general (XAXX010101000) SÍ timbra: lo usa la global', async () => {
+      const base = solicitudCfdi();
+      await expect(
+        new TimbradoFalso(RELOJ_FIJO).emitir({
+          ...base,
+          receptor: { ...base.receptor, rfc: 'XAXX010101000' },
+        }),
+      ).resolves.toHaveProperty('uuid');
+    });
+  });
+
+  describe('cancelar y consultar', () => {
+    it('emitido → vigente; cancelado → cancelado', async () => {
+      const pac = new TimbradoFalso(RELOJ_FIJO);
+      const cfdi = await pac.emitir(solicitudCfdi());
+      await expect(pac.consultarEstado(cfdi)).resolves.toEqual({
+        uuid: cfdi.uuid,
+        estado: 'vigente',
+      });
+      await expect(pac.cancelar({ ...cfdi, motivo: '02' })).resolves.toEqual({
+        uuid: cfdi.uuid,
+        estado: 'cancelado',
+        fecha: new Date(RELOJ_FIJO.ahora()),
+      });
+      await expect(pac.consultarEstado(cfdi)).resolves.toEqual({
+        uuid: cfdi.uuid,
+        estado: 'cancelado',
+      });
+    });
+
+    it('un UUID que no emitió → no_encontrado, y cancelarlo falla', async () => {
+      const pac = new TimbradoFalso(RELOJ_FIJO);
+      const otro = { uuid: uuidDeterminista('nunca-emitido'), idPac: 'x' };
+      await expect(pac.consultarEstado(otro)).resolves.toEqual({
+        uuid: otro.uuid,
+        estado: 'no_encontrado',
+      });
+      await expect(pac.cancelar({ ...otro, motivo: '02' })).rejects.toMatchObject({
+        codigo: 'CFDI_NO_ENCONTRADO',
+      });
+    });
+
+    it('motivo 01 sin folio de sustitución se rechaza', async () => {
+      const pac = new TimbradoFalso(RELOJ_FIJO);
+      const cfdi = await pac.emitir(solicitudCfdi());
+      await expect(pac.cancelar({ ...cfdi, motivo: '01' })).rejects.toMatchObject({
+        codigo: 'MOTIVO_REQUIERE_SUSTITUTO',
+      });
+      await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'vigente' });
+    });
+  });
+});

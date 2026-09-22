@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AdaptadoresModule } from './adaptadores/adaptadores.module';
 import { AdministracionModule } from './administracion/administracion.module';
 import { AgentesModule } from './agentes/agentes.module';
 import { AppController } from './app.controller';
@@ -12,6 +13,7 @@ import { MesasModule } from './mesas/mesas.module';
 import { OrganizacionModule } from './organizacion/organizacion.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ScopeModule } from './scope/scope.module';
+import { SistemaModule } from './sistema/sistema.module';
 import { VentasModule } from './ventas/ventas.module';
 
 @Module({
@@ -19,6 +21,7 @@ import { VentasModule } from './ventas/ventas.module';
     PrismaModule,
     RelojModule,
     AuditoriaModule,
+    AdaptadoresModule,
     ScopeModule,
     AuthModule,
     AgentesModule,
@@ -27,6 +30,7 @@ import { VentasModule } from './ventas/ventas.module';
     MesasModule,
     OrganizacionModule,
     AdministracionModule,
+    SistemaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

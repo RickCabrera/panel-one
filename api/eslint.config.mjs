@@ -35,6 +35,11 @@ export default tseslint.config(
   //   - src/agentes/agentes-auth.service.ts: igual que el login, busca la
   //     sucursal por el hash de la API key ANTES de saber de qué empresa es el
   //     request (F1-012). Sólo tiene esa lectura.
+  //   - src/adaptadores/correo/correo-falso.ts (F2-202): el correo FALSO sólo hace
+  //     INSERT en su propia bandeja (`correos_enviados`), sin lecturas ni datos de
+  //     negocio de ninguna empresa. Exporta el cliente reducido a esa tabla para que
+  //     el módulo de adaptadores no tenga que importarlo. Sólo ese archivo: el resto
+  //     de `src/adaptadores/` sigue bajo la regla.
   //   - *.spec.ts: los tests arman y limpian fixtures directamente.
   // `src/lint/restriccion-prisma.spec.ts` comprueba que la regla sí muerde.
   {
@@ -44,6 +49,7 @@ export default tseslint.config(
       'src/scope/scoped-prisma.service.ts',
       'src/auth/auth.service.ts',
       'src/agentes/agentes-auth.service.ts',
+      'src/adaptadores/correo/correo-falso.ts',
       'src/**/*.spec.ts',
     ],
     rules: {

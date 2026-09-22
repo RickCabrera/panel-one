@@ -2958,3 +2958,117 @@ Prisma, sin endpoints (OpenAPI intacto), sin tocar el agente.
 
 **Qué haría distinto.** Correr los tests contra Postgres desde el principio: los timeouts de
 5 s sólo se ven ahí.
+
+## 2026-09-21 20:40 — F2-202 · Adaptadores externos e interruptor de modo demo
+**Estado:** CERRADA (PR en esta rama, se mergea al terminar el CI). Revisor: plan aprobado con
+observaciones; entregable BLOQUEADO una vez (fecha de timbrado en la TZ del proceso) y
+aprobado al segundo intento.
+
+**Qué quedó hecho.**
+- `api/src/adaptadores/`: tres puertos con falso determinista y real, elegidos por
+  `PAC_IMPL` (`falso`|`facturama`), `CORREO_IMPL` (`falso`|`brevo`) y `ARCHIVOS_IMPL`
+  (`falso`|`disco`). Sin variable, `falso`. `config.ts` (`leerAdaptadoresConfig`) truena
+  con valor desconocido, con credencial faltante de la real elegida (la nombra, nunca su
+  valor) y con `NODE_ENV=production` + cualquier `falso` (nombra cada variable).
+  `AdaptadoresModule` (global) lo lee en un `useFactory`: la app no se construye.
+  Verificado a mano: `NODE_ENV=production node dist/main.js` aborta con
+  `PAC_IMPL=falso, CORREO_IMPL=falso, ARCHIVOS_IMPL=falso no se permite con NODE_ENV=production`.
+- **Cómo lo consume una tarea de negocio:** `@Inject(PUERTO_TIMBRADO) t: PuertoTimbrado`
+  (ídem `PUERTO_CORREO`, `PUERTO_ARCHIVOS`, `ADAPTADORES_CONFIG`; tokens en
+  `adaptadores.module.ts`). Nunca importes una implementación.
+  `adaptadores.module.spec.ts` prueba que el mismo servicio recibe falso o real sólo por la
+  variable.
+- **Timbrado** (`timbrado/`): `SolicitudCfdi` en `Prisma.Decimal`, con `zonaHoraria` de la
+  sucursal (el CFDI lleva fecha local sin offset). `emitir` devuelve `{uuid, idPac, xml,
+  pdf, fechaTimbrado}`; **guarda los dos ids**: Facturama cancela y consulta por su `Id`
+  (`idPac`), no por UUID. `cancelar({uuid, idPac, motivo, folioSustitucion?})`,
+  `consultarEstado({uuid, idPac})`. Errores: `ErrorTimbrado{codigo, mensaje en español,
+  reintentable}`.
+  - Falso: UUID v4 = sha256(`referencia`) (mismo cheque, mismo UUID), XML CFDI 4.0 bien
+    formado con sellos `SIN-VALIDEZ-FISCAL` y `RfcProvCertif="FALSO"`, PDF 1.4 a mano
+    (`pdf-minimo.ts`, sólo ASCII) con "DOCUMENTO NO FISCAL". RFC reservados en
+    `RFC_CON_ERROR`: `XEXX010101000` no inscrito, `XFAL010101CP0` CP, `XFAL010101RF0`
+    régimen, `XFAL010101PAC` PAC caído (reintentable). `XAXX010101000` SÍ timbra (lo usará
+    la global).
+  - Real: `TimbradoFacturama` = funciones puras `peticionEmitir/Cancelar/Consultar/
+    Descarga` + `ClienteHttp` (fetch, timeout 30 s, Basic auth sólo en cabeceras).
+- **Correo** (`correo/`): `enviar(destinatario, plantilla YA renderizada {nombre, asunto,
+  html, texto}, adjuntos, {empresaId?})`. Falso: `<tmp>/correos/<id>/correo.json` +
+  adjuntos (nombres saneados) y una fila en la tabla nueva `correos_enviados` (migración
+  `20260922020738_correos_enviados`; `empresa_id` NULL permitido, índice y FK Restrict).
+  Real: `CorreoBrevo` (`POST https://api.brevo.com/v3/smtp/email`, `api-key` en cabecera).
+- **Archivos** (`archivos/`): `ArchivosDisco` es la implementación de las dos variantes
+  (falso: raíz temporal y secreto fijo `solo-desarrollo-no-usar-…`; disco: raíz absoluta,
+  secreto ≥32 y URL base obligatorios). Clave validada (bloquea `..`, absolutas, `\`),
+  escritura atómica, `urlFirmada` = `${base}/${clave}?expira=<s>&firma=<HMAC b64url>`, y
+  `verificarFirma` exportada para el endpoint de descarga que traerá F2-105 (hoy no hay).
+- **Modo demo:** `GET /sistema` público → exactamente `{modoDemo}` (OpenAPI regenerado).
+  Web: `web/src/sistema/MarcaDemo.tsx` va en `Proveedores` (cubre login, todas las vistas y
+  404): banda ámbar "Datos de ejemplo" no cerrable y título `[Datos de ejemplo] …`. Si
+  `/sistema` falla, no hay marca. `AuthProvider` ya no hace `queryClient.clear()` al salir:
+  borra mutaciones y todas las queries menos `['sistema']`.
+- Tests de contrato en snapshot (`__snapshots__/`): Facturama (emitir, cancelar 02 y 01,
+  consultar), Brevo (con y sin adjuntos), URL firmada. **Si un snapshot se mueve es un cambio
+  de contrato con un tercero**: revísalo como tal, no lo regeneres a ciegas.
+
+**Decisiones que tomé y por qué.**
+- **Marca demo por endpoint, no `VITE_MODO_DEMO`:** una sola variable (`MODO_DEMO`) y la
+  API es la que sabe si sus datos son de ejemplo.
+- **"Real" de archivos = disco** en el volumen persistente, porque F2-191 habla de volumen
+  y respaldo, no de S3.
+- **Allowlist de Prisma:** sólo `src/adaptadores/correo/correo-falso.ts` (INSERT en su
+  bandeja). El módulo recibe el cliente por el token `BANDEJA_CORREO_FALSO`
+  (`useExisting: PrismaService`) definido en ese archivo, para no importar `PrismaService`.
+  `restriccion-prisma.spec.ts` tiene casos positivos y negativos. `CorreoEnviado` entró a
+  `LLAVE_EMPRESA`; se adaptaron las dos listas exactas de modelos en `scope.helper.spec.ts`
+  y `scoped-prisma.service.spec.ts` (modelo nuevo, nada aflojado).
+- `DECISION PROVISIONAL (nocturno)` (cabecera de
+  `api/src/adaptadores/timbrado/timbrado-facturama.ts`): `TaxStamp.Date` sin zona se lee
+  como hora LOCAL de la sucursal (`instanteDesdeLocal` en `cfdi-comun.ts`, no depende de
+  la TZ del proceso); `Status` distinto de `active`/`canceled` (o ausente) =
+  `ESTADO_DESCONOCIDO` reintentable, nunca "vigente"; red caída/timeout = `PAC_SIN_RESPUESTA`
+  reintentable.
+- **Supuestos no validados de terceros** (Facturama y Brevo: rutas, campos, mapeo de
+  respuesta) marcados en el código; se confirman en F2-190/F2-191 (Diurnas). No son de SR:
+  `docs/esquema-sr.md` no se tocó (no hubo hallazgo del POS).
+
+**Trampas que encontré.**
+- `prisma migrate dev` falló en el `generate` con `EPERM ... query_engine-windows.dll.node`:
+  la API de desarrollo que ya corre en esta máquina tiene el DLL abierto. La migración sí se
+  aplicó y los tipos (`index.d.ts`) sí se regeneraron; sólo el rename del DLL falló (misma
+  versión, no importa). No mates ese proceso: no es tuyo.
+- `new Date('2026-09-21T20:20:05')` se lee en la TZ del PROCESO. El primer entregable lo
+  tenía así en `fechaTimbrado` y el revisor lo bloqueó: en el VPS (UTC) quedaba 6 h corrido.
+  Setear `process.env.TZ` en runtime sí cambia la zona en Node: así se prueba.
+- `queryClient.clear()` NO notifica a los observadores montados: la marca no parpadeaba en
+  jsdom aunque la caché se borrara. El test útil verifica la caché, no la pantalla.
+- La primera corrida completa de vitest venció a 5 s dos tests viejos (Inicio "pinta
+  exactamente lo que devuelven los endpoints" y Reportes "pinta los tres reportes"); aislados
+  y en las dos corridas completas siguientes pasaron. Es carga de la máquina (ya anotado en
+  F2-200), pero ahora cada test que monta `Proveedores` pide también `GET /sistema` (404 en
+  sus API falsas): si vuelven a vencer, sospecha primero de eso.
+- `react-refresh/only-export-components`: constantes y hooks van en `sistema.ts`, el
+  componente solo en `MarcaDemo.tsx`.
+
+**Qué quedó abierto.**
+- **Reintento de `emitir` (F2-104/F2-109):** un `PAC_SIN_RESPUESTA` en emitir es ambiguo (el
+  PAC pudo timbrar). Antes de reintentar hay que consultar o usar llave de idempotencia; un
+  reintento ciego puede duplicar un CFDI. **Lo mismo al cancelar:** un 200 sin `Status` (o
+  con uno pendiente) da `ESTADO_DESCONOCIDO` aunque la cancelación pudo ocurrir; F2-109
+  consulta el estado antes de volver a cancelar.
+- `instanteDesdeLocal` resuelve sin avisar una hora local inexistente (salto de primavera)
+  o repetida (otoño). Caso borde aceptado.
+- **El PAC falso no modela extranjeros:** `XEXX010101000` (RFC genérico de extranjeros en el
+  SAT real) está reservado como "no inscrito" porque el backlog lo pidió así. F2-107/F2-109
+  no deben darlo por probado.
+- Estado de cancelaciones del PAC falso **en memoria** del proceso (se pierde al reiniciar;
+  `consultarEstado` de un UUID que ese proceso no emitió → `no_encontrado`). El estado fiscal
+  nuestro lo persiste F2-109.
+- `CorreoFalso` usa `randomUUID()` para el id (el contenido y la fecha sí son deterministas
+  con el reloj). Si un test necesita ids fijos, inyectar un generador.
+- `verificarFirma` existe pero ningún endpoint la usa: el de descarga es de F2-105.
+- `ClienteFetch` no clasifica errores de red (lo hace cada adaptador): `CorreoBrevo` hoy deja
+  pasar el error crudo; F2-105 decide su reintento.
+
+**Qué haría distinto.** Probar la lectura de fechas de terceros con `TZ=UTC` desde el
+primer test: cualquier `new Date(texto)` sin zona en un adaptador es sospechoso.

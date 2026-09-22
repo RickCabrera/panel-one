@@ -32,6 +32,7 @@ describe('Contrato OpenAPI', () => {
         '/sucursales',
         '/sucursales/{id}',
         '/sucursales/{id}/api-key',
+        '/sistema',
         '/ventas/comparativo-sucursales',
         '/ventas/formas-pago',
         '/ventas/por-dia',

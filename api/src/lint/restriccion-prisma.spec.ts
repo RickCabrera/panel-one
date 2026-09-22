@@ -97,6 +97,24 @@ describe('Regla de lint: el cliente crudo de Prisma no se importa fuera de la al
     expect(lint(archivo, IMPORTA_CLIENTE)).toContain('no-restricted-imports');
   });
 
+  // F2-202: sólo el correo FALSO escribe en su bandeja; el resto de los adaptadores
+  // (el módulo, las implementaciones reales, archivos, timbrado) sigue bajo la regla.
+  it('permite el cliente crudo en el correo falso (allowlist, sólo su bandeja)', () => {
+    expect(lint('src/adaptadores/correo/correo-falso.ts', IMPORTA_SERVICIO)).toEqual([]);
+  });
+
+  it.each([
+    'src/adaptadores/adaptadores.module.ts',
+    'src/adaptadores/correo/correo-brevo.ts',
+    'src/adaptadores/correo/otro-falso.ts',
+    'src/adaptadores/archivos/archivos-disco.ts',
+    'src/adaptadores/timbrado/timbrado-falso.ts',
+    'src/sistema/sistema.controller.ts',
+  ])('NO permite el cliente crudo en el resto de adaptadores (%s)', (archivo) => {
+    expect(lint(archivo, IMPORTA_SERVICIO)).toContain('no-restricted-imports');
+    expect(lint(archivo, IMPORTA_CLIENTE)).toContain('no-restricted-imports');
+  });
+
   it('NO permite el cliente crudo en el resto de auth', () => {
     expect(lint('src/auth/auth.controller.ts', IMPORTA_SERVICIO)).toContain(
       'no-restricted-imports',

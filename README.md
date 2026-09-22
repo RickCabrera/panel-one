@@ -171,6 +171,15 @@ local es tu base de desarrollo, a la que sólo le escriben el seed (idempotente)
 sintéticas (empresas, sucursales y usuarios `@f1-011.test`) que borran al terminar. Sin
 base, fallan; no se saltan.
 
+**Servicios externos y modo demo (F2-202).** El PAC, el correo y el almacenamiento de
+archivos van detrás de un puerto cada uno, y la implementación se elige por variable:
+`PAC_IMPL` (`falso` | `facturama`), `CORREO_IMPL` (`falso` | `brevo`) y `ARCHIVOS_IMPL`
+(`falso` | `disco`). Sin variable, `falso`: en local no hace falta ninguna cuenta. El correo
+falso deja cada envío en `<temporal>/correos/<id>/` y en la tabla `correos_enviados`.
+**Con `NODE_ENV=production` la API no arranca si alguno queda en `falso`**, y el error
+nombra la variable. `MODO_DEMO=1` pone la banda "Datos de ejemplo" en todas las vistas y en
+el título de la pestaña. Todas están documentadas en `api/.env.example`.
+
 El contrato de la API es `api/openapi.json`. Si cambias un endpoint o un DTO, corre
 `npm run openapi` en `/api` y commitea el resultado: un test falla si no coincide.
 
