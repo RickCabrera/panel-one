@@ -44,12 +44,18 @@ export const MENSAJE_CAMBIARON =
  */
 export async function exportarTickets(
   parametros: ParametrosTickets,
-  opciones: { signal?: AbortSignal; onProgreso?: (hechos: number, total: number) => void } = {},
+  opciones: {
+    signal?: AbortSignal;
+    onProgreso?: (hechos: number, total: number) => void;
+    /** El corte con que se bajó el archivo, para decir en pantalla hasta cuándo llega (F2-222). */
+    onCorte?: (corte: string) => void;
+  } = {},
 ): Promise<Ticket[]> {
   const { corte } = await pedir<PaginaTickets>('/ventas/tickets', {
     query: { ...parametros, pagina: 1, porPagina: 1 },
     signal: opciones.signal,
   });
+  opciones.onCorte?.(corte);
   const pedirPagina = (pagina: number) =>
     pedir<PaginaTickets>('/ventas/tickets', {
       query: { ...parametros, pagina, porPagina: POR_PAGINA_EXPORT, corte },

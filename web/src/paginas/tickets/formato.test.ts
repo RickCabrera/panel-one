@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import { SUCURSAL_A2 } from '../../test/apiFalsa';
 import { SUCURSALES, ticket } from './fixtures';
-import { cantidad, fechaHoraDe, fechaParaTabla, formasDePago } from './formato';
+import {
+  cantidad,
+  duracion,
+  fechaHoraDe,
+  fechaParaTabla,
+  formasDePago,
+  textoTiempoMesa,
+  tiempoMesa,
+} from './formato';
 
 describe('fechaHoraDe', () => {
   it('usa la zona de la sucursal del ticket, no UTC', () => {
@@ -51,5 +59,33 @@ describe('formato de tabla', () => {
     expect(cantidad('10')).toBe('10');
     expect(cantidad('123456789.001')).toBe('123456789.001');
     expect(cantidad('raro')).toBe('raro');
+  });
+});
+
+describe('tiempo de mesa (F2-222)', () => {
+  it('apertura → cierre en minutos completos', () => {
+    // La fixture abre a las 02:00Z y cierra a las 03:30Z.
+    expect(tiempoMesa(ticket())).toEqual({ tipo: 'minutos', minutos: 90 });
+    const casi = ticket({
+      abiertoAt: '2026-09-21T03:00:00.000Z',
+      cerradoAt: '2026-09-21T03:44:59.999Z',
+    });
+    expect(tiempoMesa(casi)).toEqual({ tipo: 'minutos', minutos: 44 });
+  });
+
+  it('sin cierre y cierre anterior a la apertura NO inventan una duración', () => {
+    expect(tiempoMesa(ticket({ cerradoAt: null }))).toEqual({ tipo: 'sin-cierre' });
+    const alReves = ticket({ abiertoAt: '2026-09-21T04:00:00.000Z' });
+    expect(tiempoMesa(alReves)).toEqual({ tipo: 'invalido' });
+    expect(textoTiempoMesa({ tipo: 'sin-cierre' })).toBe('Sin cierre');
+    expect(textoTiempoMesa({ tipo: 'invalido' })).toBe('Sin dato');
+  });
+
+  it('formato: minutos, horas y horas con minutos', () => {
+    expect(duracion(0)).toBe('0 min');
+    expect(duracion(45)).toBe('45 min');
+    expect(duracion(60)).toBe('1 h');
+    expect(duracion(90)).toBe('1 h 30 min');
+    expect(duracion(605)).toBe('10 h 5 min');
   });
 });

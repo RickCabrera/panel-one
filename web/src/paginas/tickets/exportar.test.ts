@@ -12,6 +12,16 @@ const PARAMS: ParametrosTickets = {
   desde: '2026-09-01',
   hasta: '2026-09-20',
   folio: '10',
+  // F2-222: los filtros y el orden viajan en TODAS las llamadas, la del corte incluida.
+  mesero: 'Ana María',
+  mesa: undefined,
+  forma: 'tarjeta',
+  importeMin: '100.50',
+  importeMax: undefined,
+  canceladas: 'excluir',
+  producto: 'taco',
+  orden: 'total',
+  dir: 'asc',
 };
 
 const lista = (n: number): Ticket[] =>
@@ -84,8 +94,25 @@ describe('exportarTickets', () => {
       expect(l.query.get('hasta')).toBe('2026-09-20');
       expect(l.query.get('folio')).toBe('10');
       expect(l.query.has('sucursalId')).toBe(false);
+      expect(l.query.get('mesero')).toBe('Ana María');
+      expect(l.query.get('forma')).toBe('tarjeta');
+      expect(l.query.get('importeMin')).toBe('100.50');
+      expect(l.query.get('canceladas')).toBe('excluir');
+      expect(l.query.get('producto')).toBe('taco');
+      expect(l.query.get('orden')).toBe('total');
+      expect(l.query.get('dir')).toBe('asc');
+      // Los que no se eligieron no se mandan.
+      expect(l.query.has('mesa')).toBe(false);
+      expect(l.query.has('importeMax')).toBe(false);
     }
     expect(progreso).toEqual(['100/250', '200/250', '250/250']);
+  });
+
+  it('avisa el corte con que bajó el archivo (para decirlo en pantalla)', async () => {
+    instalarApiFalsa({ 'GET /ventas/tickets': paginar(() => lista(3)) });
+    const cortes: string[] = [];
+    await exportarTickets(PARAMS, { onCorte: (c) => cortes.push(c) });
+    expect(cortes).toEqual([CORTE]);
   });
 
   it('sin tickets: la del corte y una página, y lista vacía', async () => {

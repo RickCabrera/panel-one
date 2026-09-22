@@ -2,9 +2,23 @@ import { Fragment, useState } from 'react';
 
 import type { Sucursal, Ticket } from '../../api/tipos';
 import { pesos } from '../../dinero/dinero';
-import { cantidad, fechaHoraDe, fechaParaTabla, formasDePago } from './formato';
+import { siguienteOrden, type Orden, type OrdenTickets } from '../../filtros/tickets';
+import {
+  cantidad,
+  fechaHoraDe,
+  fechaHoraEn,
+  fechaParaTabla,
+  formasDePago,
+  textoTiempoMesa,
+  tiempoMesa,
+} from './formato';
 
 const SIN_DATO = 'Sin dato';
+
+/** Lo que el panel NO recibe del POS; dicho como límite del panel, no como hecho de SR. */
+export const NOTA_DESCUENTOS =
+  'El panel no recibe descuentos ni cortesías por partida: el descuento es el de la cuenta completa.';
+export const NOTA_HORA_CANCELACION = 'El panel no recibe la hora de la cancelación';
 
 /** Columnas que en móvil se esconden (siguen en el detalle de la fila). */
 const SOLO_ESCRITORIO = 'hidden md:table-cell';
@@ -15,6 +29,8 @@ export function TablaTickets({
   sucursales,
   mostrarSucursal,
   atenuada,
+  orden,
+  onOrdenar,
 }: {
   tickets: readonly Ticket[];
   sucursales: ReadonlyMap<string, Sucursal>;
@@ -25,6 +41,9 @@ export function TablaTickets({
    * `aria-busy`, NO opacidad, que bajaba el texto de 4.5:1 (F2-211).
    */
   atenuada: boolean;
+  /** El orden actual (F2-222): el encabezado de esa columna lo marca con `aria-sort`. */
+  orden: OrdenTickets;
+  onOrdenar: (orden: OrdenTickets) => void;
 }) {
   const [abiertos, setAbiertos] = useState<ReadonlySet<string>>(new Set());
   const alternar = (id: string) =>
@@ -35,7 +54,10 @@ export function TablaTickets({
       return nuevos;
     });
 
-  const columnas = 6 + (mostrarSucursal ? 1 : 0) + 3;
+  const columnas = 8 + (mostrarSucursal ? 1 : 0) + 3;
+  const encabezado = (columna: Orden, texto: string, clase = '') => (
+    <Encabezado columna={columna} texto={texto} clase={clase} orden={orden} onOrdenar={onOrdenar} />
+  );
 
   return (
     // La tabla desborda DENTRO de su caja: la página nunca tiene scroll horizontal.
@@ -49,29 +71,19 @@ export function TablaTickets({
             <th scope="col" className={CELDA}>
               <span className="sr-only">Detalle</span>
             </th>
-            <th scope="col" className={CELDA}>
-              Folio
-            </th>
-            <th scope="col" className={CELDA}>
-              Hora
-            </th>
+            {encabezado('folio', 'Folio')}
+            {encabezado('momento', 'Hora')}
             {mostrarSucursal && (
               <th scope="col" className={`${CELDA} ${SOLO_ESCRITORIO}`}>
                 Sucursal
               </th>
             )}
-            <th scope="col" className={CELDA}>
-              Mesa
-            </th>
-            <th scope="col" className={`${CELDA} ${SOLO_ESCRITORIO}`}>
-              Mesero
-            </th>
-            <th scope="col" className={`${CELDA} ${SOLO_ESCRITORIO} text-right`}>
-              Comensales
-            </th>
-            <th scope="col" className={`${CELDA} text-right`}>
-              Total
-            </th>
+            {encabezado('mesa', 'Mesa')}
+            {encabezado('mesero', 'Mesero', SOLO_ESCRITORIO)}
+            {encabezado('comensales', 'Comensales', `${SOLO_ESCRITORIO} text-right`)}
+            {encabezado('duracion', 'Tiempo', `${SOLO_ESCRITORIO} text-right`)}
+            {encabezado('propina', 'Propina', `${SOLO_ESCRITORIO} text-right`)}
+            {encabezado('total', 'Total', 'text-right')}
             <th scope="col" className={`${CELDA} ${SOLO_ESCRITORIO}`}>
               Forma de pago
             </th>
@@ -121,6 +133,14 @@ export function TablaTickets({
                   <td className={`${CELDA} ${SOLO_ESCRITORIO} text-right`}>
                     {t.comensales ?? '—'}
                   </td>
+                  <td className={`${CELDA} ${SOLO_ESCRITORIO} text-right whitespace-nowrap`}>
+                    {textoTiempoMesa(tiempoMesa(t))}
+                  </td>
+                  <td
+                    className={`${CELDA} ${SOLO_ESCRITORIO} text-right whitespace-nowrap tabular-nums`}
+                  >
+                    {pesos(t.propina)}
+                  </td>
                   <td
                     className={`${CELDA} text-right whitespace-nowrap tabular-nums ${t.cancelado ? 'line-through' : ''}`}
                   >
@@ -131,10 +151,7 @@ export function TablaTickets({
                 {abierto && (
                   <tr id={idDetalle} className="border-b border-linea bg-fondo">
                     <td colSpan={columnas} className="px-3 py-3">
-                      <Detalle
-                        ticket={t}
-                        sucursal={sucursales.get(t.sucursalId)?.nombre ?? SIN_DATO}
-                      />
+                      <Detalle ticket={t} sucursal={sucursales.get(t.sucursalId)} />
                     </td>
                   </tr>
                 )}
@@ -147,48 +164,126 @@ export function TablaTickets({
   );
 }
 
+/**
+ * Un encabezado ordenable: el botón cambia el orden y `aria-sort` dice cuál está activo. Las
+ * demás columnas no llevan `aria-sort` (ARIA: sólo la que ordena).
+ */
+function Encabezado({
+  columna,
+  texto,
+  clase,
+  orden,
+  onOrdenar,
+}: {
+  columna: Orden;
+  texto: string;
+  clase: string;
+  orden: OrdenTickets;
+  onOrdenar: (orden: OrdenTickets) => void;
+}) {
+  const activo = orden.orden === columna;
+  const sentido = orden.dir === 'asc' ? 'ascending' : 'descending';
+  return (
+    <th scope="col" className={`${CELDA} ${clase}`} aria-sort={activo ? sentido : undefined}>
+      <button
+        type="button"
+        onClick={() => onOrdenar(siguienteOrden(orden, columna))}
+        className="inline-flex items-center gap-1 rounded uppercase hover:text-tinta-medio"
+      >
+        {texto}
+        <span aria-hidden="true" className={activo ? '' : 'invisible'}>
+          {orden.dir === 'asc' ? '▲' : '▼'}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+/** `DD/MM/AAAA HH:MM` en la zona de la sucursal; "Sin dato" sin zona confiable; `—` sin instante. */
+function enSucursal(sucursal: Sucursal | undefined, instante: string | null): string {
+  if (instante === null) return '—';
+  if (!sucursal) return SIN_DATO;
+  const { fecha, hora } = fechaHoraEn(sucursal.zonaHoraria, instante);
+  return `${fechaParaTabla(fecha)} ${hora}`;
+}
+
+/**
+ * Qué se canceló y cuándo (F2-222). DECISION PROVISIONAL (nocturno): el panel sólo recibe la
+ * cancelación de la cuenta COMPLETA (`cancelado`), sin la hora en que se hizo ni partidas
+ * canceladas sueltas (docs/esquema-sr.md §2). Se dice eso, y se da el instante por el que la
+ * cuenta está ubicada, que es lo que sí se sabe.
+ */
+function Cancelacion({ ticket: t, sucursal }: { ticket: Ticket; sucursal: Sucursal | undefined }) {
+  const partidas = t.partidas.length;
+  const ubicada = t.cerradoAt === null ? 'su apertura' : 'su cierre';
+  return (
+    <div
+      role="note"
+      aria-label="Cancelación"
+      className="rounded-md border border-linea-fuerte bg-realce px-3 py-2 text-sm text-tinta-medio"
+    >
+      <p className="font-medium">Cuenta cancelada completa</p>
+      <p>
+        Se canceló la cuenta entera: {partidas} {partidas === 1 ? 'partida' : 'partidas'} por{' '}
+        {pesos(t.total)}. No suma a la venta.
+      </p>
+      <p>
+        {NOTA_HORA_CANCELACION}; la cuenta está ubicada por {ubicada}:{' '}
+        {enSucursal(sucursal, t.cerradoAt ?? t.abiertoAt)}.
+      </p>
+    </div>
+  );
+}
+
 /** La fila expandida: partidas con modificadores, pagos y el desglose del ticket. */
-function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: string }) {
+function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: Sucursal | undefined }) {
+  const tiempo = tiempoMesa(t);
   return (
     <div
       role="region"
       aria-label={`Detalle del folio ${t.folio}`}
       className="flex min-w-0 flex-col gap-4 text-tinta-medio lg:flex-row"
     >
-      <div className="min-w-0 flex-1">
-        <h3 className="text-xs font-medium text-tinta-tenue uppercase">Partidas</h3>
-        {t.partidas.length === 0 ? (
-          <p className="mt-1 text-sm text-tinta-tenue">Sin partidas.</p>
-        ) : (
-          <ul className="mt-1 divide-y divide-linea">
-            {t.partidas.map((p, i) => (
-              <li key={i} className="py-1.5">
-                <div className="flex gap-3">
-                  <span className="w-12 shrink-0 text-right tabular-nums">
-                    {cantidad(p.cantidad)}
-                  </span>
-                  <span className="min-w-0 flex-1 break-words">
-                    {p.producto}
-                    <span className="block text-xs text-tinta-tenue">
-                      {pesos(p.precioUnit)} c/u
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        {t.cancelado && <Cancelacion ticket={t} sucursal={sucursal} />}
+        <div>
+          <h3 className="text-xs font-medium text-tinta-tenue uppercase">Partidas</h3>
+          {t.partidas.length === 0 ? (
+            <p className="mt-1 text-sm text-tinta-tenue">Sin partidas.</p>
+          ) : (
+            <ul className="mt-1 divide-y divide-linea">
+              {t.partidas.map((p, i) => (
+                <li key={i} className="py-1.5">
+                  <div className="flex gap-3">
+                    <span className="w-12 shrink-0 text-right tabular-nums">
+                      {cantidad(p.cantidad)}
                     </span>
-                  </span>
-                  <span className="shrink-0 tabular-nums">{pesos(p.total)}</span>
-                </div>
-                {p.modificadores.length > 0 && (
-                  <ul className="mt-0.5 ml-15 text-xs text-tinta-tenue">
-                    {p.modificadores.map((m, j) => (
-                      <li key={j} className="flex gap-3">
-                        <span className="min-w-0 flex-1 break-words">+ {m.nombre}</span>
-                        <span className="shrink-0 tabular-nums">{pesos(m.precio)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+                    <span
+                      className={`min-w-0 flex-1 break-words ${t.cancelado ? 'line-through' : ''}`}
+                    >
+                      {p.producto}
+                      <span className="block text-xs text-tinta-tenue">
+                        {pesos(p.precioUnit)} c/u
+                      </span>
+                    </span>
+                    <span className="shrink-0 tabular-nums">{pesos(p.total)}</span>
+                  </div>
+                  {p.modificadores.length > 0 && (
+                    <ul className="mt-0.5 ml-15 text-xs text-tinta-tenue">
+                      {p.modificadores.map((m, j) => (
+                        <li key={j} className="flex gap-3">
+                          <span className="min-w-0 flex-1 break-words">+ {m.nombre}</span>
+                          <span className="shrink-0 tabular-nums">{pesos(m.precio)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-tinta-tenue">{NOTA_DESCUENTOS}</p>
+        </div>
       </div>
 
       <div className="flex min-w-0 flex-col gap-4 lg:w-72">
@@ -209,7 +304,20 @@ function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: string }) 
         </div>
         <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm">
           <dt className="md:hidden">Sucursal</dt>
-          <dd className="text-right md:hidden">{sucursal}</dd>
+          <dd className="text-right md:hidden">{sucursal?.nombre ?? SIN_DATO}</dd>
+          <dt>Apertura</dt>
+          <dd className="text-right">{enSucursal(sucursal, t.abiertoAt)}</dd>
+          <dt>Cierre</dt>
+          <dd className="text-right">{enSucursal(sucursal, t.cerradoAt)}</dd>
+          <dt>Tiempo de mesa</dt>
+          <dd className="text-right">
+            {textoTiempoMesa(tiempo)}
+            {tiempo.tipo === 'invalido' && (
+              <span className="block text-xs text-tinta-tenue">
+                El cierre es anterior a la apertura.
+              </span>
+            )}
+          </dd>
           <dt className="md:hidden">Mesero</dt>
           <dd className="text-right md:hidden">{t.mesero ?? '—'}</dd>
           <dt className="md:hidden">Comensales</dt>
@@ -218,16 +326,13 @@ function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: string }) 
           <dd className="text-right tabular-nums">{pesos(t.subtotal)}</dd>
           <dt>Impuestos</dt>
           <dd className="text-right tabular-nums">{pesos(t.impuestos)}</dd>
-          <dt>Descuentos</dt>
+          <dt>Descuento de la cuenta</dt>
           <dd className="text-right tabular-nums">{pesos(t.descuentos)}</dd>
           <dt>Propina</dt>
           <dd className="text-right tabular-nums">{pesos(t.propina)}</dd>
           <dt className="font-medium">Total</dt>
           <dd className="text-right font-medium tabular-nums">{pesos(t.total)}</dd>
         </dl>
-        {t.cancelado && (
-          <p className="text-xs text-tinta-tenue">Cancelado: se lista, pero no suma a la venta.</p>
-        )}
       </div>
     </div>
   );

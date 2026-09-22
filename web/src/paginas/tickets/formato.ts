@@ -78,3 +78,38 @@ export function cantidad(texto: string): string {
   const decimales = (partes[2] ?? '').replace(/0+$/, '');
   return decimales ? `${partes[1]}.${decimales}` : partes[1];
 }
+
+/** El tiempo de mesa de un ticket (F2-222): apertura → cierre. */
+export type TiempoMesa =
+  | { tipo: 'minutos'; minutos: number }
+  /** Un cancelado que nunca se cerró. */
+  | { tipo: 'sin-cierre' }
+  /** El POS trae el cierre ANTES de la apertura: no se inventa una duración. */
+  | { tipo: 'invalido' };
+
+export function tiempoMesa(ticket: Ticket): TiempoMesa {
+  if (ticket.cerradoAt === null) return { tipo: 'sin-cierre' };
+  const ms = Date.parse(ticket.cerradoAt) - Date.parse(ticket.abiertoAt);
+  if (!Number.isFinite(ms) || ms < 0) return { tipo: 'invalido' };
+  return { tipo: 'minutos', minutos: Math.floor(ms / 60_000) };
+}
+
+/** `45` → `"45 min"`, `90` → `"1 h 30 min"`, `120` → `"2 h"`. */
+export function duracion(minutos: number): string {
+  const horas = Math.floor(minutos / 60);
+  const resto = minutos % 60;
+  if (horas === 0) return `${resto} min`;
+  return resto === 0 ? `${horas} h` : `${horas} h ${resto} min`;
+}
+
+/** El texto de la celda y del detalle. */
+export function textoTiempoMesa(tiempo: TiempoMesa): string {
+  switch (tiempo.tipo) {
+    case 'minutos':
+      return duracion(tiempo.minutos);
+    case 'sin-cierre':
+      return 'Sin cierre';
+    case 'invalido':
+      return 'Sin dato';
+  }
+}

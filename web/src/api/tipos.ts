@@ -282,7 +282,10 @@ export interface Ticket {
 
 /** `PaginaTicketsDto`. */
 export interface PaginaTickets {
-  /** Del más reciente al más viejo. Vacío si la página pasa del final. */
+  /**
+   * En el orden pedido (`orden`/`dir`, F2-222; por default del más reciente al más viejo).
+   * Vacío si la página pasa del final.
+   */
   items: Ticket[];
   /** Tickets del filtro completo, no de esta página (no es una foto exacta). */
   total: number;
