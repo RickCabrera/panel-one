@@ -888,9 +888,10 @@ ese registro solo.
 > promedio, movimientos con referencia a póliza, explosión de insumos por producto,
 > compras.
 
-**Tablas de SR: sin mapear.** Movimientos, recetas y compras siguen pendientes (F2-122, F2-125,
-F2-126; el lector es F2-241 y lo valida F2-193). Lo que sigue **no es un hallazgo**: es el contrato
-de existencias que el panel ya acepta (F2-121) y los supuestos con que se construyó.
+**Tablas de SR: sin mapear.** Recetas y compras siguen pendientes (F2-125, F2-126); de existencias y
+movimientos tampoco se conoce la tabla (el lector es F2-241 y lo valida F2-193). Lo que sigue **no
+es un hallazgo**: son los contratos de existencias (F2-121) y de movimientos (F2-122) que el panel
+ya acepta, y los supuestos con que se construyeron.
 
 ### Existencias (F2-121): `POST /ingesta/existencias`
 
@@ -938,6 +939,68 @@ del panel y **nunca se escriben a SR**).
   existencias no se evalúa. Una alerta de un artículo que pasó a "sin lectura" **se queda abierta**
   hasta que vuelva a leerse o se borre su mínimo (opción conservadora; F2-193 decide si se cierra
   tras cierto tiempo).
+
+### Movimientos y pólizas (F2-122): `POST /ingesta/movimientos`
+
+Lo define `api/src/ingesta/dto/movimientos.dto.ts` y lo publica `api/openapi.json`. Una petición = un
+**lote de pólizas** (documentos de inventario) de la sucursal de la API key, cada una con TODAS sus
+partidas: `{ leidoAt, polizas: [{ origenSrId, folio, tipo, tipoSr?, almacenOrigenSrId, fecha,
+referencia, cancelada, partidas: [{ insumoOrigenSrId, cantidad, costoUnitario }] }] }`. Se guarda en
+`polizas_inventario` (cabecera, upsert por sucursal + `origen_sr_id`, con el `hash` de su forma
+canónica) y `movimientos_inventario` (una fila por partida, con el almacén y la fecha de su póliza).
+El panel las muestra en `/movimientos` (línea de tiempo, detalle de póliza y kardex).
+
+- ⚠️ **SUPUESTO — SR agrupa sus movimientos de inventario en pólizas/documentos con un id estable**
+  (`origenSrId`) y un folio visible. Si SR guarda movimientos sueltos sin documento, el lector
+  (F2-241) arma una póliza por movimiento con el id del movimiento.
+- `DECISION PROVISIONAL (nocturno)` — **el tipo es NUESTRO** (`tipo_poliza_inventario`: inicial,
+  compra, consumo, merma, traspaso_salida, traspaso_entrada, ajuste, otro). El lector traduce el
+  tipo de SR y manda además el código crudo en `tipoSr`, para que F2-192 valide la traducción. Lo
+  que no sepa traducir llega como `otro` y la web lo muestra "Otro (sin traducir)", no lo esconde.
+- ⚠️ **SUPUESTO — un almacén por póliza.** Un traspaso en SR podría ser UN documento con origen y
+  destino: el lector lo manda como DOS pólizas (`traspaso_salida` en el origen y `traspaso_entrada`
+  en el destino) con ids distintos. Si SR mezcla almacenes en una póliza, es cambio de contrato.
+- ⚠️ **SUPUESTO — la cantidad viaja CON SIGNO** (+ entra, − sale), NUMERIC(12,3), también en un
+  ajuste (que puede ir en los dos sentidos). El tipo es una etiqueta: el kardex suma el signo, no
+  el tipo. Una partida en 0 se acepta.
+- `DECISION PROVISIONAL (nocturno)` — **el importe lo calcula el API**: `round(cantidad ×
+  costoUnitario, 2)` mitad lejos de cero, con el costo redondeado antes a 2 (la regla de §13). Si
+  SR guarda el importe con más precisión, puede haber centavos de diferencia contra su reporte
+  (F2-193 lo mide).
+- `DECISION PROVISIONAL (nocturno)` — **una póliza nunca se borra del panel**: si SR la cancela o
+  desaparece, el lector la manda con `cancelada = true`. Una cancelada se ve (marcada) en la línea de
+  tiempo, en el detalle y en el kardex, pero **no mueve el saldo**. Si SR borra físicamente pólizas
+  sin dejar rastro, el lector no puede avisar y el panel conservaría la vieja: F2-192 lo revisa.
+- **Idempotencia y orden:** mismo hash = no se toca nada. Hash distinto = se reescribe la cabecera y
+  se **reemplazan** todas sus partidas (una corrección con menos renglones no deja renglones viejos).
+  `DECISION PROVISIONAL (nocturno)`: `leidoAt` (cuándo leyó el agente el lote) decide qué versión es
+  más nueva: una póliza guardada con una lectura más nueva no se toca (`obsoletas`), así un lote
+  viejo reintentado no revierte una corrección; con el MISMO `leidoAt` gana el que llega después.
+  El mismo contenido leído más tarde sólo avanza `leida_at`.
+- **Rechazo POR PÓLIZA:** una partida inválida rechaza su póliza ENTERA (una póliza a medias es un
+  hueco en el kardex); un `origenSrId` repetido en el lote rechaza todas sus apariciones; una fecha
+  más de 5 min en el futuro o un importe que no cabe en NUMERIC(12,2) rechaza esa póliza; un campo
+  de más (tenant incluido) también. El sobre es todo o nada (400).
+- `DECISION PROVISIONAL (nocturno)` — **topes del lote: 200 pólizas y 5000 partidas EN TOTAL** (5000
+  partidas caben en el body de 5 MB y en el `statement_timeout`). El lector parte los lotes por
+  partidas, no sólo por pólizas. Una póliza real de más de 5000 partidas no cabe: cambio de contrato.
+- **Almacén e insumo sin FK**, por su `origenSrId` en texto (como §9 y las existencias).
+- **Kardex:** saldo inicial = Σ de lo no cancelado antes del rango (días cortados en la zona de la
+  sucursal); luego cada movimiento con su saldo corrido. `DECISION PROVISIONAL (nocturno)`: el orden
+  es fecha → **folio (como texto)** → renglón. Con folios de SR sin ceros a la izquierda, "10" va
+  antes que "9" en la misma fecha: el saldo final no cambia, el corrido intermedio sí. Si pasa,
+  el lector manda un orden explícito (cambio de contrato) o F2-192 elige otro desempate.
+- **Cuadre contra la existencia:** el kardex compara la existencia de la última foto del almacén
+  (F2-121) con Σ de lo no cancelado **hasta el corte de esa foto** (`capturado_at`), no contra todo
+  lo recibido: un movimiento posterior a la foto no es diferencia. Sin pólizas recibidas de la
+  sucursal, o sin existencia leída del artículo, no hay cuadre (`null`), nunca una diferencia
+  inventada. ⚠️ **SUPUESTO — el `capturadoAt` de la foto y la `fecha` de los movimientos son del
+  mismo reloj** (el del POS/agente): si no, un movimiento cerca del corte cae del lado equivocado.
+  Caso límite conocido: una póliza que se **cancela después** de la foto aparece como diferencia
+  (la foto ya traía su efecto y el kardex ya no la suma) hasta la siguiente foto.
+- **Qué prueba el seed y qué no.** Con el seed, el kardex de cada artículo reproduce su existencia
+  (`prisma/seed-movimientos.spec.ts`): eso prueba que la ingesta y el kardex **conservan** lo que
+  simuló el seed maestro. No prueba que SR registre así sus movimientos: el cuadre real es de F2-193.
 
 ---
 
@@ -1218,6 +1281,13 @@ Foto completa de un almacén por petición; todos sus supuestos y decisiones est
 F2-241 tiene que cumplir: mandar TODAS las filas del almacén (también en 0 y negativas), el costo
 promedio en texto con la regla de dinero, y una foto por almacén; no mandar fotos de más de 5000
 registros; y no reportar un almacén vacío si la lectura falló.
+
+### Contrato de movimientos (F2-122): `POST /ingesta/movimientos`
+
+Lote de pólizas con todas sus partidas; todos sus supuestos y decisiones están en §10. Lo que F2-241
+tiene que cumplir: mandar cada póliza con TODAS sus partidas (una reenviada con otras las reemplaza),
+cantidades con signo, `cancelada = true` en vez de dejar de mandarla, `leidoAt` = cuándo leyó, a lo
+más 200 pólizas y 5000 partidas por lote, y el tipo traducido más el crudo en `tipoSr`.
 
 ### Campo nuevo del contrato de eventos (F2-233): `datos.areaOrigenSrId` del cheque
 

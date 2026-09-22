@@ -20,6 +20,7 @@ import { Inicio } from './paginas/Inicio';
 import { Login } from './paginas/Login';
 import { Menu } from './paginas/Menu';
 import { Meseros } from './paginas/Meseros';
+import { Movimientos } from './paginas/Movimientos';
 import { Mesas } from './paginas/Mesas';
 import { Productos } from './paginas/Productos';
 import { MesasPared } from './paginas/MesasPared';
@@ -87,6 +88,7 @@ export function Rutas() {
         <Route path="clientes" element={<Clientes />} />
         <Route path="areas" element={<Areas />} />
         <Route path="existencias" element={<Existencias />} />
+        <Route path="movimientos" element={<Movimientos />} />
         <Route path="cuenta" element={<Cuenta />} />
         <Route
           path="admin"

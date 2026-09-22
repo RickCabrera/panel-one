@@ -103,6 +103,9 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'limiteExistencia',
       'mesaSnapshot',
       'meseroCatalogo',
+      // F2-122: pólizas y movimientos; se escriben por `movimientosDeSucursal(agente)`.
+      'movimientoInventario',
+      'polizaInventario',
       'producto',
       'productoMetadata',
       'proveedorCatalogo',

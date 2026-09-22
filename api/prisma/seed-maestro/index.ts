@@ -37,8 +37,8 @@ import { RECETAS, type Renglon } from './recetas';
  * Las ventas (cheques, partidas, pagos, formas) y, desde F2-230, grupos,
  * productos, meseros y clientes (`prisma/seed-catalogos.ts`) ya tienen tabla, igual
  * que áreas y canales (F2-233), los catálogos de inventario (F2-120) y las
- * existencias con sus límites (F2-121, `prisma/seed-existencias.ts`). El
- * resto NO se persiste aquí: lo persiste, desde esta función, la tarea que cree
+ * existencias con sus límites (F2-121, `prisma/seed-existencias.ts`) y las
+ * pólizas con sus movimientos (F2-122, `prisma/seed-movimientos.ts`). El resto NO se persiste aquí: lo persiste, desde esta función, la tarea que cree
  * su tabla (regla 2 de la Ronda 2), para no adelantarse a su diseño:
  *
  * | Parte del universo                     | La persiste |

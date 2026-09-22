@@ -5527,3 +5527,129 @@ F2-193, y todavía no hay lector del agente (F2-241). Carriles /api + /web, más
 
 **Qué haría distinto.** Pensar la semántica de "foto" junto con la regla de idempotencia desde el
 principio. El todo-o-nada parecía lo prudente y era lo contrario: congela el almacén para siempre.
+
+## 2026-09-22 10:00 — F2-122 · Movimientos, pólizas y kardex
+**Estado:** CERRADA si el PR se mergea. **PENDIENTE DE VALIDACIÓN REAL**: no hay lector del agente
+(F2-241) y el kardex contra el saldo real del piloto es de F2-193. Carriles /api + /web, más docs y
+backlog.
+
+**Revisor.**
+- Gate del plan: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos). Seis obligatorias, todas
+  dentro: `leidoAt` contra lotes viejos, limpieza del seed entre días, índice por empresa en
+  `movimientos_inventario`, cuadre AL CORTE de la foto, `cuadra = null` sin pólizas, tope de 5000
+  partidas por lote.
+- Gate del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos). Resueltas en la rama:
+  (2) el e2e del tope ahora manda 2 pólizas de 2501 partidas (cada una cabe sola, el lote no; mutar
+  la suma a "máximo por póliza" da 1 rojo); (3) índice `(sucursal_id, fecha)` en
+  `movimientos_inventario` para la línea de tiempo sin almacén, en una migración aditiva aparte
+  `20260922200100_movimientos_linea_tiempo` (la primera ya estaba aplicada en la base local);
+  (7) el caso "póliza cancelada DESPUÉS de la foto = diferencia hasta la foto siguiente" quedó en §10
+  y en la nota de F2-193. **Desviación del plan (obs. 4):** el detalle de póliza NO devuelve
+  Σ entradas / Σ salidas, sólo `importeTotal`: sumar cantidades de insumos con unidades distintas
+  (kg + piezas) no significa nada; el kardex, que es de un solo artículo, sí las da. (6) Sin e2e del
+  503 por candado ocupado (F2-121 tampoco lo tiene); el código lo maneja igual que existencias.
+  (5) El diff de `openapi.json` es la salida de `npm run openapi` (con `--histogram`: sólo inserciones).
+
+**Qué quedó hecho.**
+- **Ingesta `POST /ingesta/movimientos`** (API key). Un lote = `{ leidoAt, polizas: [...] }`, cada
+  póliza con TODAS sus partidas `{ insumoOrigenSrId, cantidad (con signo), costoUnitario }`.
+  - Migración `20260922200000_movimientos_inventario` (CHECKs a mano): enum
+    `tipo_poliza_inventario`, `polizas_inventario` (upsert por sucursal + `origen_sr_id`, `hash`
+    sha256 de la forma canónica, `leida_at`) y `movimientos_inventario` (una fila por partida, con
+    almacén y fecha copiados de su póliza; FK compuesta `(poliza_id, sucursal_id, empresa_id)` con
+    cascade: una partida no puede colgar de una póliza de otra sucursal).
+  - Parte pura `api/src/ingesta/movimientos.ts` (`normalizarLote`, `hashPoliza`, `decidirPoliza`,
+    `partidasDelLote`); escritura `api/src/scope/escritura-movimientos.ts` (`IngestaMovimientos`,
+    clavada a la sucursal de la key, advisory lock por sucursal, mismos timeouts que F2-121).
+  - Decisión por póliza: sin guardada = crear; guardada leída después = `obsoleta` (no se toca);
+    mismo hash = nada (si la lectura es más nueva sólo avanza `leida_at`); hash distinto = reescribe
+    cabecera y REEMPLAZA partidas.
+  - Rechazo por póliza: una partida inválida rechaza la póliza entera; `origenSrId` repetido rechaza
+    todas sus apariciones; fecha > ahora+5 min, importe fuera de NUMERIC(12,2) o campo de más
+    (tenant incluido) = rechazada. Sobre inválido (vacío, sin zona, futuro, > 200 pólizas, > 5000
+    partidas en total, no-objetos) = 400 sin escribir.
+- **Panel** (`api/src/inventario/`, todo con `datos.para(scope)`, sumas por `aggregate`/`groupBy`,
+  nada de SQL crudo):
+  - `GET /inventario/movimientos`: línea de tiempo paginada (fecha desc → folio → renglón), filtros
+    sucursal/almacén/insumo/tipo y rango de días cortado en la zona de CADA sucursal
+    (`kardex.ts#limitesDelRango` con `instanteDesdeLocal` de `adaptadores/timbrado/cfdi-comun.ts`);
+    `sucursales[].polizasRecibidas` para el estado vacío.
+  - `GET /inventario/polizas/:id?empresaId=`: cabecera + partidas + total.
+  - `GET /inventario/kardex`: saldo inicial (lo no cancelado antes del rango), filas con saldo
+    corrido (la cancelada se ve y no mueve el saldo), entradas/salidas, y cuadre contra la existencia
+    de la última foto (F2-121) comparando con Σ de lo no cancelado HASTA `capturado_at` de esa foto.
+  - Fuera de alcance = el mismo 404 (listado, kardex y póliza ajena o inexistente).
+- **Seed:** `api/prisma/seed-movimientos.ts`, llamado desde `seed-ventas.ts` ANTES de existencias.
+  Manda `universo.polizas` por la ingesta real en lotes (≤ 200 pólizas y ≤ 5000 partidas). Fecha =
+  día de la póliza a una hora fija por tipo (orden de la simulación), recortada a `ahora`. Antes de
+  mandar borra las pólizas `<clave>-POL-*` que ya no están en la ventana actual (sembrar otro día
+  renumera folios). Base de desarrollo: 1014 pólizas, 7951 movimientos.
+- **Web:** `/movimientos` (`web/src/paginas/Movimientos.tsx`, `paginas/movimientos/{consultas,reglas}.ts`),
+  entrada de menú "Movimientos y kardex" después de Existencias. Filtros de almacén y tipo, el
+  periodo de la cabecera (`usePeriodo`). Clic en el folio = detalle de póliza; clic en el artículo =
+  kardex (y la línea de tiempo se acota a él). Cantidad con signo siempre visible, cancelada
+  tachada y con etiqueta, `otro` como "Otro (sin traducir)". Estados vacíos: ninguna sucursal con
+  pólizas (dice F2-241), periodo sin movimientos, rango inválido (no consulta), sucursales sin
+  movimientos (aviso), kardex sin existencia leída (no inventa diferencia).
+- **Docs:** `esquema-sr.md` §10 (contrato de movimientos y cada SUPUESTO/DECISION) y §13; backlog:
+  "Y además (de F2-122)" en F2-241 (ocho obligaciones del lector), F2-193 y F2-124.
+
+**Decisiones que tomé y por qué.** Todas son `DECISION PROVISIONAL (nocturno)` y están en §10.
+- El tipo es NUESTRO + el crudo de SR en `tipoSr` (schema.prisma, enum `TipoPolizaInventario`). No se
+  sabe cómo tipifica SR; así F2-192 valida la traducción sin perder el dato.
+- Un almacén por póliza; un traspaso = dos pólizas (así ya lo genera el seed).
+- Cantidad con signo; el tipo es etiqueta, el kardex suma el signo. Partida en 0 aceptada (F2-241 la
+  pide como fixture).
+- Importe calculado por el API (reusa `valorDe` de `ingesta/existencias.ts`).
+- Nunca se borra una póliza: `cancelada = true`. La cancelada no suma en ningún lado.
+- `leidoAt` gana contra lotes viejos; con el mismo instante gana el último. Mismo contenido leído
+  después sólo avanza `leida_at` (sin tocar `updated_at` ni `recibida_at`), para que un lote más viejo
+  que ése tampoco revierta.
+- Topes: 200 pólizas y 5000 partidas por lote (`ingesta/dto/movimientos.dto.ts`), 10 000 movimientos
+  por kardex (`inventario/movimientos.service.ts#MAX_MOVIMIENTOS_KARDEX`), 200 por página.
+- Desempate del orden: folio COMO TEXTO (observación 8 del revisor). Con folios sin ceros a la
+  izquierda el saldo corrido intermedio puede verse distinto; el final no.
+- Sin pólizas recibidas de la sucursal o sin existencia leída del artículo: `cuadra = null`.
+
+**Trampas que encontré.**
+- **`git checkout <archivo>` NO restaura un archivo nuevo sin rastrear.** En una mutación a mano sobre
+  `movimientos.service.ts` (nuevo) el checkout no hizo nada; lo salvó la copia que había hecho antes
+  en `/tmp`. Para mutar archivos nuevos: copia primero, restaura con `cp`, y verifica con `grep`.
+- Jest tiene 5 s por test por omisión: sembrar la ventana completa (~1000 pólizas) y recorrer el
+  kardex de los 88 artículos tarda ~30 s. `seed-movimientos.spec.ts` pone `LENTO_MS` en esos `it`.
+  Un timeout ahí deja el seed corriendo mientras `afterAll` limpia, y sale un FK falso en
+  `limpiarFixtures`: no es un bug de la limpieza.
+- `git diff --stat` de `openapi.json` marcaba 1300 líneas borradas: es el algoritmo de diff. Con
+  `--histogram` son 1167 inserciones y 0 borradas.
+- El seed del día de hoy: la simulación consume las ventas de hoy, pero la ingesta rechaza fechas
+  en el futuro; por eso la fecha de cada póliza se recorta a `ahora` (el folio desempata).
+- `.wt-main/` sigue en la raíz (de F2-230). ACCIÓN PARA RICARDO: borrarla. Agrego por ruta, nunca
+  `git add -A`.
+- Rojo local preexistente: `prisma/esquema.spec.ts` (argon2id del admin). Igual que en F2-120/F2-121.
+
+**Qué quedó abierto.**
+- El lector de movimientos del agente (F2-241) y el cuadre real (F2-193).
+- No hay enlace desde Existencias al kardex ni CSV de movimientos (la ficha no los pide).
+- Qué prueba el AC y qué no: `seed-movimientos.spec.ts` prueba que ingesta + kardex CONSERVAN lo que
+  simuló el seed maestro (sus existencias son inicial + Σ movimientos de la misma simulación), también
+  al volver a sembrar otro día. NO prueba que SR registre así sus movimientos. La prueba independiente
+  del kardex, con literales a mano, es `inventario/movimientos.e2e.spec.ts`.
+
+**Tests.**
+- **Nuevos en api:** `ingesta/movimientos.spec.ts` (15), `ingesta/movimientos.e2e.spec.ts` (10:
+  ×3 idéntico, corrección con menos partidas, lote viejo = obsoleta, avanzar lectura, cancelar,
+  aislamiento A1/A2/B1, inválida entre N, sobres 400, 401), `inventario/kardex.spec.ts` (6),
+  `inventario/movimientos.e2e.spec.ts` (12: medianoche local en CDMX y Tijuana, filtros, paginación,
+  detalle, kardex a mano 7.5 → 12.5 → 12.5 (cancelada) → 12.0, cuadre al corte con un movimiento
+  posterior, diferencia −1, `cuadra` nulo, 404 uniforme, 401), `prisma/seed-movimientos.spec.ts` (6,
+  el AC), `openapi.spec` (+1).
+- **Nuevos en web:** `Movimientos.test.tsx` (8), `movimientos/reglas.test.ts` (5).
+- **Adaptados, no aflojados:** `scope.helper.spec`, `scoped-prisma.service.spec` (modelos nuevos),
+  `openapi.spec` (rutas), `menu.test` (entrada nueva).
+- **Mutaciones a mano:** cuadre contra todo lo recibido en vez del corte → 4 rojos; sin limpieza del
+  seed → 1 rojo (D+1); tope por póliza en vez de por lote → 1 rojo.
+- **Números:** /api lint, typecheck, `prisma validate` limpios, sin deriva; jest 1492/1493, 0 skips
+  (el rojo es el preexistente). /web build y lint limpios, vitest 959/959.
+
+**Qué haría distinto.** Escribir el test de "sembrar otro día" antes que el seed: el problema de los
+folios renumerados no se ve con un solo reloj, y fue el revisor quien lo vio.

@@ -9,6 +9,7 @@ import { EscrituraAdmin } from './escritura-admin';
 import { EscrituraAlertas } from './escritura-alertas';
 import { EscrituraCatalogos, IngestaCatalogos } from './escritura-catalogos';
 import { EscrituraExistencias, IngestaExistencias } from './escritura-existencias';
+import { IngestaMovimientos } from './escritura-movimientos';
 import { EscrituraReportes } from './escritura-reportes';
 import { EscrituraSucursal } from './escritura-sucursal';
 import {
@@ -234,6 +235,14 @@ export class ScopedPrismaService {
   /** Lo que el panel escribe sobre las existencias (F2-121): los límites, con scope. */
   existencias(scope: EmpresaScope): EscrituraExistencias {
     return new EscrituraExistencias(this.#prisma, scope);
+  }
+
+  /**
+   * Pólizas y movimientos de inventario (F2-122) de la sucursal del agente: un lote bajo el
+   * candado de la sucursal. El panel no escribe pólizas: sólo las lee con `para(scope)`.
+   */
+  movimientosDeSucursal(agente: AgenteAutenticado): IngestaMovimientos {
+    return new IngestaMovimientos(this.#prisma, agente);
   }
 
   /**

@@ -57,6 +57,10 @@ export const LLAVE_EMPRESA = {
   Existencia: 'empresaId',
   LecturaExistencias: 'empresaId',
   LimiteExistencia: 'empresaId',
+  // F2-122. Pólizas y sus partidas: las escribe SÓLO `IngestaMovimientos` (clavada a la
+  // sucursal del agente). El panel sólo las lee.
+  PolizaInventario: 'empresaId',
+  MovimientoInventario: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;
@@ -77,9 +81,12 @@ export const COLUMNAS_INTOCABLES: readonly string[] = [
   'empresaId',
   'sucursalId',
   'chequeId',
+  // F2-122: una partida no se mueve a otra póliza.
+  'polizaId',
   'empresa',
   'sucursal',
   'cheque',
+  'poliza',
 ];
 
 /** El filtro de tenant de un modelo: `{}` para admin_global, la empresa para los demás. */

@@ -32,6 +32,8 @@ const FICHA: [string, string[]][] = [
     'Inventario y compras',
     [
       'Existencias',
+      // F2-122: la línea de tiempo de pólizas y el kardex por artículo.
+      'Movimientos y kardex',
       'Conteos físicos',
       'Recetas',
       'Proyecciones',
@@ -108,6 +110,8 @@ describe('las seis secciones de la ficha', () => {
     expect(porId('catalogos.areas').destino).toEqual({ ruta: '/areas' });
     // F2-121 construyó Existencias: navega.
     expect(porId('inventario.existencias').destino).toEqual({ ruta: '/existencias' });
+    // F2-122 construyó Movimientos y kardex: navega.
+    expect(porId('inventario.movimientos').destino).toEqual({ ruta: '/movimientos' });
     expect(tarea('inventario.conteos')).toBe('F2-123');
     expect(tarea('inventario.recetas')).toBe('F2-125');
     expect(tarea('inventario.proyecciones')).toBe('F2-127');

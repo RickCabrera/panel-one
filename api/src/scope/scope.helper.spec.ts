@@ -69,6 +69,8 @@ describe('whereEmpresa / whereScoped', () => {
       Existencia: 'empresaId',
       LecturaExistencias: 'empresaId',
       LimiteExistencia: 'empresaId',
+      PolizaInventario: 'empresaId',
+      MovimientoInventario: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });
