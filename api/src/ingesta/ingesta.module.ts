@@ -7,13 +7,15 @@ import { ExistenciasIngestaController } from './existencias-ingesta.controller';
 import { ExistenciasIngestaService } from './existencias-ingesta.service';
 import { MovimientosIngestaController } from './movimientos-ingesta.controller';
 import { MovimientosIngestaService } from './movimientos-ingesta.service';
+import { RecetasIngestaController } from './recetas-ingesta.controller';
+import { RecetasIngestaService } from './recetas-ingesta.service';
 import { IngestaController } from './ingesta.controller';
 import { IngestaService } from './ingesta.service';
 
 /**
  * La frontera entre el agente y el api: `POST /ingesta/eventos` (F1-031), la ingesta de
  * catálogos `/ingesta/catalogos*` (F2-230), la de existencias `/ingesta/existencias` (F2-121) y
- * la de movimientos `/ingesta/movimientos` (F2-122).
+ * la de movimientos `/ingesta/movimientos` (F2-122) y la de recetas `/ingesta/recetas` (F2-125).
  */
 @Module({
   imports: [AgentesModule],
@@ -22,12 +24,14 @@ import { IngestaService } from './ingesta.service';
     CatalogosIngestaController,
     ExistenciasIngestaController,
     MovimientosIngestaController,
+    RecetasIngestaController,
   ],
   providers: [
     IngestaService,
     CatalogosIngestaService,
     ExistenciasIngestaService,
     MovimientosIngestaService,
+    RecetasIngestaService,
   ],
 })
 export class IngestaModule {}

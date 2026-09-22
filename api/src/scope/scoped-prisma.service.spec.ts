@@ -114,7 +114,10 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'producto',
       'productoMetadata',
       'proveedorCatalogo',
+      // F2-125: recetas; se escriben por `recetasDeSucursal(agente)`.
+      'receta',
       'reglaAlerta',
+      'renglonReceta',
       'sesionUsuario',
       'sincronizacionCatalogo',
       'solicitudSincronizacion',

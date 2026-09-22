@@ -11,6 +11,7 @@ import { EscrituraCatalogos, IngestaCatalogos } from './escritura-catalogos';
 import { EscrituraConteos } from './escritura-conteos';
 import { EscrituraExistencias, IngestaExistencias } from './escritura-existencias';
 import { IngestaMovimientos } from './escritura-movimientos';
+import { IngestaRecetas } from './escritura-recetas';
 import { EscrituraReportes } from './escritura-reportes';
 import { EscrituraTraspasos } from './escritura-traspasos';
 import { EscrituraSucursal } from './escritura-sucursal';
@@ -245,6 +246,14 @@ export class ScopedPrismaService {
    */
   movimientosDeSucursal(agente: AgenteAutenticado): IngestaMovimientos {
     return new IngestaMovimientos(this.#prisma, agente);
+  }
+
+  /**
+   * Recetas (F2-125) de la sucursal del agente: un lote bajo el candado de recetas de la
+   * sucursal. El panel no escribe recetas: sólo las lee con `para(scope)`.
+   */
+  recetasDeSucursal(agente: AgenteAutenticado): IngestaRecetas {
+    return new IngestaRecetas(this.#prisma, agente);
   }
 
   /**

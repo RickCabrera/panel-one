@@ -1100,6 +1100,18 @@ escritura contra el POS (test que lo afirma inspeccionando el modo de la conexi�
 > movimientos en documentos y cómo ordena los folios (el desempate del kardex es el folio como
 > texto). Ver `docs/esquema-sr.md` §10 y §13.
 
+> **Y además (de F2-125).** El panel ya acepta las recetas por `POST /ingesta/recetas`: un **lote de
+> recetas**, cada una con TODOS sus renglones (`{ leidoAt, recetas: [{ productoOrigenSrId,
+> renglones: [{ insumoOrigenSrId, cantidad }] }] }`). Obligaciones del lector: (1) la receta viaja
+> **completa** — reenviarla con otros renglones los REEMPLAZA; (2) una receta que SR ya no tenga se
+> manda con `renglones: []`, nunca se deja de mandar (el panel no la borra y seguiría usando la
+> vieja); (3) cantidad en la **unidad del insumo** del catálogo y por **UNA unidad vendida**, texto
+> NUMERIC(12,4) sin signo — más de 4 decimales se rechaza, no redondear; (4) `productoOrigenSrId` e
+> `insumoOrigenSrId` = los mismos ids de los catálogos `productos` e `insumos` de la sucursal; (5) a
+> lo más 500 recetas y 5000 renglones por lote. Documentar en §10 dónde guarda SR la receta, si usa
+> una unidad de receta con factor, si tiene subrecetas (elaborados) y si explota modificadores o
+> paquetes — cualquiera de esas es cambio de contrato. Ver `docs/esquema-sr.md` §10 ("Recetas") y §13.
+
 ## BLOQUE I · Cierre
 
 ### F2-250 · Cierre de Ronda 2: auditoría de paridad y pendientes
@@ -1486,6 +1498,19 @@ Recorre el AC original de F2-121, F2-122, F2-125, F2-126 y F2-127 con datos del 
 > entrada nunca concilia); (4) medir cuántos traspasos quedan en alerta a las 48 h por captura
 > tardía en SR y ajustar el umbral por defecto si hace falta. Todo en `docs/esquema-sr.md` §10
 > ("Traspasos").
+
+> **Y además (de F2-125).** El consumo teórico se cerró contra el seed (todas las filas de dos semanas
+> cuadran con un cálculo a mano desde el universo); aquí va lo que sólo se ve con el piloto: (1)
+> validar a mano la variación de **3 insumos de control** (uno vendido por kg, uno que aparece en
+> varios productos, uno en piezas) contra la vista `/recetas`; (2) confirmar que el nombre del
+> producto en el ticket es el del catálogo (el cruce es POR NOMBRE; si no, todo sale "sin catálogo");
+> (3) ❓ **DECISIÓN ABIERTA PARA RICARDO — ¿SR descuenta el inventario por receta al vender?** Si sí,
+> la columna "consumo" ya es el teórico de SR y la comparación es casi circular: la métrica útil pasa
+> a ser "merma + ajuste contra teórico" o "existencia inicial + compras ± traspasos − existencia
+> final". Si no deja pólizas de consumo, el real es sólo merma + ajuste. Hoy el real = consumo +
+> merma + ajuste, con el desglose visible; (4) confirmar que la receta de SR está en la unidad del
+> insumo y por unidad vendida, y si los modificadores consumen. Todo en `docs/esquema-sr.md` §10
+> ("Recetas").
 
 **Listo cuando:** el valor de inventario cuadra contra el reporte de SR del mismo corte; el
 kardex de un artículo reproduce su saldo real; la variación teórico contra real de tres

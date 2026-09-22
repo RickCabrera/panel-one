@@ -33,6 +33,7 @@ import { Resumen } from './paginas/Resumen';
 import { Tickets } from './paginas/Tickets';
 import { TraspasoDetalle } from './paginas/TraspasoDetalle';
 import { TraspasoNuevo } from './paginas/TraspasoNuevo';
+import { Recetas } from './paginas/Recetas';
 import { Traspasos } from './paginas/Traspasos';
 import { MarcaDemo } from './sistema/MarcaDemo';
 import { ProveedorTema } from './tema/ProveedorTema';
@@ -101,6 +102,7 @@ export function Rutas() {
         <Route path="traspasos" element={<Traspasos />} />
         <Route path="traspasos/nuevo" element={<TraspasoNuevo />} />
         <Route path="traspasos/:id" element={<TraspasoDetalle />} />
+        <Route path="recetas" element={<Recetas />} />
         <Route path="cuenta" element={<Cuenta />} />
         <Route
           path="admin"

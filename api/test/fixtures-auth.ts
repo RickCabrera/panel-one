@@ -127,6 +127,8 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   await prisma.movimientoInventario.deleteMany(deEstas);
   await prisma.polizaInventario.deleteMany(deEstas);
   // Conteos físicos (F2-123): los renglones cuelgan del conteo.
+  await prisma.renglonReceta.deleteMany(deEstas);
+  await prisma.receta.deleteMany(deEstas);
   await prisma.partidaConteo.deleteMany(deEstas);
   await prisma.conteoFisico.deleteMany(deEstas);
   await prisma.sincronizacionCatalogo.deleteMany(deEstas);

@@ -103,6 +103,9 @@ model Sucursal {
   traspasosRecibidos    Traspaso[]        @relation("TraspasoDestino")
   partidasTraspaso      PartidaTraspaso[] @relation("PartidaTraspasoOrigen")
   partidasTraspasoDest  PartidaTraspaso[] @relation("PartidaTraspasoDestino")
+  // F2-125: recetas leídas de SR (espejo por sucursal).
+  recetas               Receta[]
+  renglonesReceta       RenglonReceta[]
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -1338,4 +1341,53 @@ model PartidaTraspaso {
   @@unique([polizaEntradaId, renglonEntrada], map: "partidas_traspaso_espejo_entrada_key")
   @@index([empresaId])
   @@map("partidas_traspaso")
+}
+
+// F2-125. La receta de UN producto leída de SR (la cabecera): cuánto de cada insumo consume UNA
+// unidad vendida. La escribe SÓLO `IngestaRecetas` (clavada a la sucursal del agente), upsert por
+// (sucursal, producto_origen_sr_id). `hash` = sha256 de su forma canónica (producto + renglones
+// ORDENADOS): igual = no se toca. `leida_at` (reloj del agente) decide qué versión es más nueva.
+// `renglones = 0` = SR dice que el producto no tiene receta (se muestra "sin receta").
+// DECISION PROVISIONAL (nocturno): una receta que deja de llegar NO se borra (el lector la manda
+// vacía); producto e insumo por su `origen_sr_id` en texto, sin FK (llegan en cualquier orden).
+// esquema-sr.md §10 "Recetas".
+model Receta {
+  id                 String   @id @default(uuid()) @db.Uuid
+  empresaId          String   @map("empresa_id") @db.Uuid
+  sucursalId         String   @map("sucursal_id") @db.Uuid
+  productoOrigenSrId String   @map("producto_origen_sr_id")
+  renglones          Int
+  hash               String   @db.Char(64)
+  leidaAt            DateTime @map("leida_at") @db.Timestamptz(3)
+  recibidaAt         DateTime @map("recibida_at") @db.Timestamptz(3)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal        @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "recetas_sucursal_empresa_fkey")
+  detalle  RenglonReceta[]
+
+  @@unique([sucursalId, productoOrigenSrId], map: "recetas_sucursal_producto_key")
+  @@unique([id, sucursalId, empresaId], map: "recetas_id_sucursal_empresa_key")
+  @@index([empresaId])
+  @@map("recetas")
+}
+
+// F2-125. Un renglón de receta: `cantidad` del insumo (en SU unidad) por UNA unidad vendida del
+// producto. DECISION PROVISIONAL (nocturno): NUMERIC(12,4); más decimales se rechazan. La FK
+// compuesta impide colgarlo de una receta de otra sucursal o empresa.
+model RenglonReceta {
+  id               String  @id @default(uuid()) @db.Uuid
+  empresaId        String  @map("empresa_id") @db.Uuid
+  sucursalId       String  @map("sucursal_id") @db.Uuid
+  recetaId         String  @map("receta_id") @db.Uuid
+  renglon          Int
+  insumoOrigenSrId String  @map("insumo_origen_sr_id")
+  cantidad         Decimal @db.Decimal(12, 4)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "renglones_receta_sucursal_empresa_fkey")
+  receta   Receta   @relation(fields: [recetaId, sucursalId, empresaId], references: [id, sucursalId, empresaId], onDelete: Cascade, map: "renglones_receta_receta_fkey")
+
+  @@unique([recetaId, renglon], map: "renglones_receta_receta_renglon_key")
+  @@index([empresaId])
+  @@map("renglones_receta")
 }

@@ -591,7 +591,8 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
 > una base real. Cuando se mapeen, lo que diga SR manda y el seed se adapta, nunca al revés.
 > En particular: el reparto área → canal (comedor/mostrador/domicilio), los ~3 % de cheques
 > sin área, los dos almacenes por sucursal y las recetas por unidad vendida son decisiones
-> del seed, no hallazgos.
+> del seed, no hallazgos. Los desechables (I060, I061) se consumen por canal y no cuelgan de
+> ningún producto: en el consumo teórico (F2-125) salen "sin teórico" a propósito.
 
 ## 6. Productos y catálogo
 
@@ -890,10 +891,10 @@ ese registro solo.
 > con costo promedio, movimientos con referencia a póliza, conteos y traspasos propios
 > conciliados contra ellos, explosión de insumos por producto, compras.
 
-**Tablas de SR: sin mapear.** Recetas y compras siguen pendientes (F2-125, F2-126); de existencias y
-movimientos tampoco se conoce la tabla (el lector es F2-241 y lo valida F2-193). Lo que sigue **no
-es un hallazgo**: son los contratos de existencias (F2-121) y de movimientos (F2-122) que el panel
-ya acepta, y los supuestos con que se construyeron.
+**Tablas de SR: sin mapear.** No se conoce la tabla de existencias, movimientos, recetas ni compras
+(el lector es F2-241 y lo valida F2-193; compras son de F2-126). Lo que sigue **no es un hallazgo**:
+son los contratos de existencias (F2-121), movimientos (F2-122) y recetas (F2-125) que el panel ya
+acepta, y los supuestos con que se construyeron.
 
 ### Existencias (F2-121): `POST /ingesta/existencias`
 
@@ -1103,6 +1104,95 @@ sin ningún espejo. Los traspasos **leídos** de SR no son tabla nueva: son las 
 - **Sin editar cantidades al recibir:** la recepción confirma el traspaso completo. Un faltante en
   el camino hoy no se registra en el panel (queda abierto; SR tendría una entrada distinta y el
   renglón no conciliaría).
+
+### Recetas (F2-125): `POST /ingesta/recetas`, y el consumo teórico contra el real
+
+**Tabla de recetas de SR: sin mapear.** Nadie ha visto dónde guarda SoftRestaurant la explosión de
+insumos por producto; la busca el lector de F2-241 y la valida F2-193. Lo que sigue es el contrato
+que el panel ya acepta y los supuestos del cálculo. Las recetas del seed
+(`api/prisma/seed-maestro/recetas.ts`) son **sintéticas**, no evidencia.
+
+**Contrato.** Lo define `api/src/ingesta/dto/recetas.dto.ts` y lo publica `api/openapi.json`. Una
+petición = un **lote de recetas** de la sucursal de la API key: `{ leidoAt, recetas: [{
+productoOrigenSrId, renglones: [{ insumoOrigenSrId, cantidad }] }] }`. Se guarda en `recetas`
+(cabecera, upsert por sucursal + `producto_origen_sr_id`, con el `hash` de su forma canónica) y
+`renglones_receta` (un renglón por insumo). Mismas reglas que las pólizas de F2-122: sobre todo o
+nada (400), rechazo POR RECETA (un renglón inválido rechaza su receta entera; un producto repetido
+en el lote se rechaza en todas sus apariciones), `leidoAt` decide qué versión es más nueva
+(`obsoletas`; con el mismo `leidoAt` gana la que llega después), el mismo contenido leído más tarde
+sólo avanza `leida_at`. Candado por sucursal (`recetas:<sucursal>`).
+
+- ⚠️ **SUPUESTO — la cantidad del renglón está en la UNIDAD DEL INSUMO** (la del catálogo `insumos`)
+  y es por **UNA unidad vendida** del producto (un kg, si el producto se vende por kg). Si SR guarda
+  la receta en otra unidad (gramos contra un insumo en kg) con un factor, el lector convierte o es
+  cambio de contrato.
+- `DECISION PROVISIONAL (nocturno)` — **cantidad NUMERIC(12,4)**, sin signo (una pizca de 0.0005 kg
+  no cabe en 3 decimales). Más decimales se **rechazan**, no se redondean. Cantidad 0 se acepta.
+- `DECISION PROVISIONAL (nocturno)` — **los renglones se ordenan** (insumo, luego cantidad como
+  decimal) antes del hash y se guardan en ese orden: la misma receta leída en otro orden es el mismo
+  contenido y no se reescribe. El mismo insumo dos veces = dos renglones; el cálculo los suma.
+- `DECISION PROVISIONAL (nocturno)` — **una receta que deja de llegar NO se borra.** El lote no es
+  una foto. Si SR borra una receta, el lector la manda con `renglones: []` (el producto queda "sin
+  receta"); si no la manda, el teórico sigue usando la vieja.
+- ⚠️ **SUPUESTO — una receta es por producto y por sucursal** (cada sucursal es su POS), con
+  producto e insumo por su `origenSrId` en texto y **sin FK** (llegan en cualquier orden).
+- ⚠️ **SUPUESTO — sin subrecetas.** Un renglón que apunte a un elaborado (algo que no está en
+  `insumos`) se guarda y se muestra "sin catálogo"; no se explota en sus propios insumos. Si SR tiene
+  productos-receta anidados (§9), es cambio de contrato.
+- ⚠️ **SUPUESTO — los modificadores no consumen insumos**, y un combo o paquete se trata como un
+  producto con su propia receta. Si SR explota los modificadores ("extra queso") o los paquetes en
+  otros productos, el teórico se queda corto.
+- ⚠️ **SUPUESTO — una partida cancelada dentro de una cuenta viva no llega** en el contrato de
+  cheques (§3). Si SR la guarda con cantidad y el lector la manda, se sumaría al teórico.
+
+**El cálculo** (`api/src/inventario/recetas.ts` y `recetas.service.ts`, `GET /inventario/consumo-teorico`):
+
+- **Teórico** = Σ (cantidad vendida × cantidad del renglón), por sucursal e insumo, con las partidas
+  de las cuentas NO canceladas cerradas en el rango (día en la zona de cada sucursal, las CTEs del
+  helper de agregados). Se redondea a 3 decimales al final (mitad lejos de cero).
+- **La partida se cruza con el producto POR NOMBRE** (`menu.ts#normalizarNombre`, como F2-145 en
+  §6), contra el espejo de productos de SU sucursal en cualquier estado. El mismo nombre en más de un
+  producto (aunque uno esté de baja) = `ambiguo`, no se adivina; un nombre sin producto =
+  `sin_catalogo`; un producto sin receta o con receta vacía = `sin_receta`. Los tres van APARTE y no
+  detienen el cálculo. Mismo riesgo que §6: si SR imprime en el ticket un nombre distinto al del
+  catálogo, TODO saldría "sin catálogo".
+- **Una sucursal sin sincronización completa de productos, o sin ninguna receta recibida, no se
+  calcula** (`calculada=false`, y la vista dice por qué). Una sucursal que nunca mandó pólizas se
+  calcula, pero su real es **nulo** (no cero).
+- `DECISION PROVISIONAL (nocturno)` — **Real** = −(Σ consumo + Σ merma + Σ ajuste) de las partidas de
+  pólizas NO canceladas del rango (misma zona por sucursal), con el desglose por tipo. **Un ajuste a
+  favor (el conteo encontró de más) RESTA al real.** Compras, traspasos, `inicial` y `otro` no son
+  consumo.
+- ⚠️ **SUPUESTO NO VALIDADO — ¿SR descuenta el inventario por receta al vender?** Hay dos
+  escenarios y la variación significa cosas distintas en cada uno:
+  1. **SR genera pólizas de consumo explotando SU receta al vender.** Entonces "consumo" ≈ el
+     teórico de SR y la comparación es casi circular: la variación útil vive en **merma + ajuste**
+     (más las diferencias entre la receta guardada en el panel y la vigente en SR al vender, y el
+     redondeo). Por eso el desglose viaja por tipo y la vista lo muestra en columnas.
+  2. **SR no deja pólizas de consumo** (sólo mueve existencias, o no descuenta). Entonces el real es
+     sólo merma + ajuste, y un teórico sin salidas sale con variación negativa grande.
+  Cuál aplica lo decide F2-193 con el piloto; si es el 1, la métrica pasa a ser "merma + ajuste vs
+  teórico" o "existencia inicial + compras ± traspasos − existencia final". **Decisión abierta para
+  Ricardo** (nota en F2-193).
+- **Variación** = real − teórico (redondeado); **%** = variación / teórico × 100 a 1 decimal (nulo con
+  teórico 0: `sinTeorico`, p. ej. desechables que no cuelgan de ningún producto).
+- `DECISION PROVISIONAL (nocturno)` — **costo de referencia** = Σ importe / Σ cantidad de las SALIDAS
+  (cantidad < 0) de esos tipos en el rango; si no hubo, el de la última foto de existencias (Σ valor
+  / Σ cantidad de los almacenes con cantidad > 0); si tampoco, nulo (sin importe, nunca $0). Se
+  redondea a 2 antes de multiplicar; importes con `round(x × costo, 2)`. Sin IVA.
+- **Ranking:** importe de la variación desc (faltantes primero), sin importe al final, luego |%|.
+- `DECISION PROVISIONAL (nocturno)` — **no se materializa un consumo diario**: se calcula al vuelo
+  para el rango (un día = rango de un día; tope 366 días como las demás consultas).
+- **Costo de una receta** (`GET /inventario/recetas`) = Σ `round(cantidad × costo de existencias,
+  2)` de sus renglones; un renglón sin costo la deja "incompleta" y sin % del precio. El % compara un
+  costo SIN IVA contra el precio del POS, que puede traerlo (§6): la vista lo dice.
+- **Qué prueba el seed y qué no** (`api/prisma/seed-recetas.spec.ts`): con el seed, TODAS las filas
+  de dos semanas cuadran contra un cálculo a mano desde el universo crudo, con tres insumos de
+  control (por kg, en varios productos, en piezas). La variación del seed es la merma 0–4 % que el
+  generador suma al consumo, el redondeo de piezas hacia arriba y sus mermas y ajustes programados:
+  prueba que el cálculo **conserva** lo simulado, no que SR registre así su consumo. Los desechables
+  del seed (I060 contenedor, I061 bolsa) se consumen por canal, no por producto: salen "sin
+  teórico", y no es un bug.
 
 ---
 
@@ -1390,6 +1480,17 @@ Lote de pólizas con todas sus partidas; todos sus supuestos y decisiones están
 tiene que cumplir: mandar cada póliza con TODAS sus partidas (una reenviada con otras las reemplaza),
 cantidades con signo, `cancelada = true` en vez de dejar de mandarla, `leidoAt` = cuándo leyó, a lo
 más 200 pólizas y 5000 partidas por lote, y el tipo traducido más el crudo en `tipoSr`.
+
+### Contrato de recetas (F2-125): `POST /ingesta/recetas`
+
+Lote de recetas, cada una con TODOS sus renglones; supuestos y decisiones en §10 "Recetas". Lo que
+F2-241 tiene que cumplir: (1) cada receta completa (reenviada con otros renglones los REEMPLAZA);
+(2) una receta que SR ya no tenga se manda con `renglones: []`, nunca se deja de mandar (el panel no
+la borra); (3) cantidad en la UNIDAD del insumo del catálogo, por UNA unidad vendida, texto
+NUMERIC(12,4) sin signo — más de 4 decimales se RECHAZA, el lector no redondea; (4) `leidoAt` =
+cuándo leyó; (5) a lo más 500 recetas y 5000 renglones por lote (partir por renglones); (6) el
+orden de los renglones no importa (el API ordena); (7) si SR tiene subrecetas o unidades de receta
+con factor, documentarlo en §10 antes de mandar nada (cambio de contrato).
 
 ### Campo nuevo del contrato de eventos (F2-233): `datos.areaOrigenSrId` del cheque
 

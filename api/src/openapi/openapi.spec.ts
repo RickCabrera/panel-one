@@ -423,6 +423,48 @@ describe('Contrato OpenAPI', () => {
     ]);
   });
 
+  it('F2-125: contrato de recetas (lote), lista de recetas y consumo teórico', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const codigos = (op: { responses?: object } | undefined) =>
+      Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/ingesta/recetas']?.post)).toEqual([
+      '200',
+      '400',
+      '401',
+      '429',
+      '500',
+      '503',
+    ]);
+    for (const ruta of ['/inventario/recetas', '/inventario/consumo-teorico']) {
+      expect([ruta, codigos(paths[ruta]?.get)]).toEqual([ruta, ['200', '400', '401', '404']]);
+    }
+    const esquemas = doc.components?.schemas as Record<
+      string,
+      { properties?: Record<string, { enum?: string[]; pattern?: string }>; required?: string[] }
+    >;
+    // El lote no lleva tenant: sale de la API key.
+    expect(Object.keys(esquemas.LoteRecetasDto.properties ?? {}).sort()).toEqual([
+      'leidoAt',
+      'recetas',
+    ]);
+    expect(Object.keys(esquemas.RecetaDto.properties ?? {}).sort()).toEqual([
+      'productoOrigenSrId',
+      'renglones',
+    ]);
+    expect(esquemas.RenglonRecetaDto.properties?.cantidad?.pattern).toBe(
+      String.raw`^\d{1,8}(\.\d{1,4})?$`,
+    );
+    expect(esquemas.VendidoAparteDto.properties?.motivo?.enum).toEqual([
+      'sin_receta',
+      'sin_catalogo',
+      'ambiguo',
+    ]);
+    for (const campo of ['real', 'consumo', 'merma', 'ajuste', 'variacion', 'porcentaje']) {
+      expect(esquemas.FilaConsumoDto.required).toContain(campo);
+    }
+  });
+
   it('F2-124: contrato de traspasos; el agente no alcanza ninguna de sus rutas; alerta en horas', async () => {
     const doc = await generarDocumento();
     const { paths } = doc;
@@ -556,6 +598,10 @@ describe('Contrato OpenAPI', () => {
         '/inventario/traspasos/{id}',
         '/inventario/traspasos/{id}/recibir',
         '/inventario/traspasos/{id}/cancelar',
+        // F2-125: recetas (ingesta del agente) y consumo teórico.
+        '/ingesta/recetas',
+        '/inventario/recetas',
+        '/inventario/consumo-teorico',
         '/mesas/abiertas',
         '/sucursales',
         '/sucursales/{id}',
