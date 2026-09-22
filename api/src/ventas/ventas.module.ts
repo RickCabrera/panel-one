@@ -10,6 +10,6 @@ import { VentasController } from './ventas.controller';
 @Module({
   controllers: [VentasController],
   providers: [AgregadosVentasService, AnalisisService, TicketsService, CacheAgregados],
-  exports: [AgregadosVentasService],
+  exports: [AgregadosVentasService, AnalisisService],
 })
 export class VentasModule {}

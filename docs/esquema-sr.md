@@ -695,6 +695,35 @@ sucursales son una sola opción, y el filtro trae las dos: el filtro es por text
 todavía **no** se liga con `cheques.mesero` (texto): esa unión es de F2-231 y hoy sólo puede ir
 por nombre.
 
+**Lo que Meseros (F2-231, `GET /catalogos/meseros/rendimiento`) supone.** Todo **sin validar** contra
+una instalación real (F2-192):
+
+- ⚠️ **SUPUESTO — el texto del mesero en el cheque es el NOMBRE del mesero en su catálogo.** El
+  cruce va por (sucursal, nombre normalizado): sin espacios de más ni mayúsculas, con los acentos
+  contando (la misma normalización del orquestador, `menu.ts#normalizarNombre`). `DECISION
+  PROVISIONAL (nocturno)` en `api/src/catalogos/meseros.ts`. Si en esta versión del POS el cheque
+  guarda la **clave** o un **id** del mesero en vez del nombre, el cruce sale todo "No está en el
+  catálogo" y hay que cambiar la llave: es lo primero que hay que mirar en F2-192.
+- Dos escrituras que ligan con el **mismo** mesero del espejo (p. ej. "Ana López" y "ANA LÓPEZ")
+  se **consolidan** en una fila con la suma exacta: para el POS son la misma persona. Si el espejo
+  trae ese nombre dos veces en la sucursal, la fila sale **ambigua** y no se liga a ninguno.
+- Sin sincronización completa de meseros en la sucursal, la fila dice "Catálogo sin sincronizar"
+  (no "No está en el catálogo"); si la lectura del espejo se trunca (2000), "Catálogo incompleto".
+- **Baja:** se lee de `activoPos` del espejo (false = baja en el POS; null = el POS no lo reporta,
+  y el panel lo dice así, nunca "Activo"). `activo=false` = ya no vino en la última sincronización
+  completa. Un mesero de baja **sale en los periodos en que atendió**, porque las cifras salen de
+  los cheques, no del catálogo.
+- **Tiempo de mesa por mesero** = cierre − apertura de SUS cuentas (misma regla que Análisis por
+  mesa: una duración negativa no entra al promedio). Si SR reabre cuentas y conserva la apertura
+  original, el tiempo incluye la reapertura: no verificado.
+- ❓ **Pendiente de ver en una instalación real:** un cheque con el mesero **sólo en espacios**
+  hoy llega como texto (no nulo), se normaliza a vacío y sale como fila "No está en el catálogo"
+  (o "Catálogo sin sincronizar") con el nombre en blanco, no como "Sin mesero". Si SR lo hace,
+  la ingesta debería guardarlo como nulo.
+- **Promedio de la sucursal** (la comparación de la ficha): venta, cuentas, comensales y propina,
+  por mesero con al menos una cuenta (sin "Sin mesero"); ticket y minutos, de TODA la sucursal
+  (con las cuentas sin mesero).
+
 ---
 
 ## 8. Áreas, estaciones y canales de venta

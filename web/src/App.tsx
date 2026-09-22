@@ -16,6 +16,7 @@ import { Cuenta } from './paginas/Cuenta';
 import { Inicio } from './paginas/Inicio';
 import { Login } from './paginas/Login';
 import { Menu } from './paginas/Menu';
+import { Meseros } from './paginas/Meseros';
 import { Mesas } from './paginas/Mesas';
 import { Productos } from './paginas/Productos';
 import { MesasPared } from './paginas/MesasPared';
@@ -79,6 +80,7 @@ export function Rutas() {
         <Route path="productos" element={<Productos />} />
         {/* `/menu` y no `/productos/menu`: el menú lateral marcaría activas las dos. */}
         <Route path="menu" element={<Menu />} />
+        <Route path="meseros" element={<Meseros />} />
         <Route path="cuenta" element={<Cuenta />} />
         <Route
           path="admin"

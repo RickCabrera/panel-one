@@ -4885,3 +4885,107 @@ del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos).
 **Qué haría distinto.** Decidir desde el plan qué nombre representa a un grupo de variantes. Lo
 dejé en "el primero alfabético", el e2e lo destapó como mala elección y lo cambié a "el de más
 importe".
+
+
+## 2026-09-22 12:25 — F2-231 · Meseros y rendimiento por mesero
+**Estado:** CERRADA si el PR se mergea. Carriles /api + /web (+ docs). Revisor, gate del plan:
+APROBADO CON OBSERVACIONES al primer pase (0 bloqueos, 9 observaciones, todas resueltas). Gate
+del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos).
+
+**Qué quedó hecho.**
+- **`GET /catalogos/meseros/rendimiento`** (empresaId, sucursalId?, desde, hasta; sin `alturaAl`,
+  sin cache). Toma las cifras de Análisis (`AnalisisService.porMeseroConSegundos`, por el helper de
+  agregados: fuera de alcance = 404) y las liga con el espejo `meseros_catalogo` (F2-230). La parte
+  pura está en `api/src/catalogos/meseros.ts#rendimientoMeseros`. Devuelve:
+  - `filas`: por sucursal, con `cruce`, `catalogo` (clave, activo, activoPos, vistoAt), `textosPos`,
+    venta, cuentas, ticket, comensales, propina, descuentos {monto, cuentas}, cancelados
+    {cuentas, monto}, minutos de mesa y `posicion` (ranking de SU sucursal por venta; un empate
+    comparte posición: 1, 2, 2, 4).
+  - `sucursales`: con `catalogoSincronizado`, `meserosEnRanking` (n) y `promedio`.
+  - `sinVentas`: los meseros del espejo que no vendieron en el periodo.
+  - Totales, y `catalogoTruncado` (el tope es 2000).
+- **`/ventas/por-mesero`** tiene dos campos nuevos: `minutosPromedio` y `cuentasConDuracion`
+  (misma regla que por mesa: las negativas no entran). `segundos` es un campo interno y no sale en
+  el contrato; `openapi.spec` lo verifica.
+- **Web `/meseros`**: la entrada del menú lateral ya navega. Tiene:
+  - la tarjeta del periodo, con venta, cuentas, descuentos y cancelaciones aparte, y el cuadre
+    "Σ meseros = venta";
+  - avisos de catálogo sin sincronizar o truncado;
+  - la tabla, con posición "n de m", clave, estado en palabras, y descuentos y cancelaciones como
+    importe y conteo;
+  - la ficha contra el promedio de la sucursal, con el % y el texto "arriba/abajo del promedio";
+  - la lista de meseros del catálogo sin ventas;
+  - el CSV `meseros_<desde>_<hasta>[_suc].csv` con TODAS las filas.
+- `docs/esquema-sr.md` §7: los supuestos, OpenAPI regenerado.
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` en `meseros.ts`: **el cheque se liga con el espejo por (sucursal,
+  nombre normalizado)**, con `normalizarNombre` de `menu.ts` (trim, espacios, mayúsculas; los
+  acentos cuentan). **Es lo primero que hay que validar en F2-192**: si en esta versión el cheque
+  trae la clave o el id del mesero en vez del nombre, todo sale "No está en el catálogo".
+- **Consolidación** (obs. 1 del revisor): dos textos que ligan con el MISMO registro del espejo
+  ("Ana López" y "ANA LÓPEZ") salen en UNA fila con la suma exacta, y cuentan como UNA persona en
+  el ranking y en la n del promedio. Si el nombre está dos veces en el espejo, la fila queda como
+  `ambiguo`: no se liga a ninguno y el mesero tampoco sale en "sin ventas".
+- Si la sucursal no tiene sincronización completa de meseros, la fila sale `sin-sincronizar`, no
+  "No está". Con el espejo truncado sale `catalogo-incompleto`. No se afirma lo que no se sabe.
+- **`activoPos` nulo** = "En el POS (sin dato de baja)", nunca "Activo". OJO: omitir `activoPos` en la
+  ingesta de catálogos lo guarda NULO (lo destapó el e2e); el seed sí lo manda.
+- **Dos denominadores en el promedio de la sucursal** (obs. 5): venta, cuentas, comensales y propina
+  van por mesero del ranking (n = meseros con nombre y ≥1 cuenta, sin "Sin mesero"); ticket y
+  minutos van sobre TODA la sucursal, con las cuentas sin mesero. Está dicho en la ficha, en el DTO
+  y en §7.
+- Quedan fuera del ranking (`posicion` null) "Sin mesero" y el mesero que sólo tiene cancelaciones.
+- El endpoint vive en `catalogos`, no en `ventas`: el servicio de catálogos ya tenía el patrón del
+  cruce (`sin-catalogo`). `VentasModule` ahora exporta `AnalisisService`.
+
+**Trampas que encontré.**
+- **Honestidad del seed** (obs. 9 del plan): en el seed `mesero` NUNCA es nulo y no hay meseros que
+  sólo cancelen ni textos con otra capitalización. Esos casos sólo los prueba
+  `meseros.e2e.spec.ts`, con cuentas escritas a mano. No los des por cubiertos "con el seed".
+- Al agregar los dos campos a `/ventas/por-mesero`, `analisis.e2e` (usa `toEqual`) y tres fixtures
+  web de Análisis se rompieron. Los adapté con los minutos calculados A MANO desde la tabla del
+  archivo (C1 60 + C2 90 → 75.0; C3 0 min sí cuenta; C6 negativa fuera), no copiando lo recibido.
+- Hay dos "Ana López" en la vista (Centro y Tijuana): en tests de la página, acota los clics con
+  `within(fila)`.
+- Los heredocs de bash con comillas mixtas siguen muriendo. Para archivos nuevos usa Write; para
+  editar, python con `open(..., newline='')`, que respeta el CRLF.
+- **Rojos locales, verificados en esta sesión:**
+  - `prisma/esquema.spec.ts` ("argon2id verificable") falla IGUAL en `main` (94d0474): es la FK de
+    la suscripción de reportes del seed local (ver F2-230).
+  - `alertas.e2e` AC1 salió rojo UNA vez en la corrida completa de la rama. Pasó 3/3 corrido solo
+    en la rama y 4/4 en `main`. Es la intermitencia de F2-224 que anotó F2-230 (allá se reprodujo en
+    main 1 de 6). Si sale en CI, relanzar cuenta como intento.
+
+**Qué quedó abierto.**
+- Obs. 3 del revisor: un mesero que en el cheque son SÓLO espacios sale con nombre en blanco como
+  "No está en el catálogo", no como "Sin mesero". Está en §7 como pendiente de una instalación real;
+  el arreglo natural es normalizar a nulo en la ingesta.
+- Tiempo de mesa con reaperturas de cuenta: no verificado (§7).
+- Rol "de sucursal": las fixtures no lo tienen. El aislamiento entre sucursales se probó con el
+  filtro `sucursalId=A2` (ni filas, ni espejo, ni sincronización de A1).
+- F2-221 (Análisis) sigue mostrando su propia tabla de meseros sin ligar con el catálogo. Unificar
+  las dos vistas o enlazarlas es una mejora para F2-250.
+
+**Tests.**
+- **Nuevos, api:**
+  - `src/catalogos/meseros.spec.ts` (10 puros): cruce, otra sucursal, ambiguo, consolidación con
+    suma exacta, sin sincronizar o truncado, estados del espejo, ranking 1-2-2-4, promedios (Σ/Σ)
+    y nulos, totales.
+  - `src/catalogos/meseros.e2e.spec.ts` (9): **los 3 AC** con cuentas a mano (Σ = 440.50 =
+    `/ventas/resumen`; cancelaciones y descuentos aparte; baja en el POS y desaparecido con sus
+    cifras), más consolidación, promedio y scope (404, 401, 400, filtro por sucursal).
+  - `src/catalogos/meseros-seed.e2e.spec.ts` (4) sobre el generador del seed: Σ; clave por
+    `maestro.meseroClave`; bajas antes y después de `bajaDesde`, con hoy fijo 2026-11-15 y el día en
+    la zona de la sucursal.
+  - `openapi.spec` (+1).
+- **Nuevos, web:** `meseros/reglas.test.ts`, `meseros/csv.test.ts` y `Meseros.test.tsx` (5).
+- **Adaptados, no aflojados:** `analisis.e2e`, `seed-catalogos.spec` (constructor), los fixtures web
+  de Análisis, y `menu.test` y `Sidebar.test` (el ejemplo de pendiente pasa a Clientes/F2-232).
+- **Números:**
+  - /api: lint y typecheck limpios, `prisma validate` OK (sin migración), jest 1287/1289 con 0 skips.
+    Los 2 rojos son los de arriba.
+  - /web: build y lint limpios, vitest 890/890.
+
+**Qué haría distinto.** Buscar desde el plan quién más consume `/ventas/por-mesero` con `toEqual`:
+un campo aditivo en el contrato rompe todos esos tests.

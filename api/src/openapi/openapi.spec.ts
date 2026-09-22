@@ -108,6 +108,24 @@ describe('Contrato OpenAPI', () => {
     expect(Object.keys(esquemas.ProductoMenuDto.properties ?? {})).toContain('discrepancia');
   });
 
+  it('documenta el rendimiento por mesero y el tiempo de mesa de Análisis (F2-231)', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const op = paths['/catalogos/meseros/rendimiento']?.get;
+    expect(Object.keys(op?.responses ?? {}).sort()).toEqual(['200', '400', '401', '404']);
+    const parametros = (op?.parameters ?? []).map((p) => (p as { name: string }).name);
+    expect(parametros.sort()).toEqual(['desde', 'empresaId', 'hasta', 'sucursalId']);
+    expect(JSON.stringify(op?.responses?.['200'])).toContain('RendimientoMeserosDto');
+    const esquemas = doc.components?.schemas as Record<string, { properties?: object }>;
+    expect(Object.keys(esquemas.FilaRendimientoMeseroDto.properties ?? {})).toEqual(
+      expect.arrayContaining(['cruce', 'catalogo', 'descuentos', 'cancelados', 'posicion']),
+    );
+    const mesero = Object.keys(esquemas.VentaMeseroDto.properties ?? {});
+    expect(mesero).toEqual(expect.arrayContaining(['minutosPromedio', 'cuentasConDuracion']));
+    // Los segundos exactos son internos: no son parte del contrato.
+    expect(mesero).not.toContain('segundos');
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
@@ -120,6 +138,7 @@ describe('Contrato OpenAPI', () => {
         '/catalogos/grupos',
         '/catalogos/menu',
         '/catalogos/meseros',
+        '/catalogos/meseros/rendimiento',
         '/catalogos/productos',
         '/catalogos/productos/{id}',
         '/catalogos/productos/{id}/metadata',

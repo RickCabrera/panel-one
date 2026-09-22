@@ -645,6 +645,19 @@ export class VentaMeseroDto implements VentaMesero {
 
   @ApiProperty({ type: CanceladosMeseroDto })
   cancelados!: CanceladosMeseroDto;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '52.5',
+    description:
+      'F2-231: minutos promedio de sus cuentas (cierre − apertura), 1 decimal. Una duración ' +
+      'negativa no entra. Null sin duraciones válidas.',
+  })
+  minutosPromedio!: string | null;
+
+  @ApiProperty({ description: 'F2-231: cuentas que entran a `minutosPromedio`.' })
+  cuentasConDuracion!: number;
 }
 
 class ProductoAnalisisDto implements ProductoAnalisis {

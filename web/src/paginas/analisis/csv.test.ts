@@ -23,6 +23,8 @@ const ana: VentaMesero = {
   propina: '20.00',
   descuentos: { monto: '10.00', cuentas: 1 },
   cancelados: { cuentas: 1, monto: '70.00' },
+  minutosPromedio: null,
+  cuentasConDuracion: 0,
 };
 const pedro: VentaMesero = {
   ...ana,

@@ -30,6 +30,7 @@ import type { RequestAutenticado } from '../auth/request-autenticado';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import { CatalogosService, type Pagina } from './catalogos.service';
+import type { RendimientoMeseros } from './meseros';
 import {
   CatalogoQueryDto,
   DetalleProductoDto,
@@ -41,6 +42,8 @@ import {
   PaginaCatalogoLecturaDto,
   PaginaClientesDto,
   PaginaProductosDto,
+  RendimientoMeserosDto,
+  RendimientoMeserosQueryDto,
   SincronizacionSucursalDto,
   SinCatalogoQueryDto,
   VendidosSinCatalogoDto,
@@ -167,6 +170,30 @@ export class CatalogosController {
     @Query() q: SinCatalogoQueryDto,
   ): Promise<VendidosSinCatalogoDto> {
     return this.catalogos.vendidosSinCatalogo(scope, {
+      empresaId: q.empresaId,
+      sucursalId: q.sucursalId,
+      desde: q.desde,
+      hasta: q.hasta,
+    });
+  }
+
+  @Get('meseros/rendimiento')
+  @ApiOperation({
+    summary: 'Meseros (F2-231): rendimiento del periodo por mesero, ligado con el espejo.',
+    description:
+      'Las cifras son las de /ventas/por-mesero (mismo filtro, días LOCALES de cada sucursal): ' +
+      'Σ venta de `filas` = /ventas/resumen. Cancelaciones y descuentos van aparte, como conteo e ' +
+      'importe; la venta no los incluye. El cheque sólo trae el TEXTO del mesero: se liga con el ' +
+      'espejo por (sucursal, nombre sin espacios de más ni mayúsculas), y dos textos que ligan con ' +
+      'el mismo mesero salen en una fila. Un mesero dado de baja sale en los periodos en que ' +
+      'atendió. Ranking y promedio, por sucursal. Sin cache.',
+  })
+  @ApiOkResponse({ type: RendimientoMeserosDto })
+  rendimientoMeseros(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: RendimientoMeserosQueryDto,
+  ): Promise<RendimientoMeseros> {
+    return this.catalogos.rendimientoMeseros(scope, {
       empresaId: q.empresaId,
       sucursalId: q.sucursalId,
       desde: q.desde,

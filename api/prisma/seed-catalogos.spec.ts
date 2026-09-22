@@ -6,6 +6,7 @@ import type { Auditoria } from '../src/comun/auditoria';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import { ScopedPrismaService } from '../src/scope/scoped-prisma.service';
 import type { AgregadosVentasService } from '../src/ventas/agregados-ventas.service';
+import type { AnalisisService } from '../src/ventas/analisis.service';
 import { crearFixtures, FX, limpiarFixtures } from '../test/fixtures-auth';
 import { registrosDe, sembrarCatalogos, sincronizacionDelSeed } from './seed-catalogos';
 import { generarVentas, universoDe, type OpcionesVentas } from './seed-ventas';
@@ -136,6 +137,7 @@ describe('sembrarCatalogos() (F2-230)', () => {
       { ahora: () => RELOJ.getTime() },
       {} as Auditoria,
       {} as AgregadosVentasService,
+      {} as AnalisisService,
     );
     const menu = await servicio.menu({ tipo: 'empresa', empresaId: FX.empresaA }, FX.empresaA);
     const senalados = menu.categorias

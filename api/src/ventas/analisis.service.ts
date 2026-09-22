@@ -28,6 +28,20 @@ export interface VentaMesero {
   propina: string;
   descuentos: { monto: string; cuentas: number };
   cancelados: { cuentas: number; monto: string };
+  /**
+   * Minutos promedio de la cuenta (cierre − apertura), 1 decimal; null sin duraciones válidas.
+   * Misma regla que `porMesa`: una duración negativa no entra (F2-231).
+   */
+  minutosPromedio: string | null;
+  cuentasConDuracion: number;
+}
+
+/**
+ * Una fila de `porMesero` con los segundos exactos: sólo para quien necesita volver a promediar
+ * (Meseros, F2-231) sin promediar promedios. NO sale en `/ventas/por-mesero`.
+ */
+export interface VentaMeseroInterna extends VentaMesero {
+  segundos: Prisma.Decimal;
 }
 
 export interface ProductoAnalisis {
@@ -126,6 +140,19 @@ export class AnalisisService {
    * Σ venta = `resumen.venta`; los cancelados no suman y se cuentan aparte.
    */
   async porMesero(scope: EmpresaScope, filtro: FiltroVentas): Promise<VentaMesero[]> {
+    const filas = await this.porMeseroConSegundos(scope, filtro);
+    // Sin `segundos`: no es parte del contrato de /ventas/por-mesero.
+    return filas.map(({ segundos: _segundos, ...f }) => {
+      void _segundos;
+      return f;
+    });
+  }
+
+  /** `porMesero` con los segundos exactos de cada fila (ver `VentaMeseroInterna`). */
+  async porMeseroConSegundos(
+    scope: EmpresaScope,
+    filtro: FiltroVentas,
+  ): Promise<VentaMeseroInterna[]> {
     const q = await this.agregados.consulta(scope, filtro);
     const filas = await q.consultar<{
       sucursal_id: string;
@@ -140,6 +167,8 @@ export class AnalisisService {
       cuentas_con_descuento: number;
       cancelados: number;
       monto_cancelado: unknown;
+      segundos: unknown;
+      con_duracion: number;
     }>(Prisma.sql`SELECT u.sucursal_id, s.nombre AS sucursal, u.mesero,
         sum(u.cuenta)::int AS cuentas,
         COALESCE(sum(u.venta), 0) AS venta,
@@ -149,13 +178,16 @@ export class AnalisisService {
         COALESCE(sum(u.descuentos), 0) AS descuentos,
         (count(*) FILTER (WHERE u.cuenta = 1 AND u.descuentos <> 0))::int AS cuentas_con_descuento,
         sum(u.cancelada)::int AS cancelados,
-        COALESCE(sum(u.monto_cancelado), 0) AS monto_cancelado
+        COALESCE(sum(u.monto_cancelado), 0) AS monto_cancelado,
+        COALESCE(sum(u.segundos_abierta) FILTER (WHERE u.segundos_abierta >= 0), 0)::numeric AS segundos,
+        (count(*) FILTER (WHERE u.segundos_abierta >= 0))::int AS con_duracion
       FROM (
         SELECT sucursal_id, mesero, 1 AS cuenta, total AS venta, comensales, propina, descuentos,
-               0 AS cancelada, 0::numeric AS monto_cancelado
+               0 AS cancelada, 0::numeric AS monto_cancelado, segundos_abierta
         FROM ventas
         UNION ALL
-        SELECT sucursal_id, mesero, 0, 0::numeric, NULL::int, 0::numeric, 0::numeric, 1, total
+        SELECT sucursal_id, mesero, 0, 0::numeric, NULL::int, 0::numeric, 0::numeric, 1, total,
+               NULL::int
         FROM cancelados
       ) u
       JOIN sucursales_alcance s ON s.id = u.sucursal_id
@@ -164,6 +196,7 @@ export class AnalisisService {
         u.mesero COLLATE ucs_basic ASC NULLS LAST`);
     return filas.map((f) => {
       const venta = dec(f.venta);
+      const segundos = dec(f.segundos);
       return {
         sucursalId: f.sucursal_id,
         sucursal: f.sucursal,
@@ -182,6 +215,9 @@ export class AnalisisService {
           // (docs/esquema-sr.md §2).
           monto: pesos(dec(f.monto_cancelado)),
         },
+        minutosPromedio: dividir(segundos, f.con_duracion * 60, 1),
+        cuentasConDuracion: f.con_duracion,
+        segundos,
       };
     });
   }
