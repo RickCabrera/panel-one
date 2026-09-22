@@ -7,7 +7,7 @@ module.exports = {
   // Van EN SERIE (`--runInBand` en `npm test`): todos comparten ese Postgres y
   // el test del seed fotografía tablas enteras; en paralelo, los fixtures de un
   // archivo se colarían en la foto del otro.
-  roots: ['<rootDir>/src', '<rootDir>/prisma'],
+  roots: ['<rootDir>/src', '<rootDir>/prisma', '<rootDir>/scripts'],
   testRegex: '.*\\.spec\\.ts$',
   // Secretos JWT sintéticos para los tests (sólo si el entorno no trae otros).
   setupFiles: ['<rootDir>/test/entorno.ts'],
