@@ -920,7 +920,7 @@ después de un re-sync completo; y un visor de la empresa A recibe 404 (no 403) 
 de la empresa B.
 
 ### F2-231 · Meseros y rendimiento por mesero
-`[ ]` **Bloque D** · /web + /api
+`[x]` **Bloque D** · /web + /api
 
 > **Datos del seed:** persistir desde `api/prisma/seed-maestro/generarUniverso()` (F2-201),
 > no inventar otros. Ver la nota "De dónde salen los datos del seed" bajo la tabla de
