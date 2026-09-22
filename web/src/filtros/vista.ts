@@ -30,7 +30,7 @@ export function queryVista(parametros: URLSearchParams): string {
  * demás (el monitor es en vivo, Administración y Mi cuenta no tienen periodo) el periodo
  * sigue en la URL y reaparece al volver. Una vista nueva con periodo se agrega aquí.
  */
-export const VISTAS_CON_PERIODO: readonly string[] = ['/', '/tickets', '/reportes'];
+export const VISTAS_CON_PERIODO: readonly string[] = ['/', '/resumen', '/tickets', '/reportes'];
 
 export function usaPeriodo(pathname: string): boolean {
   // `/tickets/` también es Tickets para el router.

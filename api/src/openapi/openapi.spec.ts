@@ -162,21 +162,34 @@ describe('Contrato OpenAPI', () => {
 
     const nombres = (ruta: string) =>
       (paths[ruta]?.get?.parameters ?? []).map((p) => ('name' in p ? p.name : '')).sort();
-    expect(nombres('/ventas/resumen')).toEqual(['desde', 'empresaId', 'hasta', 'sucursalId']);
-    expect(nombres('/ventas/por-dia')).toEqual(['desde', 'empresaId', 'hasta', 'sucursalId']);
-    expect(nombres('/ventas/comparativo-sucursales')).toEqual([
-      'desde',
-      'empresaId',
-      'hasta',
-      'sucursalId',
-    ]);
-    expect(nombres('/ventas/top-productos')).toEqual(
-      ['desde', 'empresaId', 'hasta', 'limite', 'por', 'sucursalId'].sort(),
-    );
+    // `alturaAl` (F2-220): el corte "a la misma altura" va en el filtro común de /ventas/*.
+    const FILTRO = ['alturaAl', 'desde', 'empresaId', 'hasta', 'sucursalId'];
+    expect(nombres('/ventas/resumen')).toEqual(FILTRO);
+    expect(nombres('/ventas/por-dia')).toEqual(FILTRO);
+    expect(nombres('/ventas/por-hora')).toEqual(FILTRO);
+    expect(nombres('/ventas/formas-pago')).toEqual(FILTRO);
+    expect(nombres('/ventas/comparativo-sucursales')).toEqual(FILTRO);
+    expect(nombres('/ventas/top-productos')).toEqual([...FILTRO, 'limite', 'por'].sort());
     expect(nombres('/ventas/tickets')).toEqual(
       // `corte`: corte por recepción del export (F2-203).
-      ['corte', 'desde', 'empresaId', 'folio', 'hasta', 'pagina', 'porPagina', 'sucursalId'].sort(),
+      [...FILTRO, 'corte', 'folio', 'pagina', 'porPagina'].sort(),
     );
+    // Y su contrato dice lo que hace: instante con zona, exclusivo, sólo el último día, la
+    // hora local de cada sucursal y cómo se resuelve un cambio de horario.
+    const altura = paths['/ventas/resumen']?.get?.parameters?.find(
+      (p) => 'name' in p && p.name === 'alturaAl',
+    ) as { required?: boolean; description?: string; schema?: { format?: string } } | undefined;
+    expect(altura?.required).toBe(false);
+    expect(altura?.schema?.format).toBe('date-time');
+    for (const frase of [
+      'zona obligatoria',
+      'ÚLTIMO día',
+      'exclusivo',
+      'CADA sucursal',
+      'horario',
+    ]) {
+      expect(altura?.description).toContain(frase);
+    }
 
     const esquemas = components?.schemas ?? {};
     // Un promedio sin divisor es null: el contrato lo dice.

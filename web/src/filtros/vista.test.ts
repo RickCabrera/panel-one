@@ -25,9 +25,9 @@ describe('queryVista', () => {
 });
 
 describe('usaPeriodo', () => {
-  it('sólo Inicio, Tickets y Reportes pintan el selector', () => {
-    expect(VISTAS_CON_PERIODO).toEqual(['/', '/tickets', '/reportes']);
-    for (const ruta of ['/', '/tickets', '/reportes', '/tickets/', '/reportes//']) {
+  it('sólo Inicio, Resumen, Tickets y Reportes pintan el selector', () => {
+    expect(VISTAS_CON_PERIODO).toEqual(['/', '/resumen', '/tickets', '/reportes']);
+    for (const ruta of ['/', '/resumen', '/resumen/', '/tickets', '/reportes', '/tickets/', '/reportes//']) {
       expect(usaPeriodo(ruta)).toBe(true);
     }
     for (const ruta of ['/mesas', '/admin', '/cuenta', '/login', '/no-existe']) {

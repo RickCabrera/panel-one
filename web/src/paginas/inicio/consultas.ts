@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { pedir } from '../../api/cliente';
+import { llaveConAltura, mantenerSiSoloCambiaLaAltura } from '../../consultas/altura';
 import type { FormasPago, MesasSucursal, Resumen, VentaHora } from '../../api/tipos';
 import type { Rango } from '../../filtros/periodo';
 import { POLLING_MS } from '../mesas/reglas';
@@ -34,16 +35,15 @@ export function useVentas<E extends keyof Endpoints>(
   filtro: Filtro | null,
   rango: Rango | null,
   autoRefresco: boolean,
+  /** Corte "a la misma altura" (F2-220). Sin él, la llave es la de siempre. */
+  alturaAl?: string,
 ) {
+  const queryKey = llaveConAltura(
+    ['ventas', endpoint, filtro?.empresaId, filtro?.sucursalId ?? null, rango?.desde, rango?.hasta],
+    alturaAl,
+  );
   return useQuery({
-    queryKey: [
-      'ventas',
-      endpoint,
-      filtro?.empresaId,
-      filtro?.sucursalId ?? null,
-      rango?.desde,
-      rango?.hasta,
-    ],
+    queryKey,
     queryFn: ({ signal }) =>
       pedir<Endpoints[E]>(`/ventas/${endpoint}`, {
         query: {
@@ -51,11 +51,14 @@ export function useVentas<E extends keyof Endpoints>(
           sucursalId: filtro?.sucursalId,
           desde: rango?.desde,
           hasta: rango?.hasta,
+          alturaAl,
         },
         signal,
       }),
     enabled: filtro !== null && rango !== null,
     refetchInterval: autoRefresco ? AUTO_REFRESCO_MS : false,
+    placeholderData: (anterior, previa) =>
+      mantenerSiSoloCambiaLaAltura(anterior, previa?.queryKey, queryKey, alturaAl),
   });
 }
 

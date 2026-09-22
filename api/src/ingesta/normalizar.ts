@@ -6,12 +6,8 @@ import { FormaPago, Prisma } from '@prisma/client';
  * pasa por un `number` (float), ni al validar ni al redondear.
  */
 
-/**
- * ISO-8601 con zona OBLIGATORIA (`Z` u offset `±hh:mm`). Una fecha sin zona es
- * hora local de quién sabe dónde: se rechaza. Hasta 7 decimales de segundo
- * (lo que serializa .NET); se guardan milisegundos (`timestamptz(3)`).
- */
-export const ISO_CON_ZONA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,7})?(Z|[+-]\d{2}:\d{2})$/;
+// La regex vive en `comun/` (F2-220: también la usa el helper de scope de ventas).
+export { ISO_CON_ZONA } from '../comun/fechas';
 
 /**
  * Dinero: hasta 10 enteros (lo que cabe en NUMERIC(12,2)) y hasta 4 decimales,

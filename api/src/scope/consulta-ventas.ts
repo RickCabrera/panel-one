@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import { ISO_CON_ZONA } from '../comun/fechas';
 import type { EmpresaScope } from './empresa-scope';
 
 /**
@@ -41,6 +42,22 @@ export interface FiltroVentas {
   readonly desde: string;
   /** Día local de la sucursal, `YYYY-MM-DD`, inclusivo. */
   readonly hasta: string;
+  /**
+   * Corte "a la misma altura" (F2-220): un INSTANTE ISO con zona. En el ÚLTIMO día del
+   * rango (`hasta`) sólo entra lo ocurrido ANTES de la hora local que marca ese instante
+   * en la zona de CADA sucursal (corte exclusivo); los días anteriores van completos.
+   * Así "la semana pasada hasta ahora" corta CDMX a las 14:00 y Tijuana a las 13:00 con
+   * el mismo instante, que es lo que lleva cada una HOY. Sin él, el día va completo.
+   *
+   * DECISION PROVISIONAL (nocturno): sólo se usa la HORA local del instante, no su fecha. Con
+   * sucursales en zonas distintas, en la hora en que el día local de una sucursal no es el del
+   * panel (p. ej. Tijuana entre las 00:00 y la 01:00 de CDMX: allá sigue siendo ayer, 23:xx)
+   * su base se corta a las 23:xx mientras su "hoy" vale 0, y el Δ sale muy bajo; con una zona
+   * adelantada (Cancún) pasa al revés. Arreglo propuesto: comparar la fecha local del instante
+   * con el día de referencia (posterior → último día completo, anterior → corte a las 00:00,
+   * igual → a la hora local). Lo decide Ricardo (docs/nocturno-log.md, F2-220).
+   */
+  readonly alturaAl?: string;
 }
 
 /** Tiempo máximo de una consulta de agregados. Un agregado que tarda más es un bug. */
@@ -62,6 +79,34 @@ export const CTES_VENTAS = [
   'catalogo_formas',
   'tickets',
 ] as const;
+
+const HORA_ISO = /T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/;
+
+/**
+ * Un instante ISO con zona que existe de verdad: la forma de `ISO_CON_ZONA`, un día de
+ * calendario real (`2026-02-30T…` no) y hora, minuto, segundo y offset en rango. No se
+ * deja a `Date.parse`, que según el motor acepta o recorre fechas imposibles.
+ */
+function instanteValido(texto: unknown): boolean {
+  if (typeof texto !== 'string' || !ISO_CON_ZONA.test(texto)) {
+    return false;
+  }
+  const partes = HORA_ISO.exec(texto);
+  if (dia(texto.slice(0, 10)) === null || !partes) {
+    return false;
+  }
+  const [h, m, s] = [Number(partes[1]), Number(partes[2]), Number(partes[3])];
+  if (h > 23 || m > 59 || s > 59) {
+    return false;
+  }
+  if (partes[4] !== undefined) {
+    const [oh, om] = [Number(partes[5]), Number(partes[6])];
+    if (oh > 14 || om > 59) {
+      return false;
+    }
+  }
+  return true;
+}
 
 /** Un día de calendario real, en ms UTC de su medianoche, o null. */
 function dia(texto: unknown): number | null {
@@ -112,6 +157,9 @@ export function validarFiltro(filtro: FiltroVentas): void {
     } else if (dias > MAX_DIAS_RANGO) {
       errores.push(`el rango no puede pasar de ${MAX_DIAS_RANGO} días`);
     }
+  }
+  if (filtro.alturaAl !== undefined && !instanteValido(filtro.alturaAl)) {
+    errores.push('alturaAl debe ser un instante ISO-8601 válido con zona (Z u offset ±hh:mm)');
   }
   if (errores.length > 0) {
     throw new BadRequestException(errores);
@@ -231,7 +279,12 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
       : Prisma.sql`AND s.id = ${filtro.sucursalId}::uuid`;
   // Inicio del primer día y fin (exclusivo) del último, EN LA ZONA DE CADA SUCURSAL.
   const inicioLocal = Prisma.sql`(${filtro.desde}::date::timestamp AT TIME ZONE s.zona_horaria)`;
-  const finLocal = Prisma.sql`((${filtro.hasta}::date + 1)::timestamp AT TIME ZONE s.zona_horaria)`;
+  // Con `alturaAl` (F2-220), el último día termina en la hora local de ESE instante en la
+  // zona de cada sucursal, no a medianoche. Sin él, el SQL es idéntico al de siempre.
+  const finLocal =
+    filtro.alturaAl === undefined
+      ? Prisma.sql`((${filtro.hasta}::date + 1)::timestamp AT TIME ZONE s.zona_horaria)`
+      : Prisma.sql`((${filtro.hasta}::date + (${filtro.alturaAl}::timestamptz AT TIME ZONE s.zona_horaria)::time)::timestamp AT TIME ZONE s.zona_horaria)`;
   // Pre-filtro grueso en UTC (las zonas van de -12 a +14 h) que sí puede usar
   // los índices `(empresa_id, cerrado_at)` / `(sucursal_id, cerrado_at)`. En
   // `cancelados` va partido en dos ramas (con y sin `cerrado_at`) porque el

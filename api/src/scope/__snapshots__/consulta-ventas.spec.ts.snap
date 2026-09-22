@@ -1,0 +1,87 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`alturaAl (F2-220) sin alturaAl, el SQL es byte a byte el de antes de F2-220 1`] = `
+"WITH sucursales_alcance AS (
+    SELECT s.id, s.empresa_id, s.nombre, s.zona_horaria
+    FROM sucursales s
+    WHERE s.empresa_id = ?::uuid AND s.empresa_id = ?::uuid 
+  ),
+  ventas AS (
+    SELECT c.id, c.empresa_id, c.sucursal_id, c.folio, c.cerrado_at,
+           extract(hour FROM c.cerrado_at AT TIME ZONE s.zona_horaria)::int AS hora_local,
+           (c.cerrado_at AT TIME ZONE s.zona_horaria)::date AS dia_local,
+           c.comensales, c.subtotal, c.impuestos, c.descuentos, c.propina, c.total,
+           c.created_at AS recibido_at
+    FROM cheques c
+    JOIN sucursales_alcance s ON s.id = c.sucursal_id AND s.empresa_id = c.empresa_id
+    WHERE c.empresa_id = ?::uuid AND c.empresa_id = ?::uuid 
+      AND NOT c.cancelado
+      AND c.cerrado_at >= ((?::date::timestamp AT TIME ZONE 'UTC') - interval '15 hours') AND c.cerrado_at < (((?::date + 1)::timestamp AT TIME ZONE 'UTC') + interval '15 hours')
+      AND c.cerrado_at >= (?::date::timestamp AT TIME ZONE s.zona_horaria) AND c.cerrado_at < ((?::date + 1)::timestamp AT TIME ZONE s.zona_horaria)
+  ),
+  cancelados AS (
+    SELECT c.id, c.empresa_id, c.sucursal_id, c.folio,
+           COALESCE(c.cerrado_at, c.abierto_at) AS momento, c.created_at AS recibido_at
+    FROM cheques c
+    JOIN sucursales_alcance s ON s.id = c.sucursal_id AND s.empresa_id = c.empresa_id
+    WHERE c.empresa_id = ?::uuid AND c.empresa_id = ?::uuid 
+      AND c.cancelado
+      AND (
+        (c.cerrado_at >= ((?::date::timestamp AT TIME ZONE 'UTC') - interval '15 hours') AND c.cerrado_at < (((?::date + 1)::timestamp AT TIME ZONE 'UTC') + interval '15 hours'))
+        OR (c.cerrado_at IS NULL AND c.abierto_at >= ((?::date::timestamp AT TIME ZONE 'UTC') - interval '15 hours') AND c.abierto_at < (((?::date + 1)::timestamp AT TIME ZONE 'UTC') + interval '15 hours'))
+      )
+      AND COALESCE(c.cerrado_at, c.abierto_at) >= (?::date::timestamp AT TIME ZONE s.zona_horaria)
+      AND COALESCE(c.cerrado_at, c.abierto_at) < ((?::date + 1)::timestamp AT TIME ZONE s.zona_horaria)
+  ),
+  partidas_ventas AS (
+    SELECT p.cheque_id, p.empresa_id, v.sucursal_id, p.producto, p.categoria, p.cantidad, p.total
+    FROM cheque_partidas p
+    JOIN ventas v ON v.id = p.cheque_id AND v.empresa_id = p.empresa_id
+    WHERE p.empresa_id = ?::uuid AND p.empresa_id = ?::uuid
+  ),
+  pagos_ventas AS (
+    SELECT g.cheque_id, g.empresa_id, v.sucursal_id, g.forma_raw, g.monto
+    FROM cheque_pagos g
+    JOIN ventas v ON v.id = g.cheque_id AND v.empresa_id = g.empresa_id
+    WHERE g.empresa_id = ?::uuid AND g.empresa_id = ?::uuid
+  ),
+  catalogo_formas AS (
+    SELECT f.empresa_id, f.forma_raw, f.forma::text AS forma
+    FROM formas_pago_catalogo f
+    WHERE f.empresa_id = ?::uuid AND f.empresa_id = ?::uuid
+  ),
+  tickets AS (
+    SELECT id, empresa_id, sucursal_id, folio, cerrado_at AS momento, false AS cancelado,
+           recibido_at FROM ventas
+    UNION ALL
+    SELECT id, empresa_id, sucursal_id, folio, momento, true AS cancelado,
+           recibido_at FROM cancelados
+  ) SELECT 1 FROM ventas"
+`;
+
+exports[`alturaAl (F2-220) sin alturaAl, el SQL es byte a byte el de antes de F2-220 2`] = `
+[
+  "f1011000-0000-4000-8000-00000000000a",
+  "f1011000-0000-4000-8000-00000000000a",
+  "f1011000-0000-4000-8000-00000000000a",
+  "f1011000-0000-4000-8000-00000000000a",
+  "2026-11-01",
+  "2026-11-30",
+  "2026-11-01",
+  "2026-11-30",
+  "f1011000-0000-4000-8000-00000000000a",
+  "f1011000-0000-4000-8000-00000000000a",
+  "2026-11-01",
+  "2026-11-30",
+  "2026-11-01",
+  "2026-11-30",
+  "2026-11-01",
+  "2026-11-30",
+  "f1011000-0000-4000-8000-00000000000a",
+  "f1011000-0000-4000-8000-00000000000a",
+  "f1011000-0000-4000-8000-00000000000a",
+  "f1011000-0000-4000-8000-00000000000a",
+  "f1011000-0000-4000-8000-00000000000a",
+  "f1011000-0000-4000-8000-00000000000a",
+]
+`;

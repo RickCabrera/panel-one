@@ -15,7 +15,7 @@ import {
   MinLength,
 } from 'class-validator';
 
-import { ISO_CON_ZONA } from '../../ingesta/normalizar';
+import { ISO_CON_ZONA } from '../../comun/fechas';
 import { MAX_DIAS_RANGO } from '../../scope/consulta-ventas';
 import {
   LIMITE_TOP_DEFAULT,
@@ -38,6 +38,21 @@ const DIA = /^\d{4}-\d{2}-\d{2}$/;
 const DOC_DIA =
   'Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de "hoy" se hace en la ' +
   `zona de la sucursal, no en la del servidor. Rango máximo: ${MAX_DIAS_RANGO} días.`;
+
+const DOC_ALTURA =
+  'Corte "a la misma altura" (F2-220), para comparar contra un periodo anterior hasta la ' +
+  'misma hora. Un INSTANTE ISO-8601 con zona obligatoria (sin zona, 400). Sólo afecta al ' +
+  'ÚLTIMO día del rango (`hasta`): de ese día entra únicamente lo ocurrido ANTES de la hora ' +
+  'local que marca el instante en la zona de CADA sucursal (corte exclusivo: una cuenta ' +
+  'cerrada justo a esa hora no entra). Los días anteriores van completos. Con sucursales en ' +
+  'zonas distintas, cada una se corta en su propia hora local del mismo instante (sólo la ' +
+  'hora, no la fecha: en la hora en que el día local de una sucursal no es el de quien pide, ' +
+  'su corte no corresponde a "hoy"; supuesto provisional). Los ' +
+  'cancelados se ubican por su cierre o, sin cierre, por su apertura. Si ese día la hora ' +
+  'local no existe (el reloj se adelanta) se lee con el offset de ANTES del salto (02:30 que ' +
+  'no existe = 03:30 del horario nuevo); si pasa dos veces (el reloj se atrasa), con el de ' +
+  'DESPUÉS (la segunda vez). Lo resuelve Postgres y lo fija un e2e. Sin él, el último día va ' +
+  'completo.';
 
 /** El filtro común de /ventas/*. El servicio lo vuelve a validar (`validarFiltro`). */
 export class FiltroVentasQueryDto {
@@ -64,6 +79,19 @@ export class FiltroVentasQueryDto {
   @ApiProperty({ example: '2026-09-20', description: DOC_DIA })
   @Matches(DIA, { message: 'hasta debe ser YYYY-MM-DD' })
   hasta!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    pattern: ISO_CON_ZONA.source,
+    example: '2026-09-21T20:30:00.000Z',
+    description: DOC_ALTURA,
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(ISO_CON_ZONA, { message: '$property debe ser ISO-8601 con zona (Z u offset ±hh:mm)' })
+  @IsISO8601({ strict: true, strictSeparator: true })
+  alturaAl?: string;
 }
 
 export class TopProductosQueryDto extends FiltroVentasQueryDto {

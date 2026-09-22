@@ -44,11 +44,18 @@ const DESC_404 =
   'Misma respuesta en todos los casos (nunca 403).';
 
 function filtroDe(q: FiltroVentasQueryDto): FiltroVentas {
-  return { empresaId: q.empresaId, sucursalId: q.sucursalId, desde: q.desde, hasta: q.hasta };
+  return {
+    empresaId: q.empresaId,
+    sucursalId: q.sucursalId,
+    desde: q.desde,
+    hasta: q.hasta,
+    alturaAl: q.alturaAl,
+  };
 }
 
+/** `alturaAl` va al FINAL y como `''` sin él: las llaves de antes no cambian de significado. */
 function parametros(q: FiltroVentasQueryDto): string[] {
-  return [q.empresaId, q.sucursalId ?? '', q.desde, q.hasta];
+  return [q.empresaId, q.sucursalId ?? '', q.desde, q.hasta, q.alturaAl ?? ''];
 }
 
 /**

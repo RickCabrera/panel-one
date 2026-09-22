@@ -132,7 +132,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'ventas.resumen',
         texto: 'Resumen',
         icono: LayoutDashboard,
-        pendiente: construye('F2-220'),
+        destino: { ruta: '/resumen' },
       },
       { id: 'ventas.tickets', texto: 'Tickets', icono: Receipt, destino: { ruta: '/tickets' } },
       {
