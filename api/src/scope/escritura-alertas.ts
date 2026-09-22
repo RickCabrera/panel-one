@@ -130,6 +130,24 @@ export class TransaccionAlertas {
     return count;
   }
 
+  /** La marca de agua: el instante de la última observación aplicada (ms), o null. */
+  async marcaDeAgua(): Promise<number | null> {
+    const fila = await this.#tx.alertaEvaluacion.findFirst({
+      where: { empresaId: this.empresaId },
+      select: { observadoAt: true },
+    });
+    return fila?.observadoAt.getTime() ?? null;
+  }
+
+  /** Avanza la marca de agua (nunca la retrocede: el caller ya comparó bajo el candado). */
+  async avanzarMarca(instante: Date): Promise<void> {
+    await this.#tx.alertaEvaluacion.upsert({
+      where: { empresaId: this.empresaId },
+      create: { empresaId: this.empresaId, observadoAt: instante },
+      update: { observadoAt: instante },
+    });
+  }
+
   async guardarRegla(tipo: TipoAlerta, activa: boolean, umbral: number): Promise<void> {
     await this.#tx.reglaAlerta.upsert({
       where: { empresaId_tipo: { empresaId: this.empresaId, tipo } },
@@ -148,13 +166,17 @@ export interface ClienteAlertas {
   ): Promise<T>;
 }
 
+/**
+ * ¿El error es el `lock_timeout` de Postgres (55P03) esperando el candado? Sólo ése: una
+ * transacción que expira por otra causa (P2028 por una sentencia lenta, el pool sin
+ * conexiones) NO es "otra evaluación tiene el candado" y sale como el error que es.
+ */
 function esCandadoOcupado(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
     return false;
   }
-  // P2028: la transacción no se pudo abrir o expiró. 55P03: lock_timeout de Postgres.
   const meta = error.meta as { code?: unknown } | undefined;
-  return error.code === 'P2028' || meta?.code === '55P03' || error.message.includes('55P03');
+  return meta?.code === '55P03' || error.message.includes('55P03');
 }
 
 export class EscrituraAlertas {

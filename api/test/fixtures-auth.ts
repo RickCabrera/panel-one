@@ -88,6 +88,7 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   // El centro de alertas (F2-224) cuelga de la empresa y de la sucursal.
   await prisma.alerta.deleteMany(deEstas);
   await prisma.reglaAlerta.deleteMany(deEstas);
+  await prisma.alertaEvaluacion.deleteMany(deEstas);
   await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });
   await prisma.empresa.deleteMany({ where: { id: { in: empresas } } });
 }

@@ -74,6 +74,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'agenteEstado',
       // F2-224: centro de alertas; sus escrituras van por `alertas(scope)`, no por aquí.
       'alerta',
+      'alertaEvaluacion',
       'cheque',
       'chequePago',
       'chequePartida',

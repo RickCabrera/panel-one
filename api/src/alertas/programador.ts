@@ -64,7 +64,9 @@ export class AlertasProgramador implements OnApplicationBootstrap, OnModuleDestr
       const empresas = await this.alertas.empresasAEvaluar();
       for (const id of empresas) {
         try {
-          await this.alertas.evaluarEmpresa(id);
+          if (!(await this.alertas.evaluarEmpresa(id))) {
+            this.logger.debug(`Observación de la empresa ${id} descartada: llegó tarde.`);
+          }
         } catch (error) {
           this.logger.warn(`No se evaluaron las alertas de la empresa ${id}: ${String(error)}`);
         }

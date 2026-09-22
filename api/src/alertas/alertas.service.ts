@@ -210,8 +210,28 @@ export class AlertasService {
     return salida;
   }
 
-  /** Aplica una observación bajo el candado ya tomado. Cierra antes de abrir. */
-  private async aplicarEn(tx: TransaccionAlertas, obs: Observacion, ahora: number): Promise<void> {
+  /**
+   * Aplica una observación bajo el candado ya tomado. Cierra antes de abrir.
+   *
+   * Marca de agua (bloqueo B1 del revisor, gate del entregable): el candado ordena las
+   * APLICACIONES, no las observaciones. Una observación tomada FUERA del candado con un
+   * instante anterior a la última aplicada llegó tarde: aplicarla cerraría con una hora
+   * anterior a la apertura (viola `alertas_abierta_chk`) o abriría una fila fantasma. Se
+   * descarta (devuelve `false`). Una observación tomada DENTRO del candado (`fresca`) es la
+   * más nueva por construcción y siempre se aplica. La hora que se escribe nunca es anterior
+   * a la marca, así que `cerrada_at >= abierta_at` se sostiene aunque el reloj retroceda.
+   */
+  private async aplicarEn(
+    tx: TransaccionAlertas,
+    obs: Observacion,
+    observadoAt: number,
+    fresca: boolean,
+  ): Promise<boolean> {
+    const marca = await tx.marcaDeAgua();
+    if (!fresca && marca !== null && observadoAt < marca) {
+      return false;
+    }
+    const ahora = marca === null ? observadoAt : Math.max(observadoAt, marca);
     const [empresaActiva, sucursalesActivas, guardadas, abiertas] = await Promise.all([
       tx.empresaActiva(),
       tx.sucursalesActivas(),
@@ -233,20 +253,29 @@ export class AlertasService {
       await tx.cerrar(ids, instante, motivo);
     }
     await tx.abrir(cambios.abrir, instante);
+    await tx.avanzarMarca(instante);
+    return true;
   }
 
-  /** Aplica una observación (tomada antes) bajo el candado de su empresa. */
-  async aplicar(obs: Observacion, ahora: number): Promise<void> {
-    await this.datos
+  /**
+   * Aplica una observación tomada ANTES (fuera del candado) bajo el candado de su empresa.
+   * Devuelve `false` si llegó tarde y se descartó (ver `aplicarEn`).
+   */
+  async aplicar(obs: Observacion, observadoAt: number): Promise<boolean> {
+    return this.datos
       .alertas(SCOPE_SISTEMA)
-      .bajoCandado(obs.empresaId, (tx) => this.aplicarEn(tx, obs, ahora));
+      .bajoCandado(obs.empresaId, (tx) => this.aplicarEn(tx, obs, observadoAt, false));
   }
 
-  /** Una vuelta completa para una empresa: observar y aplicar. La usa el programador. */
-  async evaluarEmpresa(empresaId: string): Promise<void> {
+  /**
+   * Una vuelta completa para una empresa: observar y aplicar. La usa el programador. Si otra
+   * evaluación más nueva se aplicó primero, ésta se descarta sin error: la siguiente vuelta
+   * vuelve a observar.
+   */
+  async evaluarEmpresa(empresaId: string): Promise<boolean> {
     const ahora = this.reloj.ahora();
     const obs = await this.observar(empresaId, ahora);
-    await this.aplicar(obs, ahora);
+    return this.aplicar(obs, ahora);
   }
 
   /** Empresas a evaluar: las activas, más las inactivas que aún tengan alertas abiertas. */
@@ -338,12 +367,14 @@ export class AlertasService {
     }
     // 404 con el scope del USUARIO antes de observar nada.
     await verificarAlcance(this.datos.para(scope), empresaId);
-    const ahora = this.reloj.ahora();
-    const obs = await this.observar(empresaId, ahora);
     try {
       await this.datos.alertas(scope).bajoCandado(empresaId, async (tx) => {
         await tx.guardarRegla(tipo, cambio.activa, cambio.umbral);
-        await this.aplicarEn(tx, obs, ahora);
+        // Se observa CON el candado tomado: ninguna otra aplicación puede colarse entre esta
+        // observación y su aplicación, así que es la más nueva y nunca se descarta.
+        const ahora = this.reloj.ahora();
+        const obs = await this.observar(empresaId, ahora);
+        await this.aplicarEn(tx, obs, ahora, true);
       });
     } catch (error) {
       if (error instanceof CandadoAlertasOcupado) {

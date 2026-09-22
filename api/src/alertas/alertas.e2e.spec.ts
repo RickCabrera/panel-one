@@ -348,6 +348,89 @@ describe('Centro de alertas (e2e, F2-224)', () => {
     expect(dobles).toEqual([{ n: 0 }]);
   });
 
+  /** Un snapshot de A1 capturado y recibido en `t`, con las cuentas indicadas. */
+  async function snapshotEn(t: number, mesas: MesaSeed[]) {
+    await prisma.mesaSnapshot.create({
+      data: {
+        empresaId: FX.empresaA,
+        sucursalId: FX.sucursalA1,
+        capturadoAt: new Date(t),
+        recibidoAt: new Date(t),
+        payload: { origen: 'e2e', mesas } as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+  const todas = () =>
+    prisma.alerta.findMany({ where: { empresaId: FX.empresaA }, orderBy: { id: 'asc' } });
+
+  it('B1 (entregable): una observación vieja aplicada DESPUÉS de una nueva se descarta', async () => {
+    const [x] = esperadasMesa(60);
+    const sinX = mesasVivas.filter((m) => m.folio !== x);
+
+    // Caso 2 del revisor: la vieja VE la cuenta X; la nueva ya no. Sin marca de agua, la vieja
+    // abriría una fila fantasma de X con una hora anterior al último cierre.
+    const t1 = T0 + 60_000;
+    await snapshotEn(t1, mesasVivas);
+    reloj.t = t1;
+    const vieja = await servicio.observar(FX.empresaA, t1);
+    const t2 = T0 + 90_000;
+    await snapshotEn(t2, sinX);
+    reloj.t = t2;
+    const nueva = await servicio.observar(FX.empresaA, t2);
+    expect(await servicio.aplicar(nueva, t2)).toBe(true);
+    const tras = await todas();
+    expect(await servicio.aplicar(vieja, t1)).toBe(false);
+    expect(await todas()).toEqual(tras);
+
+    // Caso 1 del revisor: la vieja NO ve X; la nueva la abre. Sin marca de agua, la vieja la
+    // cerraría con una hora anterior a su apertura (CHECK violado → la transacción truena).
+    const t3 = T0 + 120_000;
+    await snapshotEn(t3, mesasVivas);
+    reloj.t = t3;
+    const nueva2 = await servicio.observar(FX.empresaA, t3);
+    expect(await servicio.aplicar(nueva2, t3)).toBe(true);
+    const abiertaX = await prisma.alerta.findFirstOrThrow({
+      where: { empresaId: FX.empresaA, tipo: TipoAlerta.mesa_abierta, llave: x, cerradaAt: null },
+    });
+    expect(abiertaX.abiertaAt.getTime()).toBe(t3);
+    const antes = await todas();
+    await expect(servicio.aplicar(nueva, t2)).resolves.toBe(false);
+    expect(await todas()).toEqual(antes);
+  });
+
+  it('B1 (entregable): el PUT observa con el candado tomado y nunca da 500 por el orden', async () => {
+    const t4 = T0 + 150_000;
+    reloj.t = t4;
+    const vieja = await servicio.observar(FX.empresaA, t4);
+    reloj.t = T0 + 180_000;
+    await snapshotEn(reloj.t, mesasVivas);
+    const r = await put('cuenta_sin_imprimir', {
+      empresaId: FX.empresaA,
+      activa: true,
+      umbral: 30,
+    });
+    expect(r.status).toBe(200);
+    expect(await servicio.aplicar(vieja, t4)).toBe(false);
+
+    // Un reloj que retrocede (ajuste de hora del servidor) tampoco rompe: la hora que se
+    // escribe nunca es anterior a la marca, así que ningún cierre queda antes de su apertura.
+    reloj.t = T0;
+    const r2 = await put('mesa_abierta', { empresaId: FX.empresaA, activa: true, umbral: 200 });
+    expect(r2.status).toBe(200);
+    const incoherentes = await prisma.alerta.count({
+      where: { empresaId: FX.empresaA, cerradaAt: { not: null } },
+    });
+    expect(incoherentes).toBeGreaterThan(0);
+    const [malas] = await prisma.$queryRaw<Array<{ n: number }>>`
+      SELECT count(*)::int AS n FROM alertas
+      WHERE empresa_id = ${FX.empresaA}::uuid AND cerrada_at < abierta_at`;
+    expect(malas.n).toBe(0);
+    reloj.t = T0 + 180_000;
+    expect(
+      (await put('mesa_abierta', { empresaId: FX.empresaA, activa: true, umbral: 60 })).status,
+    ).toBe(200);
+  });
+
   describe('AC3 y lectura', () => {
     it('abiertas: crítica primero, y es exactamente lo abierto en la base', async () => {
       const r = await get(`/alertas/abiertas?empresaId=${FX.empresaA}`);

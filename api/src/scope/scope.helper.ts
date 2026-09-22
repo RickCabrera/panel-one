@@ -27,6 +27,7 @@ export const LLAVE_EMPRESA = {
   // F2-224. Las escribe SÓLO `EscrituraAlertas` (bajo candado por empresa).
   Alerta: 'empresaId',
   ReglaAlerta: 'empresaId',
+  AlertaEvaluacion: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

@@ -46,6 +46,7 @@ model Empresa {
   correosEnviados    CorreoEnviado[]
   alertas            Alerta[]
   reglasAlerta       ReglaAlerta[]
+  alertaEvaluacion   AlertaEvaluacion?
 
   @@map("empresas")
 }
@@ -458,4 +459,18 @@ model ReglaAlerta {
   // Empieza por empresa_id: también es el índice por empresa de esta tabla.
   @@unique([empresaId, tipo], map: "reglas_alerta_empresa_id_tipo_key")
   @@map("reglas_alerta")
+}
+
+// Marca de agua de la evaluación de alertas por empresa (F2-224): el instante de la última
+// observación APLICADA. Se lee y se avanza bajo el candado de la empresa. Una observación
+// tomada fuera del candado con un instante anterior a la marca llegó tarde (otra más nueva ya
+// se aplicó) y se descarta: aplicarla cerraría con una hora anterior a la apertura o abriría
+// una fila fantasma.
+model AlertaEvaluacion {
+  empresaId   String   @id @map("empresa_id") @db.Uuid
+  observadoAt DateTime @map("observado_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+
+  @@map("alertas_evaluacion")
 }
