@@ -9,11 +9,13 @@ import { terminarSesion } from '../auth/sesion';
 import { crearQueryClient } from '../consultas/queryClient';
 import {
   EMPRESA_A,
+  EMPRESA_B,
   instalarApiFalsa,
   json,
   sesion,
   SUCURSAL_A1,
   SUCURSAL_A2,
+  SUCURSAL_B1,
   usuario,
   type Llamada,
   type Manejador,
@@ -167,6 +169,7 @@ function montar(ruta: string) {
 const texto = (testId: string) => screen.getByTestId(testId).textContent ?? '';
 const celda = (filaId: string, id: string) =>
   within(screen.getByTestId(filaId)).getByTestId(id).textContent ?? '';
+const ventaTotal = () => screen.getByRole('region', { name: 'Venta total' });
 const CENTRO = `fila-${SUCURSAL_A1.id}`;
 const TIJUANA = `fila-${A2.id}`;
 const ordenFilas = () =>
@@ -201,6 +204,8 @@ describe('AC · "este mes vs mes anterior" cuadra con los dashboards individuale
     const total = {
       ventaA: celda('fila-total', 'venta-a'),
       ventaB: celda('fila-total', 'venta-b'),
+      ticketsA: celda('fila-total', 'cuentas-a'),
+      ticketsB: celda('fila-total', 'cuentas-b'),
       ticketA: celda('fila-total', 'ticketPromedio-a'),
       ticketB: celda('fila-total', 'ticketPromedio-b'),
       comensalesA: celda('fila-total', 'comensales-a'),
@@ -209,15 +214,24 @@ describe('AC · "este mes vs mes anterior" cuadra con los dashboards individuale
     expect(total).toEqual({
       ventaA: '$40,000.00',
       ventaB: '$40,000.00',
+      ticketsA: '85',
+      ticketsB: '80',
       ticketA: '$470.59',
       ticketB: '$500.00',
       comensalesA: '150',
       comensalesB: '200',
     });
     expect(texto('cobertura-comensales')).toBe('Periodo A: 60 de 85 cuentas traían comensales.');
-    const centro = { a: celda(CENTRO, 'venta-a'), b: celda(CENTRO, 'venta-b') };
-    expect(centro).toEqual({ a: '$30,000.00', b: '$40,000.00' });
+    const centro = {
+      a: celda(CENTRO, 'venta-a'),
+      b: celda(CENTRO, 'venta-b'),
+      ticketsA: celda(CENTRO, 'cuentas-a'),
+      ticketsB: celda(CENTRO, 'cuentas-b'),
+    };
+    expect(centro).toEqual({ a: '$30,000.00', b: '$40,000.00', ticketsA: '60', ticketsB: '80' });
     expect(celda(TIJUANA, 'venta-a')).toBe('$10,000.00');
+    const tijuanaTicketsA = celda(TIJUANA, 'cuentas-a');
+    expect(tijuanaTicketsA).toBe('25');
     // Tijuana sin cuentas en B: "—" en las cuatro métricas y en sus Δ, nunca $0.00 ni 0.
     for (const m of ['venta', 'cuentas', 'ticketPromedio', 'comensales']) {
       expect(celda(TIJUANA, `${m}-b`)).toBe('—');
@@ -233,7 +247,7 @@ describe('AC · "este mes vs mes anterior" cuadra con los dashboards individuale
     expect(new Set(resumenes.map(clave))).toEqual(new Set([ESTE_MES, MES_ANTERIOR]));
     cleanup();
 
-    // Inicio con "Este mes" y con "Mes anterior": la venta total, el ticket y los comensales.
+    // Inicio con "Este mes" y con "Mes anterior": venta total, tickets, ticket y comensales.
     for (const [periodo, lado] of [
       ['mes', 'A'],
       ['mes-anterior', 'B'],
@@ -241,20 +255,22 @@ describe('AC · "este mes vs mes anterior" cuadra con los dashboards individuale
       montar(`/?empresa=${A}&periodo=${periodo}`);
       await screen.findByTestId('venta-total');
       expect(texto('venta-total')).toBe(total[`venta${lado}`]);
+      expect(ventaTotal()).toHaveTextContent(`${total[`tickets${lado}`]} cuentas cerradas`);
       expect(texto('ticket-promedio')).toBe(total[`ticket${lado}`]);
       expect(texto('comensales')).toBe(total[`comensales${lado}`]);
       cleanup();
     }
 
     // Inicio por sucursal: Centro en A y en B, Tijuana en A.
-    for (const [sucursal, periodo, esperado] of [
-      [SUCURSAL_A1.id, 'mes', centro.a],
-      [SUCURSAL_A1.id, 'mes-anterior', centro.b],
-      [A2.id, 'mes', '$10,000.00'],
+    for (const [sucursal, periodo, esperado, tickets] of [
+      [SUCURSAL_A1.id, 'mes', centro.a, centro.ticketsA],
+      [SUCURSAL_A1.id, 'mes-anterior', centro.b, centro.ticketsB],
+      [A2.id, 'mes', '$10,000.00', tijuanaTicketsA],
     ] as const) {
       montar(`/?empresa=${A}&sucursal=${sucursal}&periodo=${periodo}`);
       await screen.findByTestId('venta-total');
       expect(texto('venta-total')).toBe(esperado);
+      expect(ventaTotal()).toHaveTextContent(`${tickets} cuentas cerradas`);
       cleanup();
     }
 
@@ -418,6 +434,17 @@ describe('estados vacíos', () => {
     const c = within(screen.getByTestId(TIJUANA)).getByTestId('comensales-a');
     expect(c).toHaveTextContent('0');
     expect(c.getAttribute('title')).toContain('no distingue');
+    // Con B comparable (Tijuana 20 comensales) el Δ sale −100 % y lleva la misma salvedad.
+    cleanup();
+    montar(`/comparativos?empresa=${A}&periodo=mes`);
+    await screen.findByTestId('fila-total');
+    const d = within(screen.getByTestId(TIJUANA)).getByTestId('comensales-delta');
+    expect(d).toHaveTextContent('-100.0 %');
+    expect(d.getAttribute('title')).toContain('no distingue');
+    // Centro sí registró comensales: su Δ no lleva salvedad.
+    expect(
+      within(screen.getByTestId(CENTRO)).getByTestId('comensales-delta').getAttribute('title'),
+    ).toBeNull();
   });
 
   it('si una consulta falla, se ve el error y no una tabla a medias', async () => {
@@ -455,6 +482,52 @@ describe('alcance', () => {
     soltar();
     await screen.findByTestId(TIJUANA);
     expect(ordenFilas()).toEqual([TIJUANA]);
+  });
+
+  it('al cambiar de empresa (admin_global) nunca se ven las filas de la anterior', async () => {
+    const user = userEvent.setup();
+    const B = { ...EMPRESA_B, activo: true };
+    let soltar: () => void = () => {};
+    const pausa = new Promise<void>((r) => {
+      soltar = r;
+    });
+    const deB = (l: Llamada) => l.query.get('empresaId') === B.id;
+    api({
+      'POST /auth/refresh': () => json(200, sesion(usuario('admin_global'))),
+      'GET /empresas': () => json(200, [EMPRESA_A, B]),
+      'GET /sucursales': (l) =>
+        json(200, l.query.get('empresaId') === B.id ? [SUCURSAL_B1] : [SUCURSAL_A1, A2]),
+      'GET /ventas/resumen': (l) =>
+        json(200, deB(l) ? resumen('7000.00', 7, '1000.00', 14, 7) : resumenDe(l, SUCURSALES)),
+      'GET /ventas/comparativo-sucursales': async (l) => {
+        if (!deB(l)) return json(200, filasDe(l, SUCURSALES));
+        await pausa;
+        return json(200, [fila(SUCURSAL_B1, '7000.00', 7, '1000.00', 14)]);
+      },
+      'GET /mesas/abiertas': () => json(200, []),
+    });
+    montar(`/comparativos?empresa=${A}&periodo=mes`);
+    await screen.findByTestId(CENTRO);
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Empresa' }), B.id);
+    await waitFor(() => expect(screen.queryByTestId('tabla-comparativos')).toBeNull());
+    expect(screen.queryByTestId(CENTRO)).toBeNull();
+    expect(screen.queryByTestId(TIJUANA)).toBeNull();
+    soltar();
+    await screen.findByTestId(`fila-${SUCURSAL_B1.id}`);
+    expect(ordenFilas()).toEqual([`fila-${SUCURSAL_B1.id}`]);
+    expect(celda('fila-total', 'venta-a')).toBe('$7,000.00');
+  });
+
+  it('el visor de la empresa A ve la matriz de su empresa y nada consulta otra', async () => {
+    const a = api({
+      'POST /auth/refresh': () => json(200, sesion(usuario('visor', 'Vero Visor'))),
+    });
+    montar(`/comparativos?empresa=${A}&periodo=mes`);
+    await screen.findByTestId('fila-total');
+    expect(ordenFilas()).toEqual([CENTRO, TIJUANA]);
+    const ventas = a.llamadas.filter((l) => l.ruta.startsWith('/ventas/'));
+    expect(ventas.length).toBeGreaterThan(0);
+    expect(new Set(ventas.map((l) => l.query.get('empresaId')))).toEqual(new Set([A]));
   });
 });
 

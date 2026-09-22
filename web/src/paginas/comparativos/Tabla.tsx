@@ -44,7 +44,18 @@ function Cifra({ c, m, testId }: { c: Cifras | null; m: Metrica; testId: string 
 }
 
 /** Δ compacto para la celda: % arriba y diferencia abajo; sin base, "—" con el porqué. */
-function CeldaDelta({ d, dinero, testId }: { d: Delta; dinero: boolean; testId: string }) {
+function CeldaDelta({
+  d,
+  dinero,
+  testId,
+  aviso,
+}: {
+  d: Delta;
+  dinero: boolean;
+  testId: string;
+  /** Salvedad que el Δ no puede quitarse (comensales en 0 que quizá no se registraron). */
+  aviso?: string;
+}) {
   if (d.tipo === 'sinBase') {
     return (
       <td className={`${NUM} text-tinta-tenue`} data-testid={testId} title={d.razon}>
@@ -58,7 +69,7 @@ function CeldaDelta({ d, dinero, testId }: { d: Delta; dinero: boolean; testId: 
     ? diferenciaEnPesos(d.diferencia)
     : `${d.diferencia > 0n ? '+' : ''}${d.diferencia}`;
   return (
-    <td className={`${NUM} ${color}`} data-testid={testId}>
+    <td className={`${NUM} ${color}`} data-testid={testId} title={aviso}>
       <div className="font-medium">{d.porcentaje}</div>
       <div className="text-xs">{diferencia}</div>
     </td>
@@ -88,7 +99,17 @@ function MetricaCeldas({
     <>
       <Cifra c={fila.a} m={m} testId={`${m}-a`} />
       <Cifra c={fila.b} m={m} testId={`${m}-b`} />
-      <CeldaDelta d={deltaDe(fila, m)} dinero={dinero} testId={`${m}-delta`} />
+      <CeldaDelta
+        d={deltaDe(fila, m)}
+        dinero={dinero}
+        testId={`${m}-delta`}
+        // Con 0 comensales en A el Δ sale −100 %, pero ese 0 puede ser "no se registraron".
+        aviso={
+          m === 'comensales' && tieneDatos(fila.a) && fila.a.comensales === 0
+            ? COMENSALES_CERO
+            : undefined
+        }
+      />
     </>
   );
 }
