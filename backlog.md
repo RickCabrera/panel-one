@@ -1831,7 +1831,7 @@ antes de construir.
 muestra la mezcla por canal cuadrando contra el total de ventas.
 
 ### F2-145 · Orquestador de menú / catálogo de productos
-`[ ]` Vista "Productos" y "Orquestador de menú": catálogo de productos leído de SR (grupos,
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-192. Vista "Productos" y "Orquestador de menú": catálogo de productos leído de SR (grupos,
 precios, activos/inactivos), organización visual por categorías, detección de productos
 vendidos sin catálogo y de precios distintos entre sucursales. **Solo lectura de SR**;
 ediciones son metadata nuestra (foto, descripción, etiquetas) para uso futuro (menú digital).
