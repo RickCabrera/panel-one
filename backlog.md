@@ -721,7 +721,7 @@ nombra la variable; y con `MODO_DEMO=1` la marca aparece en todas las vistas y e
 de la pestaña.
 
 ### F2-203 · Deudas visuales y de datos detectadas en la revisión
-`[ ]` **Bloque A** · /web + /api
+`[x]` **Bloque A** · /web + /api
 
 Recogida de lo que salió en la revisión del 21/09 y de los pendientes que el log de F1-092 y
 F1-094 dejó abiertos. Son chicas y se cierran juntas.
