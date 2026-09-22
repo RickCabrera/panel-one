@@ -423,6 +423,71 @@ describe('Contrato OpenAPI', () => {
     ]);
   });
 
+  it('F2-124: contrato de traspasos; el agente no alcanza ninguna de sus rutas; alerta en horas', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const codigos = (op: { responses?: object } | undefined) =>
+      Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/inventario/traspasos']?.get)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/inventario/traspasos/sr']?.get)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/inventario/traspasos/{id}']?.get)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/inventario/traspasos']?.post)).toEqual([
+      '201',
+      '400',
+      '401',
+      '403',
+      '404',
+      '503',
+    ]);
+    for (const op of [
+      paths['/inventario/traspasos/{id}/recibir']?.post,
+      paths['/inventario/traspasos/{id}/cancelar']?.post,
+    ]) {
+      expect(codigos(op)).toEqual(['200', '400', '401', '403', '404', '409', '503']);
+    }
+    const conKeyDeAgente = Object.entries(paths).flatMap(([ruta, ops]) =>
+      Object.values(ops as Record<string, { security?: Array<Record<string, unknown>> }>).some(
+        (op) => (op.security ?? []).some((s) => 'agente' in s),
+      )
+        ? [ruta]
+        : [],
+    );
+    expect(conKeyDeAgente.some((r) => r.includes('traspaso'))).toBe(false);
+    const esquemas = doc.components?.schemas as Record<
+      string,
+      { properties?: Record<string, { enum?: string[] }>; enum?: string[] }
+    >;
+    expect(esquemas.EstadoTraspaso.enum).toEqual(['enviado', 'recibido', 'cancelado']);
+    expect(esquemas.EstadoConciliacionTraspaso.enum).toEqual([
+      'conciliado',
+      'pendiente_sr',
+      'en_alerta',
+      'cancelado',
+    ]);
+    expect(Object.keys(esquemas.EnviarTraspasoDto.properties ?? {})).toEqual([
+      'empresaId',
+      'sucursalOrigenId',
+      'almacenOrigenSrId',
+      'sucursalDestinoId',
+      'almacenDestinoSrId',
+      'nota',
+      'partidas',
+    ]);
+    expect(Object.keys(esquemas.RenglonNuevoDto.properties ?? {})).toEqual([
+      'insumoOrigenSrId',
+      'cantidad',
+    ]);
+    expect(Object.keys(esquemas.PartidaTraspasoDto.properties ?? {})).toEqual(
+      expect.arrayContaining(['cantidad', 'costoUnitario', 'importe', 'salida', 'entrada']),
+    );
+    expect(esquemas.TipoAlerta?.enum ?? []).toContain('traspaso_sin_conciliar');
+    expect(esquemas.ReglaAlertaDto?.properties?.unidad?.enum).toEqual([
+      'minutos',
+      'porcentaje',
+      'horas',
+    ]);
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
@@ -485,6 +550,12 @@ describe('Contrato OpenAPI', () => {
         '/inventario/conteos/{id}/partidas',
         '/inventario/conteos/{id}/cerrar',
         '/inventario/conteos/{id}/cancelar',
+        // F2-124: traspasos del panel y los leídos de SR.
+        '/inventario/traspasos',
+        '/inventario/traspasos/sr',
+        '/inventario/traspasos/{id}',
+        '/inventario/traspasos/{id}/recibir',
+        '/inventario/traspasos/{id}/cancelar',
         '/mesas/abiertas',
         '/sucursales',
         '/sucursales/{id}',

@@ -118,7 +118,8 @@ describe('las seis secciones de la ficha', () => {
     expect(tarea('inventario.proyecciones')).toBe('F2-127');
     expect(tarea('inventario.compras')).toBe('F2-126');
     expect(tarea('inventario.gastos')).toBe('F2-126');
-    expect(tarea('inventario.traspasos')).toBe('F2-124');
+    // F2-124 construyó Traspasos: navega.
+    expect(porId('inventario.traspasos').destino).toEqual({ ruta: '/traspasos' });
     expect(tarea('canales.ventas')).toBe('F2-144');
     expect(porId('canales.ventas').pendiente?.razon).toContain('F2-233');
     expect(tarea('administracion.facturacion')).toBe('F2-100');

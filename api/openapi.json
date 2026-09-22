@@ -7236,6 +7236,567 @@
           "inventario"
         ]
       }
+    },
+    "/inventario/traspasos": {
+      "get": {
+        "description": "Con su flujo (enviado → recibido) y su conciliación contra SoftRestaurant: \"pendiente de registrar en SR\" hasta que la sincronización trae su salida y su entrada (artículo + cantidad + fecha ± 1 día); sin conciliar pasado el umbral de la regla (48 h) queda en alerta. Un traspaso es dato del panel: NUNCA se escribe a SR.",
+        "operationId": "TraspasosController_listar",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa: los traspasos que SALEN de ella o LLEGAN a ella. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/EstadoTraspaso"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraspasosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, una sucursal no es de esa empresa, un almacén no es de su sucursal, o el traspaso no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Traspasos del panel (F2-124), los más recientes primero.",
+        "tags": [
+          "inventario"
+        ]
+      },
+      "post": {
+        "description": "Congela el costo promedio de la foto del almacén de origen (nulo si no viene). No valida contra la existencia. Queda \"pendiente de registrar en SR\": el traspaso se captura también en SoftRestaurant, y el panel lo concilia solo cuando la sincronización lo trae.",
+        "operationId": "TraspasosController_enviar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnviarTraspasoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraspasoDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, una sucursal no es de esa empresa, un almacén no es de su sucursal, o el traspaso no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Otra operación tiene los traspasos de la empresa; reintentar.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Envía un traspaso (1.ª confirmación): de un almacén a otro de la misma empresa.",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/traspasos/sr": {
+      "get": {
+        "description": "Las pólizas `traspaso_salida` y `traspaso_entrada`, agrupadas por la referencia del documento de SR, con los traspasos del panel conciliados contra ellas.",
+        "operationId": "TraspasosController_leidosDeSr",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraspasosSrDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, una sucursal no es de esa empresa, un almacén no es de su sucursal, o el traspaso no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Traspasos LEÍDOS de SoftRestaurant en un rango (pólizas de traspaso de F2-122).",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/traspasos/{id}": {
+      "get": {
+        "description": "Importe = round(cantidad × costo, 2) por renglón; sin costo no suma (se cuenta aparte). Un espejo se muestra sólo mientras sigue vigente (su póliza no se canceló ni cambió).",
+        "operationId": "TraspasosController_detalle",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "La empresa del traspaso. Otra = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraspasoDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, una sucursal no es de esa empresa, un almacén no es de su sucursal, o el traspaso no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Un traspaso con sus renglones, su importe y sus movimientos espejo en SR.",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/traspasos/{id}/recibir": {
+      "post": {
+        "operationId": "TraspasosController_recibir",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TraspasoEmpresaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraspasoDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, una sucursal no es de esa empresa, un almacén no es de su sucursal, o el traspaso no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El traspaso ya no está enviado (recibido o cancelado).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Otra operación tiene los traspasos de la empresa; reintentar.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Confirma la recepción (2.ª confirmación). Sólo desde enviado.",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/traspasos/{id}/cancelar": {
+      "post": {
+        "operationId": "TraspasosController_cancelar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TraspasoEmpresaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraspasoDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, una sucursal no es de esa empresa, un almacén no es de su sucursal, o el traspaso no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El traspaso ya no está enviado (recibido o cancelado). O SR ya tiene movimientos de este traspaso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Otra operación tiene los traspasos de la empresa; reintentar.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancela un traspaso enviado que SR todavía no registra (queda visible).",
+        "tags": [
+          "inventario"
+        ]
+      }
     }
   },
   "info": {
@@ -10080,7 +10641,8 @@
           "mesa_abierta",
           "cuenta_sin_imprimir",
           "caida_venta",
-          "bajo_minimo"
+          "bajo_minimo",
+          "traspaso_sin_conciliar"
         ]
       },
       "SeveridadAlerta": {
@@ -10227,7 +10789,8 @@
             "type": "string",
             "enum": [
               "minutos",
-              "porcentaje"
+              "porcentaje",
+              "horas"
             ]
           },
           "minimo": {
@@ -13665,6 +14228,571 @@
             "type": "string",
             "format": "uuid",
             "description": "La empresa del conteo. Otra = 404."
+          }
+        },
+        "required": [
+          "empresaId"
+        ]
+      },
+      "EstadoTraspaso": {
+        "type": "string",
+        "enum": [
+          "enviado",
+          "recibido",
+          "cancelado"
+        ]
+      },
+      "EstadoConciliacionTraspaso": {
+        "type": "string",
+        "enum": [
+          "conciliado",
+          "pendiente_sr",
+          "en_alerta",
+          "cancelado"
+        ],
+        "description": "Contra SoftRestaurant: `conciliado` (todos sus renglones tienen salida y entrada en SR), `pendiente_sr` (pendiente de registrar en SR), `en_alerta` (sin conciliar pasado el umbral de la regla, 48 h por defecto) o `cancelado`."
+      },
+      "TraspasoResumenDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "folio": {
+            "type": "number",
+            "description": "Consecutivo por EMPRESA (un traspaso cruza sucursales)."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Sucursal de ORIGEN."
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacenOrigen": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo; nulo si no está."
+          },
+          "sucursalDestinoId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalDestino": {
+            "type": "string"
+          },
+          "almacenDestinoSrId": {
+            "type": "string"
+          },
+          "almacenDestino": {
+            "type": "string",
+            "nullable": true
+          },
+          "nota": {
+            "type": "string",
+            "nullable": true
+          },
+          "estado": {
+            "description": "El flujo.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoTraspaso"
+              }
+            ]
+          },
+          "conciliacion": {
+            "description": "Contra SoftRestaurant: `conciliado` (todos sus renglones tienen salida y entrada en SR), `pendiente_sr` (pendiente de registrar en SR), `en_alerta` (sin conciliar pasado el umbral de la regla, 48 h por defecto) o `cancelado`.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoConciliacionTraspaso"
+              }
+            ]
+          },
+          "enviadoAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recibidoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "canceladoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "conciliadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cuándo lo concilió el panel. Nulo si no está conciliado."
+          },
+          "articulos": {
+            "type": "number"
+          },
+          "conciliados": {
+            "type": "number",
+            "description": "Renglones con salida Y entrada vigentes en SR."
+          }
+        },
+        "required": [
+          "id",
+          "folio",
+          "sucursalId",
+          "sucursal",
+          "almacenOrigenSrId",
+          "almacenOrigen",
+          "sucursalDestinoId",
+          "sucursalDestino",
+          "almacenDestinoSrId",
+          "almacenDestino",
+          "nota",
+          "estado",
+          "conciliacion",
+          "enviadoAt",
+          "recibidoAt",
+          "canceladoAt",
+          "conciliadoAt",
+          "articulos",
+          "conciliados"
+        ]
+      },
+      "SucursalTraspasoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "zonaHoraria"
+        ]
+      },
+      "AlmacenTraspasoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "sucursalId",
+          "almacenOrigenSrId",
+          "almacen"
+        ]
+      },
+      "TraspasosDto": {
+        "type": "object",
+        "properties": {
+          "traspasos": {
+            "description": "Los 200 más recientes.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraspasoResumenDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Cuántos hay con ese filtro (puede ser más que los devueltos)."
+          },
+          "umbralAlertaHoras": {
+            "type": "number",
+            "description": "El umbral vigente de la regla `traspaso_sin_conciliar`, en horas."
+          },
+          "sucursales": {
+            "description": "Las sucursales activas del alcance.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalTraspasoDto"
+            }
+          },
+          "almacenes": {
+            "description": "Almacenes de TODA la empresa (catálogo activo ∪ con lectura): origen y destino.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlmacenTraspasoDto"
+            }
+          }
+        },
+        "required": [
+          "traspasos",
+          "total",
+          "umbralAlertaHoras",
+          "sucursales",
+          "almacenes"
+        ]
+      },
+      "PolizaTraspasoSrDto": {
+        "type": "object",
+        "properties": {
+          "polizaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "traspaso_salida",
+              "traspaso_entrada"
+            ]
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cancelada": {
+            "type": "boolean"
+          },
+          "partidas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "polizaId",
+          "folio",
+          "tipo",
+          "sucursalId",
+          "sucursal",
+          "almacenOrigenSrId",
+          "almacen",
+          "fecha",
+          "cancelada",
+          "partidas"
+        ]
+      },
+      "TraspasoWebRefDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "folio": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "folio"
+        ]
+      },
+      "TraspasoSrDto": {
+        "type": "object",
+        "properties": {
+          "referencia": {
+            "type": "string",
+            "nullable": true,
+            "description": "La `referencia` del documento en SR; nula = póliza suelta (va sola)."
+          },
+          "polizas": {
+            "description": "Salida y entrada del documento.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PolizaTraspasoSrDto"
+            }
+          },
+          "traspasosPanel": {
+            "description": "Traspasos del panel conciliados contra alguna de estas pólizas (vigentes).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraspasoWebRefDto"
+            }
+          }
+        },
+        "required": [
+          "referencia",
+          "polizas",
+          "traspasosPanel"
+        ]
+      },
+      "TraspasosSrDto": {
+        "type": "object",
+        "properties": {
+          "traspasos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraspasoSrDto"
+            }
+          },
+          "truncado": {
+            "type": "boolean",
+            "description": "Hubo más de 400 pólizas: acorta el rango."
+          },
+          "hayPolizas": {
+            "type": "boolean",
+            "description": "Pólizas de traspaso recibidas alguna vez de esas sucursales."
+          },
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalTraspasoDto"
+            }
+          }
+        },
+        "required": [
+          "traspasos",
+          "truncado",
+          "hayPolizas",
+          "sucursales"
+        ]
+      },
+      "RenglonNuevoDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "El `origenSrId` de un insumo de la sucursal ORIGEN."
+          },
+          "cantidad": {
+            "type": "string",
+            "pattern": "^\\d{1,9}(\\.\\d{1,3})?$",
+            "example": "2.5",
+            "description": "Lo que se traspasa, en la unidad del insumo: texto decimal sin signo, > 0, hasta 3 decimales (más = 400, nunca se redondea)."
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "cantidad"
+        ]
+      },
+      "EnviarTraspasoDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalOrigenId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La sucursal de ORIGEN. De otra empresa = 404."
+          },
+          "almacenOrigenSrId": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "sucursalDestinoId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La sucursal de DESTINO (puede ser la misma). De otra empresa = 404."
+          },
+          "almacenDestinoSrId": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Distinto del de origen si es la misma sucursal."
+          },
+          "nota": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Nota libre (quién lleva, motivo...)."
+          },
+          "partidas": {
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RenglonNuevoDto"
+            }
+          }
+        },
+        "required": [
+          "empresaId",
+          "sucursalOrigenId",
+          "almacenOrigenSrId",
+          "sucursalDestinoId",
+          "almacenDestinoSrId",
+          "partidas"
+        ]
+      },
+      "EspejoDto": {
+        "type": "object",
+        "properties": {
+          "polizaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "folio": {
+            "type": "string",
+            "description": "Folio de la póliza en SR."
+          },
+          "referencia": {
+            "type": "string",
+            "nullable": true
+          },
+          "renglon": {
+            "type": "number"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "polizaId",
+          "folio",
+          "referencia",
+          "renglon",
+          "fecha"
+        ]
+      },
+      "PartidaTraspasoDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true
+          },
+          "cantidad": {
+            "type": "string",
+            "example": "2.500"
+          },
+          "costoUnitario": {
+            "type": "string",
+            "nullable": true,
+            "description": "Costo promedio de la foto de ORIGEN al enviar; nulo = sin lectura (nunca 0)."
+          },
+          "importe": {
+            "type": "string",
+            "nullable": true,
+            "description": "round(cantidad × costo, 2)."
+          },
+          "salida": {
+            "nullable": true,
+            "description": "La salida en SR (almacén de origen). Nulo = todavía no aparece.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EspejoDto"
+              }
+            ]
+          },
+          "entrada": {
+            "nullable": true,
+            "description": "La entrada en SR (destino).",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EspejoDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "insumo",
+          "clave",
+          "unidad",
+          "cantidad",
+          "costoUnitario",
+          "importe",
+          "salida",
+          "entrada"
+        ]
+      },
+      "TotalesTraspasoDto": {
+        "type": "object",
+        "properties": {
+          "importe": {
+            "type": "string",
+            "description": "Σ de los importes conocidos.",
+            "example": "150.00"
+          },
+          "sinCosto": {
+            "type": "number",
+            "description": "Renglones sin costo (no suman al importe)."
+          }
+        },
+        "required": [
+          "importe",
+          "sinCosto"
+        ]
+      },
+      "TraspasoDetalleDto": {
+        "type": "object",
+        "properties": {
+          "traspaso": {
+            "$ref": "#/components/schemas/TraspasoResumenDto"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "description": "Zona de la sucursal de origen, para presentar las fechas."
+          },
+          "partidas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartidaTraspasoDto"
+            }
+          },
+          "totales": {
+            "$ref": "#/components/schemas/TotalesTraspasoDto"
+          }
+        },
+        "required": [
+          "traspaso",
+          "zonaHoraria",
+          "partidas",
+          "totales"
+        ]
+      },
+      "TraspasoEmpresaDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La empresa del traspaso. Otra = 404."
           }
         },
         "required": [

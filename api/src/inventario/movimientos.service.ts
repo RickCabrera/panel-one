@@ -35,7 +35,7 @@ function dia(texto: string): number | null {
   return Number.isNaN(ms) || new Date(ms).toISOString().slice(0, 10) !== texto ? null : ms;
 }
 
-function validarRango(desde: string, hasta: string): void {
+export function validarRango(desde: string, hasta: string): void {
   const d = dia(desde);
   const h = dia(hasta);
   const errores: string[] = [];

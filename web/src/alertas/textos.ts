@@ -11,6 +11,7 @@ export const NOMBRE_TIPO: Record<TipoAlerta, string> = {
   cuenta_sin_imprimir: 'Cuenta sin imprimir',
   caida_venta: 'Caída de venta',
   bajo_minimo: 'Artículo bajo mínimo',
+  traspaso_sin_conciliar: 'Traspaso sin registrar en SR',
 };
 
 export const NOMBRE_SEVERIDAD: Record<SeveridadAlerta, string> = {
@@ -38,6 +39,8 @@ export function textoRegla(tipo: TipoAlerta, umbral: number): string {
       return `La venta de hoy va más de ${umbral} % abajo del mismo día de la semana pasada a la misma hora (con al menos 5 cuentas en esa base).`;
     case 'bajo_minimo':
       return `Un artículo tiene en su almacén menos del ${umbral} % de su mínimo (el mínimo se define en Existencias).`;
+    case 'traspaso_sin_conciliar':
+      return `Un traspaso enviado desde el panel lleva más de ${umbral} h sin aparecer en SoftRestaurant (su salida y su entrada).`;
   }
 }
 
@@ -80,6 +83,13 @@ export function describirAlerta(a: Alerta): string {
       const cant = texto(d.cantidad);
       const min = texto(d.minimo);
       return `${articulo} (${almacen ? `almacén ${almacen}, ` : ''}${a.sucursal}): ${cant === null ? 'existencia sin dato' : `existencia ${cantidad(cant)}`} contra un mínimo de ${min === null ? 'sin dato' : cantidad(min)} al abrir la alerta.`;
+    }
+    case 'traspaso_sin_conciliar': {
+      const folio = entero(d.folio);
+      const horas = entero(d.horas);
+      const origen = texto(d.almacenOrigen);
+      const destino = [texto(d.sucursalDestino), texto(d.almacenDestino)].filter(Boolean).join(' · ');
+      return `Traspaso ${folio === null ? 'sin folio' : `#${folio}`} (${origen ? `${origen}, ` : ''}${a.sucursal} → ${destino || 'destino sin dato'}): ${horas === null ? 'más del umbral' : `${horas} h`} sin registrarse en SoftRestaurant al abrir la alerta.`;
     }
   }
 }

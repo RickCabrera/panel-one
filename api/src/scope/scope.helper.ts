@@ -65,6 +65,10 @@ export const LLAVE_EMPRESA = {
   // `EscrituraConteos` (con el scope del usuario). Nunca se escriben a SR.
   ConteoFisico: 'empresaId',
   PartidaConteo: 'empresaId',
+  // F2-124. Traspasos del panel y sus renglones: dato NUESTRO, los escribe SÓLO
+  // `EscrituraTraspasos` (con el scope del usuario, o el de la empresa al conciliar).
+  Traspaso: 'empresaId',
+  PartidaTraspaso: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;
@@ -89,11 +93,14 @@ export const COLUMNAS_INTOCABLES: readonly string[] = [
   'polizaId',
   // F2-123: un renglón no se mueve a otro conteo.
   'conteoId',
+  // F2-124: un renglón no se mueve a otro traspaso.
+  'traspasoId',
   'empresa',
   'sucursal',
   'cheque',
   'poliza',
   'conteo',
+  'traspaso',
 ];
 
 /** El filtro de tenant de un modelo: `{}` para admin_global, la empresa para los demás. */

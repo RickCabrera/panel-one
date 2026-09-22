@@ -146,7 +146,7 @@ export class ReglaAlertaDto implements ReglaVista {
   @ApiProperty({ description: 'La empresa no la ha configurado: vale la regla por defecto.' })
   porDefecto!: boolean;
 
-  @ApiProperty({ enum: ['minutos', 'porcentaje'] })
+  @ApiProperty({ enum: ['minutos', 'porcentaje', 'horas'] })
   unidad!: ReglaVista['unidad'];
 
   @ApiProperty()

@@ -5,7 +5,7 @@ import { SeveridadAlerta, TipoAlerta } from '@prisma/client';
  * umbral, en qué rango se acepta y con qué valor nace.
  */
 
-export type UnidadUmbral = 'minutos' | 'porcentaje';
+export type UnidadUmbral = 'minutos' | 'porcentaje' | 'horas';
 
 export interface DefinicionRegla {
   tipo: TipoAlerta;
@@ -73,6 +73,18 @@ export const REGLAS: readonly DefinicionRegla[] = [
     minimo: 1,
     maximo: 100,
     porDefecto: 100,
+    severidad: SeveridadAlerta.advertencia,
+  },
+  {
+    // F2-124. Un traspaso del panel que SoftRestaurant no ha registrado (sin conciliar) pasadas
+    // estas horas desde su envío. Las 48 h las fija la ficha ("los no conciliados en 48 h se
+    // marcan en alerta"); en el borde exacto no. DECISION PROVISIONAL (nocturno): rango 1–720 h
+    // (30 días) y advertencia, no crítica. Ver docs/nocturno-log.md (F2-124).
+    tipo: TipoAlerta.traspaso_sin_conciliar,
+    unidad: 'horas',
+    minimo: 1,
+    maximo: 720,
+    porDefecto: 48,
     severidad: SeveridadAlerta.advertencia,
   },
 ];

@@ -32,6 +32,7 @@ function sucursal(p: Partial<SucursalObservada> = {}): SucursalObservada {
     cuentas: [],
     venta: null,
     existencias: null,
+    traspasos: [],
     ...p,
   };
 }
@@ -373,5 +374,70 @@ describe('lectura del snapshot para alertas', () => {
     expect(diaLocal(t, 'America/Cancun')).toBe('2026-09-22');
     expect(restarDias('2026-03-10', 7)).toBe('2026-03-03');
     expect(restarDias('2026-11-05', 7)).toBe('2026-10-29');
+  });
+});
+
+describe('evaluador: traspaso sin conciliar (F2-124)', () => {
+  const tr = (id: string, edadS: number) => ({
+    id,
+    folio: 7,
+    edadS,
+    almacenOrigen: 'General',
+    sucursalDestino: 'Centro',
+    almacenDestino: 'Barra',
+  });
+  const soloTraspasos = (c: ReturnType<typeof evaluar>) =>
+    c.abrir.filter((a) => a.tipo === TipoAlerta.traspaso_sin_conciliar);
+
+  it('más de 48 h abre advertencia por traspaso; a las 48 h exactas no', () => {
+    const c = evaluar(
+      obs(sucursal({ traspasos: [tr('t-borde', 48 * 3600), tr('t-viejo', 48 * 3600 + 1)] })),
+      estado(),
+    );
+    expect(soloTraspasos(c)).toEqual([
+      {
+        sucursalId: S1,
+        tipo: TipoAlerta.traspaso_sin_conciliar,
+        severidad: SeveridadAlerta.advertencia,
+        llave: 't-viejo',
+        umbral: 48,
+        detalle: {
+          folio: 7,
+          horas: 48,
+          almacenOrigen: 'General',
+          sucursalDestino: 'Centro',
+          almacenDestino: 'Barra',
+        },
+      },
+    ]);
+  });
+
+  it('se cierra cuando ya no se observa (se concilió o se canceló) y no se duplica', () => {
+    const abiertas = [abierta('a1', TipoAlerta.traspaso_sin_conciliar, 't-1')];
+    expect(evaluar(obs(sucursal({ traspasos: [] })), estado({ abiertas })).cerrar).toEqual([
+      { id: 'a1', motivo: MotivoCierreAlerta.condicion },
+    ]);
+    const sigue = evaluar(
+      obs(sucursal({ traspasos: [tr('t-1', 50 * 3600)] })),
+      estado({ abiertas }),
+    );
+    expect(sigue.cerrar).toEqual([]);
+    expect(soloTraspasos(sigue)).toEqual([]);
+  });
+
+  it('respeta el umbral guardado y la regla apagada', () => {
+    const reglas = reglasEfectivas([
+      { tipo: TipoAlerta.traspaso_sin_conciliar, activa: true, umbral: 2 },
+    ]);
+    const c = evaluar(obs(sucursal({ traspasos: [tr('t', 2 * 3600 + 1)] })), estado({ reglas }));
+    expect(soloTraspasos(c).map((a) => [a.llave, a.umbral])).toEqual([['t', 2]]);
+    const apagada = reglasEfectivas([
+      { tipo: TipoAlerta.traspaso_sin_conciliar, activa: false, umbral: 48 },
+    ]);
+    expect(
+      soloTraspasos(
+        evaluar(obs(sucursal({ traspasos: [tr('t', 99 * 3600)] })), estado({ reglas: apagada })),
+      ),
+    ).toEqual([]);
   });
 });

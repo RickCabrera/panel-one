@@ -261,7 +261,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'inventario.traspasos',
         texto: 'Traspasos',
         icono: ArrowLeftRight,
-        pendiente: construye('F2-124'),
+        destino: { ruta: '/traspasos' },
       },
     ],
   },

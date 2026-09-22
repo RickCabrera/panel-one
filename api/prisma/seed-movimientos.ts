@@ -96,13 +96,28 @@ export async function sembrarMovimientos(
   for (const s of op.sucursales) {
     const suyas = op.universo.polizas.filter((p) => p.sucursalId === s.id);
     // Lo sembrado en otra ventana que ya no existe en ésta (las partidas caen en cascada).
-    const { count } = await prisma.polizaInventario.deleteMany({
-      where: {
-        empresaId: op.empresaId,
-        sucursalId: s.id,
-        origenSrId: { startsWith: prefijoPolizas(s.clave), notIn: suyas.map((p) => p.folio) },
-      },
-    });
+    const viejas = {
+      empresaId: op.empresaId,
+      sucursalId: s.id,
+      origenSrId: { startsWith: prefijoPolizas(s.clave), notIn: suyas.map((p) => p.folio) },
+    };
+    // F2-124: un traspaso del panel conciliado contra una de ellas la apunta con ON DELETE
+    // RESTRICT. Se suelta el espejo (el renglón vuelve a "sin espejo"); la siguiente
+    // conciliación lo re-verifica y deja el traspaso pendiente o lo vuelve a conciliar.
+    const idsViejas = (
+      await prisma.polizaInventario.findMany({ where: viejas, select: { id: true } })
+    ).map((p) => p.id);
+    if (idsViejas.length > 0) {
+      await prisma.partidaTraspaso.updateMany({
+        where: { empresaId: op.empresaId, polizaSalidaId: { in: idsViejas } },
+        data: { polizaSalidaId: null, renglonSalida: null },
+      });
+      await prisma.partidaTraspaso.updateMany({
+        where: { empresaId: op.empresaId, polizaEntradaId: { in: idsViejas } },
+        data: { polizaEntradaId: null, renglonEntrada: null },
+      });
+    }
+    const { count } = await prisma.polizaInventario.deleteMany({ where: viejas });
     borradas += count;
     for (const lote of lotesDe(suyas)) {
       const r = await servicio.recibir(

@@ -482,7 +482,15 @@ describe('Centro de alertas (e2e, F2-224)', () => {
         'cuenta_sin_imprimir',
         'caida_venta',
         'bajo_minimo',
+        // F2-124.
+        'traspaso_sin_conciliar',
       ]);
+      expect(r.body[5]).toMatchObject({
+        unidad: 'horas',
+        minimo: 1,
+        maximo: 720,
+        valorPorDefecto: 48,
+      });
       expect(r.body[3]).toMatchObject({
         unidad: 'porcentaje',
         minimo: 1,

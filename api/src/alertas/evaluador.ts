@@ -59,6 +59,20 @@ export function llaveArticulo(almacen: string, insumo: string): string {
   return JSON.stringify([almacen, insumo]);
 }
 
+/**
+ * Un traspaso del panel (F2-124) que sale de esta sucursal, no cancelado y SIN conciliar con SR.
+ * Los conciliados no se observan: su alerta, si la tenían, se cierra.
+ */
+export interface TraspasoObservado {
+  id: string;
+  folio: number;
+  /** Segundos enteros desde su envío (reloj del servidor). */
+  edadS: number;
+  almacenOrigen: string;
+  sucursalDestino: string;
+  almacenDestino: string;
+}
+
 export interface SucursalObservada {
   sucursalId: string;
   /** Segundos desde el último reporte (reloj del servidor); null = nunca ha reportado. */
@@ -71,6 +85,8 @@ export interface SucursalObservada {
   venta: VentaObservada | null;
   /** Null = la sucursal nunca ha mandado existencias: bajo mínimo no se evalúa. */
   existencias: ExistenciasObservadas | null;
+  /** Traspasos sin conciliar que salen de la sucursal (dato propio: siempre se evalúa). */
+  traspasos: TraspasoObservado[];
 }
 
 export interface Observacion {
@@ -197,6 +213,21 @@ function condiciones(
           },
         }));
     }
+
+    case TipoAlerta.traspaso_sin_conciliar:
+      // Estrictamente MÁS de `umbral` horas: a las 48 h exactas todavía no.
+      return s.traspasos
+        .filter((t) => t.edadS > umbral * 3600)
+        .map((t) => ({
+          llave: t.id,
+          detalle: {
+            folio: t.folio,
+            horas: Math.floor(t.edadS / 3600),
+            almacenOrigen: t.almacenOrigen,
+            sucursalDestino: t.sucursalDestino,
+            almacenDestino: t.almacenDestino,
+          },
+        }));
   }
 }
 

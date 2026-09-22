@@ -859,7 +859,7 @@ ese registro solo.
 
 - ⚠️ **SUPUESTO — cada sucursal tiene sus propios almacenes** (un almacén es de un POS y no se
   comparte entre sucursales). `schema.prisma#AlmacenCatalogo`. Si en SR un almacén central
-  surte a varias sucursales, esto cambia (y con ello los traspasos de F2-124).
+  surte a varias sucursales, esto cambia (y con ello los traspasos de F2-124, §10 "Traspasos").
 - ⚠️ **SUPUESTO — un insumo tiene UN grupo y UNA unidad**, referidos por el `origenSrId` de
   esos catálogos en la misma sucursal, en texto y **sin FK** (como el grupo del producto, §6): el
   orden de llegada no está garantizado. `RegistroInsumoDto` y `schema.prisma#Insumo`. Omitirlos
@@ -886,9 +886,9 @@ ese registro solo.
 
 ## 10. Inventario — existencias, movimientos y recetas (Fase 2)
 
-> Alimenta a `F2-121`, `F2-122`, `F2-125` y `F2-126`. Existencias por almacén con costo
-> promedio, movimientos con referencia a póliza, explosión de insumos por producto,
-> compras.
+> Alimenta a `F2-121`, `F2-122`, `F2-123`, `F2-124`, `F2-125` y `F2-126`. Existencias por almacén
+> con costo promedio, movimientos con referencia a póliza, conteos y traspasos propios
+> conciliados contra ellos, explosión de insumos por producto, compras.
 
 **Tablas de SR: sin mapear.** Recetas y compras siguen pendientes (F2-125, F2-126); de existencias y
 movimientos tampoco se conoce la tabla (el lector es F2-241 y lo valida F2-193). Lo que sigue **no
@@ -1048,6 +1048,61 @@ idénticas las tablas espejo de SR (existencias, lecturas, pólizas, movimientos
   una póliza de tipo `ajuste` (F2-122) y la siguiente foto de existencias ya lo refleja. **Cómo se
   llama ese menú en SR y qué documento genera no está mapeado**: la ayuda del panel
   (`web/src/paginas/AyudaConteos.tsx`) lo describe en genérico. F2-193 lo verifica en el piloto.
+
+### Traspasos (F2-124): dato PROPIO conciliado contra las pólizas de SR
+
+Un traspaso del panel (`/inventario/traspasos*`, tablas `traspasos` y `partidas_traspaso`) se
+**captura en la web y NUNCA se escribe a SR**: el encargado lo registra también en SoftRestaurant, y
+el panel lo concilia solo cuando la ingesta de movimientos (F2-122) trae sus pólizas espejo. Flujo
+propio: `enviado` (1.ª confirmación, al crearlo) → `recibido` (2.ª); cancelar sólo desde `enviado` y
+sin ningún espejo. Los traspasos **leídos** de SR no son tabla nueva: son las pólizas
+`traspaso_salida` / `traspaso_entrada` ya guardadas, que `GET /inventario/traspasos/sr` agrupa por su
+`referencia`. `/agent` no se toca y el agente no tiene ninguna ruta de traspasos (401; lo fijan
+`openapi.spec.ts` y el e2e).
+
+- **Espejo = (póliza, renglón)**, no el id del movimiento: la ingesta reemplaza los movimientos de una
+  póliza corregida (ids nuevos), pero la póliza conserva su id (upsert por `origen_sr_id`). FK
+  compuestas: la salida es de una póliza de la sucursal ORIGEN y la entrada de una de la DESTINO,
+  las dos de la MISMA empresa (`partidas_traspaso_poliza_salida_fkey` / `…_entrada_fkey`), ON DELETE
+  RESTRICT (la ingesta nunca borra pólizas; el seed de movimientos suelta los espejos antes de borrar
+  las suyas). Un renglón de SR concilia a lo más UN renglón del panel (únicos).
+- `DECISION PROVISIONAL (nocturno)` — **regla del espejo** (`api/src/inventario/traspasos.ts`): la
+  salida es una partida de una póliza `traspaso_salida` NO cancelada en la sucursal y almacén de
+  origen, del mismo insumo, con cantidad exactamente −q y |fecha − envío| ≤ 24 h; la entrada, una de
+  `traspaso_entrada` en el destino con +q y fecha en [envío − 24 h, (recibido ?? envío) + 24 h].
+  "± 1 día" = **24 h absolutas**, no días de calendario; cantidad **exacta** a 3 decimales; **no se
+  exige la `referencia`** (no se sabe si SR la llena). Entre candidatos gana la fecha más cercana; los
+  traspasos van en orden de envío y folio (determinista). Un traspaso está **conciliado** cuando TODOS
+  sus renglones tienen salida y entrada; a medias sigue "pendiente de registrar en SR".
+- ⚠️ **SUPUESTO — la `fecha` de las pólizas de SR trae hora.** Si SR guarda sólo la fecha (medianoche
+  local), la ventana de ± 24 h sigue cubriendo el día del envío y el anterior; un traspaso enviado de
+  noche y registrado al día siguiente podría quedar fuera. F2-193 lo mide.
+- ⚠️ **SUPUESTO — la clave del insumo (`origenSrId`) es la MISMA en las dos sucursales** (el catálogo
+  de SR se replica). El renglón se valida contra el catálogo o la foto de la sucursal ORIGEN; la
+  entrada se busca con la misma clave en la destino. Si cada sucursal numera distinto, la entrada
+  nunca concilia y hace falta un mapeo (tarea nueva).
+- ⚠️ **SUPUESTO — un traspaso de SR llega como DOS pólizas** (salida en el origen, entrada en el
+  destino), cada una desde el agente de SU sucursal (ya era el supuesto "un almacén por póliza" de
+  F2-122). Si un almacén central surte a varias sucursales (§9), esto cambia.
+- `DECISION PROVISIONAL (nocturno)` — **quién concilia y cuándo:** la vuelta del centro de alertas
+  (cada 60 s) concilia la empresa ANTES de evaluar, con el scope de la empresa; si el candado de
+  traspasos está ocupado, se pospone esa vuelta (a lo más retrasa una alerta), cualquier otro error se
+  propaga. Los GET no concilian, pero RE-VERIFICAN al leer cada espejo guardado (sigue sirviendo con
+  la misma regla): si SR canceló la póliza en el último minuto, la vista ya no lo pinta. Una empresa
+  inactiva sin alertas abiertas no se evalúa y sus traspasos no se concilian.
+- `DECISION PROVISIONAL (nocturno)` — **un conciliado se re-verifica 90 días** desde su envío (si SR
+  cancela o corrige la póliza a otra cosa, vuelve a pendiente y conserva `conciliado_at` si el espejo
+  sigue sirviendo). Pasado eso se da por firme. Uno NO conciliado se busca siempre.
+- **Alerta `traspaso_sin_conciliar`** (centro de alertas): un traspaso no cancelado y sin conciliar
+  **más de** 48 h después de su envío (a las 48 h exactas, no), por su sucursal de ORIGEN; umbral en
+  horas (1–720), advertencia. Se cierra al conciliarse o cancelarse.
+- `DECISION PROVISIONAL (nocturno)` — **el costo** de cada renglón es el costo promedio de la foto del
+  almacén de origen AL ENVIAR (nulo si el artículo no venía en la foto, nunca 0); importe =
+  `round(cantidad × costo, 2)` (la `valorDe` de F2-121). No se valida contra la existencia (la foto
+  puede estar vieja): el web sólo avisa.
+- **Sin editar cantidades al recibir:** la recepción confirma el traspaso completo. Un faltante en
+  el camino hoy no se registra en el panel (queda abierto; SR tendría una entrada distinta y el
+  renglón no conciliaría).
 
 ---
 
