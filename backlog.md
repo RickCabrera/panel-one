@@ -1860,7 +1860,7 @@ el encargado ajuste en SR; enlace de ayuda documentando el proceso.
 la pantalla; el reporte de diferencias cuadra aritméticamente.
 
 ### F2-124 · Traspasos entre sucursales/almacenes
-`[ ]` Registro de traspasos leídos desde SR (si la instalación los usa) + traspasos propios de
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-193 (dos pólizas por traspaso en SR, fecha con hora, misma clave de insumo en las dos sucursales; §10 "Traspasos" de esquema-sr). Registro de traspasos leídos desde SR (si la instalación los usa) + traspasos propios de
 la web con flujo enviado→recibido (dos confirmaciones), generando reporte imprimible; igual
 que conteos, **sin escribir a SR**, con estado "pendiente de registrar en SR" hasta que la
 sync detecte el movimiento espejo.
