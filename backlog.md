@@ -897,6 +897,10 @@ alertas sin borrar el historial de las que ya había.
 ### F2-230 · Catálogos espejo: modelo, ingesta y sincronización
 `[ ]` **Bloque D** · /api
 
+> **Datos del seed:** persistir desde `api/prisma/seed-maestro/generarUniverso()` (F2-201),
+> no inventar otros. Ver la nota "De dónde salen los datos del seed" bajo la tabla de
+> cierre nocturno de las heredadas.
+
 Cimiento de todo el bloque D y una pieza del E. Modelos espejo en Postgres de lo que vive en
 SoftRestaurant, con `empresa_id`/`sucursal_id`, `origen_sr_id` para trazabilidad, `hash` del
 registro para no reescribir iguales, y `visto_at` para detectar lo que desapareció del POS:
@@ -918,6 +922,10 @@ de la empresa B.
 ### F2-231 · Meseros y rendimiento por mesero
 `[ ]` **Bloque D** · /web + /api
 
+> **Datos del seed:** persistir desde `api/prisma/seed-maestro/generarUniverso()` (F2-201),
+> no inventar otros. Ver la nota "De dónde salen los datos del seed" bajo la tabla de
+> cierre nocturno de las heredadas.
+
 Vista "Meseros": catálogo (nombre, clave, sucursal, activo) y ficha por mesero con su
 rendimiento en el periodo — venta, cuentas, ticket promedio, comensales atendidos, propina,
 tiempo promedio de mesa, cancelaciones y descuentos aplicados, y su posición en el ranking.
@@ -930,6 +938,10 @@ venta.
 
 ### F2-232 · Clientes
 `[ ]` **Bloque D** · /web + /api
+
+> **Datos del seed:** persistir desde `api/prisma/seed-maestro/generarUniverso()` (F2-201),
+> no inventar otros. Ver la nota "De dónde salen los datos del seed" bajo la tabla de
+> cierre nocturno de las heredadas.
 
 Vista "Clientes" con lo que el POS registre (nombre, teléfono, correo, RFC si lo hay) más lo que
 se puede derivar de los cheques: número de visitas, ticket promedio, última visita, productos
@@ -945,6 +957,10 @@ usuario lo haya pedido explícitamente.
 
 ### F2-233 · Áreas, estaciones y canales de venta
 `[ ]` **Bloque D** · /web + /api
+
+> **Datos del seed:** persistir desde `api/prisma/seed-maestro/generarUniverso()` (F2-201),
+> no inventar otros. Ver la nota "De dónde salen los datos del seed" bajo la tabla de
+> cierre nocturno de las heredadas.
 
 Catálogo de áreas (comedor, barra, terraza), estaciones y canales, con la venta de cada uno en
 el periodo y su participación. Es la base sobre la que F2-144 construye la vista de delivery y
@@ -1065,6 +1081,18 @@ el de aquí abajo. El original queda vivo y se verifica en su tarea Diurna corre
 | **F2-145** Productos / orquestador | Sobre el catálogo del seed, que incluye a propósito el mismo producto con precio distinto entre sucursales: la discrepancia aparece señalada; la metadata propia sobrevive un re-sync. |
 | **F2-146** PWA | Instalable desde Chrome de escritorio; el service worker sirve el armazón sin red; las notificaciones se prueban con VAPID local; cada alerta se apaga por separado. |
 | **F2-147** Landing y onboarding | Lighthouse > 90 en local; el asistente de alta deja una empresa nueva con sucursales, llaves generadas y su checklist, medido con un cronómetro en el test de flujo. |
+
+> **De dónde salen los datos del seed (lo dejó F2-201).** Catálogos, inventario, recetas,
+> compras y gastos ya se generan, puros y deterministas, en `api/prisma/seed-maestro/`
+> (`generarUniverso()`, que en `seed-ventas.ts` se obtiene con `universoDe(op, cheques)`),
+> simulados contra las ventas del propio seed. **No tienen tabla todavía:** la tarea que crea
+> la tabla **persiste desde ahí** en su `sembrar…()` y su test cuenta las filas en la base.
+> Quién persiste qué: F2-230 grupos, productos, meseros y clientes · F2-145 precios por
+> sucursal · F2-233 áreas y canales · F2-120 unidades, grupos de insumo, insumos, almacenes y
+> proveedores · F2-121 existencias · F2-122 pólizas y movimientos (F2-123 conteos, F2-124
+> traspasos) · F2-125 recetas · F2-126 compras y gastos. Los datos por cheque que la tabla
+> `cheques` aún no guarda (área, canal, cliente, clave de mesero y de producto) vienen en
+> `ChequeSeed.maestro` y `PartidaSeed.productoClave`.
 
 > **F2-102 (QR en el ticket) no entra a la cola nocturna.** Necesita una impresora, una
 > plantilla real de SoftRestaurant y decidir si el QR lo imprime el POS o el agente. Vive en

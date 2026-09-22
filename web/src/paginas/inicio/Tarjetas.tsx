@@ -51,10 +51,13 @@ export function TarjetaVentaTotal({
   resumen,
   porHora,
   rango,
+  horaTope,
 }: {
   resumen: Consulta<Resumen>;
   porHora: Consulta<VentaHora[]>;
   rango: Rango;
+  /** Hora en curso (0–23) cuando el rango es sólo hoy: la gráfica no dibuja el futuro. */
+  horaTope?: number;
 }) {
   const dias = diasDe(rango);
   return (
@@ -78,12 +81,14 @@ export function TarjetaVentaTotal({
               </h3>
               <SegunEstado consulta={porHora} esqueleto={<Esqueleto lineas={0} grafica />}>
                 {(filas) => {
-                  const puntos = datosPorHora(filas);
+                  const puntos = datosPorHora(filas, horaTope);
                   return (
                     <>
-                      <Suspense fallback={<Esqueleto lineas={0} grafica />}>
-                        <GraficaPorHora puntos={puntos} />
-                      </Suspense>
+                      <div data-testid="grafica-por-hora" data-horas={puntos.length}>
+                        <Suspense fallback={<Esqueleto lineas={0} grafica />}>
+                          <GraficaPorHora puntos={puntos} />
+                        </Suspense>
+                      </div>
                       {puntos.some((p) => p.valor === null) && (
                         <p className="mt-1 text-xs text-slate-500" data-testid="horas-sin-dato">
                           Alguna hora no trae un importe legible; la línea se corta ahí.

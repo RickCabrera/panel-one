@@ -16,7 +16,7 @@ import type { EmpresaScope } from '../scope/empresa-scope';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import { AgregadosVentasService, diasDelRango, FORMAS } from './agregados-ventas.service';
 
-// Los agregados de F1-032 contra Postgres real, con el seed de 500 cheques.
+// Los agregados de F1-032 contra Postgres real, con el seed de 1500 cheques (90 días).
 //
 // Dos referencias independientes del SQL:
 // 1. Un cálculo "a mano" en JS, con Decimal, sobre los MISMOS cheques que
@@ -66,19 +66,25 @@ const pesos = (d: Prisma.Decimal) => d.toFixed(2, Prisma.Decimal.ROUND_HALF_UP);
 const div2 = (a: Prisma.Decimal, b: number) =>
   a.div(b).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 
+// Un formateador por zona, reusado: crear uno por llamada hacía que el cálculo a
+// mano sobre los 1500 cheques del seed de 90 días (F2-201) pasara de 5 s.
+const formateadores = new Map<string, { dia: Intl.DateTimeFormat; hora: Intl.DateTimeFormat }>();
+
 function local(t: Date, zona: string): { dia: string; hora: number } {
-  const dia = new Intl.DateTimeFormat('en-CA', {
-    timeZone: zona,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(t);
-  const hora = Number(
-    new Intl.DateTimeFormat('en-US', { timeZone: zona, hour: 'numeric', hourCycle: 'h23' }).format(
-      t,
-    ),
-  );
-  return { dia, hora };
+  let f = formateadores.get(zona);
+  if (!f) {
+    f = {
+      dia: new Intl.DateTimeFormat('en-CA', {
+        timeZone: zona,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }),
+      hora: new Intl.DateTimeFormat('en-US', { timeZone: zona, hour: 'numeric', hourCycle: 'h23' }),
+    };
+    formateadores.set(zona, f);
+  }
+  return { dia: f.dia.format(t), hora: Number(f.hora.format(t)) };
 }
 
 function delFiltro(cheques: ChequeSeed[], f: FiltroVentas): ChequeSeed[] {
@@ -202,7 +208,7 @@ function manual(cheques: ChequeSeed[], f: FiltroVentas) {
 
 // ---------------------------------------------------------------------------
 
-describe('AgregadosVentasService (contra Postgres, seed de 500 cheques)', () => {
+describe('AgregadosVentasService (contra Postgres, seed de 1500 cheques)', () => {
   const prisma = new PrismaClient();
   const servicio = new AgregadosVentasService(
     new ScopedPrismaService(prisma as unknown as PrismaService),
@@ -227,7 +233,7 @@ describe('AgregadosVentasService (contra Postgres, seed de 500 cheques)', () => 
   });
 
   const escenarios: Array<[string, FiltroVentas]> = [
-    ['los 30 días completos', { empresaId: FX.empresaA, desde: '2026-10-17', hasta: '2026-11-15' }],
+    ['los 90 días completos', { empresaId: FX.empresaA, desde: '2026-08-18', hasta: '2026-11-15' }],
     [
       'el día del cambio de horario de Tijuana',
       { empresaId: FX.empresaA, desde: '2026-11-01', hasta: '2026-11-01' },

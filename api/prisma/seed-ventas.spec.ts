@@ -9,11 +9,12 @@ import {
   generarVentas,
   hoyEn,
   instanteLocal,
+  relojDelSeed,
   sembrarVentas,
   type OpcionesVentas,
 } from './seed-ventas';
 
-// El seed de ventas de F1-032 contra Postgres real. Siembra en las sucursales
+// El seed de ventas de F1-032 (ampliado en F2-201) contra Postgres real. Siembra en las sucursales
 // de FIXTURES (empresa A), nunca en las de `SEED_IDS`: no pisa la base de
 // desarrollo de nadie.
 
@@ -26,6 +27,9 @@ const OPCIONES: OpcionesVentas = {
   hoy: '2026-11-15',
 };
 
+/** Los tests de la base siembran con reloj FIJO: 14:00 en CDMX del último día. */
+const CON_RELOJ: OpcionesVentas = { ...OPCIONES, ahora: new Date('2026-11-15T20:00:00Z') };
+
 const cero = () => new Prisma.Decimal(0);
 const diaLocal = (t: Date, zona: string) => hoyEn(zona, t);
 
@@ -33,7 +37,7 @@ describe('generarVentas()', () => {
   const cheques = generarVentas(OPCIONES);
 
   it(`son ${2 * CHEQUES_POR_SUCURSAL} cheques: ${CHEQUES_POR_SUCURSAL} por sucursal`, () => {
-    expect(cheques).toHaveLength(500);
+    expect(cheques).toHaveLength(1500);
     for (const s of OPCIONES.sucursales) {
       expect(cheques.filter((c) => c.sucursalId === s.id)).toHaveLength(CHEQUES_POR_SUCURSAL);
     }
@@ -47,7 +51,7 @@ describe('generarVentas()', () => {
           .map((c) => diaLocal(c.cerradoAt!, s.zonaHoraria)),
       );
       expect(dias.size).toBe(DIAS);
-      expect([...dias].sort()[0]).toBe('2026-10-17');
+      expect([...dias].sort()[0]).toBe('2026-08-18');
       expect([...dias].sort()[DIAS - 1]).toBe('2026-11-15');
     }
   });
@@ -114,6 +118,86 @@ describe('generarVentas()', () => {
   });
 });
 
+describe('el día en curso no inventa futuro (F2-201)', () => {
+  const completos = generarVentas(OPCIONES);
+  const zona = (id: string) => OPCIONES.sucursales.find((s) => s.id === id)!.zonaHoraria;
+
+  /** Con `ahora`, lo que queda es EXACTAMENTE lo de antes de `ahora`, sin tocarlo. */
+  function comprobar(op: OpcionesVentas, ahora: Date) {
+    const conReloj = generarVentas({ ...op, ahora });
+    const referencia = generarVentas(op);
+    expect(conReloj.length).toBeLessThan(referencia.length);
+    for (const c of conReloj) {
+      expect(c.abiertoAt.getTime()).toBeLessThanOrEqual(ahora.getTime());
+      if (c.cerradoAt) expect(c.cerradoAt.getTime()).toBeLessThanOrEqual(ahora.getTime());
+    }
+    // Por sucursal, lo que queda es el principio de la lista sin reloj, idéntico
+    // (ids, folios, partidas y pagos): no hay huecos de folio ni pasado alterado.
+    for (const s of op.sucursales) {
+      const con = conReloj.filter((c) => c.sucursalId === s.id);
+      const sin = referencia.filter((c) => c.sucursalId === s.id);
+      expect(con).toEqual(sin.slice(0, con.length));
+      // Y lo descartado sí era futuro (los cancelados sin cierre no dicen su hora).
+      for (const c of sin.slice(con.length)) {
+        if (c.cerradoAt) expect(c.cerradoAt.getTime()).toBeGreaterThan(ahora.getTime());
+      }
+    }
+    return conReloj;
+  }
+
+  it.each([
+    ['14:00', '2026-11-15T20:00:00Z'],
+    ['23:30', '2026-11-16T05:30:00Z'],
+  ])('reloj falso a las %s de CDMX: ningún cheque de hoy cierra después', (_hora, iso) => {
+    const ahora = new Date(iso);
+    const quedan = comprobar(OPCIONES, ahora);
+    const deHoy = quedan.filter(
+      (c) =>
+        c.sucursalId === FX.sucursalA1 &&
+        c.cerradoAt &&
+        diaLocal(c.cerradoAt, zona(c.sucursalId)) === '2026-11-15',
+    );
+    expect(deHoy.length).toBeGreaterThan(0); // hoy sí tiene ventas, sólo que no futuras
+  });
+
+  it('dos zonas: a las 00:30 de CDMX, el "hoy" de Tijuana (22:30 de ayer) todavía no ocurre', () => {
+    const ahora = new Date('2026-11-15T06:30:00Z'); // 00:30 CDMX = 22:30 del 14 en Tijuana
+    const quedan = comprobar(OPCIONES, ahora);
+    const tijuana = quedan.filter((c) => c.sucursalId === FX.sucursalA2 && c.cerradoAt);
+    expect(tijuana.some((c) => diaLocal(c.cerradoAt!, 'America/Tijuana') === '2026-11-15')).toBe(
+      false,
+    );
+    expect(tijuana.some((c) => diaLocal(c.cerradoAt!, 'America/Tijuana') === '2026-11-14')).toBe(
+      true,
+    );
+  });
+
+  it('sin reloj, o con uno después de todo, no se descarta nada', () => {
+    expect(generarVentas({ ...OPCIONES, ahora: new Date('2100-01-01T00:00:00Z') })).toEqual(
+      completos,
+    );
+    expect(completos).toHaveLength(2 * CHEQUES_POR_SUCURSAL);
+  });
+});
+
+describe('relojDelSeed()', () => {
+  it('trunca al minuto: dos corridas dentro del mismo minuto usan el mismo reloj', () => {
+    expect(relojDelSeed(undefined, new Date('2026-11-15T20:00:59.999Z')).toISOString()).toBe(
+      '2026-11-15T20:00:00.000Z',
+    );
+    expect(relojDelSeed(undefined, new Date('2026-11-15T20:00:00.001Z')).toISOString()).toBe(
+      '2026-11-15T20:00:00.000Z',
+    );
+  });
+
+  it('SEED_AHORA fija el reloj, y uno ilegible se rechaza', () => {
+    expect(relojDelSeed('2026-09-21T14:00:00-06:00').toISOString()).toBe(
+      '2026-09-21T20:00:00.000Z',
+    );
+    expect(() => relojDelSeed('ayer')).toThrow(/SEED_AHORA/);
+  });
+});
+
 describe('instanteLocal()', () => {
   it('convierte hora de pared a UTC con el desfase de ESE día (horario de Tijuana)', () => {
     // Tijuana: PDT (-7) hasta el 1 de noviembre de 2026, PST (-8) después.
@@ -141,7 +225,7 @@ describe('sembrarVentas() (contra Postgres)', () => {
   afterAll(async () => {
     await limpiarFixtures(prisma);
     await prisma.$disconnect();
-  });
+  }, 60_000);
 
   async function fotografia() {
     const sinFechas = { createdAt: true, updatedAt: true } as const;
@@ -167,28 +251,33 @@ describe('sembrarVentas() (contra Postgres)', () => {
     ]);
   }
 
-  it('siembra 500 cheques y el catálogo', async () => {
-    const r = await sembrarVentas(prisma, OPCIONES);
-    expect(r.cheques).toBe(500);
-    await expect(prisma.cheque.count({ where: { sucursalId: sucursales } })).resolves.toBe(500);
+  it('siembra los cheques de 90 días (sin los futuros) y el catálogo', async () => {
+    const esperados = generarVentas(CON_RELOJ).length;
+    expect(esperados).toBeGreaterThan(1400);
+    expect(esperados).toBeLessThan(1500);
+    const r = await sembrarVentas(prisma, CON_RELOJ);
+    expect(r.cheques).toBe(esperados);
+    await expect(prisma.cheque.count({ where: { sucursalId: sucursales } })).resolves.toBe(
+      esperados,
+    );
     await expect(
       prisma.chequePartida.count({ where: { cheque: { sucursalId: sucursales } } }),
     ).resolves.toBe(r.partidas);
     await expect(
       prisma.formaPagoCatalogo.count({ where: { empresaId: FX.empresaA } }),
     ).resolves.toBe(CATALOGO_SEED.length);
-  });
+  }, 60_000); // 1500 cheques del seed de 90 días (F2-201): los 5 s de jest no alcanzan
 
-  it('es idempotente: tres corridas dejan exactamente los mismos datos, ids incluidos', async () => {
+  it('es idempotente: con el mismo reloj, tres corridas dejan exactamente los mismos datos, ids incluidos', async () => {
     const antes = await fotografia();
-    await sembrarVentas(prisma, OPCIONES);
-    await sembrarVentas(prisma, OPCIONES);
-    await sembrarVentas(prisma, OPCIONES);
+    await sembrarVentas(prisma, CON_RELOJ);
+    await sembrarVentas(prisma, CON_RELOJ);
+    await sembrarVentas(prisma, CON_RELOJ);
     expect(await fotografia()).toEqual(antes);
-  });
+  }, 60_000); // 1500 cheques del seed de 90 días (F2-201): los 5 s de jest no alcanzan
 
   it('lo guardado es lo generado, peso a peso', async () => {
-    const generados = generarVentas(OPCIONES);
+    const generados = generarVentas(CON_RELOJ);
     const guardados = await prisma.cheque.findMany({
       where: { sucursalId: sucursales },
       include: { partidas: { orderBy: { orden: 'asc' } }, pagos: { orderBy: { id: 'asc' } } },
@@ -205,7 +294,7 @@ describe('sembrarVentas() (contra Postgres)', () => {
         [...g.pagos].sort((a, b) => (a.id < b.id ? -1 : 1)).map((p) => p.monto.toFixed(2)),
       );
     }
-  });
+  }, 60_000); // 1500 cheques del seed de 90 días (F2-201): los 5 s de jest no alcanzan
 
   it('no toca cheques que no sembró', async () => {
     const ajeno = await prisma.cheque.create({
@@ -223,8 +312,8 @@ describe('sembrarVentas() (contra Postgres)', () => {
         total: '1',
       },
     });
-    await sembrarVentas(prisma, OPCIONES);
+    await sembrarVentas(prisma, CON_RELOJ);
     await expect(prisma.cheque.count({ where: { id: ajeno.id } })).resolves.toBe(1);
     await prisma.cheque.delete({ where: { id: ajeno.id } });
-  });
+  }, 60_000); // 1500 cheques del seed de 90 días (F2-201): los 5 s de jest no alcanzan
 });
