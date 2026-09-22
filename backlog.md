@@ -875,7 +875,7 @@ pared se lee a dos metros de distancia; y con todas las sucursales desconectadas
 dice por qué está vacía, sin inventar ceros.
 
 ### F2-224 · Centro de alertas
-`[ ]` **Bloque C** · /web + /api
+`[x]` **Bloque C** · /web + /api
 
 Las alertas hoy están dispersas (el aviso de sucursal desconectada, el semáforo de mesas).
 Unificar en un modelo propio: tipo, severidad, sucursal, momento de apertura, momento de cierre
