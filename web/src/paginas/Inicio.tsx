@@ -1,19 +1,8 @@
-import { useCallback } from 'react';
-import { useSearchParams } from 'react-router';
-
 import { useAlcance } from '../filtros/alcance';
-import {
-  escribirPeriodo,
-  horaEn,
-  incluyeHoy,
-  leerPeriodo,
-  rangoDe,
-  zonaDelPanel,
-  type Periodo,
-} from '../filtros/periodo';
-import { useHoraEn, useHoy } from '../filtros/useHoy';
+import { horaEn, incluyeHoy } from '../filtros/periodo';
+import { useHoraEn } from '../filtros/useHoy';
+import { usePeriodo } from '../filtros/usePeriodo';
 import { useMesasAbiertas, useVentas, type Filtro } from './inicio/consultas';
-import { SelectorPeriodo } from './inicio/SelectorPeriodo';
 import {
   TarjetaDescuentos,
   TarjetaFormasPago,
@@ -25,12 +14,8 @@ import { Vista } from './Vista';
 
 export function Inicio() {
   const { empresa, sucursal, sucursalId, sucursales } = useAlcance();
-  const [parametros, setParametros] = useSearchParams();
-  const periodo = leerPeriodo(parametros);
-
-  const zona = zonaDelPanel(sucursal, sucursales.data);
-  const hoy = useHoy(zona);
-  const rango = rangoDe(periodo, hoy);
+  // El selector de periodo está en la cabecera (F2-212); aquí sólo se lee.
+  const { rango, hoy, zona } = usePeriodo();
   const autoRefresco = rango !== null && incluyeHoy(rango, hoy);
   // Sólo hoy: la gráfica por hora termina en la hora en curso de la zona del panel.
   const horaActual = useHoraEn(zona);
@@ -52,11 +37,6 @@ export function Inicio() {
   const mesas = useMesasAbiertas(filtro);
   const consultas = [resumen, porHora, formas, mesas];
 
-  const cambiarPeriodo = useCallback(
-    (nuevo: Periodo) => setParametros((previos) => escribirPeriodo(previos, nuevo)),
-    [setParametros],
-  );
-
   // "Actualizado" = el dato MÁS VIEJO en pantalla: si una tarjeta no se pudo
   // refrescar, la hora no promete que todo es de hace un momento.
   const exitosas = consultas.filter((c) => c.isSuccess).map((c) => c.dataUpdatedAt);
@@ -69,8 +49,7 @@ export function Inicio() {
 
   return (
     <Vista titulo="Panel de ventas">
-      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <SelectorPeriodo periodo={periodo} rangoActual={rango} onCambiar={cambiarPeriodo} />
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-end">
         <div className="flex items-center gap-3 text-sm text-tinta-tenue">
           <span data-testid="actualizado">
             {actualizado === null
