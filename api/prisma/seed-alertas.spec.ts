@@ -29,7 +29,11 @@ describe('generarAlertasSeed()', () => {
     const dias = new Set(filas.map((f) => f.abiertaAt.toISOString().slice(0, 10)));
     expect(dias.size).toBe(DIAS_HISTORIA);
     expect(new Set(filas.map((f) => f.sucursalId))).toEqual(new Set(OPCIONES.sucursales));
-    expect(new Set(filas.map((f) => f.tipo))).toEqual(new Set(Object.values(TipoAlerta)));
+    // Los cuatro tipos de F2-224. `bajo_minimo` (F2-121) NO tiene historial sintético: lo abre la
+    // evaluación con las existencias del seed, no se inventa.
+    expect(new Set(filas.map((f) => f.tipo))).toEqual(
+      new Set(Object.values(TipoAlerta).filter((t) => t !== TipoAlerta.bajo_minimo)),
+    );
     for (const f of filas) {
       expect(f.cerradaAt.getTime()).toBeGreaterThan(f.abiertaAt.getTime());
       expect(f.cerradaAt.getTime()).toBeLessThan(Date.parse('2026-11-15T00:00:00Z'));

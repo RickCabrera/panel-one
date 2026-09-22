@@ -8,6 +8,7 @@ import { ConsultaVentas, type FiltroVentas } from './consulta-ventas';
 import { EscrituraAdmin } from './escritura-admin';
 import { EscrituraAlertas } from './escritura-alertas';
 import { EscrituraCatalogos, IngestaCatalogos } from './escritura-catalogos';
+import { EscrituraExistencias, IngestaExistencias } from './escritura-existencias';
 import { EscrituraReportes } from './escritura-reportes';
 import { EscrituraSucursal } from './escritura-sucursal';
 import {
@@ -220,6 +221,19 @@ export class ScopedPrismaService {
    */
   catalogos(scope: EmpresaScope): EscrituraCatalogos {
     return new EscrituraCatalogos(this.#prisma, scope);
+  }
+
+  /**
+   * Existencias (F2-121) de la sucursal del agente: la foto de un almacén, bajo su candado.
+   * El tenant sale de la API key; nada de lo que llega puede moverlo.
+   */
+  existenciasDeSucursal(agente: AgenteAutenticado): IngestaExistencias {
+    return new IngestaExistencias(this.#prisma, agente);
+  }
+
+  /** Lo que el panel escribe sobre las existencias (F2-121): los límites, con scope. */
+  existencias(scope: EmpresaScope): EscrituraExistencias {
+    return new EscrituraExistencias(this.#prisma, scope);
   }
 
   /**

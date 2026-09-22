@@ -52,6 +52,11 @@ export const LLAVE_EMPRESA = {
   Insumo: 'empresaId',
   AlmacenCatalogo: 'empresaId',
   ProveedorCatalogo: 'empresaId',
+  // F2-121. Existencias y su lectura: las escribe SÓLO `IngestaExistencias` (clavada a la
+  // sucursal del agente); los límites, SÓLO `EscrituraExistencias` (con scope).
+  Existencia: 'empresaId',
+  LecturaExistencias: 'empresaId',
+  LimiteExistencia: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

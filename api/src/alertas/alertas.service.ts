@@ -10,11 +10,12 @@ import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import { AgregadosVentasService } from '../ventas/agregados-ventas.service';
 import {
   evaluar,
+  type ExistenciasObservadas,
   type Observacion,
   type SucursalObservada,
   type VentaObservada,
 } from './evaluador';
-import { cuentasDelSnapshot, diaLocal, restarDias } from './observar';
+import { cuentasDelSnapshot, diaLocal, existenciasObservadas, restarDias } from './observar';
 import {
   definicion,
   REGLAS,
@@ -132,6 +133,7 @@ export class AlertasService {
     });
     const contactoDe = new Map(contactos.map((c) => [c.sucursalId, c.ultimoContactoAt]));
     const ventas = await this.ventasPorZona(scope, empresaId, sucursales, ahora);
+    const existencias = await this.existenciasPorSucursal(scope, empresaId, ids);
 
     const observadas = await Promise.all(
       sucursales.map(async (s): Promise<SucursalObservada> => {
@@ -163,10 +165,73 @@ export class AlertasService {
               ? cuentasDelSnapshot(snap.payload, snap.capturadoAt, edadRecepcionS!)
               : [],
           venta: ventas.get(s.id) ?? null,
+          existencias: existencias.get(s.id) ?? null,
         };
       }),
     );
     return { empresaId, sucursales: observadas };
+  }
+
+  /**
+   * Lo que la regla de bajo mínimo (F2-121) necesita de cada sucursal: sus lecturas, sus
+   * límites con mínimo, la existencia de esos artículos en la última foto y el nombre del
+   * insumo. Todo con el scope de la empresa. Sin lectura = sin entrada (no se evalúa).
+   */
+  private async existenciasPorSucursal(
+    scope: EmpresaScope,
+    empresaId: string,
+    ids: readonly string[],
+  ): Promise<Map<string, ExistenciasObservadas>> {
+    const datos = this.datos.para(scope);
+    const deEstas = { empresaId, sucursalId: { in: [...ids] } };
+    const [lecturas, limites] = await Promise.all([
+      datos.lecturaExistencias.groupBy({
+        by: ['sucursalId'],
+        where: deEstas,
+        _count: { _all: true },
+      }),
+      datos.limiteExistencia.findMany({
+        where: { ...deEstas, minimo: { not: null } },
+        select: { sucursalId: true, almacenOrigenSrId: true, insumoOrigenSrId: true, minimo: true },
+      }),
+    ]);
+    const salida = new Map<string, ExistenciasObservadas>();
+    const conLectura = lecturas.filter((l) => l._count._all > 0).map((l) => l.sucursalId);
+    if (conLectura.length === 0) return salida;
+    const insumos = [...new Set(limites.map((l) => l.insumoOrigenSrId))];
+    const [filas, catalogo] = await Promise.all([
+      insumos.length === 0
+        ? Promise.resolve([])
+        : datos.existencia.findMany({
+            where: { empresaId, sucursalId: { in: conLectura }, insumoOrigenSrId: { in: insumos } },
+            select: {
+              sucursalId: true,
+              almacenOrigenSrId: true,
+              insumoOrigenSrId: true,
+              cantidad: true,
+            },
+          }),
+      insumos.length === 0
+        ? Promise.resolve([])
+        : datos.insumo.findMany({
+            where: { empresaId, sucursalId: { in: conLectura }, origenSrId: { in: insumos } },
+            select: { sucursalId: true, origenSrId: true, nombre: true },
+          }),
+    ]);
+    for (const sucursalId of conLectura) {
+      const obs = existenciasObservadas({
+        lecturas: lecturas.find((l) => l.sucursalId === sucursalId)?._count._all ?? 0,
+        limites: limites.flatMap((l) =>
+          l.sucursalId === sucursalId && l.minimo !== null ? [{ ...l, minimo: l.minimo }] : [],
+        ),
+        filas: filas.filter((f) => f.sucursalId === sucursalId),
+        nombres: new Map(
+          catalogo.filter((c) => c.sucursalId === sucursalId).map((c) => [c.origenSrId, c.nombre]),
+        ),
+      });
+      if (obs) salida.set(sucursalId, obs);
+    }
+    return salida;
   }
 
   /**

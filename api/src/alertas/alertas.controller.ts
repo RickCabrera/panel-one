@@ -81,7 +81,7 @@ export class AlertasController {
   }
 
   @Get('reglas')
-  @ApiOperation({ summary: 'Las cuatro reglas de alerta de la empresa (guardadas o por defecto).' })
+  @ApiOperation({ summary: 'Las reglas de alerta de la empresa (guardadas o por defecto).' })
   @ApiOkResponse({ type: [ReglaAlertaDto] })
   @ApiBadRequestResponse({ type: ErrorDto, description: 'Parámetros inválidos.' })
   @ApiNotFoundResponse({ type: ErrorDto, description: DESC_404 })
@@ -100,7 +100,7 @@ export class AlertasController {
       'Guarda la regla y, en la misma transacción, recalcula las alertas abiertas de la ' +
       'empresa: con un umbral nuevo cierran las que ya no lo alcanzan (`condicion`) y abren ' +
       'las que sí; apagada, cierra las de su tipo (`regla_apagada`) y deja de abrir. El ' +
-      'historial no se borra. Responde las cuatro reglas.',
+      'historial no se borra. Responde todas las reglas.',
   })
   @ApiParam({ name: 'tipo', enum: TipoAlerta, enumName: 'TipoAlerta' })
   @ApiOkResponse({ type: [ReglaAlertaDto] })

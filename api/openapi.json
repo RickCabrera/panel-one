@@ -694,6 +694,87 @@
         ]
       }
     },
+    "/ingesta/existencias": {
+      "post": {
+        "description": "Reemplaza lo que el panel sabe de ese almacén: crea lo nuevo, actualiza lo que cambió y BORRA lo que ya no viene. Idempotente: la misma foto tres veces deja exactamente los mismos datos. Llave: (sucursal de la API key, `almacenOrigenSrId`, `insumoOrigenSrId`). Cada registro se valida aparte: uno inválido va a `rechazados` y, si su insumo se puede identificar, su fila se queda como estaba; si algún rechazo no tiene insumo, la foto no borra nada (`ausentesConservados`). Una foto más vieja que la última aplicada del almacén responde `aplicado=false` sin escribir; con el mismo `capturadoAt` gana la que llega después. Nunca toca los mínimos y máximos del panel. Registra el contacto del agente.",
+        "operationId": "ExistenciasIngestaController_recibir",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FotoExistenciasDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoExistenciasDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sobre inválido: almacén vacío o de más de 64, fecha sin zona o más de 5 min en el futuro, `registros` no arreglo, con más de 5000 o con no-objetos, o un campo de más en el sobre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          },
+          "500": {
+            "description": "Falla determinista: no se guardó nada y reenviar lo mismo va a fallar igual. No reintentar en bucle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Falla transitoria (base, o el candado del almacén lo tiene otra foto de la misma sucursal). No se guardó nada: reenviar igual más tarde.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "Recibe la foto completa de las existencias de UN almacén del POS.",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
     "/ventas/resumen": {
       "get": {
         "description": "Cache de 15 s por usuario-alcance y filtro.",
@@ -3330,7 +3411,7 @@
             "bearer": []
           }
         ],
-        "summary": "Las cuatro reglas de alerta de la empresa (guardadas o por defecto).",
+        "summary": "Las reglas de alerta de la empresa (guardadas o por defecto).",
         "tags": [
           "alertas"
         ]
@@ -3338,7 +3419,7 @@
     },
     "/alertas/reglas/{tipo}": {
       "put": {
-        "description": "Guarda la regla y, en la misma transacción, recalcula las alertas abiertas de la empresa: con un umbral nuevo cierran las que ya no lo alcanzan (`condicion`) y abren las que sí; apagada, cierra las de su tipo (`regla_apagada`) y deja de abrir. El historial no se borra. Responde las cuatro reglas.",
+        "description": "Guarda la regla y, en la misma transacción, recalcula las alertas abiertas de la empresa: con un umbral nuevo cierran las que ya no lo alcanzan (`condicion`) y abren las que sí; apagada, cierra las de su tipo (`regla_apagada`) y deja de abrir. El historial no se borra. Responde todas las reglas.",
         "operationId": "AlertasController_guardarRegla",
         "parameters": [
           {
@@ -5976,6 +6057,183 @@
           "catalogos"
         ]
       }
+    },
+    "/inventario/existencias": {
+      "get": {
+        "description": "La última foto que el agente mandó de cada almacén (`POST /ingesta/existencias`), con los nombres de los catálogos espejo y los mínimos/máximos del panel. KPIs sobre las filas del filtro (sucursal, almacén, búsqueda). Un artículo con límite que ya no viene en la foto sale `sin_lectura`. Una sucursal sin ninguna lectura lo dice en `sucursales[].almacenesLeidos`.",
+        "operationId": "ExistenciasController_listar",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "almacenOrigenSrId",
+            "required": false,
+            "in": "query",
+            "description": "El `origenSrId` de un almacén de esa sucursal. Exige `sucursalId` (si no, 400).",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Busca en el nombre, la clave y el origenSrId del insumo (sin distinguir mayúsculas).",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExistenciasDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o el artículo no tiene existencia ni límite en ese almacén. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Existencias por artículo, sucursal y almacén, con su valor y su semáforo (F2-121).",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/existencias/limites": {
+      "put": {
+        "description": "Son nuestros: viven en Postgres, la ingesta no los toca y sobreviven a que el artículo salga de la foto. Los dos nulos = se borran. Mínimo mayor que máximo = 400. Responde la fila.",
+        "operationId": "ExistenciasController_guardarLimites",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardarLimitesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilaExistenciaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o el artículo no tiene existencia ni límite en ese almacén. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Guarda el mínimo y el máximo de un artículo en su almacén (NUNCA escribe a SR).",
+        "tags": [
+          "inventario"
+        ]
+      }
     }
   },
   "info": {
@@ -7082,6 +7340,147 @@
         "required": [
           "solicitadaAt",
           "pendiente"
+        ]
+      },
+      "RegistroExistenciaDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string",
+            "example": "I001",
+            "description": "El `origenSrId` del insumo en el catálogo `insumos` de esta sucursal (1–64). Sin FK: el catálogo puede llegar después. Repetido dentro de la foto = se rechazan todas sus apariciones."
+          },
+          "cantidad": {
+            "type": "string",
+            "pattern": "^-?\\d{1,9}(\\.\\d{1,3})?$",
+            "example": "12.500",
+            "description": "Existencia en la unidad del insumo, texto decimal NUMERIC(12,3) (hasta 9 enteros y 3 decimales; no se redondea). Puede ser 0 o negativa: el lector manda TODAS las filas del almacén, también las agotadas (una que falta sale del panel)."
+          },
+          "costoPromedio": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "85.40",
+            "description": "Costo promedio por unidad EN ESTE ALMACÉN, sin IVA supuesto (esquema-sr §10). Regla de los importes de `/ingesta/eventos`: hasta 10 enteros y 4 decimales, se redondea a 2 mitad lejos de cero. El valor (cantidad × costo, a 2 decimales) lo calcula el API: si no cabe en NUMERIC(12,2) se rechaza el registro."
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "cantidad",
+          "costoPromedio"
+        ]
+      },
+      "FotoExistenciasDto": {
+        "type": "object",
+        "properties": {
+          "almacenOrigenSrId": {
+            "type": "string",
+            "example": "ALM-GEN",
+            "description": "El `origenSrId` del almacén en el catálogo `almacenes` de esta sucursal (1–64). Sin FK."
+          },
+          "capturadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-22T15:30:00.000Z",
+            "description": "El instante en que se LEYÓ la foto en el POS (reloj del agente), ISO-8601 con zona. Una foto más vieja que la última aplicada de ese almacén se ignora (`aplicado=false`); con el MISMO instante, gana la que llega después. Más de 5 min en el futuro = 400."
+          },
+          "registros": {
+            "maxItems": 5000,
+            "description": "TODAS las existencias del almacén (0 a 5000). Lo que ya estaba y no viene se BORRA (salvo que algún rechazo no tenga insumo identificable: entonces no se borra nada). Vacío = el almacén no tiene nada.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegistroExistenciaDto"
+            }
+          }
+        },
+        "required": [
+          "almacenOrigenSrId",
+          "capturadoAt",
+          "registros"
+        ]
+      },
+      "RechazoExistenciaDto": {
+        "type": "object",
+        "properties": {
+          "indice": {
+            "type": "number",
+            "example": 3,
+            "description": "Posición del registro en la foto (desde 0)."
+          },
+          "insumoOrigenSrId": {
+            "type": "string",
+            "nullable": true,
+            "description": "El `insumoOrigenSrId` si era válido; nulo si no."
+          },
+          "motivo": {
+            "type": "string",
+            "example": "registros.3.cantidad: cantidad debe ser una cantidad decimal en texto",
+            "description": "Ruta y regla. NUNCA repite el valor."
+          },
+          "reintentable": {
+            "type": "boolean",
+            "description": "Siempre false: reenviarlo igual va a fallar igual."
+          }
+        },
+        "required": [
+          "indice",
+          "insumoOrigenSrId",
+          "motivo",
+          "reintentable"
+        ]
+      },
+      "ResultadoExistenciasDto": {
+        "type": "object",
+        "properties": {
+          "aplicado": {
+            "type": "boolean",
+            "description": "false = la foto es más vieja que la última aplicada de ese almacén: no se escribió nada."
+          },
+          "recibidos": {
+            "type": "number",
+            "description": "Registros en la foto."
+          },
+          "creados": {
+            "type": "number",
+            "description": "Filas nuevas."
+          },
+          "actualizados": {
+            "type": "number",
+            "description": "Filas cuya cantidad, costo o valor cambió."
+          },
+          "sinCambios": {
+            "type": "number",
+            "description": "Filas iguales: no se tocaron."
+          },
+          "borrados": {
+            "type": "number",
+            "description": "Filas del almacén que ya no vienen en la foto: se borraron."
+          },
+          "conservados": {
+            "type": "number",
+            "description": "Rechazados cuya fila ya existía: se conserva tal cual (ni se actualiza ni se borra)."
+          },
+          "ausentesConservados": {
+            "type": "boolean",
+            "description": "true = algún rechazo no tenía insumo identificable, así que esta foto NO borró ausentes."
+          },
+          "rechazados": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RechazoExistenciaDto"
+            }
+          }
+        },
+        "required": [
+          "aplicado",
+          "recibidos",
+          "creados",
+          "actualizados",
+          "sinCambios",
+          "borrados",
+          "conservados",
+          "ausentesConservados",
+          "rechazados"
         ]
       },
       "DescuentosDto": {
@@ -8475,7 +8874,8 @@
           "sucursal_sin_reporte",
           "mesa_abierta",
           "cuenta_sin_imprimir",
-          "caida_venta"
+          "caida_venta",
+          "bajo_minimo"
         ]
       },
       "SeveridadAlerta": {
@@ -10731,6 +11131,286 @@
         "required": [
           "empresaId",
           "sucursalId"
+        ]
+      },
+      "KpisExistenciasDto": {
+        "type": "object",
+        "properties": {
+          "articulos": {
+            "type": "number",
+            "description": "Artículos con lectura (tras sucursal, almacén y búsqueda)."
+          },
+          "valor": {
+            "type": "string",
+            "example": "12345.67",
+            "description": "Σ valor, negativos incluidos."
+          },
+          "atencion": {
+            "type": "number",
+            "description": "Atención requerida = bajo mínimo."
+          },
+          "sinExistencia": {
+            "type": "number",
+            "description": "Cantidad ≤ 0."
+          },
+          "sobreMaximo": {
+            "type": "number"
+          },
+          "sinLectura": {
+            "type": "number",
+            "description": "Con límite guardado pero ya no vienen en la foto de su almacén."
+          }
+        },
+        "required": [
+          "articulos",
+          "valor",
+          "atencion",
+          "sinExistencia",
+          "sobreMaximo",
+          "sinLectura"
+        ]
+      },
+      "EstadoExistencia": {
+        "type": "string",
+        "enum": [
+          "sin_existencia",
+          "bajo_minimo",
+          "sobre_maximo",
+          "ok",
+          "sin_limites",
+          "sin_lectura"
+        ]
+      },
+      "FilaExistenciaDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo de almacenes de su sucursal; nulo si no está."
+          },
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo de insumos de su sucursal; nulo si no está."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre de la unidad del insumo."
+          },
+          "cantidad": {
+            "type": "string",
+            "nullable": true,
+            "example": "12.500",
+            "description": "NUMERIC(12,3). Nulo = sin lectura."
+          },
+          "costoPromedio": {
+            "type": "string",
+            "nullable": true,
+            "example": "85.40",
+            "description": "Dinero. Nulo = sin lectura."
+          },
+          "valor": {
+            "type": "string",
+            "nullable": true,
+            "example": "1067.50",
+            "description": "round(cantidad × costo, 2). Nulo = sin lectura."
+          },
+          "minimo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Mínimo del panel (no de SR)."
+          },
+          "maximo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Máximo del panel (no de SR)."
+          },
+          "estado": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoExistencia"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "almacenOrigenSrId",
+          "almacen",
+          "insumoOrigenSrId",
+          "insumo",
+          "clave",
+          "unidad",
+          "cantidad",
+          "costoPromedio",
+          "valor",
+          "minimo",
+          "maximo",
+          "estado"
+        ]
+      },
+      "AlmacenExistenciasDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo; nulo si no está."
+          },
+          "capturadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cuándo se leyó la última foto aplicada (reloj del agente). Nulo = nunca."
+          },
+          "recibidaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cuándo la recibió el API. Nulo = nunca."
+          },
+          "atrasada": {
+            "type": "boolean",
+            "description": "Recibida hace más de 90 min (3 × la lectura de 30 min)."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "almacenOrigenSrId",
+          "almacen",
+          "capturadoAt",
+          "recibidaAt",
+          "atrasada"
+        ]
+      },
+      "SucursalExistenciasDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "description": "Zona IANA de la sucursal: las horas se presentan en ella."
+          },
+          "almacenesLeidos": {
+            "type": "number",
+            "description": "Almacenes con al menos una foto aplicada."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "zonaHoraria",
+          "almacenesLeidos"
+        ]
+      },
+      "ExistenciasDto": {
+        "type": "object",
+        "properties": {
+          "kpis": {
+            "$ref": "#/components/schemas/KpisExistenciasDto"
+          },
+          "filas": {
+            "description": "Todas las filas del filtro (sin paginar), por sucursal, almacén y nombre.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaExistenciaDto"
+            }
+          },
+          "almacenes": {
+            "description": "Los almacenes de las sucursales pedidas: con lectura o del catálogo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlmacenExistenciasDto"
+            }
+          },
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalExistenciasDto"
+            }
+          }
+        },
+        "required": [
+          "kpis",
+          "filas",
+          "almacenes",
+          "sucursales"
+        ]
+      },
+      "GuardarLimitesDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La sucursal del almacén. De otra empresa = 404."
+          },
+          "almacenOrigenSrId": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "insumoOrigenSrId": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "minimo": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^\\d{1,9}(\\.\\d{1,3})?$",
+            "example": "2.5",
+            "description": "Existencia mínima en la unidad del insumo, texto decimal sin signo (hasta 3 decimales). Nulo = sin mínimo."
+          },
+          "maximo": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^\\d{1,9}(\\.\\d{1,3})?$",
+            "description": "Existencia máxima. Menor que el mínimo = 400. Los dos nulos = se borran."
+          }
+        },
+        "required": [
+          "empresaId",
+          "sucursalId",
+          "almacenOrigenSrId",
+          "insumoOrigenSrId",
+          "minimo",
+          "maximo"
         ]
       }
     }

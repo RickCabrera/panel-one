@@ -62,6 +62,19 @@ export const REGLAS: readonly DefinicionRegla[] = [
     porDefecto: 30,
     severidad: SeveridadAlerta.advertencia,
   },
+  {
+    // F2-121. El umbral es el % DEL MÍNIMO de cada artículo: con 100 (el valor por defecto)
+    // avisa en cuanto la existencia queda por debajo de su mínimo; con 50, sólo por debajo de
+    // la mitad. DECISION PROVISIONAL (nocturno): unidad, rango y default son una elección
+    // conservadora (la ficha sólo dice "artículo bajo mínimo"); advertencia, no crítica: no
+    // ciega ninguna vista. Ver docs/nocturno-log.md (F2-121).
+    tipo: TipoAlerta.bajo_minimo,
+    unidad: 'porcentaje',
+    minimo: 1,
+    maximo: 100,
+    porDefecto: 100,
+    severidad: SeveridadAlerta.advertencia,
+  },
 ];
 
 export function definicion(tipo: TipoAlerta): DefinicionRegla {
@@ -96,7 +109,7 @@ export interface ReglaEfectiva {
   porDefecto: boolean;
 }
 
-/** Las cuatro reglas de una empresa: lo guardado, o la regla por defecto. */
+/** Las reglas de una empresa: lo guardado, o la regla por defecto. */
 export function reglasEfectivas(
   guardadas: ReadonlyArray<{ tipo: TipoAlerta; activa: boolean; umbral: number }>,
 ): ReglaEfectiva[] {

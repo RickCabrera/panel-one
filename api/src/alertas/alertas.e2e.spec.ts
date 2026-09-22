@@ -463,7 +463,7 @@ describe('Centro de alertas (e2e, F2-224)', () => {
       expect((await get(`/alertas/historial?empresaId=${FX.empresaA}&pagina=0`)).status).toBe(400);
     });
 
-    it('reglas: las cuatro, con unidad y rango', async () => {
+    it('reglas: todas, con unidad y rango', async () => {
       const r = await get(`/alertas/reglas?empresaId=${FX.empresaA}`);
       expect(r.status).toBe(200);
       expect(r.body.map((x: { tipo: string }) => x.tipo)).toEqual([
@@ -471,6 +471,7 @@ describe('Centro de alertas (e2e, F2-224)', () => {
         'mesa_abierta',
         'cuenta_sin_imprimir',
         'caida_venta',
+        'bajo_minimo',
       ]);
       expect(r.body[3]).toMatchObject({
         unidad: 'porcentaje',

@@ -98,6 +98,10 @@ function detalleDe(
         caidaPct: pct,
       };
     }
+    case TipoAlerta.bajo_minimo:
+      // No está en `TIPOS`: las de bajo mínimo las abre la evaluación con las existencias del
+      // seed (F2-121), no se inventa un historial.
+      throw new Error('El historial sintético no siembra alertas de bajo mínimo.');
   }
 }
 
@@ -112,6 +116,7 @@ const UMBRAL: Record<TipoAlerta, number> = {
   mesa_abierta: 60,
   cuenta_sin_imprimir: 30,
   caida_venta: 30,
+  bajo_minimo: 100,
 };
 
 export function generarAlertasSeed(op: OpcionesAlertas): AlertaSeed[] {

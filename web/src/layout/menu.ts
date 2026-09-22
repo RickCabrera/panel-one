@@ -218,7 +218,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'inventario.existencias',
         texto: 'Existencias',
         icono: Warehouse,
-        pendiente: construye('F2-121'),
+        destino: { ruta: '/existencias' },
       },
       {
         id: 'inventario.conteos',

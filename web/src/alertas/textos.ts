@@ -1,6 +1,7 @@
 import type { Alerta, MotivoCierreAlerta, SeveridadAlerta, TipoAlerta } from '../api/tipos';
 import { aCentavos, formatearPesos } from '../dinero/dinero';
 import { edadLegible } from '../paginas/inicio/ventaEnVivo';
+import { cantidad } from '../paginas/tickets/formato';
 
 /** Textos del centro de alertas (F2-224). Todo estado se dice con palabras, no sólo con color. */
 
@@ -9,6 +10,7 @@ export const NOMBRE_TIPO: Record<TipoAlerta, string> = {
   mesa_abierta: 'Mesa abierta mucho tiempo',
   cuenta_sin_imprimir: 'Cuenta sin imprimir',
   caida_venta: 'Caída de venta',
+  bajo_minimo: 'Artículo bajo mínimo',
 };
 
 export const NOMBRE_SEVERIDAD: Record<SeveridadAlerta, string> = {
@@ -34,6 +36,8 @@ export function textoRegla(tipo: TipoAlerta, umbral: number): string {
       return `Una cuenta sin imprimir lleva abierta más de ${umbral} min.`;
     case 'caida_venta':
       return `La venta de hoy va más de ${umbral} % abajo del mismo día de la semana pasada a la misma hora (con al menos 5 cuentas en esa base).`;
+    case 'bajo_minimo':
+      return `Un artículo tiene en su almacén menos del ${umbral} % de su mínimo (el mínimo se define en Existencias).`;
   }
 }
 
@@ -69,6 +73,13 @@ export function describirAlerta(a: Alerta): string {
     case 'caida_venta': {
       const pct = texto(d.caidaPct);
       return `${a.sucursal}: venta de hoy ${pesos(d.ventaHoy)} contra ${pesos(d.ventaBase)} el mismo día de la semana pasada a la misma hora${pct ? ` (−${pct} %)` : ''}.`;
+    }
+    case 'bajo_minimo': {
+      const articulo = texto(d.nombre) ?? texto(d.insumo) ?? 'Artículo sin dato';
+      const almacen = texto(d.almacen);
+      const cant = texto(d.cantidad);
+      const min = texto(d.minimo);
+      return `${articulo} (${almacen ? `almacén ${almacen}, ` : ''}${a.sucursal}): ${cant === null ? 'existencia sin dato' : `existencia ${cantidad(cant)}`} contra un mínimo de ${min === null ? 'sin dato' : cantidad(min)} al abrir la alerta.`;
     }
   }
 }

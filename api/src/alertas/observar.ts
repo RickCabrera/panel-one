@@ -1,4 +1,11 @@
-import type { CuentaObservada } from './evaluador';
+import type { Prisma } from '@prisma/client';
+
+import {
+  llaveArticulo,
+  type ArticuloObservado,
+  type CuentaObservada,
+  type ExistenciasObservadas,
+} from './evaluador';
 
 /**
  * Lectura de las cuentas del snapshot de mesas para el evaluador (F2-224). Misma forma
@@ -88,4 +95,50 @@ export function diaLocal(instanteMs: number, zona: string): string {
 /** `dia` menos `n` días de calendario (aritmética sobre la medianoche UTC: sin horario de verano). */
 export function restarDias(dia: string, n: number): string {
   return new Date(Date.parse(`${dia}T00:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Lo que el evaluador de bajo mínimo (F2-121) sabe de las existencias de UNA sucursal:
+ * - sin ninguna lectura de existencias → null (nunca ha mandado: no se evalúa);
+ * - cada límite con mínimo cuya llave viene en la última foto de su almacén → un artículo;
+ * - un límite con mínimo cuya llave NO viene (o cuyo almacén no tiene lectura) → `sinLectura`:
+ *   no se sabe su existencia, y su alerta se deja como está.
+ */
+export function existenciasObservadas(op: {
+  lecturas: number;
+  limites: ReadonlyArray<{
+    almacenOrigenSrId: string;
+    insumoOrigenSrId: string;
+    minimo: Prisma.Decimal;
+  }>;
+  filas: ReadonlyArray<{
+    almacenOrigenSrId: string;
+    insumoOrigenSrId: string;
+    cantidad: Prisma.Decimal;
+  }>;
+  nombres: ReadonlyMap<string, string>;
+}): ExistenciasObservadas | null {
+  if (op.lecturas === 0) return null;
+  const cantidades = new Map(
+    op.filas.map((f) => [llaveArticulo(f.almacenOrigenSrId, f.insumoOrigenSrId), f.cantidad]),
+  );
+  const articulos: ArticuloObservado[] = [];
+  const sinLectura: string[] = [];
+  for (const l of op.limites) {
+    const llave = llaveArticulo(l.almacenOrigenSrId, l.insumoOrigenSrId);
+    const cantidad = cantidades.get(llave);
+    if (cantidad === undefined) {
+      sinLectura.push(llave);
+      continue;
+    }
+    articulos.push({
+      llave,
+      almacen: l.almacenOrigenSrId,
+      insumo: l.insumoOrigenSrId,
+      nombre: op.nombres.get(l.insumoOrigenSrId) ?? null,
+      cantidad: cantidad.toFixed(3),
+      minimo: l.minimo.toFixed(3),
+    });
+  }
+  return { articulos, sinLectura };
 }

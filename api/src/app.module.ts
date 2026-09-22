@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CatalogosModule } from './catalogos/catalogos.module';
+import { InventarioModule } from './inventario/inventario.module';
 import { AuditoriaModule } from './comun/auditoria';
 import { RelojModule } from './comun/reloj';
 import { IngestaModule } from './ingesta/ingesta.module';
@@ -37,6 +38,7 @@ import { VentasModule } from './ventas/ventas.module';
     AlertasModule,
     ReportesModule,
     CatalogosModule,
+    InventarioModule,
   ],
   controllers: [AppController],
   providers: [AppService],

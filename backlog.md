@@ -1062,6 +1062,18 @@ escritura contra el POS (test que lo afirma inspeccionando el modo de la conexi�
 > espejo: si SR las tiene, documentar en `docs/esquema-sr.md` §9 dónde viven; su espejo y
 > contrato serían tarea nueva (recetas: F2-125). Ver §9 y §13.
 
+> **Y además (de F2-121).** El panel ya acepta las existencias por `POST /ingesta/existencias`:
+> una petición = la **foto completa de UN almacén** (`almacenOrigenSrId`, `capturadoAt` = cuándo se
+> leyó, y `registros: [{ insumoOrigenSrId, cantidad, costoPromedio }]`), cada 30 min. Obligaciones
+> del lector: (1) mandar **TODAS** las filas del almacén, también las que están en **0 y las
+> negativas** — lo que no viene se borra del panel y un agotado desaparecería; (2) cantidad en texto
+> NUMERIC(12,3) y costo promedio en texto con la regla de dinero (se redondea a 2); (3) **nunca**
+> mandar una foto vacía si la lectura falló (0 registros vacía el almacén); (4) a lo más 5000
+> registros por foto — si un almacén real tiene más, documentarlo y es cambio de contrato; (5) un
+> registro sin `insumoOrigenSrId` válido hace que esa foto no borre nada (no romperlo a propósito).
+> Documentar en §10 si el costo promedio de SR es por almacén o por insumo. Ver
+> `docs/esquema-sr.md` §10 y §13.
+
 ## BLOQUE I · Cierre
 
 ### F2-250 · Cierre de Ronda 2: auditoría de paridad y pendientes
@@ -1413,6 +1425,12 @@ queda confirmada o corregida y borrada del código; y `docs/esquema-sr.md` pasa 
 ## F2-193 · Validar inventario, recetas y utilidad contra la operación real
 `[ ]` **Bloque E** · 🔒 **Razón: necesita el piloto con operación real (depende de F1-091).**
 Recorre el AC original de F2-121, F2-122, F2-125, F2-126 y F2-127 con datos del restaurante.
+
+> **Y además (de F2-121).** Al cuadrar el valor de inventario contra el reporte de SR: (1) el panel
+> redondea el costo promedio a 2 decimales antes de valuar (si SR usa 4, puede haber centavos de
+> diferencia); (2) el panel SUMA las existencias negativas (con valor negativo) al total; (3) una
+> alerta de bajo mínimo de un artículo que dejó de venir en la foto se queda abierta sin plazo
+> (decidir si se cierra tras X horas). Todo en `docs/esquema-sr.md` §10.
 
 **Listo cuando:** el valor de inventario cuadra contra el reporte de SR del mismo corte; el
 kardex de un artículo reproduce su saldo real; la variación teórico contra real de tres

@@ -3,12 +3,22 @@ import { MotivoCierreAlerta, SeveridadAlerta, TipoAlerta } from '@prisma/client'
 import type { AlertaAbierta } from '../scope/escritura-alertas';
 import {
   caidaDeVenta,
+  estaBajoMinimo,
   evaluar,
+  llaveArticulo,
   type EstadoBajoCandado,
   type Observacion,
   type SucursalObservada,
 } from './evaluador';
-import { cuentasDelSnapshot, diaLocal, minutosAbierta, restarDias } from './observar';
+import { Prisma } from '@prisma/client';
+
+import {
+  cuentasDelSnapshot,
+  diaLocal,
+  existenciasObservadas,
+  minutosAbierta,
+  restarDias,
+} from './observar';
 import { reglasEfectivas } from './reglas';
 
 const S1 = 'suc-1';
@@ -21,6 +31,7 @@ function sucursal(p: Partial<SucursalObservada> = {}): SucursalObservada {
     snapshotVivo: true,
     cuentas: [],
     venta: null,
+    existencias: null,
     ...p,
   };
 }
@@ -219,6 +230,111 @@ describe('evaluador de alertas (puro)', () => {
         estado({ abiertas: ab }),
       );
       expect(c.cerrar).toEqual([{ id: 'c', motivo: MotivoCierreAlerta.condicion }]);
+    });
+  });
+});
+
+describe('bajo mínimo (F2-121)', () => {
+  const L = llaveArticulo('ALM-1', 'I01');
+  const art = (cantidad: string, minimo = '10.000') => ({
+    llave: L,
+    almacen: 'ALM-1',
+    insumo: 'I01',
+    nombre: 'Tomate',
+    cantidad,
+    minimo,
+  });
+  const conExistencias = (articulos: ReturnType<typeof art>[], sinLectura: string[] = []) =>
+    sucursal({ existencias: { articulos, sinLectura } });
+  const soloBajo = (c: ReturnType<typeof evaluar>) =>
+    c.abrir.filter((a) => a.tipo === TipoAlerta.bajo_minimo);
+
+  it('estaBajoMinimo en Decimal: estrictamente menor; en el mínimo exacto no', () => {
+    expect(estaBajoMinimo('9.999', '10.000', 100)).toBe(true);
+    expect(estaBajoMinimo('10.000', '10.000', 100)).toBe(false);
+    expect(estaBajoMinimo('-1.000', '10.000', 100)).toBe(true);
+    expect(estaBajoMinimo('4.999', '10.000', 50)).toBe(true);
+    expect(estaBajoMinimo('5.000', '10.000', 50)).toBe(false);
+  });
+
+  it('abre advertencia con llave [almacén, insumo] y cantidades como TEXTO; en el mínimo no', () => {
+    expect(soloBajo(evaluar(obs(conExistencias([art('10.000')])), estado()))).toEqual([]);
+    expect(soloBajo(evaluar(obs(conExistencias([art('4.000')])), estado()))).toEqual([
+      {
+        sucursalId: S1,
+        tipo: TipoAlerta.bajo_minimo,
+        severidad: SeveridadAlerta.advertencia,
+        llave: '["ALM-1","I01"]',
+        umbral: 100,
+        detalle: {
+          almacen: 'ALM-1',
+          insumo: 'I01',
+          nombre: 'Tomate',
+          cantidad: '4.000',
+          minimo: '10.000',
+        },
+      },
+    ]);
+  });
+
+  it('sin existencias (nunca mandó): ni abre ni cierra', () => {
+    const c = evaluar(
+      obs(sucursal()),
+      estado({ abiertas: [abierta('a1', TipoAlerta.bajo_minimo, L)] }),
+    );
+    expect(c.cerrar).toEqual([]);
+    expect(soloBajo(c)).toEqual([]);
+  });
+
+  it('el artículo sube sobre su mínimo (o se borra el límite): se cierra por condición', () => {
+    const abiertas = [abierta('a1', TipoAlerta.bajo_minimo, L)];
+    expect(evaluar(obs(conExistencias([art('12.000')])), estado({ abiertas })).cerrar).toEqual([
+      { id: 'a1', motivo: MotivoCierreAlerta.condicion },
+    ]);
+    // Límite borrado: el artículo ya no se observa y tampoco está "sin lectura".
+    expect(evaluar(obs(conExistencias([])), estado({ abiertas })).cerrar).toEqual([
+      { id: 'a1', motivo: MotivoCierreAlerta.condicion },
+    ]);
+  });
+
+  it('el artículo pasa a sin lectura: la alerta abierta SIGUE abierta', () => {
+    const c = evaluar(
+      obs(conExistencias([], [L])),
+      estado({ abiertas: [abierta('a1', TipoAlerta.bajo_minimo, L)] }),
+    );
+    expect(c.cerrar).toEqual([]);
+    expect(soloBajo(c)).toEqual([]);
+  });
+
+  it('existenciasObservadas: sin lecturas = null; límite sin fila = sin lectura', () => {
+    const D = (v: string) => new Prisma.Decimal(v);
+    expect(existenciasObservadas({ lecturas: 0, limites: [], filas: [], nombres: new Map() })).toBe(
+      null,
+    );
+    const o = existenciasObservadas({
+      lecturas: 2,
+      limites: [
+        { almacenOrigenSrId: 'A', insumoOrigenSrId: 'I1', minimo: D('5') },
+        { almacenOrigenSrId: 'A', insumoOrigenSrId: 'I2', minimo: D('5') },
+      ],
+      filas: [
+        { almacenOrigenSrId: 'A', insumoOrigenSrId: 'I1', cantidad: D('2.5') },
+        { almacenOrigenSrId: 'B', insumoOrigenSrId: 'I2', cantidad: D('9') },
+      ],
+      nombres: new Map([['I1', 'Uno']]),
+    });
+    expect(o).toEqual({
+      articulos: [
+        {
+          llave: '["A","I1"]',
+          almacen: 'A',
+          insumo: 'I1',
+          nombre: 'Uno',
+          cantidad: '2.500',
+          minimo: '5.000',
+        },
+      ],
+      sinLectura: ['["A","I2"]'],
     });
   });
 });

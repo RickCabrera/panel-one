@@ -116,7 +116,7 @@ describe('AC1 · las seis secciones con sus entradas', () => {
     await menu();
     expect(document.getElementById('menu-seccion-administracion')).toBeNull();
     // Las pendientes NO se ocultan por no estar construidas: el visor ve el mapa.
-    expect(screen.getByRole('button', { name: 'Existencias' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Conteos físicos' })).toBeInTheDocument();
   });
 });
 
@@ -125,17 +125,17 @@ describe('AC2 · una entrada sin módulo no navega a una pantalla rota', () => {
     api(usuario('visor'));
     montar(`/tickets?empresa=${A}`);
     const nav = await menu();
-    // Clientes ya navega (F2-232): la pendiente de ejemplo es Existencias (F2-121).
-    const existencias = within(nav).getByRole('button', { name: 'Existencias' });
+    // Existencias ya navega (F2-121): la pendiente de ejemplo es Conteos físicos (F2-123).
+    const conteos = within(nav).getByRole('button', { name: 'Conteos físicos' });
 
-    expect(existencias).toHaveAttribute('aria-disabled', 'true');
-    expect(existencias).not.toBeDisabled(); // sigue en el orden de Tab
-    expect(existencias).toHaveAccessibleDescription('Se construye en F2-121.');
-    expect(existencias).toHaveAttribute('title', 'Existencias: Se construye en F2-121.');
+    expect(conteos).toHaveAttribute('aria-disabled', 'true');
+    expect(conteos).not.toBeDisabled(); // sigue en el orden de Tab
+    expect(conteos).toHaveAccessibleDescription('Se construye en F2-123.');
+    expect(conteos).toHaveAttribute('title', 'Conteos físicos: Se construye en F2-123.');
 
-    await userEvent.click(existencias);
+    await userEvent.click(conteos);
     expect(ubicacion()).toBe(`/tickets?empresa=${A}`);
-    existencias.focus();
+    conteos.focus();
     await userEvent.keyboard('{Enter}');
     await userEvent.keyboard(' ');
     expect(ubicacion()).toBe(`/tickets?empresa=${A}`);

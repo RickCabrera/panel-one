@@ -92,10 +92,15 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'empresa',
       // F2-141: reportes programados; sus escrituras van por `reportes(scope)`.
       'envioReporte',
+      // F2-121: existencias; se escriben por `existenciasDeSucursal(agente)` y
+      // `existencias(scope)`, no por aquí.
+      'existencia',
       'formaPagoCatalogo',
       'grupoInsumo',
       'grupoProducto',
       'insumo',
+      'lecturaExistencias',
+      'limiteExistencia',
       'mesaSnapshot',
       'meseroCatalogo',
       'producto',
