@@ -62,7 +62,7 @@ export function Dialogo({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-velo p-2 sm:p-4"
       onMouseDown={(e) => {
         if (cerrable && e.target === e.currentTarget) onCerrar();
       }}
@@ -74,7 +74,7 @@ export function Dialogo({
         aria-labelledby={idTitulo}
         tabIndex={-1}
         onKeyDown={teclado}
-        className="flex max-h-full w-full max-w-lg min-w-0 flex-col overflow-y-auto rounded-lg bg-white p-4 shadow-xl outline-none"
+        className="flex max-h-full w-full max-w-lg min-w-0 flex-col overflow-y-auto rounded-lg bg-superficie p-4 shadow-xl outline-none"
       >
         <h2 id={idTitulo} className="text-lg font-semibold break-words">
           {titulo}

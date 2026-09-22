@@ -16,6 +16,7 @@ import { NoEncontrada } from './paginas/NoEncontrada';
 import { Reportes } from './paginas/Reportes';
 import { Tickets } from './paginas/Tickets';
 import { MarcaDemo } from './sistema/MarcaDemo';
+import { ProveedorTema } from './tema/ProveedorTema';
 
 /** Proveedores de la app, sin router: los tests los montan con un `MemoryRouter`. */
 export function Proveedores({
@@ -29,7 +30,10 @@ export function Proveedores({
     <QueryClientProvider client={queryClient}>
       {/* F2-202: la marca del modo demo va sobre TODAS las vistas, login incluido. */}
       <MarcaDemo />
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        {/* F2-211: dentro de Auth, para cargar la preferencia del usuario que entra. */}
+        <ProveedorTema>{children}</ProveedorTema>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

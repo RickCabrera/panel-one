@@ -171,7 +171,7 @@ describe('Monitor de mesas: KPIs y grid', () => {
 
     const tres = tarjetaMesa('Mesa 3 · Centro');
     expect(tres).toHaveAttribute('data-semaforo', 'rojo');
-    expect(tres).toHaveClass('border-red-600');
+    expect(tres).toHaveClass('border-semaforo-rojo');
     expect(within(tres).getByTestId('mesa-total')).toHaveTextContent('$1,200.00');
     expect(within(tres).getByTestId('mesa-minutos')).toHaveTextContent('65 min');
     expect(tres).toHaveTextContent('Mesero de la 3');

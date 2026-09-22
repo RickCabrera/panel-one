@@ -32,21 +32,21 @@ export function Sucursales({ empresa }: { empresa: Empresa }) {
 
       <div className="min-w-0 overflow-x-auto">
         {accion.error && (
-          <p role="alert" className="mb-2 text-sm text-red-700">
+          <p role="alert" className="mb-2 text-sm text-peligro">
             {accion.error}
           </p>
         )}
         {sucursales.isPending ? (
-          <p className="text-sm text-slate-500">Cargando sucursales…</p>
+          <p className="text-sm text-tinta-tenue">Cargando sucursales…</p>
         ) : sucursales.isError ? (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-peligro">
             No se pudieron cargar las sucursales.
           </p>
         ) : sucursales.data.length === 0 ? (
-          <p className="text-sm text-slate-500">Esta empresa todavía no tiene sucursales.</p>
+          <p className="text-sm text-tinta-tenue">Esta empresa todavía no tiene sucursales.</p>
         ) : (
           <table className={CLASE_TABLA}>
-            <thead className="text-xs text-slate-500">
+            <thead className="text-xs text-tinta-tenue">
               <tr>
                 <th className="py-2 pr-3 font-medium">Sucursal</th>
                 <th className="py-2 pr-3 font-medium">Zona horaria</th>
@@ -56,11 +56,7 @@ export function Sucursales({ empresa }: { empresa: Empresa }) {
             </thead>
             <tbody>
               {sucursales.data.map((s) => (
-                <tr
-                  key={s.id}
-                  aria-label={s.nombre}
-                  className="border-t border-slate-200 align-top"
-                >
+                <tr key={s.id} aria-label={s.nombre} className="border-t border-linea align-top">
                   <td className="py-2 pr-3 break-words">{s.nombre}</td>
                   <td className="py-2 pr-3 break-all">{s.zonaHoraria}</td>
                   <td className="py-2 pr-3">{s.activo ? 'Activa' : 'Inactiva'}</td>
@@ -162,10 +158,10 @@ function AltaSucursal({ empresa }: { empresa: Empresa }) {
     <form
       aria-label="Nueva sucursal"
       onSubmit={(e) => void enviar(e)}
-      className="grid min-w-0 gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+      className="grid min-w-0 gap-3 rounded-lg border border-linea p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
     >
       <label className="min-w-0 text-sm">
-        <span className="text-slate-600">Nombre de la sucursal</span>
+        <span className="text-tinta-suave">Nombre de la sucursal</span>
         <input
           className={CLASE_INPUT}
           value={nombre}
@@ -175,14 +171,14 @@ function AltaSucursal({ empresa }: { empresa: Empresa }) {
         />
       </label>
       <label className="min-w-0 text-sm" htmlFor="alta-sucursal-zona">
-        <span className="text-slate-600">Zona horaria</span>
+        <span className="text-tinta-suave">Zona horaria</span>
         <SelectorZona id="alta-sucursal-zona" valor={zona} onCambio={setZona} />
       </label>
       <button type="submit" className={CLASE_PRIMARIO} disabled={accion.enCurso}>
         Agregar sucursal
       </button>
       {accion.error && (
-        <p role="alert" className="text-sm text-red-700 sm:col-span-3">
+        <p role="alert" className="text-sm text-peligro sm:col-span-3">
           {accion.error}
         </p>
       )}
@@ -214,7 +210,7 @@ function EditarSucursal({ sucursal, onCerrar }: { sucursal: Sucursal; onCerrar: 
     <Dialogo titulo={`Editar ${sucursal.nombre}`} onCerrar={onCerrar}>
       <form onSubmit={(e) => void enviar(e)} className="space-y-3">
         <label className="block text-sm">
-          <span className="text-slate-600">Nombre</span>
+          <span className="text-tinta-suave">Nombre</span>
           <input
             className={CLASE_INPUT}
             value={nombre}
@@ -224,17 +220,17 @@ function EditarSucursal({ sucursal, onCerrar }: { sucursal: Sucursal; onCerrar: 
           />
         </label>
         <label className="block text-sm" htmlFor="editar-sucursal-zona">
-          <span className="text-slate-600">Zona horaria</span>
+          <span className="text-tinta-suave">Zona horaria</span>
           <SelectorZona id="editar-sucursal-zona" valor={zona} onCambio={setZona} />
         </label>
         {zona !== sucursal.zonaHoraria && (
-          <p role="note" className="text-sm text-amber-800">
+          <p role="note" className="text-sm text-aviso">
             Los reportes cortan el día con la zona actual de la sucursal: cambiarla también mueve de
             día las ventas pasadas en los reportes.
           </p>
         )}
         {accion.error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-peligro">
             {accion.error}
           </p>
         )}
@@ -278,7 +274,7 @@ function ConfirmarKey({
           </strong>
         </p>
         {accion.error && (
-          <p role="alert" className="text-red-700">
+          <p role="alert" className="text-peligro">
             {accion.error}
           </p>
         )}
@@ -328,11 +324,11 @@ function MostrarKey({
   return (
     <Dialogo titulo={`API key de ${sucursal.nombre}`} onCerrar={onCerrar} cerrable={false}>
       <div className="space-y-3 text-sm">
-        <p className="font-medium text-amber-800">
+        <p className="font-medium text-aviso">
           Cópiala ahora: no se volverá a mostrar. Si la pierdes, hay que generar otra.
         </p>
         <label className="block">
-          <span className="text-slate-600">API key</span>
+          <span className="text-tinta-suave">API key</span>
           <input
             readOnly
             value={apiKey}
@@ -342,7 +338,7 @@ function MostrarKey({
         </label>
         {copiada === true && <p role="status">Copiada al portapapeles.</p>}
         {copiada === false && (
-          <p role="alert" className="text-red-700">
+          <p role="alert" className="text-peligro">
             No se pudo copiar: selecciónala y cópiala a mano.
           </p>
         )}

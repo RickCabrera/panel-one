@@ -13,7 +13,7 @@ export function Vista({ titulo, children }: { titulo: string; children?: ReactNo
   return (
     <section className="p-4 md:p-6">
       <h1 className="text-xl font-semibold">{titulo}</h1>
-      <p className="mt-1 truncate text-sm text-slate-600" data-testid="alcance">
+      <p className="mt-1 truncate text-sm text-tinta-suave" data-testid="alcance">
         {empresa ? `${empresa.nombre} · ${nombreSucursal}` : 'Cargando alcance…'}
       </p>
       <div className="mt-6">{children}</div>

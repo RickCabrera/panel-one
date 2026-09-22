@@ -1,12 +1,61 @@
 @import 'tailwindcss';
 
 /*
- * Tema claro. El acento es configurable por despliegue (VITE_COLOR_ACENTO): main.tsx
- * sobrescribe --color-acento en :root al arrancar, y todas las clases `*-acento`
- * de Tailwind lo leen de ahí.
+ * Tema (F2-211). Los colores NO se escriben aquí: viven en src/tema/paleta.ts, y
+ * aplicarTema() (src/tema/tema.ts) los pone como variables en :root (--fondo,
+ * --tinta...) según el tema elegido. Este bloque sólo se los presenta a Tailwind, que
+ * genera bg-fondo, text-tinta, border-linea... con `var()` (por eso `inline`).
+ *
+ * `--color-*: initial` apaga la paleta de fábrica de Tailwind: `text-slate-500` o
+ * `bg-white` ya no generan CSS. La regla de lint los prohíbe en el código fuente, y
+ * esto hace que uno que se cuele no pinte nada en vez de pintar el color equivocado.
+ *
+ * tema/css.node.test.ts comprueba que esta lista es exactamente la de paleta.ts y que aquí
+ * no hay ningún color escrito.
  */
 @theme {
-  --color-acento: #0f766e;
+  --color-*: initial;
+}
+
+@theme inline {
+  --color-fondo: var(--fondo);
+  --color-superficie: var(--superficie);
+  --color-realce: var(--realce);
+  --color-realce-fuerte: var(--realce-fuerte);
+  --color-linea-suave: var(--linea-suave);
+  --color-linea: var(--linea);
+  --color-linea-fuerte: var(--linea-fuerte);
+  --color-tinta: var(--tinta);
+  --color-tinta-medio: var(--tinta-medio);
+  --color-tinta-suave: var(--tinta-suave);
+  --color-tinta-tenue: var(--tinta-tenue);
+  --color-peligro: var(--peligro);
+  --color-peligro-fondo: var(--peligro-fondo);
+  --color-peligro-borde: var(--peligro-borde);
+  --color-peligro-fuerte: var(--peligro-fuerte);
+  --color-sobre-peligro: var(--sobre-peligro);
+  --color-aviso: var(--aviso);
+  --color-aviso-fondo: var(--aviso-fondo);
+  --color-aviso-borde: var(--aviso-borde);
+  --color-aviso-fuerte: var(--aviso-fuerte);
+  --color-exito: var(--exito);
+  --color-exito-fondo: var(--exito-fondo);
+  --color-exito-fuerte: var(--exito-fuerte);
+  --color-info: var(--info);
+  --color-semaforo-ok: var(--semaforo-ok);
+  --color-semaforo-alerta: var(--semaforo-alerta);
+  --color-semaforo-rojo: var(--semaforo-rojo);
+  --color-semaforo-sin-dato: var(--semaforo-sin-dato);
+  --color-serie-2: var(--serie-2);
+  --color-serie-3: var(--serie-3);
+  --color-serie-4: var(--serie-4);
+  --color-rejilla: var(--rejilla);
+  --color-velo: var(--velo);
+  --color-acento: var(--acento);
+  --color-acento-texto: var(--acento-texto);
+  --color-acento-borde: var(--acento-borde);
+  --color-sobre-acento: var(--sobre-acento);
+  --color-serie-1: var(--serie-1);
 }
 
 :root {
@@ -17,11 +66,21 @@
     Roboto,
     sans-serif;
   line-height: 1.5;
-  color-scheme: light;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: var(--color-slate-50);
+  /* El texto que no lleva clase hereda de aquí: también tiene que seguir al tema. */
+  color: var(--tinta);
+  background-color: var(--fondo);
+}
+
+/*
+ * Todo placeholder usa la tinta tenue del tema, que paleta.test.ts prueba a 4.5:1. El
+ * de fábrica (el texto al 50 %) quedaba en ~3.5:1 y ningún test lo veía.
+ */
+::placeholder {
+  color: var(--tinta-tenue);
+  opacity: 1;
 }

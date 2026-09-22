@@ -31,7 +31,7 @@ import { TablaTickets } from './tickets/Tabla';
 import { Vista } from './Vista';
 
 const BOTON =
-  'rounded-md border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50';
+  'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
 
 function mensajeDe(error: unknown): string {
   if (error instanceof ErrorApi || error instanceof ErrorCsv || error instanceof ErrorExport) {
@@ -135,7 +135,7 @@ function BuscadorFolio({ folio, onBuscar }: { folio: string; onBuscar: (folio: s
           maxLength={MAX_LARGO_FOLIO}
           onChange={(e) => setTexto(e.target.value)}
           placeholder="Empieza con…"
-          className="w-36 min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-acento focus:outline-none"
+          className="w-36 min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 py-1 text-sm focus:border-acento-borde focus:outline-none"
         />
       </label>
       <button type="submit" className={BOTON}>
@@ -213,7 +213,7 @@ export function Tickets() {
           <BuscadorFolio key={folio} folio={folio} onBuscar={buscar} />
           {exportando ? (
             <>
-              <span className="text-sm text-slate-600" role="status">
+              <span className="text-sm text-tinta-suave" role="status">
                 {exportacion.total === null
                   ? 'Exportando…'
                   : `Exportando ${exportacion.hechos.toLocaleString('es-MX')} de ${exportacion.total.toLocaleString('es-MX')}…`}
@@ -241,16 +241,18 @@ export function Tickets() {
         </div>
       </div>
       {exportacion.fase === 'error' && (
-        <p role="alert" className="mt-2 text-sm text-red-700">
+        <p role="alert" className="mt-2 text-sm text-peligro">
           No se pudo exportar. {exportacion.mensaje}
         </p>
       )}
 
       <div className="mt-4 min-w-0">
         {rango === null ? (
-          <p className="text-sm text-slate-500">Corrige el rango de fechas para ver los tickets.</p>
+          <p className="text-sm text-tinta-tenue">
+            Corrige el rango de fechas para ver los tickets.
+          </p>
         ) : consulta.isError ? (
-          <p role="alert" className="py-6 text-center text-sm text-red-700">
+          <p role="alert" className="py-6 text-center text-sm text-peligro">
             No se pudieron cargar los tickets. {mensajeDe(consulta.error)}
           </p>
         ) : !datos ? (
@@ -262,7 +264,7 @@ export function Tickets() {
               : 'No hay tickets en este periodo.'}
           </Vacio>
         ) : datos.items.length === 0 ? (
-          <div className="py-6 text-center text-sm text-slate-500">
+          <div className="py-6 text-center text-sm text-tinta-tenue">
             <p>Esta página ya no tiene tickets.</p>
             <button type="button" className={`${BOTON} mt-2`} onClick={() => irA(paginas)}>
               Ir a la última página
@@ -278,7 +280,7 @@ export function Tickets() {
             />
             <nav
               aria-label="Paginación"
-              className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600"
+              className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-tinta-suave"
             >
               <span data-testid="conteo">
                 {datos.total.toLocaleString('es-MX')} {datos.total === 1 ? 'ticket' : 'tickets'}

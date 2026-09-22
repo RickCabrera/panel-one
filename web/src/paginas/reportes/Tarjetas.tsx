@@ -26,7 +26,7 @@ const GraficaPorDia = lazy(() => import('./graficas').then((m) => ({ default: m.
 const GraficaTop = lazy(() => import('./graficas').then((m) => ({ default: m.GraficaTop })));
 
 const BOTON =
-  'rounded-md border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50';
+  'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
 const TH = 'px-2 py-1 font-medium';
 const NUM = 'px-2 py-1 text-right tabular-nums';
 
@@ -67,7 +67,7 @@ function BotonCsv({ nombre, generar }: { nombre: string; generar: () => string }
         Exportar CSV
       </button>
       {error && (
-        <p role="alert" className="text-right text-xs text-red-700">
+        <p role="alert" className="text-right text-xs text-peligro">
           {error}
         </p>
       )}
@@ -78,7 +78,7 @@ function BotonCsv({ nombre, generar }: { nombre: string; generar: () => string }
 function Encabezado({ children, acciones }: { children?: ReactNode; acciones?: ReactNode }) {
   return (
     <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-2">
-      <div className="min-w-0 text-sm text-slate-500">{children}</div>
+      <div className="min-w-0 text-sm text-tinta-tenue">{children}</div>
       {acciones}
     </div>
   );
@@ -86,7 +86,7 @@ function Encabezado({ children, acciones }: { children?: ReactNode; acciones?: R
 
 function FilaTotal({ totales, children }: { totales: Totales; children?: ReactNode }) {
   return (
-    <tr className="border-t-2 border-slate-300 font-semibold" data-testid="fila-total">
+    <tr className="border-t-2 border-linea-fuerte font-semibold" data-testid="fila-total">
       <th scope="row" className="px-2 py-1 text-left">
         Total
       </th>
@@ -120,7 +120,7 @@ export function ReportePorDia({
             <>
               <Encabezado acciones={<BotonCsv nombre={nombreCsv} generar={() => csv(filas)} />}>
                 <span
-                  className="block text-2xl font-semibold text-slate-900 tabular-nums"
+                  className="block text-2xl font-semibold text-tinta tabular-nums"
                   data-testid="total-por-dia"
                 >
                   {textoTotal(total.venta)}
@@ -138,7 +138,7 @@ export function ReportePorDia({
               </Suspense>
               <div className="mt-3 max-h-80 overflow-auto">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-white text-left text-slate-500">
+                  <thead className="sticky top-0 bg-superficie text-left text-tinta-tenue">
                     <tr>
                       <th scope="col" className={TH}>
                         Día
@@ -155,12 +155,12 @@ export function ReportePorDia({
                     {filas.map((f) => (
                       <tr
                         key={f.dia}
-                        className="border-t border-slate-100"
+                        className="border-t border-linea-suave"
                         data-testid={`dia-${f.dia}`}
                       >
                         <td className="px-2 py-1">
                           {etiquetaDia(f.dia)}{' '}
-                          <span className="text-xs text-slate-500">{f.dia}</span>
+                          <span className="text-xs text-tinta-tenue">{f.dia}</span>
                         </td>
                         <td className={NUM}>{pesos(f.venta)}</td>
                         <td className={NUM}>{f.cuentas}</td>
@@ -204,7 +204,7 @@ export function ReporteComparativo({
               </Encabezado>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="text-left text-slate-500">
+                  <thead className="text-left text-tinta-tenue">
                     <tr>
                       <th scope="col" className={TH}>
                         Sucursal
@@ -227,7 +227,7 @@ export function ReporteComparativo({
                     {filas.map((f) => (
                       <tr
                         key={f.sucursalId}
-                        className="border-t border-slate-100"
+                        className="border-t border-linea-suave"
                         data-testid={`sucursal-${f.sucursalId}`}
                       >
                         <td className="max-w-[12rem] truncate px-2 py-1">{f.nombre}</td>
@@ -289,7 +289,7 @@ export function ReporteTop({
             onClick={() => onCambiarPor(o)}
             className={
               por === o
-                ? 'rounded-md border border-acento bg-acento px-3 py-1 text-sm text-white'
+                ? 'rounded-md border border-acento bg-acento px-3 py-1 text-sm text-sobre-acento'
                 : BOTON
             }
           >
@@ -302,7 +302,7 @@ export function ReporteTop({
         <select
           value={limite}
           onChange={(e) => onCambiarLimite(Number(e.target.value) as LimiteTop)}
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+          className="rounded-md border border-linea-fuerte bg-superficie px-2 py-1 text-sm"
         >
           {LIMITES_TOP.map((l) => (
             <option key={l} value={l}>
@@ -343,7 +343,7 @@ export function ReporteTop({
               </Suspense>
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="text-left text-slate-500">
+                  <thead className="text-left text-tinta-tenue">
                     <tr>
                       <th scope="col" className={`${TH} w-8`}>
                         #
@@ -363,10 +363,10 @@ export function ReporteTop({
                     {filas.map((f, i) => (
                       <tr
                         key={f.producto}
-                        className="border-t border-slate-100"
+                        className="border-t border-linea-suave"
                         data-testid={`top-${i + 1}`}
                       >
-                        <td className="px-2 py-1 text-slate-500 tabular-nums">{i + 1}</td>
+                        <td className="px-2 py-1 text-tinta-tenue tabular-nums">{i + 1}</td>
                         <td className="max-w-[14rem] truncate px-2 py-1">{f.producto}</td>
                         <td className={NUM}>{pesos(f.importe)}</td>
                         <td className={NUM}>{cantidadLegible(f.cantidad)}</td>

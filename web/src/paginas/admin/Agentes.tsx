@@ -14,9 +14,9 @@ const TEXTO_ESTADO: Record<EstadoAgente, string> = {
 };
 
 const COLOR_ESTADO: Record<EstadoAgente, string> = {
-  conectado: 'bg-emerald-100 text-emerald-800',
-  desconectado: 'bg-red-100 text-red-800',
-  'sin-reporte': 'bg-slate-100 text-slate-600',
+  conectado: 'bg-exito-fondo text-exito',
+  desconectado: 'bg-peligro-fondo text-peligro',
+  'sin-reporte': 'bg-realce text-tinta-suave',
 };
 
 const SIN_DATO = 'Sin dato';
@@ -39,11 +39,11 @@ export function Agentes({ empresa }: { empresa: Empresa }) {
   const ahora = useAhora();
 
   if (consulta.isPending) {
-    return <p className="text-sm text-slate-500">Cargando estado de los agentes…</p>;
+    return <p className="text-sm text-tinta-tenue">Cargando estado de los agentes…</p>;
   }
   if (consulta.isError && consulta.data === undefined) {
     return (
-      <p role="alert" className="text-sm text-red-700">
+      <p role="alert" className="text-sm text-peligro">
         No se pudo cargar el estado de los agentes.
       </p>
     );
@@ -53,22 +53,22 @@ export function Agentes({ empresa }: { empresa: Empresa }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-tinta-suave">
         Una sucursal pasa a desconectada cuando su agente lleva más de {UMBRAL_DESCONEXION_S} s sin
         reportar. El aviso del menú se prende a los {UMBRAL_ALERTA_S / 60} min. La última lectura
         usa el reloj de la PC del restaurante.
       </p>
       {consulta.isError && (
-        <p role="alert" className="text-sm text-amber-700">
+        <p role="alert" className="text-sm text-aviso">
           No se pudo actualizar; se muestra la última respuesta, envejeciendo.
         </p>
       )}
       {filas.length === 0 ? (
-        <p className="text-sm text-slate-500">Esta empresa no tiene sucursales activas.</p>
+        <p className="text-sm text-tinta-tenue">Esta empresa no tiene sucursales activas.</p>
       ) : (
         <div className="min-w-0 overflow-x-auto">
           <table className={CLASE_TABLA}>
-            <thead className="text-xs text-slate-500">
+            <thead className="text-xs text-tinta-tenue">
               <tr>
                 <th className="py-2 pr-3 font-medium">Sucursal</th>
                 <th className="py-2 pr-3 font-medium">Estado</th>
@@ -105,8 +105,8 @@ function Fila({
   const edadLectura = edadAhora(fila.edadLecturaSegundos, respuestaAt, ahora);
   const estado = estadoAgente(edadContacto);
   return (
-    <tr aria-label={fila.nombre} className="border-t border-slate-100 align-top">
-      <td className="py-2 pr-3 font-medium text-slate-800">{fila.nombre}</td>
+    <tr aria-label={fila.nombre} className="border-t border-linea-suave align-top">
+      <td className="py-2 pr-3 font-medium text-tinta">{fila.nombre}</td>
       <td className="py-2 pr-3">
         <span
           data-testid="estado-agente"

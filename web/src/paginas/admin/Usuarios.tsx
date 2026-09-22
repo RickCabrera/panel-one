@@ -66,21 +66,21 @@ function TablaUsuarios({
   return (
     <div className="min-w-0 overflow-x-auto">
       {accion.error && (
-        <p role="alert" className="mb-2 text-sm text-red-700">
+        <p role="alert" className="mb-2 text-sm text-peligro">
           {accion.error}
         </p>
       )}
       {consulta.isPending ? (
-        <p className="text-sm text-slate-500">Cargando usuarios…</p>
+        <p className="text-sm text-tinta-tenue">Cargando usuarios…</p>
       ) : consulta.isError ? (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-peligro">
           No se pudieron cargar los usuarios.
         </p>
       ) : consulta.data.length === 0 ? (
-        <p className="text-sm text-slate-500">{vacio}</p>
+        <p className="text-sm text-tinta-tenue">{vacio}</p>
       ) : (
         <table className={CLASE_TABLA}>
-          <thead className="text-xs text-slate-500">
+          <thead className="text-xs text-tinta-tenue">
             <tr>
               <th className="py-2 pr-3 font-medium">Nombre</th>
               <th className="py-2 pr-3 font-medium">Email</th>
@@ -91,7 +91,7 @@ function TablaUsuarios({
           </thead>
           <tbody>
             {consulta.data.map((u) => (
-              <tr key={u.id} aria-label={u.email} className="border-t border-slate-200 align-top">
+              <tr key={u.id} aria-label={u.email} className="border-t border-linea align-top">
                 <td className="py-2 pr-3 break-words">{u.nombre}</td>
                 <td className="py-2 pr-3 break-all">{u.email}</td>
                 <td className="py-2 pr-3">{NOMBRE_ROL[u.rol]}</td>
@@ -157,7 +157,7 @@ function CampoPassword({
 }) {
   return (
     <label className="block min-w-0 text-sm">
-      <span className="text-slate-600">{etiqueta}</span>
+      <span className="text-tinta-suave">{etiqueta}</span>
       <input
         type="password"
         autoComplete="new-password"
@@ -168,7 +168,7 @@ function CampoPassword({
         maxLength={PASSWORD_MAX}
         onChange={(e) => onCambio(e.target.value)}
       />
-      <span className="text-xs text-slate-500">Mínimo {PASSWORD_MIN} caracteres.</span>
+      <span className="text-xs text-tinta-tenue">Mínimo {PASSWORD_MIN} caracteres.</span>
     </label>
   );
 }
@@ -208,10 +208,10 @@ function AltaUsuario({ empresa, puedeGlobal }: { empresa: Empresa; puedeGlobal: 
     <form
       aria-label="Nuevo usuario"
       onSubmit={(e) => void enviar(e)}
-      className="grid min-w-0 gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-2"
+      className="grid min-w-0 gap-3 rounded-lg border border-linea p-3 sm:grid-cols-2"
     >
       <label className="min-w-0 text-sm">
-        <span className="text-slate-600">Email</span>
+        <span className="text-tinta-suave">Email</span>
         <input
           type="email"
           className={CLASE_INPUT}
@@ -222,7 +222,7 @@ function AltaUsuario({ empresa, puedeGlobal }: { empresa: Empresa; puedeGlobal: 
         />
       </label>
       <label className="min-w-0 text-sm">
-        <span className="text-slate-600">Nombre</span>
+        <span className="text-tinta-suave">Nombre</span>
         <input
           className={CLASE_INPUT}
           value={nombre}
@@ -232,7 +232,7 @@ function AltaUsuario({ empresa, puedeGlobal }: { empresa: Empresa; puedeGlobal: 
         />
       </label>
       <label className="min-w-0 text-sm">
-        <span className="text-slate-600">Rol</span>
+        <span className="text-tinta-suave">Rol</span>
         <select className={CLASE_INPUT} value={rol} onChange={(e) => setRol(e.target.value as Rol)}>
           {roles.map((r) => (
             <option key={r} value={r}>
@@ -240,7 +240,7 @@ function AltaUsuario({ empresa, puedeGlobal }: { empresa: Empresa; puedeGlobal: 
             </option>
           ))}
         </select>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-tinta-tenue">
           {rol === 'admin_global'
             ? 'Ve y administra TODAS las empresas; no pertenece a ninguna.'
             : `En la empresa ${empresa.nombre}.`}
@@ -248,7 +248,7 @@ function AltaUsuario({ empresa, puedeGlobal }: { empresa: Empresa; puedeGlobal: 
       </label>
       <CampoPassword etiqueta="Contraseña inicial" valor={password} onCambio={setPassword} />
       {accion.error && (
-        <p role="alert" className="text-sm text-red-700 sm:col-span-2">
+        <p role="alert" className="text-sm text-peligro sm:col-span-2">
           {accion.error}
         </p>
       )}
@@ -294,7 +294,7 @@ function EditarUsuario({
     <Dialogo titulo={`Editar ${usuario.email}`} onCerrar={onCerrar}>
       <form onSubmit={(e) => void enviar(e)} className="space-y-3">
         <label className="block text-sm">
-          <span className="text-slate-600">Nombre</span>
+          <span className="text-tinta-suave">Nombre</span>
           <input
             className={CLASE_INPUT}
             value={nombre}
@@ -304,7 +304,7 @@ function EditarUsuario({
           />
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Rol</span>
+          <span className="text-tinta-suave">Rol</span>
           <select
             className={CLASE_INPUT}
             value={rol}
@@ -319,7 +319,7 @@ function EditarUsuario({
           </select>
         </label>
         {accion.error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-peligro">
             {accion.error}
           </p>
         )}
@@ -366,7 +366,7 @@ function ResetPassword({ usuario, onCerrar }: { usuario: UsuarioAdmin; onCerrar:
         <form onSubmit={(e) => void enviar(e)} className="space-y-3">
           <CampoPassword etiqueta="Contraseña nueva" valor={password} onCambio={setPassword} />
           {accion.error && (
-            <p role="alert" className="text-sm text-red-700">
+            <p role="alert" className="text-sm text-peligro">
               {accion.error}
             </p>
           )}

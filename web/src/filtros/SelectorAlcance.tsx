@@ -1,7 +1,7 @@
 import { useAlcance } from './alcance';
 
 const CLASE_SELECT =
-  'w-full min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-acento focus:outline-none sm:w-auto sm:max-w-56';
+  'w-full min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 py-1.5 text-sm focus:border-acento-borde focus:outline-none sm:w-auto sm:max-w-56';
 
 function etiqueta(nombre: string, activo: boolean): string {
   // Las inactivas se muestran: ocultarlas rompería el deep-link al histórico de
@@ -14,10 +14,10 @@ export function SelectorAlcance() {
 
   let selectorEmpresa;
   if (empresas.isPending) {
-    selectorEmpresa = <span className="text-sm text-slate-500">Cargando empresas…</span>;
+    selectorEmpresa = <span className="text-sm text-tinta-tenue">Cargando empresas…</span>;
   } else if (empresas.isError) {
     selectorEmpresa = (
-      <span role="alert" className="text-sm text-red-700">
+      <span role="alert" className="text-sm text-peligro">
         No se pudieron cargar las empresas.
       </span>
     );
@@ -64,7 +64,7 @@ export function SelectorAlcance() {
         ))}
       </select>
       {sucursales.isError && (
-        <span role="alert" className="text-sm text-red-700">
+        <span role="alert" className="text-sm text-peligro">
           No se pudieron cargar las sucursales.
         </span>
       )}

@@ -1,7 +1,7 @@
 import { errorDeRango, TIPOS_PERIODO, type Periodo, type Rango } from '../../filtros/periodo';
 
 const CLASE_FECHA =
-  'min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-acento focus:outline-none';
+  'min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 py-1 text-sm focus:border-acento-borde focus:outline-none';
 
 /**
  * Hoy / Esta semana / Este mes / Mes anterior / Rango. Al pasar a "Rango" se
@@ -39,8 +39,8 @@ export function SelectorPeriodo({
               }}
               className={
                 activo
-                  ? 'rounded-md border border-acento bg-acento px-3 py-1 text-sm text-white'
-                  : 'rounded-md border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-100'
+                  ? 'rounded-md border border-acento bg-acento px-3 py-1 text-sm text-sobre-acento'
+                  : 'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm hover:bg-realce'
               }
             >
               {nombre}
@@ -69,7 +69,7 @@ export function SelectorPeriodo({
             />
           </label>
           {error && (
-            <span role="alert" className="text-red-700">
+            <span role="alert" className="text-peligro">
               {error}
             </span>
           )}

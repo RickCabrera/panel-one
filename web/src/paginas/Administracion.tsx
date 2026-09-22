@@ -48,7 +48,7 @@ export function Administracion() {
   if (actual === 'empresas') {
     contenido = <Empresas />;
   } else if (!empresa) {
-    contenido = <p className="text-sm text-slate-500">Cargando empresa…</p>;
+    contenido = <p className="text-sm text-tinta-tenue">Cargando empresa…</p>;
   } else if (actual === 'agentes') {
     contenido = <Agentes key={empresa.id} empresa={empresa} />;
   } else if (actual === 'usuarios') {
@@ -68,7 +68,7 @@ export function Administracion() {
             aria-selected={p === actual}
             onClick={() => elegir(p)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-              p === actual ? 'bg-acento text-white' : 'text-slate-700 hover:bg-slate-100'
+              p === actual ? 'bg-acento text-sobre-acento' : 'text-tinta-medio hover:bg-realce'
             }`}
           >
             {TEXTO[p]}

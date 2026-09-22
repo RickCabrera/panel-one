@@ -19,10 +19,10 @@ export function Layout() {
   }, [menuAbierto]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 md:flex">
+    <div className="min-h-screen bg-fondo text-tinta md:flex">
       {menuAbierto && (
         <div
-          className="fixed inset-0 z-20 bg-black/30 md:hidden"
+          className="fixed inset-0 z-20 bg-velo md:hidden"
           aria-hidden="true"
           onClick={() => setMenuAbierto(false)}
         />

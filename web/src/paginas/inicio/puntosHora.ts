@@ -1,9 +1,6 @@
 import type { VentaHora } from '../../api/tipos';
 import { aCentavos, formatearPesos, paraGrafica } from '../../dinero/dinero';
-import { leerAcento } from '../../tema/acento';
-
-/** El mismo acento que `main.tsx` pone en `:root` (SVG no lee bien `var()` en atributos). */
-export const ACENTO = leerAcento(import.meta.env.VITE_COLOR_ACENTO as string | undefined);
+import type { TokenAcento, Token } from '../../tema/paleta';
 
 export interface PuntoHora {
   hora: number;
@@ -43,4 +40,13 @@ export function datosPorHora(filas: readonly VentaHora[], horaTope?: number): Pu
   });
 }
 
-export const COLORES_FORMA = [ACENTO, '#6366f1', '#f59e0b', '#94a3b8'];
+/**
+ * Colores de la dona, por posición. Son TOKENS: el hex lo da el tema que se ve
+ * (`useTema().colores`), porque SVG no lee bien `var()` en atributos.
+ */
+export const SERIES_FORMA: readonly (Token | TokenAcento)[] = [
+  'serie-1',
+  'serie-2',
+  'serie-3',
+  'serie-4',
+];
