@@ -80,6 +80,11 @@ describe('whereEmpresa / whereScoped', () => {
       // F2-125: recetas leídas de SR y sus renglones.
       Receta: 'empresaId',
       RenglonReceta: 'empresaId',
+      // F2-126: compras leídas de SR, sus partidas, y categorías y gastos (dato propio).
+      Compra: 'empresaId',
+      PartidaCompra: 'empresaId',
+      CategoriaGasto: 'empresaId',
+      Gasto: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });

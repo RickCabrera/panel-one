@@ -1326,3 +1326,144 @@ export interface ConsumoTeorico {
   filas: FilaConsumo[];
   aparte: VendidoAparte[];
 }
+
+// ---------------------------------------------------------------------------
+// F2-126 · Compras, gastos y utilidad
+// ---------------------------------------------------------------------------
+
+/** `SucursalComprasDto`. `comprasRecibidas = 0`: el agente nunca mandó compras. */
+export interface SucursalCompras {
+  sucursalId: string;
+  sucursal: string;
+  comprasRecibidas: number;
+}
+
+/** `ProveedorComprasDto`. `proveedor` nulo = sin catálogo o sin proveedor. */
+export interface ProveedorCompras {
+  sucursalId: string;
+  proveedorOrigenSrId: string | null;
+  proveedor: string | null;
+  compras: number;
+  total: Importe;
+}
+
+/** `CompraResumenDto`. Importes sin IVA; `fecha` es un instante UTC. */
+export interface CompraResumen {
+  id: string;
+  sucursalId: string;
+  folio: string;
+  fecha: string;
+  proveedorOrigenSrId: string | null;
+  proveedor: string | null;
+  almacenOrigenSrId: string | null;
+  almacen: string | null;
+  total: Importe;
+  partidas: number;
+  cancelada: boolean;
+}
+
+/** `ComprasDto`: `GET /finanzas/compras`. */
+export interface Compras {
+  sucursales: SucursalCompras[];
+  porProveedor: ProveedorCompras[];
+  compras: CompraResumen[];
+  totalCompras: number;
+  truncado: boolean;
+  total: Importe;
+}
+
+/** `PartidaCompraVistaDto`. */
+export interface PartidaCompraVista {
+  renglon: number;
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  unidad: string | null;
+  cantidad: string;
+  costoUnitario: Importe;
+  importe: Importe;
+}
+
+/** `CompraDetalleDto`: `GET /finanzas/compras/{id}`. */
+export interface CompraDetalle extends CompraResumen {
+  sucursal: string;
+  detalle: PartidaCompraVista[];
+}
+
+/** `CategoriaGastoDto`. */
+export interface CategoriaGasto {
+  id: string;
+  nombre: string;
+  activa: boolean;
+}
+
+/** `GastoDto`. `dia` es el día contable local de la sucursal; monto sin IVA acreditable. */
+export interface Gasto {
+  id: string;
+  sucursalId: string;
+  dia: string;
+  categoriaId: string;
+  categoria: string;
+  concepto: string;
+  monto: Importe;
+  anulado: boolean;
+}
+
+/** `GastoCategoriaTotalDto`. */
+export interface GastoCategoriaTotal {
+  categoriaId: string;
+  categoria: string;
+  monto: Importe;
+}
+
+/** `GastosDto`: `GET /finanzas/gastos`. */
+export interface Gastos {
+  gastos: Gasto[];
+  truncado: boolean;
+  total: Importe;
+  porCategoria: GastoCategoriaTotal[];
+}
+
+/** `CostoVendidoDto`. `importe` nulo = no se pudo calcular (nunca 0 inventado). */
+export interface CostoVendido {
+  importe: Importe | null;
+  completo: boolean;
+  insumosSinCosto: number;
+  productosSinCosto: number;
+  /** Importe de PARTIDAS: con IVA y antes del descuento. Sólo indica cobertura. */
+  ventaSinCosto: Importe;
+}
+
+/** `EstadoResultadosBaseDto`. Márgenes a 1 decimal, sin `%`. */
+export interface EstadoResultadosBase {
+  cuentas: number;
+  venta: Importe;
+  ventaNeta: Importe;
+  costo: CostoVendido;
+  gastos: Importe;
+  compras: Importe;
+  utilidadBruta: Importe | null;
+  utilidadOperacion: Importe | null;
+  margenBruto: string | null;
+  margenOperacion: string | null;
+  utilidadSobrestimada: boolean;
+  sinVentas: boolean;
+}
+
+export type MotivoSinCalculo = 'sin_catalogo_productos' | 'sin_recetas';
+
+export interface EstadoResultadosSucursal extends EstadoResultadosBase {
+  sucursalId: string;
+  sucursal: string;
+  motivo: MotivoSinCalculo | null;
+}
+
+export interface EstadoResultadosTotal extends EstadoResultadosBase {
+  sucursalesSinCalculo: string[];
+}
+
+/** `EstadoResultadosDto`: `GET /finanzas/estado-resultados`. */
+export interface EstadoResultados {
+  sucursales: EstadoResultadosSucursal[];
+  total: EstadoResultadosTotal;
+  gastosPorCategoria: GastoCategoriaTotal[];
+}
