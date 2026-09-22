@@ -48,6 +48,33 @@ describe('Contrato Facturama (F2-202)', () => {
     expect(http.peticiones).toMatchSnapshot();
     expect(cfdi).toMatchObject({ uuid: UUID, idPac: 'fcm-123', xml: '<cfdi:Comprobante/>' });
     expect(cfdi.pdf.toString()).toBe('%PDF-1.4');
+    // `TaxStamp.Date` viene sin zona: hora LOCAL de la sucursal (CDMX), no del servidor.
+    expect(cfdi.fechaTimbrado.toISOString()).toBe('2026-09-22T02:20:05.000Z');
+  });
+
+  it('emitir: la fecha de timbrado no depende de la zona del proceso', async () => {
+    const tz = process.env.TZ;
+    try {
+      for (const zona of ['UTC', 'Asia/Tokyo']) {
+        process.env.TZ = zona;
+        const http = new ClienteQueCaptura(respuestaEmision);
+        const cfdi = await new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir(solicitudCfdi());
+        expect(cfdi.fechaTimbrado.toISOString()).toBe('2026-09-22T02:20:05.000Z');
+      }
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
+  });
+
+  it('emitir: sin fecha legible del PAC, la del reloj', async () => {
+    const http = new ClienteQueCaptura((p) =>
+      p.metodo === 'POST'
+        ? { status: 201, cuerpo: { Id: 'fcm-1', Complement: { TaxStamp: { Uuid: UUID } } } }
+        : respuestaEmision(p),
+    );
+    const cfdi = await new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir(solicitudCfdi());
+    expect(cfdi.fechaTimbrado.getTime()).toBe(RELOJ_FIJO.ahora());
   });
 
   it('emitir: los importes viajan como número con sus decimales exactos', async () => {
@@ -115,6 +142,41 @@ describe('Contrato Facturama (F2-202)', () => {
       await expect(promesa).rejects.toBeInstanceOf(ErrorTimbrado);
       await expect(promesa).rejects.toMatchObject({
         codigo: 'PAC_NO_DISPONIBLE',
+        reintentable: true,
+      });
+    });
+
+    it('un estado que no conocemos NO se da por vigente: ESTADO_DESCONOCIDO, reintentable', async () => {
+      const http = new ClienteQueCaptura(() => ({ status: 200, cuerpo: { Status: 'pending' } }));
+      const pac = new TimbradoFacturama(BASE, http, RELOJ_FIJO);
+      await expect(pac.consultarEstado({ uuid: UUID, idPac: 'fcm-123' })).rejects.toMatchObject({
+        codigo: 'ESTADO_DESCONOCIDO',
+        reintentable: true,
+      });
+      await expect(
+        pac.cancelar({ uuid: UUID, idPac: 'fcm-123', motivo: '02' }),
+      ).rejects.toMatchObject({ codigo: 'ESTADO_DESCONOCIDO' });
+    });
+
+    it('cancelar sin Status en la respuesta tampoco se da por cancelado', async () => {
+      const http = new ClienteQueCaptura(() => ({ status: 200, cuerpo: {} }));
+      await expect(
+        new TimbradoFacturama(BASE, http, RELOJ_FIJO).cancelar({
+          uuid: UUID,
+          idPac: 'fcm-123',
+          motivo: '02',
+        }),
+      ).rejects.toMatchObject({ codigo: 'ESTADO_DESCONOCIDO' });
+    });
+
+    it('red caída o timeout → PAC_SIN_RESPUESTA, reintentable (no un error crudo)', async () => {
+      const http: ClienteHttp = {
+        enviar: () => Promise.reject(new DOMException('The operation timed out.', 'TimeoutError')),
+      };
+      const promesa = new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir(solicitudCfdi());
+      await expect(promesa).rejects.toBeInstanceOf(ErrorTimbrado);
+      await expect(promesa).rejects.toMatchObject({
+        codigo: 'PAC_SIN_RESPUESTA',
         reintentable: true,
       });
     });

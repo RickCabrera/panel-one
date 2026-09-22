@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 
 import { pedir } from '../api/cliente';
 import type { Sesion } from '../api/tipos';
+import { CLAVE_SISTEMA } from '../sistema/sistema';
 import { AuthContexto, type ContextoAuth, type EstadoAuth } from './contexto';
 import {
   marcarSesionCerrada,
@@ -34,8 +35,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (evento.tipo === 'establecida') {
           setAuth({ estado: 'autenticado', usuario: evento.usuario });
         } else {
-          // Los datos de un usuario no se le quedan en caché al siguiente.
-          queryClient.clear();
+          // Los datos de un usuario no se le quedan en caché al siguiente. Se salva
+          // sólo `['sistema']` (F2-202): es config pública del servidor, no de nadie, y
+          // borrarla quitaría la marca de "Datos de ejemplo" al cerrar sesión.
+          queryClient.getMutationCache().clear();
+          queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== CLAVE_SISTEMA });
           setAuth({ estado: 'anonimo', motivo: evento.motivo });
         }
       }),

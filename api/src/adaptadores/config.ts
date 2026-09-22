@@ -3,7 +3,7 @@ import { isAbsolute } from 'node:path';
 /**
  * Qué implementación corre detrás de cada puerto externo (F2-202, regla 1 de la
  * Ronda 2). Se elige SÓLO por variable de entorno: ningún servicio de negocio sabe
- * cuál le tocó, inyecta el token del puerto (`tokens.ts`).
+ * cuál le tocó, inyecta el token del puerto (`adaptadores.module.ts`).
  *
  * - Sin variable → `falso` (desarrollo y test arrancan sin cuentas de nadie).
  * - Valor desconocido → el arranque TRUENA nombrando la variable. No se adivina.

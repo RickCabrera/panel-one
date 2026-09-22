@@ -1,6 +1,6 @@
 import type { Reloj } from '../../comun/reloj';
 import { numeroJson, type ClienteHttp, type PeticionHttp, type RespuestaHttp } from '../http';
-import { fechaLocalCfdi } from './cfdi-comun';
+import { fechaLocalCfdi, instanteDesdeLocal } from './cfdi-comun';
 import {
   ErrorTimbrado,
   type CfdiTimbrado,
@@ -23,6 +23,19 @@ import {
  * pública de Facturama, no de una llamada real. El test de contrato fija la forma que
  * NOSOTROS mandamos; que Facturama la acepte se prueba en F2-190, y cada diferencia se
  * corrige aquí y en su snapshot.
+ *
+ * También supuestos, con la opción conservadora elegida:
+ * - `Complement.TaxStamp.Date` (fecha de timbrado): no se sabe si trae zona.
+ *   DECISION PROVISIONAL (nocturno): si no la trae, se lee como hora LOCAL de la
+ *   sucursal (así viene la del CFDI, Anexo 20), nunca como hora del servidor; si la
+ *   trae, se respeta. Si falta o no se puede leer, se usa el reloj (como el falso), y
+ *   F2-190 confirma el formato real.
+ * - `Status`: sólo se conocen `active` y `canceled`. DECISION PROVISIONAL (nocturno):
+ *   cualquier otro valor (p. ej. una cancelación en proceso) NO se da por vigente ni
+ *   por cancelado: es `ESTADO_DESCONOCIDO`, reintentable (consultar más tarde).
+ * - Un fallo de red o un timeout es `PAC_SIN_RESPUESTA`, reintentable. OJO en
+ *   `emitir`: el PAC pudo haber timbrado. Quien reintente (F2-104/F2-109) consulta
+ *   antes o usa una llave de idempotencia; reintentar a ciegas puede duplicar un CFDI.
  */
 
 export function peticionEmitir(base: string, s: SolicitudCfdi): PeticionHttp {
@@ -128,7 +141,14 @@ interface CuerpoCfdi {
 }
 
 export function estadoDeFacturama(status: string | undefined): EstadoCfdi {
-  return status?.toLowerCase() === 'canceled' ? 'cancelado' : 'vigente';
+  const normal = status?.toLowerCase();
+  if (normal === 'active') return 'vigente';
+  if (normal === 'canceled') return 'cancelado';
+  throw new ErrorTimbrado(
+    'ESTADO_DESCONOCIDO',
+    'El PAC reportó un estado que no reconocemos. Consulta de nuevo en unos minutos.',
+    true,
+  );
 }
 
 export class TimbradoFacturama implements PuertoTimbrado {
@@ -138,8 +158,21 @@ export class TimbradoFacturama implements PuertoTimbrado {
     private readonly reloj: Pick<Reloj, 'ahora'>,
   ) {}
 
+  /** Red caída o timeout → `ErrorTimbrado` reintentable (ver la nota de `emitir` arriba). */
+  private async enviar(peticion: PeticionHttp): Promise<RespuestaHttp> {
+    try {
+      return await this.http.enviar(peticion);
+    } catch {
+      throw new ErrorTimbrado(
+        'PAC_SIN_RESPUESTA',
+        'No hubo respuesta del servicio de timbrado. Revisa el estado antes de reintentar.',
+        true,
+      );
+    }
+  }
+
   async emitir(solicitud: SolicitudCfdi): Promise<CfdiTimbrado> {
-    const r = await this.http.enviar(peticionEmitir(this.base, solicitud));
+    const r = await this.enviar(peticionEmitir(this.base, solicitud));
     if (!ok(r)) throw errorDe(r);
     const cuerpo = r.cuerpo as CuerpoCfdi;
     const idPac = cuerpo.Id;
@@ -156,7 +189,9 @@ export class TimbradoFacturama implements PuertoTimbrado {
       idPac,
       xml: xml.toString('utf8'),
       pdf,
-      fechaTimbrado: new Date(cuerpo.Complement?.TaxStamp?.Date ?? this.reloj.ahora()),
+      fechaTimbrado:
+        instanteDesdeLocal(cuerpo.Complement?.TaxStamp?.Date ?? '', solicitud.zonaHoraria) ??
+        new Date(this.reloj.ahora()),
     };
   }
 
@@ -167,18 +202,18 @@ export class TimbradoFacturama implements PuertoTimbrado {
         'La cancelación con motivo 01 requiere el folio fiscal que sustituye al cancelado.',
       );
     }
-    const r = await this.http.enviar(peticionCancelar(this.base, solicitud));
+    const r = await this.enviar(peticionCancelar(this.base, solicitud));
     if (!ok(r)) throw errorDe(r);
     const cuerpo = (r.cuerpo ?? {}) as CuerpoCfdi;
     return {
       uuid: solicitud.uuid,
-      estado: estadoDeFacturama(cuerpo.Status ?? 'canceled'),
+      estado: estadoDeFacturama(cuerpo.Status),
       fecha: new Date(this.reloj.ahora()),
     };
   }
 
   async consultarEstado(cfdi: ReferenciaCfdi): Promise<{ uuid: string; estado: EstadoCfdi }> {
-    const r = await this.http.enviar(peticionConsultar(this.base, cfdi));
+    const r = await this.enviar(peticionConsultar(this.base, cfdi));
     if (r.status === 404) return { uuid: cfdi.uuid, estado: 'no_encontrado' };
     if (!ok(r)) throw errorDe(r);
     return { uuid: cfdi.uuid, estado: estadoDeFacturama((r.cuerpo as CuerpoCfdi).Status) };
@@ -186,7 +221,7 @@ export class TimbradoFacturama implements PuertoTimbrado {
 
   /** Facturama devuelve el archivo como `{ Content: <base64> }`. */
   private async descargar(formato: 'xml' | 'pdf', idPac: string): Promise<Buffer> {
-    const r = await this.http.enviar(peticionDescarga(this.base, formato, idPac));
+    const r = await this.enviar(peticionDescarga(this.base, formato, idPac));
     if (!ok(r)) throw errorDe(r);
     const contenido = (r.cuerpo as { Content?: string } | null)?.Content;
     if (!contenido)
