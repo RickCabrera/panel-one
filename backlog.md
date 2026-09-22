@@ -1744,7 +1744,7 @@ periodo.
 ## EPIC 9 — Inventario y compras
 
 ### F2-120 · Sincronización de catálogos de inventario desde SR
-`[ ]` Extender el agente (`ISoftRestaurantReader`) con lectura de catálogos: insumos, grupos
+`[x]` **ALCANCE:** sin presentaciones ni productos-receta (el seed no los genera y no se sabe cómo los guarda SR: ver §9 de esquema-sr y la nota "Y además (de F2-120)" en F2-241; recetas son de F2-125); la lectura desde SR es de F2-241 y el forzado manual espera los once catálogos (decisión abierta, nota en F2-240). **PENDIENTE DE VALIDACIÓN REAL:** ver F2-192. Extender el agente (`ISoftRestaurantReader`) con lectura de catálogos: insumos, grupos
 de insumos, unidades, almacenes, presentaciones y productos-receta (tablas reales según
 `/docs/esquema-sr.md`, extender F1-090 si falta mapeo). Sync completa diaria + hash por
 catálogo para detectar cambios y no reenviar iguales. Modelos espejo en Postgres con
