@@ -956,7 +956,7 @@ filtrado por ese cliente; y ningún dato personal aparece en logs ni en el CSV s
 usuario lo haya pedido explícitamente.
 
 ### F2-233 · Áreas, estaciones y canales de venta
-`[ ]` **Bloque D** · /web + /api
+`[x]` **ALCANCE:** sin estaciones (no hay espejo, contrato ni dato del POS: ver §8 de esquema-sr y las notas "Y además (de F2-233)" en F2-240 y F2-192); el área de la cuenta es supuesto no validado y hoy ningún agente la manda (esquema-sr §2, §13). **Bloque D** · /web + /api
 
 > **Datos del seed:** persistir desde `api/prisma/seed-maestro/generarUniverso()` (F2-201),
 > no inventar otros. Ver la nota "De dónde salen los datos del seed" bajo la tabla de
