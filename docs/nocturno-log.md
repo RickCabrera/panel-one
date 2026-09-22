@@ -4719,6 +4719,11 @@ pase. Gate del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos
   que no cambian el HMAC decodificado. `alertas.e2e` también falló una vez en una corrida completa
   ("la cuenta sale del snapshot", la fila no estaba en la página 1 del historial). Ninguno de los
   dos lo toca este PR. Van para F2-250.
+- **En el CI de este PR (#43) falló `alertas.e2e` AC1** ("la cuenta sale del snapshot…": la fila
+  cerrada no aparece en `/alertas/historial`). Lo reproduje en MAIN sin este cambio: 1 de 6 corridas
+  sueltas. Se relanzó el job (primer intento de CI) y pasó en verde; no se tocó ningún test. Es una
+  intermitencia previa de F2-224 que pide su propia tarea: sospecha, algo que depende del reloj real
+  o del orden del historial.
 - **`npx jest` sin `--runInBand` rompe suites** que comparten fixtures (vi 10 falsos rojos en
   `escritura-admin.spec`). Usa siempre `npm test`, o `npx jest --runInBand`.
 - **`prisma migrate dev` volvió a dar EPERM con el DLL del motor.** Los tipos sí se generan (ver la
