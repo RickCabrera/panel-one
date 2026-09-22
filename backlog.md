@@ -746,7 +746,7 @@ horizontal; y la salida del script se ve con acentos correctos.
 ## BLOQUE B · Cascarón
 
 ### F2-210 · Navegación por secciones tipo centro de control
-`[ ]` **Bloque B** · /web
+`[x]` **Bloque B** · /web
 
 Hoy el menú es una lista plana de cinco entradas. Al terminar la Ronda 2 habrá más de veinte
 vistas, y una lista plana de veinte es inservible. Reorganizar el lateral en secciones con
