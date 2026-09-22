@@ -20,11 +20,20 @@ import type { EmpresaScope } from './empresa-scope';
  *   NO cancelados cerrados en el rango. `hora_local`, `dia_local` y `dia_semana_local`
  *   (ISO: 1 = lunes … 7 = domingo) son los del cierre en la zona de SU sucursal;
  *   `segundos_abierta` = cierre − apertura (F2-221; negativo si el POS los trae al revés).
- * - `cancelados(id, empresa_id, sucursal_id, folio, momento, recibido_at, mesero, total)`:
+ * - `cancelados(id, empresa_id, sucursal_id, folio, momento, recibido_at, mesero, total,
+ *   mesa, comensales, propina, abierto_at, cerrado_at)`:
  *   cheques cancelados del rango, ubicados por `momento = COALESCE(cerrado_at, abierto_at)`.
- * - `tickets(id, empresa_id, sucursal_id, folio, momento, cancelado, recibido_at)`:
+ * - `tickets(id, empresa_id, sucursal_id, folio, momento, cancelado, recibido_at, mesa,
+ *   mesero, comensales, propina, total, abierto_at, cerrado_at)`:
  *   la lista de tickets (F1-033) = `ventas` ∪ `cancelados`; `momento` es
- *   `cerrado_at` en los no cancelados.
+ *   `cerrado_at` en los no cancelados. Las columnas de `mesa` en adelante son de los
+ *   filtros y el orden de F2-222.
+ * - `partidas_tickets(cheque_id, empresa_id, sucursal_id, producto)` y
+ *   `pagos_tickets(cheque_id, empresa_id, sucursal_id, forma_raw)` (F2-222): partidas y
+ *   pagos de los TICKETS del rango, cancelados incluidos (para buscar por producto o forma
+ *   de pago). Se atan a `ventas` ∪ `cancelados` y no a la CTE `tickets` a propósito: así
+ *   `tickets` sigue referenciada una sola vez y Postgres puede seguir metiéndola dentro de
+ *   la consulta (sin materializarla) en la lista sin filtros.
  *
  * `recibido_at` es `cheques.created_at`: cuándo llegó el cheque a NUESTRA base
  * por primera vez (el upsert de la ingesta no lo reescribe). Sirve para el corte
@@ -80,6 +89,8 @@ export const CTES_VENTAS = [
   'pagos_ventas',
   'catalogo_formas',
   'tickets',
+  'partidas_tickets',
+  'pagos_tickets',
 ] as const;
 
 const HORA_ISO = /T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/;
@@ -322,7 +333,8 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
   cancelados AS (
     SELECT c.id, c.empresa_id, c.sucursal_id, c.folio,
            COALESCE(c.cerrado_at, c.abierto_at) AS momento, c.created_at AS recibido_at,
-           c.mesero, c.total
+           c.mesero, c.total,
+           c.mesa, c.comensales, c.propina, c.abierto_at, c.cerrado_at
     FROM cheques c
     JOIN sucursales_alcance s ON s.id = c.sucursal_id AND s.empresa_id = c.empresa_id
     WHERE c.empresa_id = ${empresa} ${filtroTenant(scope, 'c')} ${sucursalCheque}
@@ -353,9 +365,27 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
   ),
   tickets AS (
     SELECT id, empresa_id, sucursal_id, folio, cerrado_at AS momento, false AS cancelado,
-           recibido_at FROM ventas
+           recibido_at,
+           mesa, mesero, comensales, propina, total, abierto_at, cerrado_at FROM ventas
     UNION ALL
     SELECT id, empresa_id, sucursal_id, folio, momento, true AS cancelado,
-           recibido_at FROM cancelados
+           recibido_at,
+           mesa, mesero, comensales, propina, total, abierto_at, cerrado_at FROM cancelados
+  ),
+  partidas_tickets AS (
+    SELECT p.cheque_id, p.empresa_id, t.sucursal_id, p.producto
+    FROM cheque_partidas p
+    JOIN (SELECT id, empresa_id, sucursal_id FROM ventas
+          UNION ALL SELECT id, empresa_id, sucursal_id FROM cancelados) t
+      ON t.id = p.cheque_id AND t.empresa_id = p.empresa_id
+    WHERE p.empresa_id = ${empresa} ${filtroTenant(scope, 'p')}
+  ),
+  pagos_tickets AS (
+    SELECT g.cheque_id, g.empresa_id, t.sucursal_id, g.forma_raw
+    FROM cheque_pagos g
+    JOIN (SELECT id, empresa_id, sucursal_id FROM ventas
+          UNION ALL SELECT id, empresa_id, sucursal_id FROM cancelados) t
+      ON t.id = g.cheque_id AND t.empresa_id = g.empresa_id
+    WHERE g.empresa_id = ${empresa} ${filtroTenant(scope, 'g')}
   )`;
 }

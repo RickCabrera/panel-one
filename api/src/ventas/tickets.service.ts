@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { FormaPago, Prisma } from '@prisma/client';
 
 import type { FiltroVentas } from '../scope/consulta-ventas';
@@ -52,6 +52,56 @@ export interface PaginaTickets {
   corte: string;
 }
 
+export const CANCELADAS = ['incluir', 'excluir', 'solo'] as const;
+export type Canceladas = (typeof CANCELADAS)[number];
+
+export const ORDENES_TICKETS = [
+  'momento',
+  'folio',
+  'total',
+  'mesa',
+  'mesero',
+  'comensales',
+  'propina',
+  'duracion',
+] as const;
+export type OrdenTickets = (typeof ORDENES_TICKETS)[number];
+
+export const DIRECCIONES = ['asc', 'desc'] as const;
+export type Direccion = (typeof DIRECCIONES)[number];
+
+/** Un importe de filtro: pesos con hasta 2 decimales, en texto (nunca float). */
+export const IMPORTE_FILTRO = /^-?\d{1,10}(\.\d{1,2})?$/;
+
+/**
+ * Lista blanca de orden → expresión SQL FIJA (F2-222). Lo que viene del request sólo elige
+ * una llave de aquí; jamás se interpola. Los textos van con `ucs_basic` (byte a byte, igual
+ * en CI y en cualquier Postgres, como `analisis.service.ts`).
+ * DECISION PROVISIONAL (nocturno): `folio` es texto (esquema-sr.md §2); se ordena por largo y
+ * luego por texto para que "999" quede antes de "1000" si los folios son numéricos.
+ */
+const EXPRESION_ORDEN: Readonly<Record<OrdenTickets, readonly string[]>> = {
+  momento: ['momento'],
+  folio: ['length(folio)', 'folio COLLATE ucs_basic'],
+  total: ['total'],
+  mesa: ['mesa COLLATE ucs_basic'],
+  mesero: ['mesero COLLATE ucs_basic'],
+  comensales: ['comensales'],
+  propina: ['propina'],
+  duracion: ['(cerrado_at - abierto_at)'],
+};
+const SQL_DIRECCION: Readonly<Record<Direccion, string>> = { asc: 'ASC', desc: 'DESC' };
+
+/** El `ORDER BY` de la página, sólo desde las listas blancas. Nulos al final; desempate por id. */
+export function ordenSql(orden: OrdenTickets, dir: Direccion): Prisma.Sql {
+  if (!Object.hasOwn(EXPRESION_ORDEN, orden) || !Object.hasOwn(SQL_DIRECCION, dir)) {
+    throw new Error(`Orden de tickets fuera de la lista blanca: ${String(orden)} ${String(dir)}.`);
+  }
+  const sentido = SQL_DIRECCION[dir];
+  const partes = EXPRESION_ORDEN[orden].map((e) => `${e} ${sentido} NULLS LAST`);
+  return Prisma.raw(`ORDER BY ${[...partes, `id ${sentido}`].join(', ')}`);
+}
+
 export interface OpcionesTickets {
   pagina: number;
   porPagina: number;
@@ -59,6 +109,69 @@ export interface OpcionesTickets {
   folio?: string;
   /** Instante ISO con zona: sólo tickets recibidos hasta él (F2-203). */
   corte?: string;
+  /** Igualdad exacta (F2-222). */
+  mesero?: string;
+  /** Igualdad exacta (F2-222). */
+  mesa?: string;
+  /** Al menos un pago de esa forma, según el catálogo (F2-222). */
+  forma?: FormaPago;
+  /** `total >= importeMin`, texto decimal (F2-222). */
+  importeMin?: string;
+  /** `total <= importeMax`, texto decimal (F2-222). */
+  importeMax?: string;
+  /** Default `incluir` (F2-222). */
+  canceladas?: Canceladas;
+  /** Alguna partida cuyo producto contiene el texto, sin mayúsculas, literal (F2-222). */
+  producto?: string;
+  /** Default `momento` / `desc` (F2-222). */
+  orden?: OrdenTickets;
+  dir?: Direccion;
+}
+
+/** min > max es un 400, comparado en decimal exacto (nunca `Number`). */
+function validarImportes(opciones: OpcionesTickets): void {
+  const { importeMin, importeMax } = opciones;
+  for (const valor of [importeMin, importeMax]) {
+    if (valor !== undefined && !IMPORTE_FILTRO.test(valor)) {
+      throw new BadRequestException(['importe inválido']);
+    }
+  }
+  if (
+    importeMin !== undefined &&
+    importeMax !== undefined &&
+    new Prisma.Decimal(importeMin).greaterThan(new Prisma.Decimal(importeMax))
+  ) {
+    throw new BadRequestException(['importeMin no puede ser mayor que importeMax']);
+  }
+}
+
+/** Las condiciones de F2-222 sobre la CTE `tickets` (alias `t`). Todo valor viaja como parámetro. */
+function condicionesFiltro(opciones: OpcionesTickets): Prisma.Sql[] {
+  const c: Prisma.Sql[] = [];
+  if (opciones.mesero !== undefined) c.push(Prisma.sql`t.mesero = ${opciones.mesero}`);
+  if (opciones.mesa !== undefined) c.push(Prisma.sql`t.mesa = ${opciones.mesa}`);
+  if (opciones.importeMin !== undefined) {
+    c.push(Prisma.sql`t.total >= ${opciones.importeMin}::numeric`);
+  }
+  if (opciones.importeMax !== undefined) {
+    c.push(Prisma.sql`t.total <= ${opciones.importeMax}::numeric`);
+  }
+  if (opciones.canceladas === 'excluir') c.push(Prisma.sql`NOT t.cancelado`);
+  if (opciones.canceladas === 'solo') c.push(Prisma.sql`t.cancelado`);
+  if (opciones.producto !== undefined) {
+    // `strpos` y no LIKE: el texto es literal, sin comodines que escapar.
+    c.push(Prisma.sql`EXISTS (SELECT 1 FROM partidas_tickets pt
+      WHERE pt.cheque_id = t.id AND pt.empresa_id = t.empresa_id
+        AND strpos(lower(pt.producto), lower(${opciones.producto})) > 0)`);
+  }
+  if (opciones.forma !== undefined) {
+    // El MISMO criterio que `pagos[].forma` del detalle: catálogo de la empresa, o `otro`.
+    c.push(Prisma.sql`EXISTS (SELECT 1 FROM pagos_tickets gt
+      LEFT JOIN catalogo_formas cf ON cf.empresa_id = gt.empresa_id AND cf.forma_raw = gt.forma_raw
+      WHERE gt.cheque_id = t.id AND gt.empresa_id = t.empresa_id
+        AND COALESCE(cf.forma, ${FormaPago.otro}) = ${opciones.forma})`);
+  }
+  return c;
 }
 
 /**
@@ -97,6 +210,8 @@ export class TicketsService {
     opciones: OpcionesTickets,
   ): Promise<PaginaTickets> {
     const { pagina, porPagina, folio } = opciones;
+    validarImportes(opciones);
+    const orden = ordenSql(opciones.orden ?? 'momento', opciones.dir ?? 'desc');
     // Valida el filtro (400) y el alcance (404) igual que los agregados.
     const q = await this.agregados.consulta(scope, filtro);
 
@@ -120,21 +235,24 @@ export class TicketsService {
     // `starts_with` con el prefijo como parámetro: literal, sin comodines que escapar.
     const condiciones: Prisma.Sql[] = [];
     if (opciones.corte !== undefined) {
-      condiciones.push(Prisma.sql`recibido_at <= ${corte.toISOString()}::timestamptz`);
+      condiciones.push(Prisma.sql`t.recibido_at <= ${corte.toISOString()}::timestamptz`);
     }
     if (folio !== undefined) {
-      condiciones.push(Prisma.sql`starts_with(folio, ${folio})`);
+      condiciones.push(Prisma.sql`starts_with(t.folio, ${folio})`);
     }
+    // Filtros de F2-222: el MISMO `WHERE` para el conteo y la página, así `total` es siempre
+    // el del filtro completo (la cifra que se muestra antes de exportar).
+    condiciones.push(...condicionesFiltro(opciones));
     const donde =
       condiciones.length === 0
         ? Prisma.empty
         : Prisma.sql`WHERE ${Prisma.join(condiciones, ' AND ')}`;
     const [conteo] = await q.consultar<{ total: number }>(
-      Prisma.sql`SELECT count(*)::int AS total FROM tickets ${donde}`,
+      Prisma.sql`SELECT count(*)::int AS total FROM tickets t ${donde}`,
     );
     const pag = await q.consultar<{ id: string }>(
-      Prisma.sql`SELECT id FROM tickets ${donde}
-        ORDER BY momento DESC, id DESC
+      Prisma.sql`SELECT id FROM tickets t ${donde}
+        ${orden}
         LIMIT ${porPagina} OFFSET ${(pagina - 1) * porPagina}`,
     );
     const base = { total: conteo.total, pagina, porPagina, corte: corte.toISOString() };

@@ -189,8 +189,35 @@ describe('Contrato OpenAPI', () => {
     expect(nombres('/ventas/top-productos')).toEqual([...FILTRO, 'limite', 'por'].sort());
     expect(nombres('/ventas/tickets')).toEqual(
       // `corte`: corte por recepción del export (F2-203).
-      [...FILTRO, 'corte', 'folio', 'pagina', 'porPagina'].sort(),
+      // Filtros y orden de F2-222.
+      [
+        ...FILTRO,
+        'corte',
+        'folio',
+        'pagina',
+        'porPagina',
+        'mesero',
+        'mesa',
+        'forma',
+        'importeMin',
+        'importeMax',
+        'canceladas',
+        'producto',
+        'orden',
+        'dir',
+      ].sort(),
     );
+    // Los enums y el aviso de acentos quedan en el contrato (el front construye contra él).
+    const param = (n: string) =>
+      paths['/ventas/tickets']?.get?.parameters?.find((p) => 'name' in p && p.name === n) as
+        { description?: string; schema?: { enum?: string[]; pattern?: string } } | undefined;
+    expect(param('canceladas')?.schema?.enum).toEqual(['incluir', 'excluir', 'solo']);
+    expect(param('dir')?.schema?.enum).toEqual(['asc', 'desc']);
+    expect(param('orden')?.schema?.enum).toEqual(
+      expect.arrayContaining(['momento', 'folio', 'total', 'duracion']),
+    );
+    expect(param('importeMin')?.schema?.pattern).toBe('^-?\\d{1,10}(\\.\\d{1,2})?$');
+    expect(param('producto')?.description).toMatch(/NO ignora acentos/);
     // Y su contrato dice lo que hace: instante con zona, exclusivo, sólo el último día, la
     // hora local de cada sucursal y cómo se resuelve un cambio de horario.
     const altura = paths['/ventas/resumen']?.get?.parameters?.find(
