@@ -3564,3 +3564,155 @@ observaciones, anotadas aquí). Sólo /web: sin API, sin OpenAPI, sin hallazgos 
 
 **Qué haría distinto.** Montar primero el helper de test con los estados vacíos en mente: dos
 tests fallaron por esperar una cifra que la vista, con venta 0, correctamente no pinta.
+
+## 2026-09-21 23:40 — F2-220 · Resumen ejecutivo
+**Estado:** CERRADA si el PR se mergea. Revisor: plan BLOQUEADO una vez (B1: el corte usaba la hora
+de la zona del panel) y APROBADO CON OBSERVACIONES en el segundo pase; entregable BLOQUEADO una vez (B1: sucursales y top
+actuales no se refrescaban mientras su base avanzaba cada minuto; corregido con prueba) y
+APROBADO CON OBSERVACIONES en el segundo pase (todas atendidas o anotadas aquí).
+Carriles /api + /web. OpenAPI actualizado. Sin hallazgos de SoftRestaurant (no se tocó
+`docs/esquema-sr.md`: no se lee nada nuevo del POS).
+
+**Qué quedó hecho.**
+- **API: `alturaAl`, el corte "a la misma altura".** Parámetro opcional del filtro común de
+  TODOS los `/ventas/*` (tickets incluido).
+  - Es un INSTANTE ISO con zona (`ISO_CON_ZONA`), no una hora de reloj.
+  - Sólo toca el ÚLTIMO día del rango (`hasta`): de ese día entra lo ocurrido ANTES de la hora
+    local que marca el instante EN LA ZONA DE CADA SUCURSAL. Exclusivo. Días previos completos.
+  - Vive en UN lugar: `finLocal` de `armarCtes` (`api/src/scope/consulta-ventas.ts`). Ventas,
+    cancelados (por `momento`), partidas, pagos y tickets lo heredan de ahí.
+  - Sin él, el SQL es byte a byte el de antes: `consulta-ventas.spec.ts` tiene un snapshot que
+    se ESCRIBIÓ con el helper de main (checkout del archivo viejo, correr, restaurar) y pasa con
+    el nuevo.
+  - Validación doble: DTO (`@Matches(ISO_CON_ZONA)` + `@IsISO8601 strict`) y `validarFiltro`
+    (`instanteValido`: día real, hora/minuto/segundo/offset en rango) → 400.
+  - Cache: `parametros()` lo agrega AL FINAL y como `''` sin él.
+  - `ISO_CON_ZONA` se movió a `api/src/comun/fechas.ts`; `ingesta/normalizar.ts` la reexporta.
+- **Web: vista `/resumen`** (`paginas/Resumen.tsx`, `paginas/resumen/`).
+  - Fijo (no depende de la cabecera): **Hoy** vs el mismo día de la semana pasada a esta hora;
+    **Venta en curso** (es `TarjetaVentaEnVivo` de Inicio, el mismo componente); **Este mes**
+    vs el mes anterior a la misma altura.
+  - Del periodo de la cabecera, contra `periodoComparable()`: ticket promedio y comensales,
+    mejor y peor sucursal (sólo entre las que vendieron; las sin venta se nombran), top 5 por
+    importe con su Δ contra el top 50 de la base.
+  - **Alertas activas** (hasta F2-224): sucursales desconectadas / sin reporte y mesas con
+    `minutos > 60` explícito, con enlace al Monitor. API caída → error, no "sin alertas".
+  - Todo Δ sin base (base sin cuentas, en 0 o ilegible) es "—" con el porqué. "Top fuera de
+    los 50 de la base" y "sin ventas en la base" tienen textos distintos.
+  - Si alguna sucursal del alcance no reporta, "Hoy" lo avisa junto al Δ (ver trampas).
+- **No hay cálculo propio en el front.** Cada cifra "actual" es la MISMA consulta (misma llave
+  de React Query) que la pinta en Inicio o Reportes. `useVentas` y `useReporte` aceptan
+  `alturaAl` opcional: sin él la llave es idéntica a la de antes (test por hook).
+- Menú: "Resumen" ya navega; `/resumen` está en `VISTAS_CON_PERIODO`.
+
+**Decisiones que tomé y por qué.**
+- **Instante, no hora (bloqueo B1 del revisor).** Mi primer plan mandaba `hastaHora=HH:MM`
+  sacada de la zona del panel. Con CDMX + Tijuana, la base de Tijuana se cortaba una hora
+  tarde TODOS los días: Δ sesgado a la baja. Con el instante, cada sucursal saca su propia
+  hora local en SQL. El front no decide la hora de nadie.
+- **La cifra actual no se corta; la base sí.** "Hoy" trae todo lo que llegó, porque así cuadra
+  con Inicio (AC1). Si un agente va atrasado, el Δ sale más bajo de lo real: no se corrige, se
+  avisa en la tarjeta con las sucursales sin lectura.
+- **Mes:** si el día de hoy no existe en el mes anterior (31-mar vs febrero), la base es el mes
+  anterior completo, sin corte.
+- **Rango a mano:** la base son los N días anteriores; se corta sólo si el rango termina hoy.
+  Un rango que termina en el futuro NO se corta (documentado en `comparables.ts`).
+- **Top 5:** la base es el top 50 del periodo comparable. Un producto fuera de esos 50 dice
+  eso, no "sin ventas". LIMITACIÓN: si vendió poco en la base, no sabemos cuánto. Pedir la
+  base filtrada a esos 5 productos exigiría un parámetro nuevo en `top-productos`.
+- **Etiquetas sin hora:** "a esta hora" / "a la misma altura", nunca "hasta las 14:30": con
+  varias zonas no existe una sola hora.
+- **Auto-refresco (bloqueo B1 del entregable).** `useReporte` ganó un `autoRefresco` opcional
+  (Reportes no lo usa). El Resumen se lo pasa a sucursales y top actuales cuando el periodo
+  incluye hoy. Sin eso, a las 16:00 la cifra actual seguía siendo la de las 14:00 y la base ya
+  iba a las 16:00: Δ falso. Hay prueba con relojes falsos que falla sin el arreglo (lo
+  comprobé con la mutación).
+- **Reloj de la vista alineado al minuto.** `useMinuto` revisa cada 5 s y sólo re-renderiza
+  cuando cambia el minuto: la base queda a lo más ~1 min + 5 s detrás del ahora, no ~2 min.
+- **`placeholderData` sólo si cambia la altura** (`consultas/altura.ts`): la base cambia de
+  llave cada minuto y no debe volver a "cargando"; pero con otra empresa, sucursal o rango
+  NO se pinta el dato viejo (regla de siempre del panel).
+
+**LIMITACIONES CONOCIDAS (decisiones para Ricardo).**
+- **DECISION PROVISIONAL (nocturno), medianoche con zonas distintas** (`consulta-ventas.ts`,
+  JSDoc de `alturaAl`; `comparables.ts`; descripción OpenAPI). El corte usa sólo la HORA local
+  del instante, no su fecha. Con "Todas" y Tijuana, entre las 00:00 y la 01:00 de CDMX el "hoy"
+  del panel ya es el día nuevo, Tijuana sigue en el anterior: su "hoy" vale 0 y su base se
+  corta a las 23:xx → Δ muy bajo. Con una zona adelantada (Cancún, 23:00–24:00 CDMX) pasa al
+  revés. Arreglo propuesto por el revisor: comparar la fecha local del instante con el día de
+  referencia (posterior → último día completo; anterior → corte a las 00:00; igual → a la hora
+  local). No se hizo: toca el helper de scope y el "hoy" por sucursal, que es otra decisión.
+- **Rango que llega hasta hoy o al futuro** (`desde ≤ hoy < hasta`): lo actual incluye hoy a
+  medias y la base va completa → Δ sesgado a la baja. Documentado en `comparables.ts`.
+
+**REGLA PARA LAS TAREAS SIGUIENTES (F2-140 Comparativos, F2-221 Análisis…).**
+- Toda comparación "a la misma altura" usa `alturaAl` (instante truncado al minuto,
+  `alturaDe()` de `paginas/resumen/comparables.ts`). No inventes un parámetro propio ni una
+  hora de reloj.
+- El periodo comparable de un periodo de la cabecera sale de `periodoComparable()`. Si
+  Comparativos necesita "periodo A vs B" libre, reusa `alturaAl` para cortar el B cuando
+  termine hoy.
+- Δ: `delta()` / `deltaImporte()` de `paginas/resumen/delta.ts` (bigint, "—" sin base).
+- Hooks: `alturaAl` es el 5.º argumento de `useVentas` y de `useReporte` (en `useReporte` el
+  6.º es `autoRefresco`). Una cifra actual que se compare contra una base con `alturaAl`
+  TIENE que refrescarse sola mientras incluya hoy, o el Δ se desfasa.
+
+**Tests.**
+- API:
+  - `altura.e2e.spec.ts` (14): cheques insertados a mano con hora exacta; cada esperado
+    calculado a mano en el comentario del cheque.
+  - `consulta-ventas.spec.ts`: +15 (validación y snapshot del SQL).
+  - `openapi.spec.ts`: ADAPTADO (no aflojado). La lista de parámetros de `/ventas/*` ahora
+    incluye `alturaAl`, y se fija su descripción (zona obligatoria, ÚLTIMO día, exclusivo,
+    CADA sucursal, horario).
+- Web:
+  - `comparables.test.ts`, `delta.test.ts`, `consultas/altura.test.tsx`.
+  - `Resumen.test.tsx` (AC1 contra Inicio y Reportes montados con `Rutas` reales, AC2, AC3,
+    alertas, alcance, rango invertido, auto-refresco con relojes falsos).
+  - ADAPTADOS al comportamiento nuevo, no borrados: `vista.test.ts` (+`/resumen`),
+    `menu.test.ts` (resumen tiene destino), `Sidebar.test.tsx` (la pendiente de ejemplo ahora
+    es Análisis/F2-221).
+- Honestidad del AC1: el test web prueba mismos endpoints, mismas llaves y mismo formato. La
+  garantía NUMÉRICA del corte viene del e2e de la API contra Postgres.
+- Números:
+  - API: lint y typecheck limpios; jest **897/897** (45 suites, 0 skips, 8 snapshots).
+  - Web: lint limpio, build limpio, vitest **671/671** (42 archivos, 0 skips). Bundle
+    principal 109.3 kB gzip (+ gráficas en sus chunks).
+
+**Verificación con el seed.**
+- API de la rama levantada en el puerto 3099 (la del 3000 era otra, vieja) y el admin de
+  desarrollo del seed.
+- Resumen del 14-sep con `alturaAl` = 14:00 CDMX: $2,613.60 / 3 cuentas. Es exactamente Σ
+  `por-hora` de las horas 0–13 del mismo día completo. El día completo: $11,745.40 / 13.
+- El seed de dev tiene las DOS sucursales en CDMX: **el caso de varias zonas NO se verificó en
+  vivo**, sólo en el e2e.
+- **No hubo verificación visual en Chrome** (ni 390 px). Los estados vacíos y los textos están
+  cubiertos por tests; el layout usa las mismas tarjetas y grid de Inicio. Pendiente para
+  F2-250 si se quiere mirar.
+
+**Trampas.**
+- **Cambio de horario, confirmado por Postgres y calculado a mano antes:** una hora local que
+  NO existe (02:30 del 14-mar-2027 en Tijuana) se lee con el offset de ANTES del salto (=
+  03:30 PDT). Una que se repite (01:30 del 7-nov-2027) se lee con el de DESPUÉS (la segunda
+  pasada, PST). Está en la descripción OpenAPI.
+- **`python` sobre archivos CRLF del working copy:** un reemplazo sobre
+  `api/src/openapi/openapi.spec.ts` lo dejó en 200k líneas. Usa la herramienta de edición.
+- **`prettier --write` sobre carpetas** reescribe los finales de línea de decenas de archivos
+  ajenos. `git diff --stat` los ignora, `git status` los marca M. Formatea sólo tus archivos
+  y agrega al commit uno por uno.
+- `placeholderData` como función con firma propia hacía que TanStack infiriera mal el tipo
+  de `data`. Escríbela inline: `(anterior, previa) => ...`.
+- El e2e con cheques anidados (`partidas: { create }`) no compila: la FK es compuesta. Crea
+  partidas y pagos aparte con `chequeId`.
+
+**Qué quedó abierto.**
+- Top 5 con base en el top 50 (arriba). Si molesta, un parámetro `productos=` en
+  `top-productos`.
+- Las alertas son las provisionales; F2-224 las reemplaza por el centro de alertas.
+- Verificación visual y a 390 px: F2-250.
+- Medianoche con zonas distintas y rango hacia el futuro (arriba).
+- Tijuana (varias zonas) sin verificación en vivo: el seed de dev no tiene otra zona.
+
+**Qué haría distinto.** Pensar el corte en la API desde el principio como "instante" y no como
+"hora": la zona es de cada sucursal, y cualquier hora que calcule el front ya trae la zona
+equivocada para alguien.
