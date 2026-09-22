@@ -4989,3 +4989,160 @@ del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos).
 
 **Qué haría distinto.** Buscar desde el plan quién más consume `/ventas/por-mesero` con `toEqual`:
 un campo aditivo en el contrato rompe todos esos tests.
+
+
+## 2026-09-22 13:15 — F2-232 · Clientes
+**Estado:** CERRADA si el PR se mergea. Carriles /api + /web (+ docs). Revisor, gate del plan:
+BLOQUEADO una vez (B1: faltaba la matriz de scoping por rol en los tres endpoints nuevos) y
+APROBADO CON OBSERVACIONES en el 2.º pase. Gate del entregable: BLOQUEADO una vez (B1: el CSV sacaba la última visita en UTC) y APROBADO
+CON OBSERVACIONES en el 2.º pase.
+
+**Qué quedó hecho.**
+- **El cliente de la cuenta** (lo que hace "derivable" todo lo demás; antes `cheques` no lo
+  guardaba):
+  - Migración `20260922123738_cheque_cliente`: `cheques.cliente_origen_sr_id TEXT NULL`, CHECK
+    `NULL o largo 1..64` y un índice `(sucursal_id, cliente_origen_sr_id)`.
+  - `DatosChequeDto.clienteOrigenSrId` en `POST /ingesta/eventos`. Se guarda TAL CUAL; sólo
+    espacios = nulo; omitirlo = nulo. Entra en `chequeCanonico`, así que cambiar el cliente
+    reescribe el cheque y reenviar lo mismo no toca nada.
+  - Las CTEs `ventas`, `cancelados` y `tickets` del helper de scope exponen la columna.
+- **API** (todo por el helper de scope; lo ajeno da el MISMO 404 que lo inexistente):
+  - `GET /catalogos/clientes/resumen`: lista del periodo con visitas, venta, ticket promedio,
+    última visita y canceladas aparte. Trae el estado del catálogo por sucursal, cuentas con
+    cliente, y `q`, `pagina`, `porPagina` (hasta 500) y `contacto`.
+  - `GET /catalogos/clientes/{id}/ficha`: el registro con teléfono, correo y RFC, las cifras del
+    periodo en SU sucursal y el top 10 de productos.
+  - `GET /ventas/tickets?clienteId=`: resuelve el registro del espejo con scope y filtra por
+    empresa + sucursal + id del POS.
+  - La parte pura está en `api/src/catalogos/clientes.ts`.
+- **Seed:** `sembrarVentas` persiste `maestro.clienteClave` como `clienteOrigenSrId`. Usa el mismo
+  generador, así que no mueve ninguna otra cifra, y el seed de catálogos usa esa misma clave como
+  `origenSrId`.
+- **Web `/clientes`** (el menú lateral ya navega; `/clientes` está en `VISTAS_CON_PERIODO`):
+  - estado vacío honesto por sucursal ("llegó vacío" / "no ha enviado"), con lo que haría falta;
+  - aviso por sucursal con clientes en el catálogo pero ninguna cuenta con cliente;
+  - tabla paginada en servidor; las filas "sin ficha" no llevan enlace;
+  - ficha con "Ver sus N visitas en Tickets" (`?cliente=<uuid>&canceladas=excluir`, más alcance y
+    periodo);
+  - CSV sin datos personales, salvo que se marque la casilla "Incluir nombre y datos de contacto".
+    La última visita va como fecha y hora en la zona de SU sucursal; sin esa zona no hay archivo
+    (la regla del CSV de Tickets). **Ése fue el bloqueo del entregable:** la primera versión
+    exportaba el instante UTC, y la visita de las 23:30 del día 10 salía el 11;
+  - la búsqueda vive en el estado de la vista, no en la URL.
+- **Tickets:** filtro `cliente` en la URL. Sólo acepta un uuid; viaja a la API y al export, y
+  sale como chip "Un cliente (desde su ficha)", sin el nombre.
+- OpenAPI regenerado (2 rutas nuevas, `clienteId` en tickets, `clienteOrigenSrId` en el cheque).
+- `docs/esquema-sr.md`: §2 (el cliente de la cuenta), §8 (lo que decide la vista) y §13 (el
+  campo nuevo del contrato).
+- Backlog: un "Y además (de F2-232)" en la ficha de **F2-100**, para el enlace con
+  `ReceptorFrecuente`.
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` en `schema.prisma` (modelo `Cheque`) y en
+  `ingesta.dto.ts#clienteOrigenSrId`: **el cheque de SR trae el MISMO id del cliente que su
+  catálogo.** No está validado; es lo primero que hay que mirar en F1-090/F2-192. **Ningún agente
+  manda hoy este campo**, porque no hay lector de cheques (F1-022 depende de F1-090).
+- **El cruce es por (sucursal, `origen_sr_id`) EXACTO**, no por clave ni por nombre. El mismo id en
+  dos sucursales son dos clientes, y no se consolida por RFC ni por teléfono.
+- **Visitas** = cuentas NO canceladas cerradas en el periodo, las mismas que Tickets con
+  `clienteId` + `canceladas=excluir`. Por eso el enlace de la ficha lleva `canceladas=excluir`.
+- **Ticket promedio** = venta / visitas, half-up a 2 decimales (la regla de Análisis y Meseros,
+  verificada en `analisis.service.ts#dividir`).
+- **`q` se filtra EN CÓDIGO**, sobre la lista ya armada. Un nombre nunca llega a SQL ni a un log.
+  Costo: cada búsqueda relee el espejo, hasta 5000.
+- **Tope del espejo:** la lista lee hasta 5000 vigentes (`catalogoTruncado`). Los registros de los
+  ids que aparecen en las cuentas se leen APARTE, en lotes de 500 y sin tope, así que un cliente con
+  visitas siempre liga. "sin-ficha" = el espejo sincronizado no lo tiene; "sin-sincronizar" = la
+  sucursal nunca cerró su catálogo de clientes.
+- **Cambios respecto al primer plan** (para quien lo lea en el PR):
+  - el tope del id es **64**, igual que `origen_sr_id`, y no 100;
+  - el id se guarda **tal cual, sin trim**, porque el catálogo tampoco lo recorta y el cruce es
+    exacto;
+  - el export con contacto lo pide al MISMO resumen con `contacto=true`, no a
+    `GET /catalogos/clientes`.
+- **Dados de baja** (`activo=false`): sólo salen si tuvieron visitas o canceladas en el periodo.
+- **`contacto=true`** es un parámetro explícito de la lista. Sin él, las llaves `telefono`,
+  `correo` y `rfc` NO vienen. El web sólo lo manda desde el export con la casilla marcada.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO:** ¿el `visor` debe ver teléfono, correo y RFC en la ficha?
+  Hoy sí, igual que `GET /catalogos/clientes` desde F2-230. No lo endurecí sin decisión (§8).
+- **ReceptorFrecuente (F2-100) no existe:** el enlace por RFC NO está hecho. Queda anotado en la
+  ficha de F2-100. El `[x]` de F2-232 no incluye esa parte.
+
+**Trampas que encontré.**
+- **Honestidad del seed:** en el seed `origenSrId = clave` (C001…), así que un cruce por CLAVE
+  pasaría todos los tests del seed. El cruce se prueba en `clientes.e2e.spec.ts` con ids y claves
+  DISTINTOS: "Carla Trampa" tiene clave "SR-20" y la cuenta con id "SR-20" no es suya.
+- **El AC "con el seed sin clientes"** no se puede medir con el seed: el seed demo SÍ tiene
+  clientes. Tocar `generarUniverso` movería el PRNG y todas las cifras. El estado vacío se prueba a
+  mano en el e2e (catálogo cerrado con `total=0` y sin cuentas con cliente) y en `Clientes.test.tsx`.
+- **`chequeCanonico` también compara el campo nuevo.** Si no, cambiar el cliente de una cuenta se
+  habría tomado como "reenvío idéntico" y se ignoraría en silencio. Tiene su test en
+  `normalizar.spec.ts`.
+- El snapshot de `consulta-ventas.spec` NO se regeneró: `sinF2232()` quita literalmente las 4
+  apariciones de la columna, igual que hicieron F2-221 y F2-222.
+- El Write de este entorno convierte un `﻿` escrito en un test en el carácter BOM real, y el
+  lint lo marca como `no-irregular-whitespace`. Lo arreglé con un script de python.
+- Los heredocs de bash con comillas mixtas siguen muriendo (ya lo advertían F2-230 y F2-231). Usa
+  Edit, o escribe el texto a un archivo con Write y pégalo con python.
+- `prisma migrate dev` volvió a dar EPERM con el DLL del motor. La migración sí se aplicó
+  (`migrate status` limpio) y los tipos sí se generaron.
+- **Empecé a construir (migración + DTO) antes de que el revisor aprobara el plan.** El revisor lo
+  marcó (obs. 1 del 2.º pase). No cambió nada del plan, pero no lo repitas.
+- **Rojos locales:**
+  - `prisma/esquema.spec.ts` (argon2id): el preexistente de siempre, por la FK de la suscripción
+    del seed local.
+  - `reportes.e2e` "el martes: el diario cuadra…": las alertas traen 2 "Sucursal sin reportar"
+    de más. Salió rojo en la corrida completa y 1 de 2 veces corrido junto con `clientes*`. **Lo
+    reproduje corriendo `reportes.e2e` SOLO: 1 de 31 veces.** Depende del reloj real (el
+    evaluador de alertas); no toca clientes. Es la familia de intermitencias de F2-224/F2-141 que
+    anotó F2-230. Si sale en CI, relanzar cuenta como intento.
+
+**Qué quedó abierto.**
+- El enlace con `ReceptorFrecuente` por RFC (F2-100, anotado en su ficha).
+- La decisión del `visor` y los datos de contacto (arriba).
+- `/meseros` (F2-231) y `/menu` (F2-145) NO están en `VISTAS_CON_PERIODO`, así que la cabecera no
+  pinta el selector de periodo en esas vistas aunque lo usan. No lo toqué (no era esta tarea). Para
+  F2-250: verificar si es a propósito.
+- `q` viaja en la query string de la petición GET. Hoy Caddy no tiene access log; si se activa,
+  entrarían nombres a los logs. Opción: pasar la búsqueda a POST, o no loguear query strings.
+- Sin "última visita histórica": la última visita es la del periodo elegido, igual que las demás
+  cifras.
+
+**Tests.**
+- **Nuevos, api:**
+  - `src/catalogos/clientes.spec.ts` (13 puros): cruce exacto (una clave igual con otro id no
+    liga), otra sucursal, sin ficha, sin sincronizar, truncado + lectura por ids, dados de baja,
+    orden, `q`, contacto, redondeo, totales.
+  - `src/catalogos/clientes.e2e.spec.ts` (18): **AC vacío** (sin sincronizar → vacío), **AC
+    cuadre** (ficha = Tickets filtrado: 3 visitas, 183.34, 61.11; con canceladas 4), productos,
+    lista y contacto, `q`; Tickets con otra sucursal = vacío; ingesta ×3 idéntica, cambio,
+    omitido, espacios, >64 rechazado solo y sin el valor en el motivo; **matriz de roles** (visor,
+    admin de empresa y global; ajeno = mismo status y cuerpo que inexistente en los tres
+    endpoints); 400/401; **AC datos personales**: ningún log del archivo trae nombre, teléfono,
+    correo ni RFC, y además exige que el espía haya capturado logs de la app, para no pasar en
+    vacío.
+  - `src/catalogos/clientes-seed.e2e.spec.ts` (3): el seed persiste el cliente; cada fila cuadra
+    con el generador; ficha = Tickets para el cliente más frecuente.
+  - `normalizar.spec.ts` (+1) y `openapi.spec` (+1).
+- **Nuevos, web:**
+  - `paginas/Clientes.test.tsx` (7): petición, **AC vacío**, tabla y avisos, ficha y enlace, el
+    filtro de Tickets, búsqueda, y **AC CSV** sin y con la casilla.
+  - `clientes/reglas.test.ts` (5) y `clientes/csv.test.ts` (6, con una visita de madrugada UTC
+    que cambia de día y la sucursal sin zona).
+  - `filtros/tickets.test.ts` (+1).
+- **Mutaciones a mano:** cruzar por clave y quitar la sucursal del filtro de Tickets dan 9 rojos.
+- **Adaptados, no aflojados:**
+  - `consulta-ventas.spec` (`sinF2232`) y `openapi.spec` (`clienteId`);
+  - `normalizar.spec` y `escritura-sucursal.spec` (campo nuevo en los fixtures de tipo);
+  - web: `exportar.test` (el cliente viaja en todas las llamadas), `tickets.test` (`cliente: ''`),
+    `vista.test` (`/clientes`), `menu.test` y `Sidebar.test` (Clientes navega; la pendiente de
+    ejemplo pasa a Existencias/F2-121, y en el colapso se busca el enlace).
+- **Números:**
+  - /api, corrida completa limpia tras el arreglo del bloqueo: lint y typecheck limpios,
+    `prisma validate` OK, jest 1324/1325 con 0 skips. El único rojo es `prisma/esquema.spec`
+    (argon2id, preexistente local); `reportes.e2e` pasó en esa corrida.
+  - /web: build y lint limpios, vitest 909/909.
+
+**Qué haría distinto.** Esperar el veredicto del plan antes de tocar código aunque sea "obvio", y
+buscar desde el plan qué objeto cierra la idempotencia (aquí, `chequeCanonico`): un campo nuevo
+que no entra en esa comparación se pierde en silencio.
