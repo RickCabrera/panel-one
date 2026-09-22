@@ -28,6 +28,10 @@ export const LLAVE_EMPRESA = {
   Alerta: 'empresaId',
   ReglaAlerta: 'empresaId',
   AlertaEvaluacion: 'empresaId',
+  // F2-141. Las escribe SÓLO `EscrituraReportes`, salvo la baja pública, que apaga por
+  // `updateMany` con el id de un token firmado ya verificado.
+  SuscripcionReporte: 'empresaId',
+  EnvioReporte: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

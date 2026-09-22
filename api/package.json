@@ -15,9 +15,10 @@
     "seed:ventas": "ts-node prisma/seed-ventas.ts",
     "seed:mesas": "ts-node prisma/seed-mesas.ts",
     "seed:alertas": "ts-node prisma/seed-alertas.ts",
+    "seed:reportes": "ts-node prisma/seed-reportes.ts",
     "postinstall": "prisma generate",
     "setup:env": "ts-node scripts/setup-env.ts",
-    "seed": "prisma db seed && npm run seed:ventas && npm run seed:mesas && npm run seed:alertas"
+    "seed": "prisma db seed && npm run seed:ventas && npm run seed:mesas && npm run seed:alertas && npm run seed:reportes"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.5",

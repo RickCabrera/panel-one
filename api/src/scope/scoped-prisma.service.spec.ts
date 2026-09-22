@@ -81,11 +81,14 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // F2-202: bandeja del correo falso, filtrada por empresa_id como las demás.
       'correoEnviado',
       'empresa',
+      // F2-141: reportes programados; sus escrituras van por `reportes(scope)`.
+      'envioReporte',
       'formaPagoCatalogo',
       'mesaSnapshot',
       'reglaAlerta',
       'sesionUsuario',
       'sucursal',
+      'suscripcionReporte',
       'usuario',
     ]);
     expect(Object.keys(datos.sucursal).sort()).toEqual(

@@ -7,6 +7,7 @@ import type { AgenteAutenticado } from '../auth/request-autenticado';
 import { ConsultaVentas, type FiltroVentas } from './consulta-ventas';
 import { EscrituraAdmin } from './escritura-admin';
 import { EscrituraAlertas } from './escritura-alertas';
+import { EscrituraReportes } from './escritura-reportes';
 import { EscrituraSucursal } from './escritura-sucursal';
 import {
   COLUMNAS_INTOCABLES,
@@ -191,6 +192,15 @@ export class ScopedPrismaService {
    */
   alertas(scope: EmpresaScope): EscrituraAlertas {
     return new EscrituraAlertas(this.#prisma, scope);
+  }
+
+  /**
+   * Las escrituras de los reportes programados (F2-141): guardar la suscripción propia y
+   * reclamar/cerrar cada envío (ver `escritura-reportes.ts`). La empresa se verifica con
+   * este `scope`: fuera de alcance, 404.
+   */
+  reportes(scope: EmpresaScope): EscrituraReportes {
+    return new EscrituraReportes(this.#prisma, scope);
   }
 
   /**

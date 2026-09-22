@@ -13,6 +13,7 @@ export const THROTTLER_LOGIN = 'login';
 export const THROTTLER_LOGIN_HORA = 'login-hora';
 export const THROTTLER_REFRESH = 'refresh';
 export const THROTTLER_RESET = 'reset';
+export const THROTTLER_BAJA = 'baja-reportes';
 
 /** `POST /auth/login` y `POST /cuenta/password`: 5 intentos por minuto por IP. */
 export const OPCIONES_THROTTLER_LOGIN: ThrottlerOptions = {
@@ -57,12 +58,24 @@ export const OPCIONES_THROTTLER_RESET: ThrottlerOptions = {
   limit: 10,
 };
 
+/**
+ * `POST /reportes/baja` (F2-141): 10 por minuto por IP. Es pública (el enlace del correo
+ * funciona sin sesión) y el token es una firma de 256 bits: esto no protege el token, corta
+ * a quien martille la ruta.
+ */
+export const OPCIONES_THROTTLER_BAJA: ThrottlerOptions = {
+  name: THROTTLER_BAJA,
+  ttl: 60_000,
+  limit: 10,
+};
+
 /** Todos los throttlers registrados en `AuthModule`. Uno nuevo va aquí. */
 export const THROTTLERS = [
   THROTTLER_LOGIN,
   THROTTLER_LOGIN_HORA,
   THROTTLER_REFRESH,
   THROTTLER_RESET,
+  THROTTLER_BAJA,
   THROTTLER_AGENTE,
 ] as const;
 export type NombreThrottler = (typeof THROTTLERS)[number];
