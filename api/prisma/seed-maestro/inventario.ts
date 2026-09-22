@@ -282,6 +282,8 @@ export function generarInventario(op: {
             const folio = `${s.clave}-OC-${String(n).padStart(4, '0')}`;
             const movs = claves.map((clave) => {
               const e = est.get(clave)!;
+              // Variación ±5 % sacada del PRNG y redondeada a centavos: sirve para un seed
+              // sintético, NO es el patrón para importes reales (ahí, sólo Decimal).
               const costo = dinero(new Dec(insumo(clave).costo).times(0.95 + r() * 0.1));
               return mover(e, clave, cantidadMovible(clave, e.maximo.minus(e.saldo)), costo);
             });

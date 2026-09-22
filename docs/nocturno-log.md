@@ -2850,3 +2850,111 @@ Posible test sensible a carga/tiempo: si vuelve a salir, identificar cuál (no l
 
 **Qué haría distinto.** Correr la verificación sin variables de entorno desde el principio:
 me habría ahorrado una vuelta.
+
+## 2026-09-21 20:05 — F2-201 · Seed maestro: realismo y datos para todos los módulos
+**Estado:** CERRADA (PR en esta rama, se mergea al terminar el CI)
+
+> Retomada: una sesión anterior murió por límite de uso tras escribir el plan y
+> `seed-maestro/azar.ts` + `catalogos.ts` sin commitear (rama local sin commits). Se
+> reusaron, el plan se volvió a pasar por el revisor y se construyó en una rama recreada
+> desde main.
+
+**Qué quedó hecho.**
+- `api/prisma/seed-ventas.ts`: **90 días, 750 cheques por sucursal** (1500). Productos,
+  precios por sucursal, grupos, meseros (nombre + clave), áreas, canales y clientes salen de
+  `api/prisma/seed-maestro/catalogos.ts`. Mostrador y domicilio van con `mesa: null`; ~3 %
+  de cheques sin área. El producto P008 y los meseros M06/N05 están dados de baja y no
+  aparecen desde su día de baja.
+- **El día en curso no inventa futuro.** `OpcionesVentas.ahora`: los cheques se generan igual
+  (el PRNG avanza lo mismo) y se descarta todo el que CIERRE después de `ahora` (comparación
+  por instante, vale para cualquier zona). Como los folios van en orden cronológico, lo
+  descartado es la cola: sin huecos, y lo anterior es idéntico con o sin reloj. Un cheque que
+  abrió antes de `ahora` pero cierra después **se descarta entero**: el histórico no trae
+  cuentas "en curso" (ésas son del seed de mesas). `main()` usa `relojDelSeed()`:
+  `SEED_AHORA` si viene, si no el minuto en curso **truncado**. Dos corridas dentro del mismo
+  minuto dejan lo mismo; una que cruce de minuto puede sumar los cheques que cerraron en ese
+  minuto, y es lo correcto.
+- `api/prisma/seed-maestro/` (puro, sin Prisma client; `Prisma.Decimal` para dinero y
+  cantidades a 3 decimales): `insumos.ts` (unidades, 6 grupos, 44 insumos, 6 proveedores,
+  2 almacenes por sucursal: GEN y BAR), `recetas.ts` (24 de 26 productos; **P020 Refresco y
+  P021 Cerveza sin receta a propósito**; costo de receta 20–45 % del precio, el spec lo
+  afirma), `inventario.ts` (simulación día por día **contra las ventas**: inicial al máximo,
+  compras lunes/jueves hasta el punto medio y cualquier día bajo mínimo, consumo = recetas ×
+  ventas + 0–4 % de merma, mermas ocasionales, traspaso quincenal A→B, y un **ajuste de
+  conteo físico el último día** que deja un insumo EN CERO y otro BAJO MÍNIMO por almacén;
+  existencias = saldo de los movimientos con costo promedio ponderado a centavos),
+  `gastos.ts` (renta, nómina, luz, agua, gas, mantenimiento, publicidad), `index.ts`
+  (`generarUniverso()` y `resumenPorModulo()`). En `seed-ventas.ts`,
+  `universoDe(op, cheques)` arma el universo.
+- `npm run seed` imprime el conteo por módulo y la tarea que lo persistirá.
+- `/web`: `datosPorHora(filas, horaTope?)` + `useHoraEn(zona)` (en `filtros/useHoy.ts`):
+  con el periodo "Hoy" la gráfica termina en la hora en curso; una hora posterior con
+  cuentas se conserva (otra zona puede ir adelante). El contenedor lleva
+  `data-testid="grafica-por-hora" data-horas=N` para testearlo.
+- `seed-mesas.ts`: meseros con los nombres del catálogo (test de que meseros, productos,
+  grupos y precios son los del catálogo).
+
+**Decisión central (el revisor la aceptó): el universo NO tiene tablas todavía.** No se
+crearon modelos ni migraciones para catálogos/inventario/compras: eso es diseño de F2-230 y
+F2-120…F2-126, y adelantarlo pisaría su `origen_sr_id`/hash. El "test por módulo contando
+filas" del Listo cuando se mide **sobre el universo generado, no sobre Postgres**
+(`seed-maestro.spec.ts`, un `describe` por módulo). La tarea que cree cada tabla
+**persiste desde `generarUniverso()`/`universoDe()`** en su `sembrar…()`, y su test cuenta
+filas en la base. Quién persiste qué: F2-230 grupos, productos, meseros, clientes · F2-145
+precios por sucursal · F2-233 áreas y canales · F2-120 unidades, grupos de insumo, insumos,
+almacenes, proveedores · F2-121 existencias · F2-122 pólizas y movimientos (F2-123 conteos,
+F2-124 traspasos) · F2-125 recetas · F2-126 compras y gastos. Lo mismo quedó en
+`backlog.md` (nota bajo la tabla de heredadas y una línea en F2-230…F2-233).
+**`ChequeSeed.maestro`** (meseroClave, area, canal, clienteClave) y
+**`PartidaSeed.productoClave` NO se persisten**: `sembrarVentas` los quita antes del
+`createMany`. Cuando `cheques` gane esas columnas, se dejan de quitar.
+
+**Otras decisiones.**
+- Idempotencia: se mantiene **borrar lo `SEED-%` propio + recrear con ids deterministas** en
+  una transacción (patrón de F1-032), aunque el texto dice `upsert`: con fechas relativas a
+  hoy, un upsert dejaría cheques huérfanos de corridas de otro día. **Riesgo:** las FK de
+  partidas/pagos son `onDelete: Restrict`; en cuanto otra tabla (p. ej. F2-101, códigos de
+  facturación) cuelgue una FK de `Cheque`, este borrado truena, y habrá que borrar también
+  esa tabla sembrada o cambiar de estrategia.
+- Sin `DECISION PROVISIONAL` en el seed: no es un supuesto sobre SR, es invención. En
+  `docs/esquema-sr.md` quedó una nota antes de §6 que lo dice. **§6–§10 siguen
+  _(pendiente)_** aunque el bloque H del backlog diga que "ya documentan" catálogos: todavía
+  no es cierto.
+- Mínimo/máximo por almacén × insumo = 2 y 7 días del consumo teórico promedio, redondeados
+  hacia arriba a 0.5 (piezas: entero). Insumos sin consumo (refresco y cerveza, que no tienen
+  receta): mínimo 2 y máximo 10; sólo se mueven por inicial y mermas.
+
+**Checks.** /api: lint limpio, typecheck limpio, jest **33 suites / 716 verdes / 0 skips**
+(~200 s). /web: build limpio, lint limpio, vitest **26 archivos / 333 verdes**, bundle
+211.1 kB gzip (tope 400). **`npm run seed` completo: 13.0 s** contra el Postgres local
+(1497 cheques a las 19:50 CDMX, 7960 movimientos, 608 compras). Sin cambio de esquema
+Prisma, sin endpoints (OpenAPI intacto), sin tocar el agente.
+
+**Tests existentes adaptados (ninguno aflojado; el revisor los verificó uno por uno).**
+- `agregados-ventas.service.spec.ts`: el cálculo a mano creaba dos `Intl.DateTimeFormat`
+  por llamada y con 1500 cheques pasaba de los 5 s; ahora cachea uno por zona. La referencia
+  sigue siendo independiente del SQL. Escenario "30 días" → "90 días completos". El tope de
+  300 ms por agregado **no se tocó** y pasa.
+- `lectura.e2e.spec.ts`: el prefijo de folio `'12'` ya no caía en el rango (los folios del
+  rango ahora son ~500–750); pasó a `'74'` y se añadió que el folio 74 existe y queda fuera.
+- `seed-ventas.spec.ts`: conteos 500 → 1500; timeouts de 60 s en los tests que siembran
+  1500 cheques (tiempo de ejecución, no aserciones).
+
+**Trampas que encontré.**
+- **Jest a 5 s + transacción larga = FK falsa.** El primer rojo fue "Foreign key constraint
+  violated" al borrar cheques: el test anterior había vencido a los 5 s con su transacción
+  aún viva y el siguiente empezó encima. Si ves ese error en un seed, mira primero el timeout.
+- `react-hooks/purity` rechaza `Date.now()` en el render; la hora va en un hook con estado
+  (`useHoraEn`), como `useAhora` de mesas.
+- Leer `web/.env` (grep, cat) está bloqueado por una regla de permisos: no lo intentes.
+- Un heredoc largo de bash con comillas simples sueltas dentro (p. ej. `'74'`) se rompe con
+  "unexpected EOF": escribe textos largos con Write/Edit.
+
+**Qué quedó abierto.**
+- `main()` genera las ventas dos veces (una dentro de `sembrarVentas`, otra para el
+  universo). Barato hoy (~0.7 s); si crece, pasar los cheques.
+- El reparto área→canal y las recetas son del seed: cuando F2-240/F2-241 lean SR, lo que diga
+  SR manda y el seed se adapta.
+
+**Qué haría distinto.** Correr los tests contra Postgres desde el principio: los timeouts de
+5 s sólo se ven ahí.
