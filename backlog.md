@@ -895,7 +895,7 @@ alertas sin borrar el historial de las que ya había.
 ## BLOQUE D · Catálogos
 
 ### F2-230 · Catálogos espejo: modelo, ingesta y sincronización
-`[ ]` **Bloque D** · /api
+`[x]` **Bloque D** · /api
 
 > **Datos del seed:** persistir desde `api/prisma/seed-maestro/generarUniverso()` (F2-201),
 > no inventar otros. Ver la nota "De dónde salen los datos del seed" bajo la tabla de
