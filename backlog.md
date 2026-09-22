@@ -840,7 +840,7 @@ cancelados y cortesías quedan fuera de la venta y visibles aparte; el mapa de c
 pagina sin tumbar la vista.
 
 ### F2-222 · Tickets: filtros y detalle completos
-`[ ]` **Bloque C** · /web + /api
+`[x]` **ALCANCE:** la hora de la cancelación y los descuentos/cortesías por partida quedan pendientes de datos del POS (el contrato de ingesta no los trae; decisiones abiertas para Ricardo, esquema-sr §2 y §3): el detalle dice que el panel no los recibe y ubica la cuenta cancelada por su cierre o apertura. El código de facturación espera a F2-101. **Bloque C** · /web + /api
 
 Subir la vista de Tickets a lo que se espera de un buscador de cuentas: filtros por sucursal,
 mesero, mesa, forma de pago, rango de importe, canceladas sí/no/sólo, y búsqueda por folio
