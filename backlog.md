@@ -1564,6 +1564,12 @@ contraseña. Validación al guardar: emitir un CFDI de prueba en sandbox y cance
 CFDI de validación timbra; un .key con contraseña incorrecta muestra error claro sin guardar
 nada; la vista muestra vigencia del certificado y alerta si vence en < 30 días.
 
+> **Y además (de F2-232):** la ficha de Clientes (`/clientes`, `GET /catalogos/clientes/{id}/ficha`)
+> tenía que enlazarse con el `ReceptorFrecuente` cuando coincida el RFC, y no se pudo porque el
+> modelo nace aquí. Al crearlo: ligar por RFC normalizado (trim y mayúsculas) contra
+> `clientes_catalogo.rfc` de la MISMA empresa (por el helper de scope), mostrar el receptor en la
+> ficha y su test (un RFC de otra empresa no liga; un cliente sin RFC no liga con nada).
+
 ### F2-101 · Código corto de facturación por cheque
 `[ ]` Al ingerir un cheque cerrado (hook en F1-031), generar `CodigoFacturacion(codigo único
 9 chars A-Z0-9 sin ambiguos [O,0,I,1], cheque_id, sucursal_id, estado ENUM[pendiente,

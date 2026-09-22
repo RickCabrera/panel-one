@@ -37,6 +37,8 @@ export const VISTAS_CON_PERIODO: readonly string[] = [
   '/analisis',
   '/tickets',
   '/reportes',
+  // F2-232: la lista de clientes es del periodo.
+  '/clientes',
 ];
 
 export function usaPeriodo(pathname: string): boolean {

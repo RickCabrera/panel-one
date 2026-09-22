@@ -1845,7 +1845,7 @@
     },
     "/ventas/tickets": {
       "get": {
-        "description": "Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag `cancelado`, no suman). Filtros (F2-222) combinables con AND: mesero, mesa, forma, importeMin/importeMax, canceladas, producto y folio; `total` es siempre el del filtro completo. Orden por `orden`/`dir`. Sin cache.",
+        "description": "Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag `cancelado`, no suman). Filtros (F2-222) combinables con AND: mesero, mesa, forma, importeMin/importeMax, canceladas, producto, clienteId (F2-232) y folio; `total` es siempre el del filtro completo. Orden por `orden`/`dir`. Sin cache.",
         "operationId": "VentasController_listarTickets",
         "parameters": [
           {
@@ -2017,6 +2017,16 @@
             "description": "El ticket tiene al menos una partida cuyo producto CONTIENE este texto, sin distinguir mayúsculas y literal (`%` y `_` no son comodines). NO ignora acentos: \"jamon\" no encuentra \"Jamón\". Incluye a los cancelados.",
             "schema": {
               "maxLength": 80,
+              "type": "string"
+            }
+          },
+          {
+            "name": "clienteId",
+            "required": false,
+            "in": "query",
+            "description": "F2-232: sólo las cuentas de ESE cliente (el `id` de `/catalogos/clientes`, nunca su nombre: ningún dato personal en la URL). El cliente es de UNA sucursal (espejo por sucursal): con `sucursalId` de otra sucursal el resultado es vacío. Un id que no existe o no es de la empresa pedida = 404.",
+            "schema": {
+              "format": "uuid",
               "type": "string"
             }
           },
@@ -4556,6 +4566,248 @@
         ]
       }
     },
+    "/catalogos/clientes/resumen": {
+      "get": {
+        "description": "Visitas, venta, ticket promedio, última visita y canceladas (aparte) por cliente, de las cuentas del periodo (días LOCALES de cada sucursal) ligadas con el espejo por (sucursal, id del cliente en el POS). Un id que las cuentas traen y el espejo no tiene sale sin ficha, sin inventarle una. Por sucursal, el estado de su catálogo y cuántas cuentas traen cliente. Sin teléfono, correo ni RFC salvo `contacto=true`. Sin cache.",
+        "operationId": "CatalogosController_resumenClientes",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa (con una sola no hay precios que comparar). Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal, inclusivo (YYYY-MM-DD). El corte es el de /ventas/*: cada cuenta cae en el día de SU zona horaria.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal, inclusivo (YYYY-MM-DD). El corte es el de /ventas/*: cada cuenta cae en el día de SU zona horaria.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Busca en nombre, clave e id del POS (sin distinguir mayúsculas, literal). Se aplica en el servidor sobre la lista ya armada: no llega a ninguna consulta ni a ningún log.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "porPagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "contacto",
+            "required": false,
+            "in": "query",
+            "description": "`true` agrega teléfono, correo y RFC a cada fila. Sólo para el export que el usuario pidió con datos de contacto; sin él las tres llaves no vienen.",
+            "schema": {
+              "default": "false",
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenClientesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clientes (F2-232): la lista del periodo, con lo derivable de las cuentas.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/clientes/{id}/ficha": {
+      "get": {
+        "description": "Datos del POS (teléfono, correo, RFC tal como los guarda), cifras del periodo en SU sucursal (las mismas que /ventas/tickets con `clienteId` y `canceladas=excluir`) y lo que más pide. Un id que no existe o no es de la empresa = 404.",
+        "operationId": "CatalogosController_fichaCliente",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal, inclusivo (YYYY-MM-DD). El corte es el de /ventas/*: cada cuenta cae en el día de SU zona horaria.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal, inclusivo (YYYY-MM-DD). El corte es el de /ventas/*: cada cuenta cae en el día de SU zona horaria.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FichaClienteDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clientes (F2-232): la ficha de un cliente, con sus datos y su periodo.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
     "/catalogos/productos/{id}": {
       "get": {
         "operationId": "CatalogosController_producto",
@@ -5280,6 +5532,13 @@
             "nullable": true,
             "example": 4,
             "description": "Nulo/ausente = SR no lo reportó (distinto de 0)."
+          },
+          "clienteOrigenSrId": {
+            "type": "string",
+            "nullable": true,
+            "example": "C001",
+            "maxLength": 64,
+            "description": "F2-232: el id estable del cliente en el POS, el MISMO `origenSrId` que manda el catálogo de clientes de esta sucursal. Nulo, ausente o sólo espacios = la cuenta no trae cliente (el cheque se manda completo cada vez: omitirlo guarda nulo). No hace falta que el cliente ya esté en el catálogo."
           },
           "subtotal": {
             "type": "string",
@@ -8451,6 +8710,368 @@
           "sucursales",
           "filas",
           "sinVentas"
+        ]
+      },
+      "SucursalClientesDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "catalogo": {
+            "type": "string",
+            "enum": [
+              "sin-sincronizar",
+              "vacio",
+              "con-clientes"
+            ],
+            "description": "`sin-sincronizar`: nunca llegó una sincronización completa de clientes. `vacio`: la última llegó sin clientes activos (el POS no los usa, o el agente leyó cero)."
+          },
+          "clientesActivos": {
+            "type": "number"
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas NO canceladas del periodo, con y sin cliente."
+          },
+          "cuentasConCliente": {
+            "type": "number",
+            "description": "De `cuentas`, las que traen cliente."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "catalogo",
+          "clientesActivos",
+          "cuentas",
+          "cuentasConCliente"
+        ]
+      },
+      "FilaResumenClienteDto": {
+        "type": "object",
+        "properties": {
+          "visitas": {
+            "type": "number",
+            "description": "Cuentas NO canceladas cerradas en el periodo con este cliente: las mismas que devuelve /ventas/tickets con `clienteId` y `canceladas=excluir`."
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de sus visitas (sin las canceladas)."
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "venta / visitas, a 2 decimales mitad lejos de cero. Null = sin visitas.",
+            "nullable": true
+          },
+          "ultimaVisita": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cierre de su última visita del periodo (UTC). Null = sin visitas."
+          },
+          "canceladas": {
+            "$ref": "#/components/schemas/CanceladosConteoDto"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Id del espejo (para la ficha y el filtro de Tickets). Null = no hay ficha."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "cruce": {
+            "type": "string",
+            "enum": [
+              "ficha",
+              "sin-ficha",
+              "sin-sincronizar"
+            ],
+            "description": "`ficha`: está en el espejo de su sucursal. `sin-ficha`: las cuentas traen ese id y el espejo (sincronizado) no lo tiene. `sin-sincronizar`: las cuentas traen ese id y la sucursal no ha mandado su catálogo de clientes: no se puede afirmar que no está."
+          },
+          "origenSrId": {
+            "type": "string",
+            "description": "Id del cliente en el POS de su sucursal (no es un dato personal)."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombre": {
+            "type": "string",
+            "nullable": true,
+            "description": "Null si no hay ficha."
+          },
+          "activo": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "false = ya no vino en la última sincronización completa (sólo aparece si tuvo visitas o canceladas en el periodo). Null si no hay ficha."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "telefono": {
+            "type": "string",
+            "nullable": true,
+            "description": "Sólo con `contacto=true`."
+          },
+          "correo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Sólo con `contacto=true`."
+          },
+          "rfc": {
+            "type": "string",
+            "nullable": true,
+            "description": "Sólo con `contacto=true`."
+          }
+        },
+        "required": [
+          "visitas",
+          "venta",
+          "ticketPromedio",
+          "ultimaVisita",
+          "canceladas",
+          "id",
+          "sucursalId",
+          "sucursal",
+          "cruce",
+          "origenSrId",
+          "clave",
+          "nombre",
+          "activo",
+          "activoPos"
+        ]
+      },
+      "ResumenClientesDto": {
+        "type": "object",
+        "properties": {
+          "usaClientes": {
+            "type": "boolean",
+            "description": "false = ningún espejo con clientes y ninguna cuenta con cliente."
+          },
+          "catalogoTruncado": {
+            "type": "boolean",
+            "description": "true = el espejo pasó de 5000 clientes vigentes: faltan clientes SIN visitas en la lista. Los que tienen visitas siempre se ligan."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "cuentasConCliente": {
+            "type": "number"
+          },
+          "ventaConCliente": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ venta de las cuentas con cliente."
+          },
+          "sucursales": {
+            "description": "Por nombre.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalClientesDto"
+            }
+          },
+          "filas": {
+            "description": "Visitas desc, venta desc, nombre (los sin ficha al final).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaResumenClienteDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Filas que pasan `q`, antes de paginar."
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "usaClientes",
+          "catalogoTruncado",
+          "cuentas",
+          "cuentasConCliente",
+          "ventaConCliente",
+          "sucursales",
+          "filas",
+          "total",
+          "pagina",
+          "porPagina"
+        ]
+      },
+      "ClienteFichaDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "origenSrId": {
+            "type": "string"
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "telefono": {
+            "type": "string",
+            "nullable": true,
+            "description": "Tal como lo guarda el POS."
+          },
+          "correo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Tal como lo guarda el POS."
+          },
+          "rfc": {
+            "type": "string",
+            "nullable": true,
+            "description": "Tal como lo guarda el POS."
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "vistoAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "sucursal",
+          "origenSrId",
+          "clave",
+          "nombre",
+          "telefono",
+          "correo",
+          "rfc",
+          "activo",
+          "activoPos",
+          "vistoAt"
+        ]
+      },
+      "CifrasClienteDto": {
+        "type": "object",
+        "properties": {
+          "visitas": {
+            "type": "number",
+            "description": "Cuentas NO canceladas cerradas en el periodo con este cliente: las mismas que devuelve /ventas/tickets con `clienteId` y `canceladas=excluir`."
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de sus visitas (sin las canceladas)."
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "venta / visitas, a 2 decimales mitad lejos de cero. Null = sin visitas.",
+            "nullable": true
+          },
+          "ultimaVisita": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cierre de su última visita del periodo (UTC). Null = sin visitas."
+          },
+          "canceladas": {
+            "$ref": "#/components/schemas/CanceladosConteoDto"
+          }
+        },
+        "required": [
+          "visitas",
+          "venta",
+          "ticketPromedio",
+          "ultimaVisita",
+          "canceladas"
+        ]
+      },
+      "ProductoClienteDto": {
+        "type": "object",
+        "properties": {
+          "producto": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "string",
+            "example": "3.000",
+            "description": "Σ cantidad en sus visitas (3 decimales)."
+          },
+          "importe": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ importe de esas partidas."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Visitas en que lo pidió."
+          }
+        },
+        "required": [
+          "producto",
+          "cantidad",
+          "importe",
+          "cuentas"
+        ]
+      },
+      "FichaClienteDto": {
+        "type": "object",
+        "properties": {
+          "cliente": {
+            "$ref": "#/components/schemas/ClienteFichaDto"
+          },
+          "periodo": {
+            "description": "Del periodo, en SU sucursal.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CifrasClienteDto"
+              }
+            ]
+          },
+          "productos": {
+            "description": "Hasta 10, por cantidad desc, importe desc, nombre (de sus visitas).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductoClienteDto"
+            }
+          }
+        },
+        "required": [
+          "cliente",
+          "periodo",
+          "productos"
         ]
       },
       "MetadataProductoDto": {

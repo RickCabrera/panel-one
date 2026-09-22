@@ -30,6 +30,8 @@ export function activos(
     lista.push({ llave: 'canceladas', texto: ETIQUETA_CANCELADAS[filtros.canceladas] });
   }
   if (filtros.producto) lista.push({ llave: 'producto', texto: `Producto: ${filtros.producto}` });
+  // F2-232: sin el nombre (la URL sólo lleva el id). Se llega desde la ficha del cliente.
+  if (filtros.cliente) lista.push({ llave: 'cliente', texto: 'Un cliente (desde su ficha)' });
   return lista;
 }
 

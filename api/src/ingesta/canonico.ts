@@ -14,6 +14,8 @@ export interface ChequeComparable {
   mesa: string | null;
   mesero: string | null;
   comensales: number | null;
+  /** F2-232. Cambiar el cliente de una cuenta es un cambio: el reenvío la reescribe. */
+  clienteOrigenSrId: string | null;
   subtotal: Prisma.Decimal;
   impuestos: Prisma.Decimal;
   descuentos: Prisma.Decimal;
@@ -47,6 +49,7 @@ export function chequeCanonico(c: ChequeComparable): string {
     mesa: c.mesa,
     mesero: c.mesero,
     comensales: c.comensales,
+    clienteOrigenSrId: c.clienteOrigenSrId,
     subtotal: c.subtotal.toFixed(2),
     impuestos: c.impuestos.toFixed(2),
     descuentos: c.descuentos.toFixed(2),

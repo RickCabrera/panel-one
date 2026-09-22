@@ -16,15 +16,17 @@ import type { EmpresaScope } from './empresa-scope';
  * - `sucursales_alcance(id, empresa_id, nombre, zona_horaria)`
  * - `ventas(id, empresa_id, sucursal_id, folio, cerrado_at, hora_local,
  *   dia_local, comensales, subtotal, impuestos, descuentos, propina, total,
- *   recibido_at, mesa, mesero, abierto_at, dia_semana_local, segundos_abierta)`: cheques
+ *   recibido_at, mesa, mesero, abierto_at, dia_semana_local, segundos_abierta,
+ *   cliente_origen_sr_id)`: cheques
  *   NO cancelados cerrados en el rango. `hora_local`, `dia_local` y `dia_semana_local`
  *   (ISO: 1 = lunes … 7 = domingo) son los del cierre en la zona de SU sucursal;
  *   `segundos_abierta` = cierre − apertura (F2-221; negativo si el POS los trae al revés).
+ *   `cliente_origen_sr_id` = el id del cliente en el POS de SU sucursal, o nulo (F2-232).
  * - `cancelados(id, empresa_id, sucursal_id, folio, momento, recibido_at, mesero, total,
- *   mesa, comensales, propina, abierto_at, cerrado_at)`:
+ *   mesa, comensales, propina, abierto_at, cerrado_at, cliente_origen_sr_id)`:
  *   cheques cancelados del rango, ubicados por `momento = COALESCE(cerrado_at, abierto_at)`.
  * - `tickets(id, empresa_id, sucursal_id, folio, momento, cancelado, recibido_at, mesa,
- *   mesero, comensales, propina, total, abierto_at, cerrado_at)`:
+ *   mesero, comensales, propina, total, abierto_at, cerrado_at, cliente_origen_sr_id)`:
  *   la lista de tickets (F1-033) = `ventas` ∪ `cancelados`; `momento` es
  *   `cerrado_at` en los no cancelados. Las columnas de `mesa` en adelante son de los
  *   filtros y el orden de F2-222.
@@ -327,7 +329,8 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
            c.created_at AS recibido_at,
            c.mesa, c.mesero, c.abierto_at,
            extract(isodow FROM c.cerrado_at AT TIME ZONE s.zona_horaria)::int AS dia_semana_local,
-           extract(epoch FROM (c.cerrado_at - c.abierto_at))::int AS segundos_abierta
+           extract(epoch FROM (c.cerrado_at - c.abierto_at))::int AS segundos_abierta,
+           c.cliente_origen_sr_id
     FROM cheques c
     JOIN sucursales_alcance s ON s.id = c.sucursal_id AND s.empresa_id = c.empresa_id
     WHERE c.empresa_id = ${empresa} ${filtroTenant(scope, 'c')} ${sucursalCheque}
@@ -339,7 +342,7 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
     SELECT c.id, c.empresa_id, c.sucursal_id, c.folio,
            COALESCE(c.cerrado_at, c.abierto_at) AS momento, c.created_at AS recibido_at,
            c.mesero, c.total,
-           c.mesa, c.comensales, c.propina, c.abierto_at, c.cerrado_at
+           c.mesa, c.comensales, c.propina, c.abierto_at, c.cerrado_at, c.cliente_origen_sr_id
     FROM cheques c
     JOIN sucursales_alcance s ON s.id = c.sucursal_id AND s.empresa_id = c.empresa_id
     WHERE c.empresa_id = ${empresa} ${filtroTenant(scope, 'c')} ${sucursalCheque}
@@ -371,11 +374,13 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
   tickets AS (
     SELECT id, empresa_id, sucursal_id, folio, cerrado_at AS momento, false AS cancelado,
            recibido_at,
-           mesa, mesero, comensales, propina, total, abierto_at, cerrado_at FROM ventas
+           mesa, mesero, comensales, propina, total, abierto_at, cerrado_at,
+           cliente_origen_sr_id FROM ventas
     UNION ALL
     SELECT id, empresa_id, sucursal_id, folio, momento, true AS cancelado,
            recibido_at,
-           mesa, mesero, comensales, propina, total, abierto_at, cerrado_at FROM cancelados
+           mesa, mesero, comensales, propina, total, abierto_at, cerrado_at,
+           cliente_origen_sr_id FROM cancelados
   ),
   partidas_empresa AS (
     SELECT p.cheque_id, p.empresa_id, p.producto

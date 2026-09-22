@@ -66,6 +66,7 @@ export const PARAMS_FILTRO = {
   importeMax: 'max',
   canceladas: 'canceladas',
   producto: 'producto',
+  cliente: 'cliente',
 } as const;
 export const PARAM_ORDEN = 'orden';
 export const PARAM_DIR = 'dir';
@@ -104,6 +105,11 @@ export interface FiltrosTickets {
   importeMax: string;
   canceladas: Canceladas;
   producto: string;
+  /**
+   * El id (uuid) del cliente del espejo (F2-232), cuando se llega desde su ficha. Nunca su
+   * nombre: ningún dato personal en la URL. `''` = sin filtro.
+   */
+  cliente: string;
 }
 
 export const SIN_FILTROS: FiltrosTickets = {
@@ -114,7 +120,10 @@ export const SIN_FILTROS: FiltrosTickets = {
   importeMax: '',
   canceladas: 'incluir',
   producto: '',
+  cliente: '',
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface OrdenTickets {
   orden: Orden;
@@ -166,6 +175,9 @@ export function leerFiltros(parametros: URLSearchParams): FiltrosTickets {
       ? (canceladas as Canceladas)
       : 'incluir',
     producto: textoDe(parametros, PARAMS_FILTRO.producto, MAX_LARGO_TEXTO_FILTRO),
+    cliente: UUID.test(parametros.get(PARAMS_FILTRO.cliente) ?? '')
+      ? parametros.get(PARAMS_FILTRO.cliente)!.toLowerCase()
+      : '',
   };
 }
 

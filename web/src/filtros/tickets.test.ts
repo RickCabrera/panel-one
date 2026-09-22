@@ -77,7 +77,20 @@ describe('filtros en la URL (F2-222)', () => {
       importeMax: '2000',
       canceladas: 'solo',
       producto: 'taco',
+      cliente: '',
     });
+  });
+
+  it('F2-232: el cliente sólo entra si es un uuid (nunca un nombre), en minúsculas', () => {
+    const id = 'C1A2B3C4-0000-4000-8000-000000000001';
+    expect(leerFiltros(p(`cliente=${id}`)).cliente).toBe(id.toLowerCase());
+    expect(leerFiltros(p('cliente=Ana%20Cliente')).cliente).toBe('');
+    expect(leerFiltros(p('cliente=SR-17')).cliente).toBe('');
+    // Se escribe y se borra como los demás filtros.
+    const escrito = escribirFiltros(p('pagina=3'), { ...SIN_FILTROS, cliente: id.toLowerCase() });
+    expect(escrito.get('cliente')).toBe(id.toLowerCase());
+    expect(escrito.has('pagina')).toBe(false);
+    expect(escribirFiltros(escrito, SIN_FILTROS).has('cliente')).toBe(false);
   });
 
   it('sin nada, o con basura, son los defaults: nada inválido llega a la API', () => {

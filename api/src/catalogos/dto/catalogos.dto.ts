@@ -782,3 +782,269 @@ export class RendimientoMeserosDto {
   })
   sinVentas!: MeseroSinVentasDto[];
 }
+
+// --- Clientes (F2-232) ---------------------------------------------------------------------
+
+export class ResumenClientesQueryDto extends SinCatalogoQueryDto {
+  @ApiPropertyOptional({
+    maxLength: 100,
+    description:
+      'Busca en nombre, clave e id del POS (sin distinguir mayúsculas, literal). Se aplica en ' +
+      'el servidor sobre la lista ya armada: no llega a ninguna consulta ni a ningún log.',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  q?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 10000, default: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  pagina?: number;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 500, default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  porPagina?: number;
+
+  @ApiPropertyOptional({
+    enum: ['true', 'false'],
+    default: 'false',
+    description:
+      '`true` agrega teléfono, correo y RFC a cada fila. Sólo para el export que el usuario pidió ' +
+      'con datos de contacto; sin él las tres llaves no vienen.',
+  })
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  contacto?: 'true' | 'false';
+}
+
+export class FichaClienteQueryDto extends EmpresaQueryDto {
+  @ApiProperty({ example: '2026-09-01', description: DOC_DIA })
+  @Matches(DIA, { message: 'desde debe ser YYYY-MM-DD' })
+  desde!: string;
+
+  @ApiProperty({ example: '2026-09-20', description: DOC_DIA })
+  @Matches(DIA, { message: 'hasta debe ser YYYY-MM-DD' })
+  hasta!: string;
+}
+
+export class CifrasClienteDto {
+  @ApiProperty({
+    description:
+      'Cuentas NO canceladas cerradas en el periodo con este cliente: las mismas que devuelve ' +
+      '/ventas/tickets con `clienteId` y `canceladas=excluir`.',
+  })
+  visitas!: number;
+
+  @ApiProperty({ ...DINERO_TXT, description: 'Σ total de sus visitas (sin las canceladas).' })
+  venta!: string;
+
+  @ApiProperty({
+    ...DINERO_NULO,
+    description: 'venta / visitas, a 2 decimales mitad lejos de cero. Null = sin visitas.',
+  })
+  ticketPromedio!: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description: 'Cierre de su última visita del periodo (UTC). Null = sin visitas.',
+  })
+  ultimaVisita!: string | null;
+
+  @ApiProperty({ type: CanceladosConteoDto })
+  canceladas!: CanceladosConteoDto;
+}
+
+export class FilaResumenClienteDto extends CifrasClienteDto {
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'Id del espejo (para la ficha y el filtro de Tickets). Null = no hay ficha.',
+  })
+  id!: string | null;
+
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({
+    enum: ['ficha', 'sin-ficha', 'sin-sincronizar'],
+    description:
+      '`ficha`: está en el espejo de su sucursal. `sin-ficha`: las cuentas traen ese id y el ' +
+      'espejo (sincronizado) no lo tiene. `sin-sincronizar`: las cuentas traen ese id y la ' +
+      'sucursal no ha mandado su catálogo de clientes: no se puede afirmar que no está.',
+  })
+  cruce!: 'ficha' | 'sin-ficha' | 'sin-sincronizar';
+
+  @ApiProperty({ description: 'Id del cliente en el POS de su sucursal (no es un dato personal).' })
+  origenSrId!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  clave!: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: 'Null si no hay ficha.' })
+  nombre!: string | null;
+
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description:
+      'false = ya no vino en la última sincronización completa (sólo aparece si tuvo visitas o ' +
+      'canceladas en el periodo). Null si no hay ficha.',
+  })
+  activo!: boolean | null;
+
+  @ApiProperty({ type: Boolean, nullable: true })
+  activoPos!: boolean | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, description: 'Sólo con `contacto=true`.' })
+  telefono?: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, description: 'Sólo con `contacto=true`.' })
+  correo?: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, description: 'Sólo con `contacto=true`.' })
+  rfc?: string | null;
+}
+
+export class SucursalClientesDto {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({
+    enum: ['sin-sincronizar', 'vacio', 'con-clientes'],
+    description:
+      '`sin-sincronizar`: nunca llegó una sincronización completa de clientes. `vacio`: la ' +
+      'última llegó sin clientes activos (el POS no los usa, o el agente leyó cero).',
+  })
+  catalogo!: 'sin-sincronizar' | 'vacio' | 'con-clientes';
+
+  @ApiProperty()
+  clientesActivos!: number;
+
+  @ApiProperty({ description: 'Cuentas NO canceladas del periodo, con y sin cliente.' })
+  cuentas!: number;
+
+  @ApiProperty({ description: 'De `cuentas`, las que traen cliente.' })
+  cuentasConCliente!: number;
+}
+
+export class ResumenClientesDto {
+  @ApiProperty({ description: 'false = ningún espejo con clientes y ninguna cuenta con cliente.' })
+  usaClientes!: boolean;
+
+  @ApiProperty({
+    description:
+      'true = el espejo pasó de 5000 clientes vigentes: faltan clientes SIN visitas en la lista. ' +
+      'Los que tienen visitas siempre se ligan.',
+  })
+  catalogoTruncado!: boolean;
+
+  @ApiProperty()
+  cuentas!: number;
+
+  @ApiProperty()
+  cuentasConCliente!: number;
+
+  @ApiProperty({ ...DINERO_TXT, description: 'Σ venta de las cuentas con cliente.' })
+  ventaConCliente!: string;
+
+  @ApiProperty({ type: [SucursalClientesDto], description: 'Por nombre.' })
+  sucursales!: SucursalClientesDto[];
+
+  @ApiProperty({
+    type: [FilaResumenClienteDto],
+    description: 'Visitas desc, venta desc, nombre (los sin ficha al final).',
+  })
+  filas!: FilaResumenClienteDto[];
+
+  @ApiProperty({ description: 'Filas que pasan `q`, antes de paginar.' })
+  total!: number;
+
+  @ApiProperty()
+  pagina!: number;
+
+  @ApiProperty()
+  porPagina!: number;
+}
+
+export class ClienteFichaDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty()
+  origenSrId!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  clave!: string | null;
+
+  @ApiProperty()
+  nombre!: string;
+
+  @ApiProperty({ type: String, nullable: true, description: 'Tal como lo guarda el POS.' })
+  telefono!: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: 'Tal como lo guarda el POS.' })
+  correo!: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: 'Tal como lo guarda el POS.' })
+  rfc!: string | null;
+
+  @ApiProperty()
+  activo!: boolean;
+
+  @ApiProperty({ type: Boolean, nullable: true })
+  activoPos!: boolean | null;
+
+  @ApiProperty({ format: 'date-time' })
+  vistoAt!: string;
+}
+
+export class ProductoClienteDto {
+  @ApiProperty()
+  producto!: string;
+
+  @ApiProperty({ example: '3.000', description: 'Σ cantidad en sus visitas (3 decimales).' })
+  cantidad!: string;
+
+  @ApiProperty({ ...DINERO_TXT, description: 'Σ importe de esas partidas.' })
+  importe!: string;
+
+  @ApiProperty({ description: 'Visitas en que lo pidió.' })
+  cuentas!: number;
+}
+
+export class FichaClienteDto {
+  @ApiProperty({ type: ClienteFichaDto })
+  cliente!: ClienteFichaDto;
+
+  @ApiProperty({ type: CifrasClienteDto, description: 'Del periodo, en SU sucursal.' })
+  periodo!: CifrasClienteDto;
+
+  @ApiProperty({
+    type: [ProductoClienteDto],
+    description: 'Hasta 10, por cantidad desc, importe desc, nombre (de sus visitas).',
+  })
+  productos!: ProductoClienteDto[];
+}

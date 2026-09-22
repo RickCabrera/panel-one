@@ -3,6 +3,7 @@ import { FormaPago, Prisma } from '@prisma/client';
 
 import type { FiltroVentas } from '../scope/consulta-ventas';
 import type { EmpresaScope } from '../scope/empresa-scope';
+import { encontradoOr404 } from '../scope/scope.helper';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import { AgregadosVentasService, pesos } from './agregados-ventas.service';
 
@@ -123,6 +124,8 @@ export interface OpcionesTickets {
   canceladas?: Canceladas;
   /** Alguna partida cuyo producto contiene el texto, sin mayúsculas, literal (F2-222). */
   producto?: string;
+  /** Id del espejo de clientes (F2-232); se resuelve con scope antes de filtrar. */
+  clienteId?: string;
   /** Default `momento` / `desc` (F2-222). */
   orden?: OrdenTickets;
   dir?: Direccion;
@@ -243,6 +246,9 @@ export class TicketsService {
     // Filtros de F2-222: el MISMO `WHERE` para el conteo y la página, así `total` es siempre
     // el del filtro completo (la cifra que se muestra antes de exportar).
     condiciones.push(...condicionesFiltro(opciones));
+    if (opciones.clienteId !== undefined) {
+      condiciones.push(await this.condicionCliente(scope, filtro.empresaId, opciones.clienteId));
+    }
     const donde =
       condiciones.length === 0
         ? Prisma.empty
@@ -312,5 +318,26 @@ export class TicketsService {
       };
     });
     return { items, ...base };
+  }
+
+  /**
+   * F2-232: el cliente se resuelve en el espejo CON scope (empresa del filtro): uno ajeno o
+   * inexistente es el mismo 404. Se filtra por los TRES datos del registro (empresa, sucursal
+   * y su id en el POS), así el mismo `origen_sr_id` de otra sucursal nunca entra.
+   */
+  private async condicionCliente(
+    scope: EmpresaScope,
+    empresaId: string,
+    clienteId: string,
+  ): Promise<Prisma.Sql> {
+    const cliente = encontradoOr404(
+      await this.datos.para(scope).clienteCatalogo.findFirst({
+        where: { id: clienteId, empresaId },
+        select: { empresaId: true, sucursalId: true, origenSrId: true },
+      }),
+    );
+    return Prisma.sql`(t.empresa_id = ${cliente.empresaId}::uuid
+      AND t.sucursal_id = ${cliente.sucursalId}::uuid
+      AND t.cliente_origen_sr_id = ${cliente.origenSrId})`;
   }
 }

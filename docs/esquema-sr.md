@@ -198,6 +198,21 @@ descubre nada nuevo de SR; hereda los supuestos de arriba y fija este criterio:
 - Los pagos de cada ticket traen la forma derivada AL LEER con el catálogo de §4, igual que
   el desglose; los pagos no traen orden propio del POS (el contrato de ingesta no lo manda) y
   salen en un orden estable pero arbitrario.
+
+**El cliente de la cuenta (F2-232, `cheques.cliente_origen_sr_id`).**
+
+- ⚠️ **SUPUESTO — NO VALIDADO: el cheque de SR referencia al cliente por el MISMO id estable que
+  usa el catálogo de clientes de esa sucursal** (el `origenSrId` que manda el agente en
+  `POST /ingesta/catalogos`). No se ha visto una instalación real: puede que el cheque guarde otra
+  cosa (la clave visible, el nombre, un id de otra tabla) o nada. Es `DECISION PROVISIONAL
+  (nocturno)` en `schema.prisma` (modelo `Cheque`) y en `DatosChequeDto.clienteOrigenSrId`. Es lo
+  primero que hay que confirmar en F1-090/F2-192: si el cheque no trae ese id, toda la vista
+  Clientes sale "sin ficha".
+- Nulo = la cuenta no trae cliente. Sin FK al espejo: cheques y catálogos llegan en cualquier
+  orden. Máximo 64 (el largo de `origen_sr_id`), CHECK "no vacío" en base.
+- Visitas de un cliente = sus cuentas NO canceladas cerradas en el periodo (las mismas que
+  `/ventas/tickets?clienteId=…&canceladas=excluir`); varias cuentas el mismo día son varias
+  visitas. Sus canceladas van aparte y no suman.
 - **Corte por recepción (F2-203, `corte` de `GET /ventas/tickets`).** Para que el export CSV no
   aborte en hora pico, todas sus páginas se piden con un mismo instante y sólo entran los
   cheques que ya habían llegado a NUESTRA base en él (`cheques.created_at`, expuesto como
@@ -750,6 +765,33 @@ nombre, teléfono, correo y RFC tal como el POS los guarde (sin validar formato:
 por un correo mal escrito sería perderlo). Son datos personales: el API nunca los repite en un
 motivo de rechazo ni en el log.
 
+**Lo que la vista Clientes (F2-232) supone y decide.**
+
+- **El cruce cuenta ↔ cliente es por (sucursal, `origen_sr_id`) EXACTO**, nunca por la clave
+  visible ni por el nombre (supuesto de §2). El mismo id en dos sucursales son dos clientes (el
+  espejo es por sucursal); no se consolida por RFC ni teléfono: sería inventar identidad.
+- **"El POS no usa clientes" no se afirma.** Un catálogo que cerró con `total=0` sale `vacio`, y la
+  vista dice "llegó vacío y ninguna cuenta trae cliente": también puede ser un agente que leyó cero
+  por un error (§13, `total=0`).
+- **Un id que traen las cuentas y el espejo no tiene sale "sin ficha"**, por su id del POS, sin
+  nombre ni datos inventados; si la sucursal no ha sincronizado clientes, sale "sin sincronizar"
+  (no se puede afirmar que falte). La lista del espejo tiene tope de 5000 vigentes, pero los
+  registros de los ids que aparecen en las cuentas se leen aparte, sin tope: un cliente con visitas
+  siempre liga.
+- Un cliente dado de baja (`activo=false`) sólo aparece si tuvo visitas o canceladas en el periodo.
+- Ticket promedio = venta / visitas, a 2 decimales mitad lejos de cero (la regla de Análisis y
+  Meseros).
+- **Datos personales.** La lista no devuelve teléfono, correo ni RFC salvo `contacto=true`, que sólo
+  pide el export cuando el usuario marca la casilla; el CSV por defecto identifica al cliente por su
+  clave o su id del POS. La búsqueda `q` (puede ser un nombre) se aplica en el servidor sobre la
+  lista ya armada: no llega a ninguna consulta SQL ni a ningún log, y la vista no la escribe en la
+  URL del navegador. OJO: `q` sí viaja en la query string de la petición; hoy Caddy no tiene access
+  log, pero **activar un access log metería nombres en los logs**. El filtro de Tickets usa el
+  `id` (uuid) del espejo, nunca el nombre.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO: ¿el `visor` debe ver teléfono, correo y RFC en la ficha?**
+  Hoy sí (igual que `GET /catalogos/clientes` desde F2-230). No se endureció sin decisión.
+- El enlace con `ReceptorFrecuente` (por RFC) queda para F2-100, que crea ese modelo.
+
 ---
 
 ## 9. Inventario — catálogos (Fase 2)
@@ -1037,6 +1079,19 @@ que cumplir al leer SR:
 - **Forzado manual:** `GET /ingesta/catalogos/solicitud` → `pendiente=true` mientras algún catálogo
   de los seis no haya **recibido** un cierre (reloj del API) después de la solicitud. Un cierre
   tomado antes pero recibido después la da por atendida (desfase de relojes aceptado).
+
+### Campo nuevo del contrato de eventos (F2-232): `datos.clienteOrigenSrId` del cheque
+
+- Opcional, texto de hasta 64. ⚠️ **SUPUESTO NO VALIDADO** (§2): es el mismo `origenSrId` que el
+  catálogo de clientes de esa sucursal. **Hoy ningún agente lo manda**: no hay lector de cheques
+  (F1-022 está bloqueada por F1-090); cuando exista, lo manda si SR lo trae.
+- Se guarda TAL CUAL (el catálogo tampoco recorta `origenSrId`); nulo, ausente o sólo espacios =
+  sin cliente. **Omitirlo lo guarda nulo**: el cheque viaja completo cada vez, así que un reenvío
+  sin el campo le quita el cliente (igual que `mesero`).
+- Entra en la forma canónica del cheque (`canonico.ts`): cambiar el cliente es un cambio y el
+  reenvío lo reescribe; reenviar lo mismo no toca nada. Los cheques guardados antes de F2-232 tienen
+  nulo y un reenvío sin el campo sigue siendo idéntico (no hay reescritura masiva).
+- Uno de más de 64 rechaza sólo ese evento (`rechazados[]`), con un motivo que no repite el valor.
 
 ---
 

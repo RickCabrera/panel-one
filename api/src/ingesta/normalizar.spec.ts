@@ -90,6 +90,7 @@ describe('normalizar (F1-031)', () => {
       mesa: null,
       mesero: null,
       comensales: null,
+      clienteOrigenSrId: null,
       subtotal: D('10.5'),
       impuestos: D('0'),
       descuentos: D('0'),
@@ -138,6 +139,13 @@ describe('normalizar (F1-031)', () => {
       expect(chequeCanonico({ ...base, partidas: dos })).not.toBe(
         chequeCanonico({ ...base, partidas: [...dos].reverse() }),
       );
+    });
+
+    it('F2-232: poner, cambiar o quitar el cliente lo cambia (el reenvío lo reescribe)', () => {
+      const conCliente = chequeCanonico({ ...base, clienteOrigenSrId: 'SR-17' });
+      expect(conCliente).not.toBe(chequeCanonico(base));
+      expect(chequeCanonico({ ...base, clienteOrigenSrId: 'SR-18' })).not.toBe(conCliente);
+      expect(chequeCanonico({ ...base, clienteOrigenSrId: 'SR-17' })).toBe(conCliente);
     });
   });
 });

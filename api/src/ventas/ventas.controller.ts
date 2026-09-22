@@ -273,7 +273,8 @@ export class VentasController {
     description:
       'Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag ' +
       '`cancelado`, no suman). Filtros (F2-222) combinables con AND: mesero, mesa, forma, ' +
-      'importeMin/importeMax, canceladas, producto y folio; `total` es siempre el del filtro ' +
+      'importeMin/importeMax, canceladas, producto, clienteId (F2-232) y folio; `total` es siempre ' +
+      'el del filtro ' +
       'completo. Orden por `orden`/`dir`. Sin cache.',
   })
   @ApiOkResponse({ type: PaginaTicketsDto })
@@ -293,6 +294,7 @@ export class VentasController {
       importeMax: q.importeMax,
       canceladas: q.canceladas,
       producto: q.producto,
+      clienteId: q.clienteId,
       orden: q.orden,
       dir: q.dir,
     });
