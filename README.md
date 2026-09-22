@@ -140,11 +140,13 @@ Qué hace cada uno:
   `infra/.env`.
 - **`npx prisma migrate deploy`** aplica las migraciones a la base (no pregunta nada).
   Quien crea migraciones nuevas usa `npx prisma migrate dev`.
-- **`npm run seed`** corre los tres seeds en su orden: `prisma db seed` (1 admin global,
+- **`npm run seed`** corre los cuatro seeds en su orden: `prisma db seed` (1 admin global,
   1 empresa demo, 2 sucursales), `seed:ventas` (500 cheques sintéticos, 2 sucursales ×
-  30 días hasta hoy) y `seed:mesas` (mesas abiertas del Monitor, "en vivo" durante
-  90 s: para volver a verlas vivas, `npm run seed:mesas` otra vez). Los tres son
-  idempotentes: correrlos otra vez no duplica nada.
+  30 días hasta hoy), `seed:mesas` (mesas abiertas del Monitor, "en vivo" durante
+  90 s: para volver a verlas vivas, `npm run seed:mesas` otra vez) y `seed:alertas`
+  (14 días de historial CERRADO del centro de alertas, F2-224; las abiertas las abre la
+  propia API al arrancar y luego cada `ALERTAS_INTERVALO_S`, 60 s por defecto). Los
+  cuatro son idempotentes: correrlos otra vez no duplica nada.
 - **`npm run dev`** levanta la API en `http://localhost:3000` y se queda corriendo. Desde
   la raíz, `npm run dev:api` hace lo mismo.
 

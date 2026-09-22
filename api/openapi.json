@@ -2757,6 +2757,350 @@
           "sistema"
         ]
       }
+    },
+    "/alertas/abiertas": {
+      "get": {
+        "description": "Sin paginar: su número está acotado por sucursales × cuentas abiertas. Orden: crítica primero, luego la más vieja. Las abre y cierra la evaluación periódica del API (`ALERTAS_INTERVALO_S`, 60 s por defecto) y el cambio de una regla; este GET no escribe.",
+        "operationId": "AlertasController_abiertas",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AlertaDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Alertas abiertas del alcance (la campana y el panel leen ESTA lista).",
+        "tags": [
+          "alertas"
+        ]
+      }
+    },
+    "/alertas/historial": {
+      "get": {
+        "description": "Una alerta que abre y cierra es UNA fila con sus dos marcas. Apagar una regla no borra nada del historial. 50 filas por página.",
+        "operationId": "AlertasController_historial",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "description": "Página de 50 filas.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistorialAlertasDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historial de alertas (abiertas y cerradas), de la más reciente a la más vieja.",
+        "tags": [
+          "alertas"
+        ]
+      }
+    },
+    "/alertas/reglas": {
+      "get": {
+        "operationId": "AlertasController_reglas",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReglaAlertaDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Las cuatro reglas de alerta de la empresa (guardadas o por defecto).",
+        "tags": [
+          "alertas"
+        ]
+      }
+    },
+    "/alertas/reglas/{tipo}": {
+      "put": {
+        "description": "Guarda la regla y, en la misma transacción, recalcula las alertas abiertas de la empresa: con un umbral nuevo cierran las que ya no lo alcanzan (`condicion`) y abren las que sí; apagada, cierra las de su tipo (`regla_apagada`) y deja de abrir. El historial no se borra. Responde las cuatro reglas.",
+        "operationId": "AlertasController_guardarRegla",
+        "parameters": [
+          {
+            "name": "tipo",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/TipoAlerta"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardarReglaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReglaAlertaDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Tipo desconocido, cuerpo inválido o umbral fuera del rango de su tipo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Otra evaluación de la misma empresa tiene el candado y no lo soltó a tiempo. No se guardó nada: reintentar.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enciende, apaga o cambia el umbral de una regla, y recalcula las alertas ya.",
+        "tags": [
+          "alertas"
+        ]
+      }
     }
   },
   "info": {
@@ -4618,6 +4962,207 @@
         },
         "required": [
           "modoDemo"
+        ]
+      },
+      "TipoAlerta": {
+        "type": "string",
+        "enum": [
+          "sucursal_sin_reporte",
+          "mesa_abierta",
+          "cuenta_sin_imprimir",
+          "caida_venta"
+        ]
+      },
+      "SeveridadAlerta": {
+        "type": "string",
+        "enum": [
+          "critica",
+          "advertencia"
+        ]
+      },
+      "MotivoCierreAlerta": {
+        "type": "string",
+        "enum": [
+          "condicion",
+          "regla_apagada",
+          "sucursal_inactiva",
+          "empresa_inactiva"
+        ],
+        "description": "`condicion`: dejó de cumplirse (o el umbral nuevo ya no la alcanza). `regla_apagada`, `sucursal_inactiva`, `empresa_inactiva`. Null = abierta."
+      },
+      "AlertaDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string",
+            "description": "Nombre de la sucursal."
+          },
+          "tipo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TipoAlerta"
+              }
+            ]
+          },
+          "severidad": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SeveridadAlerta"
+              }
+            ]
+          },
+          "llave": {
+            "type": "string",
+            "description": "El sujeto dentro de la sucursal: vacío (sin reporte), el folio de la cuenta (mesa abierta, sin imprimir) o el día local AAAA-MM-DD (caída de venta)."
+          },
+          "umbral": {
+            "type": "number",
+            "description": "El umbral de la regla cuando la alerta abrió (minutos o %)."
+          },
+          "detalle": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Lo que se vio al abrir, por tipo. `sucursal_sin_reporte`: `{ nunca: bool, edadSegundos? }`. `mesa_abierta` / `cuenta_sin_imprimir`: `{ folio, mesa (o null), minutos }`. `caida_venta`: `{ dia, ventaHoy, ventaBase, cuentasBase, caidaPct }`, con importes y % como TEXTO decimal de 2 decimales (nunca número)."
+          },
+          "abiertaAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, reloj del servidor."
+          },
+          "cerradaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Null = abierta."
+          },
+          "motivoCierre": {
+            "nullable": true,
+            "description": "`condicion`: dejó de cumplirse (o el umbral nuevo ya no la alcanza). `regla_apagada`, `sucursal_inactiva`, `empresa_inactiva`. Null = abierta.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MotivoCierreAlerta"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "sucursal",
+          "tipo",
+          "severidad",
+          "llave",
+          "umbral",
+          "detalle",
+          "abiertaAt",
+          "cerradaAt",
+          "motivoCierre"
+        ]
+      },
+      "HistorialAlertasDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number"
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertaDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "pagina",
+          "porPagina",
+          "filas"
+        ]
+      },
+      "ReglaAlertaDto": {
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TipoAlerta"
+              }
+            ]
+          },
+          "activa": {
+            "type": "boolean"
+          },
+          "umbral": {
+            "type": "number"
+          },
+          "porDefecto": {
+            "type": "boolean",
+            "description": "La empresa no la ha configurado: vale la regla por defecto."
+          },
+          "unidad": {
+            "type": "string",
+            "enum": [
+              "minutos",
+              "porcentaje"
+            ]
+          },
+          "minimo": {
+            "type": "number"
+          },
+          "maximo": {
+            "type": "number"
+          },
+          "valorPorDefecto": {
+            "type": "number",
+            "description": "El umbral con que nace la regla."
+          }
+        },
+        "required": [
+          "tipo",
+          "activa",
+          "umbral",
+          "porDefecto",
+          "unidad",
+          "minimo",
+          "maximo",
+          "valorPorDefecto"
+        ]
+      },
+      "GuardarReglaDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Fuera del alcance del usuario = 404."
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "Apagada: deja de generar alertas y cierra las abiertas de su tipo."
+          },
+          "umbral": {
+            "type": "number",
+            "description": "Entero. Minutos para `sucursal_sin_reporte`, `mesa_abierta` y `cuenta_sin_imprimir` (1–1440); porcentaje para `caida_venta` (1–100). Fuera de rango = 400."
+          }
+        },
+        "required": [
+          "empresaId",
+          "activa",
+          "umbral"
         ]
       }
     }

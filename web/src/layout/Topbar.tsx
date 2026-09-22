@@ -8,6 +8,7 @@ import { SelectorPeriodo } from '../filtros/SelectorPeriodo';
 import { usePeriodo } from '../filtros/usePeriodo';
 import { queryVista, usaPeriodo } from '../filtros/vista';
 import { InterruptorTema } from '../tema/InterruptorTema';
+import { Campana } from './Campana';
 import { OperacionEnVivo } from './OperacionEnVivo';
 
 /** El único selector de periodo del panel (F2-212); lo leen todas las vistas con periodo. */
@@ -41,6 +42,7 @@ export function Topbar({ menuAbierto, onMenu }: { menuAbierto: boolean; onMenu: 
         <SelectorAlcance />
       </div>
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
+        <Campana />
         <InterruptorTema />
         <div className="min-w-0 text-right leading-tight">
           <div className="truncate text-sm font-medium">{usuario.nombre}</div>

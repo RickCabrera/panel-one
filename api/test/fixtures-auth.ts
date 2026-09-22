@@ -85,6 +85,9 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   await prisma.agenteContacto.deleteMany(deEstas);
   // El catálogo de formas de pago (F1-032) cuelga de la empresa.
   await prisma.formaPagoCatalogo.deleteMany(deEstas);
+  // El centro de alertas (F2-224) cuelga de la empresa y de la sucursal.
+  await prisma.alerta.deleteMany(deEstas);
+  await prisma.reglaAlerta.deleteMany(deEstas);
   await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });
   await prisma.empresa.deleteMany({ where: { id: { in: empresas } } });
 }

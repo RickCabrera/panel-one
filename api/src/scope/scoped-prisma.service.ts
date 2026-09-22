@@ -6,6 +6,7 @@ import type { EmpresaScope } from './empresa-scope';
 import type { AgenteAutenticado } from '../auth/request-autenticado';
 import { ConsultaVentas, type FiltroVentas } from './consulta-ventas';
 import { EscrituraAdmin } from './escritura-admin';
+import { EscrituraAlertas } from './escritura-alertas';
 import { EscrituraSucursal } from './escritura-sucursal';
 import {
   COLUMNAS_INTOCABLES,
@@ -181,6 +182,15 @@ export class ScopedPrismaService {
    */
   admin(scope: EmpresaScope): EscrituraAdmin {
     return new EscrituraAdmin(this.#prisma, scope);
+  }
+
+  /**
+   * Las escrituras del centro de alertas (F2-224): abrir, cerrar y guardar reglas, todo
+   * bajo el candado de la empresa y clavado a ella (ver `escritura-alertas.ts`). La
+   * empresa se verifica con este `scope`: fuera de alcance, 404.
+   */
+  alertas(scope: EmpresaScope): EscrituraAlertas {
+    return new EscrituraAlertas(this.#prisma, scope);
   }
 
   /**

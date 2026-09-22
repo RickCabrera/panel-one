@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AdaptadoresModule } from './adaptadores/adaptadores.module';
 import { AdministracionModule } from './administracion/administracion.module';
 import { AgentesModule } from './agentes/agentes.module';
+import { AlertasModule } from './alertas/alertas.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -31,6 +32,7 @@ import { VentasModule } from './ventas/ventas.module';
     OrganizacionModule,
     AdministracionModule,
     SistemaModule,
+    AlertasModule,
   ],
   controllers: [AppController],
   providers: [AppService],
