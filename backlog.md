@@ -1814,7 +1814,7 @@ búsqueda. Mínimos/máximos por artículo editables en nuestra web (**no escrib
 mismo corte (piloto); artículo bajo mínimo aparece en "atención requerida".
 
 ### F2-122 · Movimientos y pólizas
-`[ ]` Ingesta de movimientos de inventario de SR (entradas, salidas, mermas, ajustes) con
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** el lector del agente es F2-241 y el kardex contra el saldo real del piloto es F2-193 (ver §10 de esquema-sr). Ingesta de movimientos de inventario de SR (entradas, salidas, mermas, ajustes) con
 referencia a póliza/documento. Vista "Movimientos": timeline filtrable por artículo, tipo,
 rango, almacén; detalle de póliza con partidas. Kardex por artículo (saldo corrido).
 
