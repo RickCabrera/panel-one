@@ -61,13 +61,13 @@ export function motivoSucursal(s: SucursalConsumo): string | null {
   if (!s.catalogoProductos) {
     return (
       `${s.sucursal}: su catálogo de productos nunca se ha sincronizado completo, así que lo ` +
-      'vendido no se puede cruzar con recetas.'
+      'vendido no se puede cruzar con recetas. No se calcula (tampoco su consumo real).'
     );
   }
   if (s.recetasRecibidas === 0) {
     return (
       `${s.sucursal}: todavía no ha mandado recetas. Las manda el agente cuando tenga el lector ` +
-      'de recetas de SoftRestaurant (F2-241).'
+      'de recetas de SoftRestaurant (F2-241). No se calcula (tampoco su consumo real).'
     );
   }
   if (s.polizasRecibidas === 0) {

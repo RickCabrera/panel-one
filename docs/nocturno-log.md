@@ -5953,6 +5953,14 @@ aprobado en el 2.º pase.
 - F2-241: el lector de recetas (obligaciones en su "Y además").
 - Unidades de receta con factor, subrecetas, modificadores que consumen: supuestos sin validar.
 - No hay alerta de "variación alta" en el centro de alertas: la ficha no la pedía.
+- Una sucursal no calculable (sin catálogo de productos o sin recetas) no muestra filas de real
+  aunque tenga pólizas; la vista lo dice ("tampoco su consumo real").
+- Las lecturas del panel (groupBy de movimientos, findMany de insumos y existencias) no fijan
+  `statement_timeout` propio (sólo la de ventas). Igual que `movimientos.service.ts`; el tope de 366
+  días lo acota. Revisar cuando haya volumen real.
+- Tarea aparte sugerida: arreglar el test inestable de `reportes.e2e.spec.ts` (ver Tests). Si el CI
+  lo pega, re-correr no cuenta como intento de arreglo.
+- Revisor, gate del entregable: APROBADO en el 1.er pase.
 
 **Tests.**
 - api: `ingesta/recetas.spec.ts` (13, puro), `inventario/recetas.spec.ts` (12, puro, literales a
