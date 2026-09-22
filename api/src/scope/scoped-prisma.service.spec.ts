@@ -75,6 +75,9 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // F2-224: centro de alertas; sus escrituras van por `alertas(scope)`, no por aquí.
       'alerta',
       'alertaEvaluacion',
+      // F2-120: catálogos de inventario; como los de F2-230, se escriben por
+      // `catalogosDeSucursal(agente)`, no por aquí.
+      'almacenCatalogo',
       // F2-230: catálogos espejo; sus escrituras van por `catalogosDeSucursal(agente)` y
       // `catalogos(scope)`, no por aquí. F2-233: el mapeo área → canal, por `catalogos(scope)`.
       'areaCanal',
@@ -90,17 +93,21 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // F2-141: reportes programados; sus escrituras van por `reportes(scope)`.
       'envioReporte',
       'formaPagoCatalogo',
+      'grupoInsumo',
       'grupoProducto',
+      'insumo',
       'mesaSnapshot',
       'meseroCatalogo',
       'producto',
       'productoMetadata',
+      'proveedorCatalogo',
       'reglaAlerta',
       'sesionUsuario',
       'sincronizacionCatalogo',
       'solicitudSincronizacion',
       'sucursal',
       'suscripcionReporte',
+      'unidadCatalogo',
       'usuario',
     ]);
     expect(Object.keys(datos.sucursal).sort()).toEqual(

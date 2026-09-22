@@ -5274,3 +5274,121 @@ F2-240 (leerlas si existen) y F2-192 (validarlas). El `[x]` de F2-233 lleva ese 
 
 **Qué haría distinto.** Correr los e2e nuevos con `--runInBand` desde el principio: el primer
 "5 rojos" tras restaurar la mutación eran dos suites pisándose las fixtures, no un bug.
+
+## 2026-09-22 16:40 — F2-120 · Catálogos de inventario
+**Estado:** CERRADA si el PR se mergea, con **ALCANCE recortado** (sin presentaciones ni
+productos-receta) y **PENDIENTE DE VALIDACIÓN REAL** (F2-192). Carril /api (+ una línea de tipo en
+/web, docs y backlog). Revisor, gate del plan: APROBADO CON OBSERVACIONES al primer pase (0
+bloqueos, O1–O10). Gate del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos).
+
+**Qué quedó hecho.**
+- **Cinco catálogos espejo más por el MISMO camino de F2-230**, sin mecanismo nuevo: `unidades`,
+  `grupos_insumo`, `insumos`, `almacenes`, `proveedores`.
+  - Migración `20260922160000_catalogos_inventario`: 5 valores en `catalogo_sr` y tablas
+    `unidades_catalogo`, `grupos_insumo`, `insumos`, `almacenes_catalogo`, `proveedores_catalogo`,
+    con las columnas de `grupos_producto`, FK compuesta a `sucursales(id, empresa_id)`, único
+    `(sucursal_id, origen_sr_id)` y CHECKs a mano.
+  - `insumos` agrega `grupo_origen_sr_id` y `unidad_origen_sr_id` (texto, sin FK, como el grupo del
+    producto). `RegistroInsumoDto` en el contrato; los otros cuatro usan `RegistroCatalogoDto`.
+  - `CATALOGOS` (parte pura), `delegadoDe` (escritura), `LLAVE_EMPRESA` (helper de scope) y la
+    limpieza de `test/fixtures-auth.ts` conocen los cinco.
+- **Lectura del panel:** `GET /catalogos/{unidades|grupos-insumo|insumos|almacenes|proveedores}`
+  con el mismo `CatalogoQueryDto` y `listar()` (scope + `verificarAlcance`, fuera de alcance = 404).
+  `/insumos` resuelve grupo y unidad EN SU SUCURSAL (`conGrupoYUnidad`). OpenAPI regenerado.
+- **Seed:** `sembrarCatalogos` siembra los cinco por la ingesta real. Unidades, grupos de insumo,
+  insumos y proveedores del universo en cada sucursal; almacenes, los de su sucursal
+  (`<clave>-GEN|BAR`, las mismas claves que usa el inventario del universo). No mueve el PRNG.
+  Base de desarrollo: unidades 6, grupos_insumo 12, insumos 88, almacenes 4, proveedores 12.
+- **Web:** sólo el tipo `CatalogoSr` en `web/src/api/tipos.ts` (si no, mentía sobre
+  `/catalogos/sincronizacion`). Ninguna vista: las de inventario empiezan en F2-121.
+- Docs: `esquema-sr.md` §9 (contrato + cada SUPUESTO) y §13; backlog: "Y además (de F2-120)" en
+  F2-240, F2-241, F2-192 y F2-126.
+
+**Decisiones que tomé y por qué.**
+- **Extender F2-230, no inventar otra ingesta.** Idempotencia, baja sin borrar, candado y forzado
+  ya estaban probados; F2-120 sólo agrega catálogos.
+- `DECISION PROVISIONAL (nocturno)` en `schema.prisma`:
+  - `Insumo`: un grupo y una unidad por id, sin FK, **sin costo** (el costo con que se valúa es el
+    promedio por almacén, que viaja con las existencias de F2-121).
+  - `AlmacenCatalogo`: los almacenes son por sucursal.
+  - `ProveedorCatalogo`: los proveedores son catálogo del POS, sin RFC ni contacto.
+  - Lo mismo en `ingesta/dto/catalogos.dto.ts#RegistroInsumoDto`. Todo en §9 como SUPUESTO.
+- **Lo que NO entra al contrato:** costo del insumo, "unidad entera/fraccionable", almacén y
+  proveedor del grupo (son del seed, no de SR). Un campo de más rechaza ESE registro.
+- **ALCANCE: presentaciones y productos-receta, fuera.** El seed no las genera y no se sabe cómo
+  las guarda SR: construirlas sería inventar. Recetas son de F2-125; presentaciones las busca
+  F2-241.
+- **El forzado manual ahora espera los ONCE catálogos** (`solicitudPendiente` recorre `CATALOGOS`).
+  Es lo que hace cumplir "alta de un insumo aparece al forzar sync desde admin". Consecuencia: con
+  F2-240 hecho y F2-241 no, un forzado queda "pendiente" en el panel hasta que existan los
+  lectores de inventario. ❓ **DECISIÓN ABIERTA PARA RICARDO:** si prefiere que el forzado cubra sólo
+  los catálogos que el agente declara leer. De noche dejé la opción conservadora. La nota de F2-240
+  dice que el agente NO debe apagarla cerrando el inventario con `total = 0` (daría de baja todo) ni
+  ciclarse resincronizando.
+- Proveedores los persiste F2-120 (así los reparte la nota del seed), aunque su texto original no
+  los nombra; corregí `seed-maestro/index.ts`, que se los asignaba a F2-126.
+
+**Trampas que encontré.**
+- ⚠️ **INCIDENTE: vacié la base de DESARROLLO local.** Para demostrar que la migración no tiene
+  deriva corrí `prisma migrate diff --from-migrations ... --shadow-database-url <DATABASE_URL>`.
+  **Prisma RESETEA la base shadow**: se borró todo (datos y `_prisma_migrations`). Sólo había datos
+  sintéticos del seed. Así la reconstruí:
+  - `migrate reset --force` me lo negó el permiso.
+  - Las tablas ya existían (el shadow aplica las 16 migraciones). Registré las 16 con
+    `npx prisma migrate resolve --applied <nombre>`.
+  - `migrate status` = al día; `migrate diff --from-schema-datasource --to-schema-datamodel
+    --exit-code` = sin diferencias.
+  - `npm run seed` completo.
+  - **REGLA: nunca pases la base de desarrollo ni la de test como `--shadow-database-url`.** Para
+    ver la deriva basta `migrate diff --from-schema-datasource prisma/schema.prisma
+    --to-schema-datamodel prisma/schema.prisma --exit-code` DESPUÉS de `migrate deploy`. Si de
+    verdad hace falta un shadow, una base desechable. Ricardo: si tenías algo propio en la base
+    local (una suscripción, un usuario), se perdió; la contraseña del admin sale de tu `.env`.
+- `prisma format` realinea modelos ajenos (Cheque): no lo uses; edita a mano y `prisma validate`.
+- `npx prettier --write` sobre carpetas enteras cambia los finales de línea de archivos ajenos y
+  reformatea líneas viejas: pásale sólo tus archivos. Revertí lo ajeno con `git checkout`.
+- `migrate dev` sigue sin correr aquí; la migración salió de `migrate diff --from-schema-datasource
+  ... --script` + CHECKs a mano + `migrate deploy`, como en F2-233.
+- **Rojos de la suite completa, ninguno de F2-120:**
+  - `prisma/esquema.spec.ts` (argon2id): falla IGUAL en main (lo comprobé con `git stash push -u --
+    api web docs backlog.md`, sin `.wt-main/`).
+  - `reportes.e2e.spec.ts`: intermitente. En la 1.ª corrida completa dio 5 rojos y, al dejar filas,
+    la limpieza de fixtures (FK de sucursal) tumbó `por-area.e2e` y `consulta-ventas.spec`, que
+    solos pasan. Suelto: 1 rojo y luego 2 verdes seguidos sin tocar nada. En la 1.ª corrida tras
+    el reseed de la base pudo influir que las suscripciones del seed no tenían historial de envíos.
+- `.wt-main/` sigue en la raíz (de F2-230; no es un worktree registrado). Sigue la ACCIÓN PARA
+  RICARDO de borrarla. Por eso agrego por ruta, nunca `git add -A`.
+
+**Qué quedó abierto.**
+- Presentaciones y productos-receta (ALCANCE; F2-241 las busca, F2-125 recetas).
+- La decisión del forzado de los once (arriba).
+- O5 del revisor: `CatalogosController.insumos()` declara `Pagina<FilaCatalogoDto>` aunque devuelve
+  `FilaInsumoDto` (igual que `productos()`); el OpenAPI está bien (`PaginaInsumosDto`). Cosmético.
+- Ninguna vista de inventario (F2-121 en adelante). La unidad "fraccionable" que pueda pedir
+  F2-123 no existe en el espejo.
+
+**Tests.**
+- **Nuevos:**
+  - `src/catalogos/inventario.e2e.spec.ts` (20): alta de un insumo → panel con grupo y unidad; ×3
+    idéntico en los 5 (foto completa); renombrar = misma fila, `updated_at` movido, las demás
+    quietas; cambio de grupo = misma fila, otro hash; incremental que omite grupo/unidad → nulos;
+    `costo` → rechazado solo sin el valor; baja sin borrar con su `visto_at`; grupo/unidad de otra
+    sucursal o empresa no se resuelven; 404 idéntico (ajena, inexistente, sucursal ajena) para
+    visor y admin_empresa en los 5, admin_global 200, 401; forzado: pendiente hasta los once, con el
+    alta del insumo por la sincronización forzada.
+  - `src/ingesta/catalogos.spec.ts` (+5): columnas y clase del insumo, hash con grupo/unidad, campo
+    de más, largo > 64 sin el valor, los once en `solicitudPendiente`.
+  - `prisma/seed-catalogos.spec.ts` (+1): fila por fila contra `UNIDADES`, `GRUPOS_INSUMO`,
+    `INSUMOS`, `PROVEEDORES`, `NOMBRE_ALMACEN` y `universo.almacenes`; la foto de idempotencia ya
+    incluye las cinco tablas.
+  - `src/openapi/openapi.spec.ts` (+1): enum `CatalogoSr`, `RegistroInsumoDto`, `FilaInsumoDto`.
+- **Mutaciones a mano:** resolver grupo/unidad sin sucursal → 1 rojo; quitar `insumos` de
+  `CATALOGOS` → 2 rojos.
+- **Adaptados (no aflojados):** `catalogos.e2e.spec` (de 6 a 11 catálogos en el forzado),
+  `openapi.spec` (rutas), `scope.helper.spec` y `scoped-prisma.service.spec` (modelos nuevos).
+- **Números:** /api lint y typecheck limpios, `prisma validate` OK; jest 1386/1387 en la corrida limpia (el único rojo, `prisma/esquema.spec`, falla igual en main); la 1.ª corrida dio 1381/1387 por la intermitencia de `reportes.e2e` descrita arriba, 0 skips.
+  /web build y lint limpios, vitest 930/930.
+
+**Qué haría distinto.** Leer qué hace `--shadow-database-url` antes de pasarle una base con datos.
+Y escribir primero la nota de F2-240 sobre el forzado: el cambio de "seis" a "once" parece un
+detalle y es un cambio de contrato para el agente.

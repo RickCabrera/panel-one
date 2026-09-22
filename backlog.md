@@ -1029,6 +1029,13 @@ configurado tiene permisos de escritura.
 > cheques (F1-022) cuando exista, y **omitirlo lo guarda nulo** (el cheque viaja completo). Ver
 > §2, §8 y §13.
 
+> **Y además (de F2-120).** El forzado manual (`GET /ingesta/catalogos/solicitud`) sigue
+> `pendiente` hasta que cierran los **ONCE** catálogos (los seis de F2-230 y los cinco de
+> inventario). Un agente con este lector y sin los de F2-241 la deja pendiente: **no** la apaga
+> cerrando el inventario con `total = 0` (eso da de baja todo lo que haya) y **no** se cicla
+> resincronizando mientras siga pendiente; atiende cada `solicitadaAt` una vez y lo recuerda en su
+> SQLite. Ver `docs/esquema-sr.md` §9 y §13.
+
 ### F2-241 · Lectores de inventario y recetas
 `[ ]` **Bloque H** · /agent
 
@@ -1044,6 +1051,16 @@ negativas, insumos sin receta y una póliza con partidas en cero; el cursor de m
 sobrevive reiniciar el servicio y no reprocesa desde el principio; una query que tarde más del
 timeout se cancela y se registra sin tumbar el ciclo; y el agente nunca abre una transacción de
 escritura contra el POS (test que lo afirma inspeccionando el modo de la conexión).
+
+> **Y además (de F2-120).** El panel ya acepta y guarda cinco catálogos de inventario por el
+> mismo `POST /ingesta/catalogos` de F2-230: `unidades`, `grupos_insumo`, `insumos` (con
+> `grupoOrigenSrId` y `unidadOrigenSrId`), `almacenes` y **`proveedores`** — este lector los lee
+> TODOS, proveedores incluidos (si SR no tiene alguno, cierra con `total = 0`; el panel no lo
+> inventa). El insumo manda SIEMPRE su grupo y su unidad: **omitirlos los guarda nulos, también
+> en una página incremental**. El insumo no lleva costo (va con las existencias) y un campo de
+> más rechaza el registro. **Presentaciones** (empaques de compra) y **productos-receta** no tienen
+> espejo: si SR las tiene, documentar en `docs/esquema-sr.md` §9 dónde viven; su espejo y
+> contrato serían tarea nueva (recetas: F2-125). Ver §9 y §13.
 
 ## BLOQUE I · Cierre
 
@@ -1380,6 +1397,12 @@ catálogo de SoftRestaurant (conteo y nombres); las existencias cuadran contra e
 inventario del POS del mismo corte; cada `DECISION PROVISIONAL (nocturno)` de los lectores
 queda confirmada o corregida y borrada del código; y `docs/esquema-sr.md` pasa de "supuesto" a
 "validado" en las secciones 6 a 10, con la instalación y la versión anotadas.
+
+> **Y además (de F2-120).** Validar los supuestos de §9 de `docs/esquema-sr.md`: almacenes por
+> sucursal, un grupo y una unidad por insumo (por id), proveedores como catálogo del POS, sin costo
+> en el catálogo de insumos, y si existen presentaciones. Cada `DECISION PROVISIONAL (nocturno)` de
+> `schema.prisma` (modelos `Insumo`, `AlmacenCatalogo`, `ProveedorCatalogo`) y de
+> `ingesta/dto/catalogos.dto.ts#RegistroInsumoDto` queda confirmada o corregida.
 
 > **Y además (de F2-233).** Validar contra una instalación real: que el cheque de SR referencia
 > el área por el MISMO id que su catálogo de áreas (`DECISION PROVISIONAL` en `schema.prisma`,
@@ -1791,6 +1814,10 @@ con gráfica y export.
 
 **Listo cuando:** el estado de resultados simple del piloto cuadra contra el cálculo del
 contador para el mismo mes (±1% por redondeos documentados).
+
+> **Y además (de F2-120):** el espejo de **proveedores** ya existe (`proveedores_catalogo`,
+> `GET /catalogos/proveedores`, sembrado desde `PROVEEDORES`): las compras lo referencian por
+> `origenSrId` en la misma sucursal, no crean otro catálogo.
 
 > **Y además (de F2-140):** agrega la columna **Utilidad** a Comparativos (`/comparativos`,
 > `web/src/paginas/comparativos/matriz.ts` → `METRICAS`), con A, B y Δ, la misma regla de "—"

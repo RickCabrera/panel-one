@@ -83,6 +83,13 @@ model Sucursal {
   sincronizacionesCatalogo SincronizacionCatalogo[]
   solicitudSincronizacion  SolicitudSincronizacion?
 
+  // Catálogos de inventario (F2-120).
+  unidadesCatalogo    UnidadCatalogo[]
+  gruposInsumo        GrupoInsumo[]
+  insumos             Insumo[]
+  almacenesCatalogo   AlmacenCatalogo[]
+  proveedoresCatalogo ProveedorCatalogo[]
+
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
   // la empresa real de la sucursal.
@@ -609,6 +616,12 @@ enum CatalogoSr {
   clientes
   areas
   canales
+  // F2-120: catálogos de inventario.
+  unidades
+  grupos_insumo
+  insumos
+  almacenes
+  proveedores
 
   @@map("catalogo_sr")
 }
@@ -868,4 +881,144 @@ model SolicitudSincronizacion {
   @@unique([sucursalId, empresaId], map: "solicitudes_sincronizacion_sucursal_id_empresa_id_key")
   @@index([empresaId])
   @@map("solicitudes_sincronizacion")
+}
+
+// ---------------------------------------------------------------------------
+// Catálogos de inventario (F2-120): espejo POR SUCURSAL de lo que el agente lee
+// del POS, con el MISMO contrato, las mismas columnas y la misma idempotencia que
+// los espejos de F2-230 (ingesta por `POST /ingesta/catalogos`, `hash`,
+// `visto_at`, baja sin borrar). `updated_at` SIN @updatedAt: lo pone el helper
+// sólo si cambia el contenido o `activo`.
+//
+// SUPUESTO NO VALIDADO (docs/esquema-sr.md §9): ninguna de estas tablas se ha
+// visto en una instalación real de SoftRestaurant. Las formas del seed no son
+// evidencia. Lo valida F2-192.
+// ---------------------------------------------------------------------------
+
+model UnidadCatalogo {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "unidades_catalogo_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "unidades_catalogo_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  // El conteo y la baja del cierre van por (sucursal, sincronización).
+  @@index([sucursalId, sincronizacionId])
+  @@map("unidades_catalogo")
+}
+
+model GrupoInsumo {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "grupos_insumo_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "grupos_insumo_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  @@index([sucursalId, sincronizacionId])
+  @@map("grupos_insumo")
+}
+
+model Insumo {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  // DECISION PROVISIONAL (nocturno): un insumo tiene UN grupo y UNA unidad, por su
+  // `origen_sr_id` en TEXTO y sin FK, como el grupo del producto (F2-230): el orden en
+  // que llegan los catálogos no está garantizado y un insumo cuyo grupo o unidad aún no
+  // llegó (o ya no existe en SR) no se rechaza. La lectura resuelve el nombre por
+  // (sucursal, origen). Sin costo: el costo con que se valúa es el promedio POR ALMACÉN
+  // (existencias, F2-121). esquema-sr.md §9.
+  grupoOrigenSrId  String?  @map("grupo_origen_sr_id")
+  unidadOrigenSrId String?  @map("unidad_origen_sr_id")
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "insumos_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "insumos_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  @@index([sucursalId, sincronizacionId])
+  @@map("insumos")
+}
+
+// DECISION PROVISIONAL (nocturno): los almacenes son POR SUCURSAL (cada POS tiene los
+// suyos). esquema-sr.md §9.
+model AlmacenCatalogo {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "almacenes_catalogo_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "almacenes_catalogo_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  @@index([sucursalId, sincronizacionId])
+  @@map("almacenes_catalogo")
+}
+
+// DECISION PROVISIONAL (nocturno): los proveedores son un catálogo del POS de cada
+// sucursal. Sin RFC ni datos de contacto: no se sabe qué guarda SR. esquema-sr.md §9.
+model ProveedorCatalogo {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "proveedores_catalogo_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "proveedores_catalogo_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  @@index([sucursalId, sincronizacionId])
+  @@map("proveedores_catalogo")
 }

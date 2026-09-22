@@ -522,7 +522,19 @@ export interface GuardarMetadata {
   maximo: string | null;
 }
 
-export type CatalogoSr = 'grupos' | 'productos' | 'meseros' | 'clientes' | 'areas' | 'canales';
+/** `CatalogoSr` del API: los seis de F2-230 y los cinco de inventario de F2-120. */
+export type CatalogoSr =
+  | 'grupos'
+  | 'productos'
+  | 'meseros'
+  | 'clientes'
+  | 'areas'
+  | 'canales'
+  | 'unidades'
+  | 'grupos_insumo'
+  | 'insumos'
+  | 'almacenes'
+  | 'proveedores';
 
 /** `EstadoCatalogoDto`. */
 export interface EstadoCatalogo {

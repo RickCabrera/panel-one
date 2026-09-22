@@ -843,7 +843,42 @@ motivo de rechazo ni en el log.
 > Alimenta a `F2-120`. Insumos, grupos de insumos, unidades, almacenes, presentaciones,
 > productos-receta.
 
-_(pendiente — no se toca hasta que F1-091 cierre)_
+**Tablas de SR: sin mapear.** Nadie ha visto todavía dónde guarda SoftRestaurant su inventario.
+Lo busca y documenta aquí el lector de F2-241, y lo valida F2-192 contra una instalación real.
+Lo que sigue **no es un hallazgo**: es el contrato que el panel ya acepta (F2-120) y los
+supuestos con que se construyó. Las formas del seed (`api/prisma/seed-maestro/insumos.ts`) son
+sintéticas y **no son evidencia** de cómo es SR.
+
+**Contrato (F2-120).** Cinco catálogos más por el MISMO camino de F2-230
+(`POST /ingesta/catalogos` + `/cierre`, mismo hash, mismo `visto_at`, misma baja sin borrar; ver
+§13): `unidades`, `grupos_insumo`, `insumos`, `almacenes`, `proveedores`. Espejo por sucursal
+en `unidades_catalogo`, `grupos_insumo`, `insumos`, `almacenes_catalogo` y
+`proveedores_catalogo`. Todos llevan sólo `origenSrId`, `clave`, `nombre` y `activoPos`, salvo el
+insumo, que agrega `grupoOrigenSrId` y `unidadOrigenSrId`. Un campo de más (p. ej. `costo`) rechaza
+ese registro solo.
+
+- ⚠️ **SUPUESTO — cada sucursal tiene sus propios almacenes** (un almacén es de un POS y no se
+  comparte entre sucursales). `schema.prisma#AlmacenCatalogo`. Si en SR un almacén central
+  surte a varias sucursales, esto cambia (y con ello los traspasos de F2-124).
+- ⚠️ **SUPUESTO — un insumo tiene UN grupo y UNA unidad**, referidos por el `origenSrId` de
+  esos catálogos en la misma sucursal, en texto y **sin FK** (como el grupo del producto, §6): el
+  orden de llegada no está garantizado. `RegistroInsumoDto` y `schema.prisma#Insumo`. Omitirlos
+  los guarda **nulos, también en una página incremental**: el lector manda siempre lo que lee.
+- ⚠️ **SUPUESTO — los proveedores son un catálogo del POS** de cada sucursal, sin RFC ni datos de
+  contacto (no se sabe qué guarda SR). `schema.prisma#ProveedorCatalogo`. Si SR no tiene
+  proveedores, el lector cierra con `total = 0` (el catálogo queda vacío, no se inventa).
+- ⚠️ **SUPUESTO — el catálogo de insumos no trae costo.** El costo con que se valúa el inventario
+  es el promedio POR ALMACÉN, que viaja con las existencias (F2-121, §10). Si SR tiene además un
+  "último costo" en el insumo, se agrega al contrato cuando se vea.
+- ⚠️ **Sin modelar: presentaciones** (empaques de compra, p. ej. "caja con 24") **y
+  productos-receta.** El seed no los genera y no se sabe cómo los guarda SR. Las recetas son de
+  F2-125; las presentaciones las busca F2-241 y, si existen, piden su propio espejo y contrato.
+- ⚠️ **SUPUESTO — la unidad no dice si es fraccionable** (el seed sí lo sabe, SR no se sabe). Si el
+  conteo físico (F2-123) lo necesita, sale de SR cuando se vea o se vuelve metadata propia.
+- **Forzado manual:** desde F2-120 una solicitud de sincronización sigue pendiente hasta que
+  cierran los **once** catálogos. Un agente que sólo lea los seis de F2-230 la deja pendiente
+  hasta que tenga los lectores de F2-241, y no debe ciclarse ni cerrar con `total = 0` para
+  apagarla (ver §13).
 
 ---
 
@@ -1121,7 +1156,11 @@ que cumplir al leer SR:
   ya no cambia nada (lo fija `menu.e2e.spec.ts`). Sin instalaciones leyendo catálogos todavía, no
   afecta a nadie.
 - **Forzado manual:** `GET /ingesta/catalogos/solicitud` → `pendiente=true` mientras algún catálogo
-  de los seis no haya **recibido** un cierre (reloj del API) después de la solicitud. Un cierre
+  de los **once** (los seis de F2-230 y los cinco de inventario de F2-120, §9) no haya **recibido**
+  un cierre (reloj del API) después de la solicitud. Un agente que todavía no lea inventario (F2-240
+  sin F2-241) la deja pendiente: **no debe cerrar esos cinco con `total = 0` para apagarla** (eso
+  da de baja todo lo que haya) y **no debe ciclarse** resincronizando mientras siga pendiente;
+  atiende cada `solicitadaAt` una vez (lo recuerda en su SQLite). Un cierre
   tomado antes pero recibido después la da por atendida (desfase de relojes aceptado).
 
 ### Campo nuevo del contrato de eventos (F2-233): `datos.areaOrigenSrId` del cheque

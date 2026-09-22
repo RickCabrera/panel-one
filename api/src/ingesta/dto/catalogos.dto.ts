@@ -30,7 +30,7 @@ import { DINERO, ISO_CON_ZONA } from '../normalizar';
  * `sucursalId` ni `empresaId`: el tenant sale de la API key.
  *
  * Nada de esto se ha visto en una instalación real de SoftRestaurant (docs/esquema-sr.md
- * §6–§8 siguen pendientes). Los largos y lo obligatorio son DECISION PROVISIONAL
+ * §6–§9: supuestos, no hallazgos). Los largos y lo obligatorio son DECISION PROVISIONAL
  * (nocturno): ver §13.
  */
 
@@ -163,10 +163,46 @@ export class RegistroClienteDto extends RegistroCatalogoDto {
   rfc?: string | null;
 }
 
+/**
+ * Un insumo del inventario (F2-120). DECISION PROVISIONAL (nocturno): un insumo tiene UN grupo
+ * y UNA unidad, por su `origenSrId` y sin FK (pueden llegar después); no lleva costo (el costo
+ * con que se valúa es el promedio POR ALMACÉN, de existencias, F2-121). Nada de esto se ha
+ * visto en SR: docs/esquema-sr.md §9.
+ */
+export class RegistroInsumoDto extends RegistroCatalogoDto {
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'GI01',
+    description:
+      'El `origenSrId` de su grupo de insumo, en esta sucursal. Sin FK: puede llegar después. ' +
+      'Ausente o nulo se GUARDA nulo, también en una página incremental: el agente manda siempre ' +
+      'el que lee.',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  grupoOrigenSrId?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'KG',
+    description:
+      'El `origenSrId` de su unidad, en esta sucursal. Sin FK. Ausente o nulo se GUARDA nulo, ' +
+      'también en una página incremental.',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  unidadOrigenSrId?: string | null;
+}
+
 export const MODELOS_REGISTRO = [
   RegistroCatalogoDto,
   RegistroProductoDto,
   RegistroClienteDto,
+  RegistroInsumoDto,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -195,9 +231,11 @@ export class PaginaCatalogoDto {
       oneOf: MODELOS_REGISTRO.map((m) => ({ $ref: getSchemaPath(m) })),
     },
     description:
-      '`RegistroProductoDto` para productos, `RegistroClienteDto` para clientes y ' +
-      '`RegistroCatalogoDto` para grupos, meseros, áreas y canales. Cada registro se valida ' +
-      'aparte: uno inválido se rechaza solo y los demás se guardan.',
+      '`RegistroProductoDto` para productos, `RegistroClienteDto` para clientes, ' +
+      '`RegistroInsumoDto` para insumos (F2-120) y `RegistroCatalogoDto` para grupos, meseros, ' +
+      'áreas, canales, unidades, grupos_insumo, almacenes y proveedores. Cada registro se valida ' +
+      'aparte: uno inválido (o con un campo que su catálogo no tiene) se rechaza solo y los demás ' +
+      'se guardan.',
   })
   @IsArray()
   @ArrayMinSize(1)

@@ -8,12 +8,14 @@ import { ScopedPrismaService } from '../src/scope/scoped-prisma.service';
 import type { AgregadosVentasService } from '../src/ventas/agregados-ventas.service';
 import type { AnalisisService } from '../src/ventas/analisis.service';
 import { crearFixtures, FX, limpiarFixtures } from '../test/fixtures-auth';
+import { ACTOR_SEED, registrosDe, sembrarCatalogos, sincronizacionDelSeed } from './seed-catalogos';
 import {
-  ACTOR_SEED,
-  registrosDe,
-  sembrarCatalogos,
-  sincronizacionDelSeed,
-} from './seed-catalogos';
+  GRUPOS_INSUMO,
+  INSUMOS,
+  NOMBRE_ALMACEN,
+  PROVEEDORES,
+  UNIDADES,
+} from './seed-maestro/insumos';
 import { generarVentas, universoDe, type OpcionesVentas } from './seed-ventas';
 
 // El seed de catálogos espejo (F2-230) contra Postgres real, en las sucursales de FIXTURES
@@ -52,6 +54,12 @@ describe('sembrarCatalogos() (F2-230)', () => {
           prisma.clienteCatalogo.findMany(w),
           prisma.areaCatalogo.findMany(w),
           prisma.canalVentaCatalogo.findMany(w),
+          // F2-120: inventario.
+          prisma.unidadCatalogo.findMany(w),
+          prisma.grupoInsumo.findMany(w),
+          prisma.insumo.findMany(w),
+          prisma.almacenCatalogo.findMany(w),
+          prisma.proveedorCatalogo.findMany(w),
           prisma.areaCanal.findMany({ where: w.where, orderBy: { areaId: 'asc' } }),
           prisma.sincronizacionCatalogo.findMany({
             where: { empresaId: FX.empresaA },
@@ -85,6 +93,12 @@ describe('sembrarCatalogos() (F2-230)', () => {
       // F2-233: las áreas de cada sucursal y los tres tipos de servicio en cada una.
       areas: universo.areas.length,
       canales: universo.canales.length * n,
+      // F2-120: inventario; los almacenes, dos por sucursal (general y barra).
+      unidades: UNIDADES.length * n,
+      grupos_insumo: GRUPOS_INSUMO.length * n,
+      insumos: INSUMOS.length * n,
+      almacenes: 2 * n,
+      proveedores: PROVEEDORES.length * n,
     });
     for (const s of OP.sucursales) {
       const w = { where: { sucursalId: s.id } };
@@ -99,6 +113,71 @@ describe('sembrarCatalogos() (F2-230)', () => {
         universo.areas.filter((a) => a.sucursalId === s.id).length,
       );
       expect(await prisma.canalVentaCatalogo.count(w)).toBe(universo.canales.length);
+    }
+  });
+
+  it('F2-120: cada catálogo de inventario cuadra fila por fila con el generador, en cada sucursal', async () => {
+    const cols = { origenSrId: true, clave: true, nombre: true, activo: true, activoPos: true };
+    const orden = { orderBy: { origenSrId: 'asc' as const } };
+    const porOrigen = <T extends { clave: string }>(xs: readonly T[]) =>
+      [...xs].sort((a, b) => (a.clave < b.clave ? -1 : 1));
+    const comun = (clave: string, nombre: string) => ({
+      origenSrId: clave,
+      clave,
+      nombre,
+      activo: true,
+      activoPos: null,
+    });
+    for (const s of OP.sucursales) {
+      const where = { sucursalId: s.id, empresaId: FX.empresaA };
+      expect(await prisma.unidadCatalogo.findMany({ where, select: cols, ...orden })).toEqual(
+        porOrigen(UNIDADES).map((u) => comun(u.clave, u.nombre)),
+      );
+      expect(await prisma.grupoInsumo.findMany({ where, select: cols, ...orden })).toEqual(
+        porOrigen(GRUPOS_INSUMO).map((g) => comun(g.clave, g.nombre)),
+      );
+      expect(await prisma.proveedorCatalogo.findMany({ where, select: cols, ...orden })).toEqual(
+        porOrigen(PROVEEDORES).map((p) => comun(p.clave, p.nombre)),
+      );
+      expect(
+        await prisma.insumo.findMany({
+          where,
+          select: { ...cols, grupoOrigenSrId: true, unidadOrigenSrId: true },
+          ...orden,
+        }),
+      ).toEqual(
+        porOrigen(INSUMOS).map((i) => ({
+          ...comun(i.clave, i.nombre),
+          grupoOrigenSrId: i.grupo,
+          unidadOrigenSrId: i.unidad,
+        })),
+      );
+      // Los almacenes, los de SU sucursal: `<clave de sucursal>-GEN|BAR`.
+      expect(await prisma.almacenCatalogo.findMany({ where, select: cols, ...orden })).toEqual([
+        comun(`${s.clave}-BAR`, NOMBRE_ALMACEN.BAR),
+        comun(`${s.clave}-GEN`, NOMBRE_ALMACEN.GEN),
+      ]);
+      // Y coinciden con el universo (lo que F2-121 y F2-122 usan por clave de almacén).
+      expect(
+        universo.almacenes
+          .filter((a) => a.sucursalId === s.id)
+          .map((a) => a.clave)
+          .sort(),
+      ).toEqual([`${s.clave}-BAR`, `${s.clave}-GEN`]);
+    }
+    // Todo insumo apunta a un grupo y una unidad que existen en SU sucursal.
+    const insumos = await prisma.insumo.findMany({ where: { empresaId: FX.empresaA } });
+    for (const i of insumos) {
+      await expect(
+        prisma.grupoInsumo.count({
+          where: { sucursalId: i.sucursalId, origenSrId: i.grupoOrigenSrId! },
+        }),
+      ).resolves.toBe(1);
+      await expect(
+        prisma.unidadCatalogo.count({
+          where: { sucursalId: i.sucursalId, origenSrId: i.unidadOrigenSrId! },
+        }),
+      ).resolves.toBe(1);
     }
   });
 
@@ -190,7 +269,13 @@ describe('sembrarCatalogos() (F2-230)', () => {
 
   it('F2-233: registrosDe() manda las áreas de SU sucursal (Terraza sólo en la par) y los canales', () => {
     const nombres = (id: string) => registrosDe(universo, id, 'areas').map((r) => r.nombre);
-    expect(nombres(FX.sucursalA1)).toEqual(['Comedor', 'Terraza', 'Barra', 'Mostrador', 'Domicilio']);
+    expect(nombres(FX.sucursalA1)).toEqual([
+      'Comedor',
+      'Terraza',
+      'Barra',
+      'Mostrador',
+      'Domicilio',
+    ]);
     expect(nombres(FX.sucursalA2)).toEqual(['Comedor', 'Barra', 'Mostrador', 'Domicilio']);
     expect(registrosDe(universo, FX.sucursalA1, 'areas')[1]).toEqual({
       origenSrId: 'A02',

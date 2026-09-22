@@ -110,6 +110,12 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   await prisma.clienteCatalogo.deleteMany(deEstas);
   await prisma.areaCatalogo.deleteMany(deEstas);
   await prisma.canalVentaCatalogo.deleteMany(deEstas);
+  // Catálogos de inventario (F2-120), de la sucursal.
+  await prisma.unidadCatalogo.deleteMany(deEstas);
+  await prisma.grupoInsumo.deleteMany(deEstas);
+  await prisma.insumo.deleteMany(deEstas);
+  await prisma.almacenCatalogo.deleteMany(deEstas);
+  await prisma.proveedorCatalogo.deleteMany(deEstas);
   await prisma.sincronizacionCatalogo.deleteMany(deEstas);
   await prisma.solicitudSincronizacion.deleteMany(deEstas);
   await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });

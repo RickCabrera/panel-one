@@ -105,7 +105,7 @@ export class CatalogosIngestaController {
   @ApiOperation({
     summary: '¿Pidió un admin sincronizar todos los catálogos de esta sucursal?',
     description:
-      '`pendiente=true` mientras algún catálogo de los seis no haya recibido un cierre después de ' +
+      '`pendiente=true` mientras algún catálogo de los once (F2-230 + inventario de F2-120) no haya recibido un cierre después de ' +
       'la solicitud (hora de recepción del API). Un catálogo que el POS no usa se cierra con ' +
       '`total=0`. Registra el contacto del agente.',
   })

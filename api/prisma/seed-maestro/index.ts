@@ -35,7 +35,8 @@ import { RECETAS, type Renglon } from './recetas';
  * ver, generado de forma PURA y determinista a partir de las ventas del seed.
  *
  * Las ventas (cheques, partidas, pagos, formas) y, desde F2-230, grupos,
- * productos, meseros y clientes (`prisma/seed-catalogos.ts`) ya tienen tabla. El
+ * productos, meseros y clientes (`prisma/seed-catalogos.ts`) ya tienen tabla, igual
+ * que áreas y canales (F2-233) y los catálogos de inventario (F2-120). El
  * resto NO se persiste aquí: lo persiste, desde esta función, la tarea que cree
  * su tabla (regla 2 de la Ronda 2), para no adelantarse a su diseño:
  *
@@ -45,11 +46,11 @@ import { RECETAS, type Renglon } from './recetas';
  * | meseros                                | F2-230 / F2-231 |
  * | clientes                               | F2-230 / F2-232 |
  * | áreas y canales                        | F2-233      |
- * | unidades, grupos de insumo, insumos, almacenes | F2-120 |
+ * | unidades, grupos de insumo, insumos, almacenes, proveedores | F2-120 |
  * | existencias                            | F2-121      |
  * | pólizas y movimientos (kardex)         | F2-122 (conteos F2-123, traspasos F2-124) |
  * | recetas                                | F2-125      |
- * | compras, proveedores y gastos          | F2-126      |
+ * | compras y gastos                       | F2-126      |
  *
  * Nada de esto es un mapeo de SoftRestaurant: es sintético.
  */
@@ -176,4 +177,3 @@ export function resumenPorModulo(
     ['gastos', u.gastos.length, 'F2-126'],
   ];
 }
-

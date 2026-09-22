@@ -1,4 +1,6 @@
 import {
+  CATALOGOS,
+  columnasDe,
   decidir,
   hashContenido,
   normalizarPagina,
@@ -170,6 +172,87 @@ describe('normalizarRegistro()', () => {
   });
 });
 
+describe('insumos y demás catálogos de inventario (F2-120)', () => {
+  const insumo = async (plano: object) => {
+    const r = await normalizarRegistro('insumos', plano, 0);
+    if (!r.ok) throw new Error(r.rechazo.motivo);
+    return r.registro;
+  };
+
+  it('el insumo guarda su grupo y su unidad; ausentes = null (también en una incremental)', async () => {
+    expect(columnasDe('insumos')).toEqual([
+      'clave',
+      'nombre',
+      'activoPos',
+      'grupoOrigenSrId',
+      'unidadOrigenSrId',
+    ]);
+    const completo = await insumo({
+      origenSrId: 'I-"01"',
+      nombre: 'Jalapeño en escabeche — lata "grande"',
+      clave: null,
+      grupoOrigenSrId: 'GI04',
+      unidadOrigenSrId: 'KG',
+    });
+    expect(completo.contenido).toEqual({
+      clave: null,
+      nombre: 'Jalapeño en escabeche — lata "grande"',
+      activoPos: null,
+      grupoOrigenSrId: 'GI04',
+      unidadOrigenSrId: 'KG',
+    });
+    const sinNada = await insumo({ origenSrId: 'I-"01"', nombre: 'Jalapeño en escabeche' });
+    expect(sinNada.contenido.grupoOrigenSrId).toBeNull();
+    expect(sinNada.contenido.unidadOrigenSrId).toBeNull();
+  });
+
+  it('cambiar el grupo o la unidad cambia el hash', async () => {
+    const base = {
+      origenSrId: 'I1',
+      nombre: 'Leche',
+      grupoOrigenSrId: 'GI02',
+      unidadOrigenSrId: 'LT',
+    };
+    const h = (await insumo(base)).hash;
+    expect((await insumo({ ...base, unidadOrigenSrId: 'KG' })).hash).not.toBe(h);
+    expect((await insumo({ ...base, grupoOrigenSrId: 'GI04' })).hash).not.toBe(h);
+    expect((await insumo({ ...base })).hash).toBe(h);
+  });
+
+  it('un campo que el catálogo no tiene (costo, grupo en una unidad) rechaza sólo ese registro', async () => {
+    const conCosto = await normalizarRegistro(
+      'insumos',
+      { origenSrId: 'I1', nombre: 'Leche', costo: '26.00' },
+      0,
+    );
+    expect(conCosto.ok).toBe(false);
+    const unidadConGrupo = await normalizarRegistro(
+      'unidades',
+      { origenSrId: 'KG', nombre: 'Kilogramo', grupoOrigenSrId: 'X' },
+      0,
+    );
+    expect(unidadConGrupo.ok).toBe(false);
+    for (const c of ['unidades', 'grupos_insumo', 'almacenes', 'proveedores'] as const) {
+      expect(columnasDe(c)).toEqual(['clave', 'nombre', 'activoPos']);
+      expect((await normalizarRegistro(c, { origenSrId: 'X1', nombre: 'Ñ "x"' }, 0)).ok).toBe(true);
+    }
+  });
+
+  it('un grupo o unidad de más de 64 se rechaza sin repetir el valor', async () => {
+    const largo = 'G'.repeat(65);
+    const r = await normalizarRegistro(
+      'insumos',
+      { origenSrId: 'I1', nombre: 'Leche', grupoOrigenSrId: largo },
+      3,
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.rechazo.motivo).toContain('registros.3.grupoOrigenSrId');
+      expect(r.rechazo.motivo).not.toContain(largo);
+    }
+  });
+});
+
 describe('normalizarPagina()', () => {
   it('rechaza sólo los inválidos y todas las apariciones de un origen repetido', async () => {
     const { validos, rechazos } = await normalizarPagina('meseros', [
@@ -308,12 +391,10 @@ describe('decidir()', () => {
 
 describe('solicitudPendiente()', () => {
   const todos = (t: Date) =>
-    (['grupos', 'productos', 'meseros', 'clientes', 'areas', 'canales'] as const).map(
-      (catalogo) => ({
-        catalogo,
-        recibidaAt: t,
-      }),
-    );
+    CATALOGOS.map((catalogo) => ({
+      catalogo,
+      recibidaAt: t,
+    }));
 
   it('sin solicitud no hay pendiente', () => {
     expect(solicitudPendiente(null, [])).toBe(false);
@@ -325,5 +406,21 @@ describe('solicitudPendiente()', () => {
       solicitudPendiente(T1, [...todos(T1).slice(1), { catalogo: 'grupos', recibidaAt: T0 }]),
     ).toBe(true);
     expect(solicitudPendiente(T1, todos(T1))).toBe(false);
+  });
+
+  it('F2-120: los once catálogos cuentan; cerrar los seis de F2-230 no basta', () => {
+    expect(CATALOGOS).toHaveLength(11);
+    const seis = todos(T1).filter((r) =>
+      ['grupos', 'productos', 'meseros', 'clientes', 'areas', 'canales'].includes(r.catalogo),
+    );
+    expect(solicitudPendiente(T1, seis)).toBe(true);
+    for (const falta of ['unidades', 'grupos_insumo', 'insumos', 'almacenes', 'proveedores']) {
+      expect(
+        solicitudPendiente(
+          T1,
+          todos(T1).filter((r) => r.catalogo !== falta),
+        ),
+      ).toBe(true);
+    }
   });
 });

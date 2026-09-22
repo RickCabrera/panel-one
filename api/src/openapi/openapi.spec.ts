@@ -181,12 +181,50 @@ describe('Contrato OpenAPI', () => {
     expect(Object.keys(esquemas.AsignarCanalAreaDto.properties ?? {})).toEqual(['empresaId', 'canal']);
   });
 
+  it('F2-120: el contrato de catálogos incluye los cinco de inventario y el registro del insumo', async () => {
+    const doc = await generarDocumento();
+    const esquemas = doc.components?.schemas as Record<
+      string,
+      { properties?: Record<string, unknown>; enum?: string[] }
+    >;
+    expect(esquemas.CatalogoSr.enum).toEqual([
+      'grupos',
+      'productos',
+      'meseros',
+      'clientes',
+      'areas',
+      'canales',
+      'unidades',
+      'grupos_insumo',
+      'insumos',
+      'almacenes',
+      'proveedores',
+    ]);
+    expect(Object.keys(esquemas.RegistroInsumoDto.properties ?? {})).toEqual([
+      'origenSrId',
+      'clave',
+      'nombre',
+      'activoPos',
+      'grupoOrigenSrId',
+      'unidadOrigenSrId',
+    ]);
+    expect(Object.keys(esquemas.FilaInsumoDto.properties ?? {})).toEqual(
+      expect.arrayContaining(['grupoOrigenSrId', 'grupo', 'unidadOrigenSrId', 'unidad']),
+    );
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
       [
         '/agente/yo',
         '/agentes/estado',
+        // F2-120: catálogos de inventario.
+        '/catalogos/almacenes',
+        '/catalogos/grupos-insumo',
+        '/catalogos/insumos',
+        '/catalogos/proveedores',
+        '/catalogos/unidades',
         '/catalogos/areas',
         '/catalogos/areas/mapeo',
         '/catalogos/areas/{id}/canal',
