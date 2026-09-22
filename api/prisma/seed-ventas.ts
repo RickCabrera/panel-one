@@ -2,10 +2,36 @@ import { FormaPago, Prisma, PrismaClient } from '@prisma/client';
 
 import { cargarEnvLocal } from '../src/config/cargar-env';
 import { SEED_IDS } from './seed';
+import {
+  diasHasta,
+  diaSemana,
+  dinero,
+  elegir,
+  fnv,
+  hoyEn,
+  instanteLocal,
+  prng,
+} from './seed-maestro/azar';
+import {
+  areasDe,
+  CLIENTES,
+  meserosDe,
+  MODIFICADORES,
+  nombreGrupo,
+  precioEn,
+  PRODUCTOS,
+  PROB_SIN_AREA,
+  type Area,
+  type Canal,
+} from './seed-maestro/catalogos';
+import { generarUniverso, resumenPorModulo } from './seed-maestro';
+
+// Se re-exportan: los specs y los consumidores los importaban de aquí.
+export { hoyEn, instanteLocal };
 
 /**
- * Seed de VENTAS de desarrollo (F1-032): 500 cheques SINTÉTICOS de 2 sucursales
- * × 30 días. Ningún dato es de un restaurante real. Es lo que deja avanzar al
+ * Seed de VENTAS de desarrollo (F1-032, ampliado en F2-201): 1500 cheques
+ * SINTÉTICOS de 2 sucursales × 90 días. Ningún dato es de un restaurante real. Es lo que deja avanzar al
  * frontend (F1-040..F1-051) sin esperar al agente.
  *
  * - `generarVentas()` es PURO y determinista (PRNG con semilla): la misma
@@ -19,14 +45,23 @@ import { SEED_IDS } from './seed';
  * total = Σ partidas − descuento; subtotal = total / 1.16; los pagos suman
  * total + propina; la propina sólo viene con tarjeta.
  *
+ * Productos, precios por sucursal, meseros, áreas y clientes salen del catálogo
+ * del seed maestro (`seed-maestro/`), que además genera el inventario, las
+ * recetas, las compras y los gastos a partir de ESTAS ventas (F2-201).
+ *
+ * El día en curso no inventa futuro: con `ahora`, ningún cheque cierra (ni abre)
+ * después de ese instante. Se generan igual que sin él y luego se descartan, así
+ * que lo anterior a `ahora` es idéntico con o sin reloj (ids incluidos).
+ *
  * Uso: `npm run seed:ventas` (después de `npx prisma db seed`). Siembra en las
- * sucursales demo 30 días que terminan HOY en su zona; correrlo otro día mueve
- * las fechas.
+ * sucursales demo 90 días que terminan HOY en su zona; correrlo otro día mueve
+ * las fechas. `SEED_AHORA=2026-09-21T14:00:00-06:00` fija el reloj para
+ * reproducir una corrida exacta.
  */
 
 export const PREFIJO_SEED = 'SEED-';
-export const CHEQUES_POR_SUCURSAL = 250;
-export const DIAS = 30;
+export const CHEQUES_POR_SUCURSAL = 750;
+export const DIAS = 90;
 
 export interface SucursalSeed {
   id: string;
@@ -38,14 +73,21 @@ export interface SucursalSeed {
 export interface OpcionesVentas {
   empresaId: string;
   sucursales: readonly SucursalSeed[];
-  /** Último día local (`YYYY-MM-DD`) de los 30. */
+  /** Último día local (`YYYY-MM-DD`) de los 90. */
   hoy: string;
+  /**
+   * El reloj: si viene, se descarta todo cheque que cierre después de este
+   * instante (en cualquier zona). Sin él, se generan los días completos.
+   */
+  ahora?: Date;
   semilla?: number;
 }
 
 export interface PartidaSeed {
   id: string;
   orden: number;
+  /** Clave del catálogo maestro. NO se persiste: la tabla guarda el nombre. */
+  productoClave: string;
   producto: string;
   categoria: string;
   cantidad: Prisma.Decimal;
@@ -68,7 +110,8 @@ export interface ChequeSeed {
   folioSr: string;
   abiertoAt: Date;
   cerradoAt: Date | null;
-  mesa: string;
+  /** Nula en mostrador y domicilio: no hay mesa. */
+  mesa: string | null;
   mesero: string;
   comensales: number | null;
   subtotal: Prisma.Decimal;
@@ -79,6 +122,17 @@ export interface ChequeSeed {
   cancelado: boolean;
   partidas: PartidaSeed[];
   pagos: PagoSeed[];
+  /**
+   * Lo que el catálogo maestro sabe del cheque y la tabla todavía no guarda
+   * (NO se persiste): lo usan el inventario del seed y las tareas de catálogos.
+   */
+  maestro: {
+    meseroClave: string;
+    /** Nula en ~3 % de los cheques: F2-233 muestra "sin clasificar". */
+    area: string | null;
+    canal: Canal | null;
+    clienteClave: string | null;
+  };
 }
 
 /**
@@ -93,125 +147,33 @@ export const CATALOGO_SEED: ReadonlyArray<{ formaRaw: string; forma: FormaPago }
 ];
 export const FORMA_SIN_CATALOGO = 'VALES DESPENSA';
 
-interface Platillo {
-  producto: string;
-  categoria: string;
-  precio: string;
-  /** Se vende por kg: cantidad fraccionaria. */
-  porKg?: boolean;
-}
-
-const MENU: readonly Platillo[] = [
-  { producto: 'Guacamole', categoria: 'Entradas', precio: '95.00' },
-  { producto: 'Sopa de tortilla', categoria: 'Entradas', precio: '78.50' },
-  { producto: 'Queso fundido', categoria: 'Entradas', precio: '112.00' },
-  { producto: 'Ensalada de nopal', categoria: 'Entradas', precio: '84.90' },
-  { producto: 'Tacos al pastor (orden)', categoria: 'Platos fuertes', precio: '89.00' },
-  { producto: 'Enchiladas suizas', categoria: 'Platos fuertes', precio: '138.00' },
-  { producto: 'Mole poblano', categoria: 'Platos fuertes', precio: '169.00' },
-  { producto: 'Chiles en nogada', categoria: 'Platos fuertes', precio: '215.00' },
-  { producto: 'Pescado a la talla', categoria: 'Platos fuertes', precio: '245.50' },
-  { producto: 'Pozole rojo', categoria: 'Platos fuertes', precio: '124.00' },
-  { producto: 'Arrachera', categoria: 'Cortes por kg', precio: '489.00', porKg: true },
-  { producto: 'Rib eye', categoria: 'Cortes por kg', precio: '720.00', porKg: true },
-  { producto: 'Carnitas', categoria: 'Cortes por kg', precio: '360.00', porKg: true },
-  { producto: 'Agua de horchata', categoria: 'Bebidas', precio: '38.00' },
-  { producto: 'Agua de jamaica', categoria: 'Bebidas', precio: '38.00' },
-  { producto: 'Refresco', categoria: 'Bebidas', precio: '35.00' },
-  { producto: 'Cerveza nacional', categoria: 'Bebidas', precio: '55.00' },
-  { producto: 'Margarita', categoria: 'Bebidas', precio: '120.00' },
-  { producto: 'Café de olla', categoria: 'Bebidas', precio: '42.00' },
-  { producto: 'Flan napolitano', categoria: 'Postres', precio: '68.00' },
-  { producto: 'Churros con chocolate', categoria: 'Postres', precio: '74.50' },
-  { producto: 'Pastel de tres leches', categoria: 'Postres', precio: '79.00' },
-];
-
-const MODIFICADORES: ReadonlyArray<{ nombre: string; precio: string }> = [
-  { nombre: 'Sin cebolla', precio: '0.00' },
-  { nombre: 'Término medio', precio: '0.00' },
-  { nombre: 'Extra queso', precio: '18.00' },
-  { nombre: 'Aguacate extra', precio: '25.00' },
-];
-
-const MESEROS = ['Mesero Uno', 'Mesero Dos', 'Mesero Tres', 'Mesero Cuatro', 'Mesero Cinco'];
-
-// ---------------------------------------------------------------------------
-// Utilidades deterministas
-// ---------------------------------------------------------------------------
-
-/** mulberry32: PRNG pequeño y determinista. */
-function prng(semilla: number): () => number {
-  let a = semilla >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** FNV-1a de 32 bits en hex: prefijo estable de los ids de cada sucursal. */
-function fnv(texto: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < texto.length; i++) {
-    h ^= texto.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, '0');
-}
-
 /** UUID determinista: sucursal + tipo (0 cheque, 1 partida, 2 pago) + contador. */
 function idSeed(sucursalId: string, tipo: number, n: number): string {
   return `${fnv(sucursalId)}-5eed-4000-8${tipo}00-${n.toString(16).padStart(12, '0')}`;
 }
 
-function dinero(v: Prisma.Decimal.Value): Prisma.Decimal {
-  return new Prisma.Decimal(v).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+/** `dia` menos `n` días. */
+function haceDias(dia: string, n: number): string {
+  return new Date(Date.parse(`${dia}T00:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** Días `YYYY-MM-DD` desde `hoy - (n-1)` hasta `hoy`. */
-function diasHasta(hoy: string, n: number): string[] {
-  const [a, m, d] = hoy.split('-').map(Number);
-  const base = Date.UTC(a, m - 1, d);
-  if (Number.isNaN(base) || new Date(base).toISOString().slice(0, 10) !== hoy) {
-    throw new Error(`hoy inválido: ${hoy}`);
+/** Área elegida por peso; nula con probabilidad `PROB_SIN_AREA`. */
+function elegirArea(r: () => number, areas: readonly Area[]): Area | null {
+  if (r() < PROB_SIN_AREA) return null;
+  const total = areas.reduce((s, a) => s + a.peso, 0);
+  let x = r() * total;
+  for (const a of areas) {
+    if ((x -= a.peso) < 0) return a;
   }
-  return Array.from({ length: n }, (_, i) =>
-    new Date(base - (n - 1 - i) * 86_400_000).toISOString().slice(0, 10),
-  );
+  return areas[areas.length - 1];
 }
 
-/** Día de la semana (0 = domingo) de un `YYYY-MM-DD`. */
-function diaSemana(dia: string): number {
-  return new Date(`${dia}T00:00:00Z`).getUTCDay();
-}
+/** Probabilidad de que el cheque traiga cliente capturado, según el canal. */
+const PROB_CLIENTE: Record<Canal, number> = { comedor: 0.05, mostrador: 0.2, domicilio: 0.9 };
 
-/** Diferencia (ms) entre la hora local de `zona` y UTC en el instante `t`. */
-function desfase(zona: string, t: number): number {
-  const partes = new Intl.DateTimeFormat('en-US', {
-    timeZone: zona,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(new Date(t));
-  const v = (tipo: string) => Number(partes.find((p) => p.type === tipo)!.value);
-  const local = Date.UTC(v('year'), v('month') - 1, v('day'), v('hour'), v('minute'), v('second'));
-  return local - Math.floor(t / 1000) * 1000;
-}
-
-/** El instante UTC de una hora de pared en `zona` (sin horas ambiguas en el seed). */
-export function instanteLocal(dia: string, segundosDelDia: number, zona: string): Date {
-  const [a, m, d] = dia.split('-').map(Number);
-  const pared = Date.UTC(a, m - 1, d) + segundosDelDia * 1000;
-  let t = pared - desfase(zona, pared);
-  t = pared - desfase(zona, t);
-  return new Date(t);
-}
+// ---------------------------------------------------------------------------
+// Utilidades
+// ---------------------------------------------------------------------------
 
 /** Reparte `total` entre los días con peso (fin de semana pesa más). Suma exacta. */
 function repartir(dias: string[], total: number): number[] {
@@ -246,10 +208,6 @@ function segundoDeCierre(r: () => number): number {
   return hora * 3600 + Math.floor(r() * 3600);
 }
 
-function elegir<T>(r: () => number, lista: readonly T[]): T {
-  return lista[Math.floor(r() * lista.length)];
-}
-
 // ---------------------------------------------------------------------------
 // Generador
 // ---------------------------------------------------------------------------
@@ -259,7 +217,14 @@ export function generarVentas(op: OpcionesVentas): ChequeSeed[] {
   const dias = diasHasta(op.hoy, DIAS);
   const cheques: ChequeSeed[] = [];
 
-  for (const suc of op.sucursales) {
+  op.sucursales.forEach((suc, iSuc) => {
+    const areas = areasDe(iSuc);
+    const meseros = meserosDe(iSuc);
+    // Día desde el que cada producto y mesero dado de baja ya no aparece.
+    const baja = (dias?: number) => (dias === undefined ? null : haceDias(op.hoy, dias));
+    const vigente = (dia: string, desde: string | null) => desde === null || dia < desde;
+    const productos = PRODUCTOS.map((p) => ({ p, desde: baja(p.bajaHaceDias) }));
+    const plantilla = meseros.map((m) => ({ m, desde: baja(m.bajaHaceDias) }));
     const porDia = repartir(dias, CHEQUES_POR_SUCURSAL);
     const delDia: Array<{ dia: string; segundo: number }> = [];
     dias.forEach((dia, i) => {
@@ -278,21 +243,30 @@ export function generarVentas(op: OpcionesVentas): ChequeSeed[] {
       const duracionMin = 25 + Math.floor(r() * 110);
       const abiertoAt = new Date(cierre.getTime() - duracionMin * 60_000);
 
+      const area = elegirArea(r, areas);
+      const canal = area?.canal ?? null;
+      const menu = productos.filter((x) => vigente(dia, x.desde)).map((x) => x.p);
+      const mesero = elegir(
+        r,
+        plantilla.filter((x) => vigente(dia, x.desde)).map((x) => x.m),
+      );
+
       const partidas: PartidaSeed[] = [];
       const nPartidas = 1 + Math.floor(r() * 6);
       for (let orden = 0; orden < nPartidas; orden++) {
-        const p = elegir(r, MENU);
+        const p = elegir(r, menu);
         const cantidad = p.porKg
           ? new Prisma.Decimal(250 + 50 * Math.floor(r() * 26)).div(1000) // 0.250–1.500 kg
           : new Prisma.Decimal(1 + Math.floor(r() * 3));
         const modificadores = r() < 0.25 ? [elegir(r, MODIFICADORES)] : [];
         const precioMods = modificadores.reduce((s, m) => s.plus(m.precio), new Prisma.Decimal(0));
-        const precioUnit = new Prisma.Decimal(p.precio);
+        const precioUnit = new Prisma.Decimal(precioEn(p, iSuc));
         partidas.push({
           id: idSeed(suc.id, 1, ++nPartida),
           orden,
-          producto: p.producto,
-          categoria: p.categoria,
+          productoClave: p.clave,
+          producto: p.nombre,
+          categoria: nombreGrupo(p.grupo),
           cantidad,
           precioUnit,
           total: dinero(precioUnit.plus(precioMods).times(cantidad)),
@@ -334,6 +308,16 @@ export function generarVentas(op: OpcionesVentas): ChequeSeed[] {
         }
       }
 
+      const numMesa = 1 + Math.floor(r() * 30);
+      const comensales = r() < 0.08 ? null : 1 + Math.floor(r() * 8);
+      const conCliente = r() < PROB_CLIENTE[canal ?? 'comedor'];
+      const cliente = elegir(r, CLIENTES);
+
+      // Sin futuro: el cheque se generó igual (el PRNG avanza lo mismo) pero no se
+      // guarda. Van en orden cronológico, así que lo descartado es la cola: no hay
+      // huecos de folio y lo anterior no cambia.
+      if (op.ahora && cierre.getTime() > op.ahora.getTime()) return;
+
       cheques.push({
         id: idSeed(suc.id, 0, n),
         sucursalId: suc.id,
@@ -342,9 +326,12 @@ export function generarVentas(op: OpcionesVentas): ChequeSeed[] {
         folioSr: `${PREFIJO_SEED}${suc.clave}-${String(n).padStart(4, '0')}`,
         abiertoAt,
         cerradoAt,
-        mesa: `M${1 + Math.floor(r() * 30)}`,
-        mesero: elegir(r, MESEROS),
-        comensales: r() < 0.08 ? null : 1 + Math.floor(r() * 8),
+        mesa:
+          canal === 'mostrador' || canal === 'domicilio'
+            ? null
+            : `${area?.nombre === 'Barra' ? 'B' : area?.nombre === 'Terraza' ? 'T' : 'M'}${numMesa}`,
+        mesero: mesero.nombre,
+        comensales,
         subtotal,
         impuestos,
         descuentos,
@@ -353,9 +340,15 @@ export function generarVentas(op: OpcionesVentas): ChequeSeed[] {
         cancelado,
         partidas,
         pagos,
+        maestro: {
+          meseroClave: mesero.clave,
+          area: area?.nombre ?? null,
+          canal,
+          clienteClave: conCliente ? cliente.clave : null,
+        },
       });
     });
-  }
+  });
   return cheques;
 }
 
@@ -376,14 +369,20 @@ export async function sembrarVentas(
   const sembrados = {
     cheque: { sucursalId: { in: sucursalIds }, folioSr: { startsWith: PREFIJO_SEED } },
   };
+  // Lo que no tiene columna (partidas y pagos van aparte; `maestro` y la clave de
+  // producto no se persisten hasta F2-230) se quita antes del `createMany`.
   const filasCheque = cheques.map((c) => {
-    const { partidas: _partidas, pagos: _pagos, ...fila } = c;
+    const { partidas: _partidas, pagos: _pagos, maestro: _maestro, ...fila } = c;
     void _partidas;
     void _pagos;
+    void _maestro;
     return fila;
   });
   const partidas = cheques.flatMap((c) =>
-    c.partidas.map((p) => ({ ...p, chequeId: c.id, empresaId: c.empresaId })),
+    c.partidas.map(({ productoClave: _clave, ...p }) => {
+      void _clave;
+      return { ...p, chequeId: c.id, empresaId: c.empresaId };
+    }),
   );
   const pagos = cheques.flatMap((c) =>
     c.pagos.map((p) => ({
@@ -419,14 +418,32 @@ export async function sembrarVentas(
   return { cheques: cheques.length, partidas: partidas.length, pagos: pagos.length };
 }
 
-/** Hoy (`YYYY-MM-DD`) en una zona IANA. */
-export function hoyEn(zona: string, ahora = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: zona,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(ahora);
+/**
+ * El universo del seed maestro que corresponde a ESTAS ventas: catálogos,
+ * inventario simulado contra ellas, recetas, compras y gastos (F2-201).
+ */
+export function universoDe(op: OpcionesVentas, cheques: readonly ChequeSeed[]) {
+  return generarUniverso({
+    sucursales: op.sucursales,
+    dias: diasHasta(op.hoy, DIAS),
+    ventas: cheques.map((c) => ({ ...c, canal: c.maestro.canal })),
+  });
+}
+
+/**
+ * El reloj de la corrida: `SEED_AHORA` si viene (para reproducir una corrida
+ * exacta), si no el minuto en curso TRUNCADO. Truncar hace que dos corridas
+ * seguidas dentro del mismo minuto dejen exactamente lo mismo; una que cruce de
+ * minuto puede sumar los cheques que cerraron en ese minuto, y es lo correcto
+ * para un seed que no inventa futuro.
+ */
+export function relojDelSeed(entorno: string | undefined, ahora = new Date()): Date {
+  if (entorno) {
+    const t = new Date(entorno);
+    if (Number.isNaN(t.getTime())) throw new Error(`SEED_AHORA inválido: ${entorno}`);
+    return t;
+  }
+  return new Date(Math.floor(ahora.getTime() / 60_000) * 60_000);
 }
 
 async function main(): Promise<void> {
@@ -455,12 +472,21 @@ async function main(): Promise<void> {
       ...s,
       zonaHoraria: guardadas.find((g) => g.id === s.id)!.zonaHoraria,
     }));
-    const hoy = hoyEn(sucursales[0].zonaHoraria);
-    const r = await sembrarVentas(prisma, { empresaId: SEED_IDS.empresaDemo, sucursales, hoy });
+    const ahora = relojDelSeed(process.env.SEED_AHORA);
+    const hoy = hoyEn(sucursales[0].zonaHoraria, ahora);
+    const op: OpcionesVentas = { empresaId: SEED_IDS.empresaDemo, sucursales, hoy, ahora };
+    const r = await sembrarVentas(prisma, op);
     console.log(
       `Seed de ventas aplicado: ${r.cheques} cheques, ${r.partidas} partidas, ${r.pagos} pagos ` +
-        `(30 días hasta ${hoy}).`,
+        `(${DIAS} días hasta ${hoy}, sin cierres después de ${ahora.toISOString()}).`,
     );
+    // El resto del universo todavía no tiene tabla: se genera (y se valida en los
+    // specs) para que la tarea que la cree lo persista desde aquí.
+    const universo = universoDe(op, generarVentas(op));
+    console.log('Seed maestro (generado; lo persiste la tarea que crea cada tabla):');
+    for (const [modulo, filas, tarea] of resumenPorModulo(universo)) {
+      console.log(`  - ${modulo}: ${filas} (${tarea})`);
+    }
   } finally {
     await prisma.$disconnect();
   }

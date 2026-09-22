@@ -145,6 +145,35 @@ describe('datosPorHora', () => {
   });
 });
 
+describe('datosPorHora con horaTope (sólo hoy, F2-201)', () => {
+  it('termina en la hora en curso: las horas que no han ocurrido no se dibujan', () => {
+    const puntos = datosPorHora([{ hora: 13, venta: '100.00', cuentas: 1 }], 14);
+    expect(puntos.map((p) => p.hora)).toEqual(Array.from({ length: 15 }, (_, i) => i));
+    // Las horas PASADAS sin ventas siguen siendo su cero real.
+    expect(puntos[14]).toMatchObject({ valor: 0, texto: '$0.00', cuentas: 0 });
+    expect(puntos[5]).toMatchObject({ valor: 0, texto: '$0.00' });
+  });
+
+  it('una hora posterior con cuentas se conserva (otra zona puede ir adelante)', () => {
+    const puntos = datosPorHora(
+      [
+        { hora: 10, venta: '50.00', cuentas: 1 },
+        { hora: 16, venta: '80.00', cuentas: 2 },
+        { hora: 20, venta: '0.00', cuentas: 0 },
+      ],
+      14,
+    );
+    expect(puntos).toHaveLength(17);
+    expect(puntos[16]).toMatchObject({ texto: '$80.00', cuentas: 2 });
+  });
+
+  it('a las 23 son las 24 horas; sin horaTope, siempre 24', () => {
+    expect(datosPorHora([], 23)).toHaveLength(24);
+    expect(datosPorHora([])).toHaveLength(24);
+    expect(datosPorHora([], 0)).toHaveLength(1);
+  });
+});
+
 describe('TooltipHora', () => {
   it('muestra el importe exacto del punto, no el número de la gráfica', () => {
     const [punto] = datosPorHora([{ hora: 0, venta: '1234.50', cuentas: 1 }]);

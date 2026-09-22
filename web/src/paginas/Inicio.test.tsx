@@ -443,6 +443,17 @@ describe('carga, vacío y error', () => {
     expect(tarjeta('Formas de pago')).not.toHaveTextContent('$0.00');
   });
 
+  it('con "Hoy", la gráfica por hora termina en la hora en curso; otro periodo, las 24 (F2-201)', async () => {
+    // AHORA = 21:30 de CDMX: se dibujan 00:00…21:00, las 22 horas que ya ocurrieron.
+    apiDashboard();
+    montar(`/?empresa=${A}`);
+    expect(await screen.findByTestId('grafica-por-hora')).toHaveAttribute('data-horas', '22');
+    cleanup();
+    apiDashboard();
+    montar(`/?empresa=${A}&periodo=mes`);
+    expect(await screen.findByTestId('grafica-por-hora')).toHaveAttribute('data-horas', '24');
+  });
+
   it('una hora con importe ilegible lo avisa bajo la gráfica', async () => {
     apiDashboard({
       'GET /ventas/por-hora': () =>

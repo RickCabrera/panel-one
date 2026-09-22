@@ -430,6 +430,16 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
 
 ---
 
+> ⚠️ **Sobre §6–§10 y el seed maestro (F2-201).** `api/prisma/seed-maestro/` genera
+> productos, grupos, precios por sucursal, meseros, clientes, áreas y canales, insumos,
+> almacenes, pólizas, existencias, recetas, compras y gastos **sintéticos**. Esas formas
+> son **invención del seed, NO evidencia del esquema de SoftRestaurant**: nadie las sacó
+> de una instalación. §6–§10 siguen **sin validar** y así se quedan hasta que alguien mire
+> una base real. Cuando se mapeen, lo que diga SR manda y el seed se adapta, nunca al revés.
+> En particular: el reparto área → canal (comedor/mostrador/domicilio), los ~3 % de cheques
+> sin área, los dos almacenes por sucursal y las recetas por unidad vendida son decisiones
+> del seed, no hallazgos.
+
 ## 6. Productos y catálogo
 
 > Alimenta a `F1-032` (top productos) y a `F2-145`.

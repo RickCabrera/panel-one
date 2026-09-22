@@ -71,6 +71,8 @@ type Renglon = [
   mods?: 0 | 1,
 ];
 
+// Meseros y productos: los del catálogo del seed maestro (F2-201), con sus nombres,
+// para que el Monitor y las ventas hablen de la misma gente y el mismo menú.
 const MOD_GRATIS = { nombre: 'Sin cebolla', precio: '0.00' };
 const MOD_CON_COSTO = { nombre: 'Extra queso', precio: '18.00' };
 
@@ -78,10 +80,10 @@ const MOD_CON_COSTO = { nombre: 'Extra queso', precio: '18.00' };
 type Plantilla = [string, string, number, number, boolean, Renglon[]];
 
 const EN_VIVO: readonly Plantilla[] = [
-  ['1', 'Mesero Uno', 10, 2, false, [['Guacamole', 'Entradas', '95.00', '1', 0]]],
+  ['1', 'Ana López', 10, 2, false, [['Guacamole', 'Entradas', '95.00', '1', 0]]],
   [
     '2',
-    'Mesero Dos',
+    'Carlos Ramírez',
     35,
     4,
     false,
@@ -90,10 +92,10 @@ const EN_VIVO: readonly Plantilla[] = [
       ['Agua de horchata', 'Bebidas', '38.00', '4'],
     ],
   ],
-  ['4', 'Mesero Tres', 40, 2, true, [['Mole poblano', 'Platos fuertes', '169.00', '2']]],
+  ['4', 'Lucía Hernández', 40, 2, true, [['Mole poblano', 'Platos fuertes', '169.00', '2']]],
   [
     '5',
-    'Mesero Uno',
+    'Ana López',
     45,
     6,
     false,
@@ -105,10 +107,10 @@ const EN_VIVO: readonly Plantilla[] = [
       ['Flan napolitano', 'Postres', '68.00', '2'],
     ],
   ],
-  ['7', 'Mesero Cuatro', 60, 3, true, [['Pozole rojo', 'Platos fuertes', '124.00', '3']]],
+  ['7', 'Jorge Martínez', 60, 3, true, [['Pozole rojo', 'Platos fuertes', '124.00', '3']]],
   [
     '10',
-    'Mesero Dos',
+    'Carlos Ramírez',
     75,
     2,
     false,
@@ -121,7 +123,7 @@ const EN_VIVO: readonly Plantilla[] = [
   ],
   [
     '12',
-    'Mesero Cinco',
+    'Sofía García',
     130,
     8,
     true,
@@ -131,12 +133,12 @@ const EN_VIVO: readonly Plantilla[] = [
       ['Refresco', 'Bebidas', '35.00', '5'],
     ],
   ],
-  ['Barra', 'Mesero Tres', 22, 1, false, [['Café de olla', 'Bebidas', '42.00', '1']]],
+  ['Barra', 'Lucía Hernández', 22, 1, false, [['Café de olla', 'Bebidas', '42.00', '1']]],
 ];
 
 const DESCONECTADA: readonly Plantilla[] = [
-  ['3', 'Mesero Uno', 20, 2, false, [['Guacamole', 'Entradas', '95.00', '1']]],
-  ['8', 'Mesero Dos', 50, 4, true, [['Carnitas', 'Cortes por kg', '360.00', '1.000']]],
+  ['3', 'Ana López', 20, 2, false, [['Guacamole', 'Entradas', '95.00', '1']]],
+  ['8', 'Carlos Ramírez', 50, 4, true, [['Carnitas', 'Cortes por kg', '360.00', '1.000']]],
 ];
 
 function dinero(v: Prisma.Decimal.Value): string {

@@ -11,7 +11,7 @@ import {
   zonaDelPanel,
   type Periodo,
 } from '../filtros/periodo';
-import { useHoy } from '../filtros/useHoy';
+import { useHoraEn, useHoy } from '../filtros/useHoy';
 import { useMesasAbiertas, useVentas, type Filtro } from './inicio/consultas';
 import { SelectorPeriodo } from './inicio/SelectorPeriodo';
 import {
@@ -32,6 +32,10 @@ export function Inicio() {
   const hoy = useHoy(zona);
   const rango = rangoDe(periodo, hoy);
   const autoRefresco = rango !== null && incluyeHoy(rango, hoy);
+  // Sólo hoy: la gráfica por hora termina en la hora en curso de la zona del panel.
+  const horaActual = useHoraEn(zona);
+  const horaTope =
+    rango !== null && rango.desde === hoy && rango.hasta === hoy ? horaActual : undefined;
 
   // Sólo con el alcance validado: la empresa está en tu lista y, si la URL trae
   // sucursal, también está en la lista de esa empresa. Y con la lista de sucursales
@@ -90,7 +94,12 @@ export function Inicio() {
         </p>
       ) : (
         <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3">
-          <TarjetaVentaTotal resumen={resumen} porHora={porHora} rango={rango} />
+          <TarjetaVentaTotal
+            resumen={resumen}
+            porHora={porHora}
+            rango={rango}
+            horaTope={horaTope}
+          />
           <TarjetaFormasPago consulta={formas} />
           <TarjetaVentaEnVivo consulta={mesas} />
           <TarjetaTicketPromedio consulta={resumen} />

@@ -16,14 +16,21 @@ export interface PuntoHora {
 }
 
 /**
- * Las 24 horas, en orden. La API ya manda las 24 con cero donde no hubo cierres; si
+ * Las 24 horas, en orden (o hasta `horaTope`, ver abajo). La API ya manda las 24 con cero donde no hubo cierres; si
  * alguna faltara, su cero también es real (no hubo cierres), así que se rellena.
  *
  * Una hora que SÍ viene pero con un importe que no se puede leer no es cero: queda
  * `valor: null` (la línea se corta ahí) y "Sin dato" (F1-094).
  */
-export function datosPorHora(filas: readonly VentaHora[]): PuntoHora[] {
-  return Array.from({ length: 24 }, (_, hora) => {
+export function datosPorHora(filas: readonly VentaHora[], horaTope?: number): PuntoHora[] {
+  // Con `horaTope` (el rango es sólo HOY) la gráfica termina en la hora en curso:
+  // las horas que todavía no ocurren no son un cero, no han pasado (F2-201). Una
+  // hora posterior que SÍ trae cuentas se conserva, y con ella las de en medio:
+  // con sucursales en otra zona, la suya puede ir adelante, y un dato real nunca
+  // se esconde.
+  const conCuentas = filas.filter((f) => f.cuentas > 0).map((f) => f.hora);
+  const ultima = horaTope === undefined ? 23 : Math.min(23, Math.max(horaTope, ...conCuentas));
+  return Array.from({ length: ultima + 1 }, (_, hora) => {
     const fila = filas.find((f) => f.hora === hora);
     const centavos = fila ? aCentavos(fila.venta) : 0n;
     return {

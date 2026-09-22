@@ -12,6 +12,7 @@ import {
   sembrarMesas,
   type OpcionesMesas,
 } from './seed-mesas';
+import { meserosDe, nombreGrupo, precioEn, PRODUCTOS } from './seed-maestro/catalogos';
 
 // El seed de snapshots de F1-050 contra Postgres real, en las sucursales de
 // FIXTURES (empresa A), nunca en las de `SEED_IDS`. La idempotencia se prueba con
@@ -67,6 +68,23 @@ describe('generarSnapshots()', () => {
       for (const m of s.payload.mesas) {
         const suma = m.partidas.reduce((a, p) => a.plus(p.total), new Prisma.Decimal(0));
         expect(m.total).toBe(suma.toFixed(2));
+      }
+    }
+  });
+
+  it('meseros, productos, grupos y precios son los del catálogo maestro (F2-201)', () => {
+    const [centro, norte] = [meserosDe(0), meserosDe(1)].map(
+      (l) => new Set(l.map((m) => m.nombre)),
+    );
+    for (const m of vivo.payload.mesas) expect(centro.has(m.mesero)).toBe(true);
+    for (const m of desconectada.payload.mesas)
+      expect(centro.has(m.mesero) || norte.has(m.mesero)).toBe(true);
+    for (const [i, s] of [vivo, desconectada].entries()) {
+      for (const p of s.payload.mesas.flatMap((m) => m.partidas)) {
+        const q = PRODUCTOS.find((x) => x.nombre === p.producto)!;
+        expect(q).toBeDefined();
+        expect(nombreGrupo(q.grupo)).toBe(p.categoria);
+        expect(p.precioUnit).toBe(precioEn(q, i));
       }
     }
   });

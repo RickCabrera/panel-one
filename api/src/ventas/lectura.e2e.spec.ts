@@ -510,12 +510,17 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
     });
 
     it('búsqueda por prefijo de folio, dentro del rango', async () => {
+      // Con 90 días de seed (F2-201) los folios del rango son los últimos (~500–750):
+      // "74" encuentra 740–749 dentro y deja fuera el 74, que es de agosto.
       const res = await get(
-        `/ventas/tickets?${Q({ ...base, folio: '12', porPagina: 100 })}`,
+        `/ventas/tickets?${Q({ ...base, folio: '74', porPagina: 100 })}`,
         USUARIOS.visorA,
       );
-      const e = esperados().filter(({ c }) => c.folio.startsWith('12'));
+      const e = esperados().filter(({ c }) => c.folio.startsWith('74'));
       expect(e.length).toBeGreaterThan(0);
+      // El 74 existe pero cae fuera del rango: el prefijo no se salta el rango.
+      expect(chequesA.some((c) => c.folio === '74')).toBe(true);
+      expect(e.some(({ c }) => c.folio === '74')).toBe(false);
       expect(res.body.total).toBe(e.length);
       expect(res.body.items.map((i: { id: string }) => i.id)).toEqual(e.map(({ c }) => c.id));
     });
