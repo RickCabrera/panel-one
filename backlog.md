@@ -1762,7 +1762,7 @@ del sugerido como orden de compra CSV.
 ## EPIC 10 — Extras de producto
 
 ### F2-140 · Comparativos avanzados
-`[ ]` Vista "Comparativos": matriz empresa/sucursal × métrica (venta, tickets, ticket
+`[x]` **ALCANCE:** sin tasa de facturación (la agrega F2-106), sin utilidad (la agrega F2-126) y una empresa a la vez (comparar entre empresas: ver F2-250). Vista "Comparativos": matriz empresa/sucursal × métrica (venta, tickets, ticket
 promedio, comensales, tasa de facturación, utilidad si Epic 9 activo) con periodo A vs
 periodo B (Δ absoluto y %), ranking de sucursales y export CSV.
 
