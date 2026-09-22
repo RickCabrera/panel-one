@@ -72,6 +72,9 @@ describe('ScopedPrismaService (contra Postgres)', () => {
     expect(Object.keys(datos).sort()).toEqual([
       'agenteContacto',
       'agenteEstado',
+      // F2-224: centro de alertas; sus escrituras van por `alertas(scope)`, no por aquí.
+      'alerta',
+      'alertaEvaluacion',
       'cheque',
       'chequePago',
       'chequePartida',
@@ -80,6 +83,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'empresa',
       'formaPagoCatalogo',
       'mesaSnapshot',
+      'reglaAlerta',
       'sesionUsuario',
       'sucursal',
       'usuario',

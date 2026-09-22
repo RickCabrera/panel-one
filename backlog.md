@@ -1680,6 +1680,12 @@ Vista admin de saldo + umbral de alerta (default 20%) con aviso por correo al ad
 recordatorio de vigencia anual de los folios (fecha de compra + 12 meses). Reporte mensual
 de consumo por empresa (base para el recobro en la anualidad del cliente).
 
+> **Y además (de F2-224):** el "saldo de folios bajo" es una regla del centro de alertas.
+> Agregar `folios_bajo` al enum `TipoAlerta` (migración), su definición en
+> `api/src/alertas/reglas.ts` (unidad, rango, default 20 %, severidad), su condición en
+> `api/src/alertas/evaluador.ts` y su texto en `web/src/alertas/textos.ts`. La evaluación
+> ya corre sola y bajo candado: sólo falta la condición.
+
 **Listo cuando:** con saldo simulado en 0, la emisión se bloquea ANTES de llamar a Facturama
 con mensaje claro; el reporte mensual cuadra con el nº de CFDI vigentes+cancelados del
 periodo.
@@ -1702,6 +1708,11 @@ promedio. Vista "Existencias" réplica de Arkhon: KPIs (artículos visibles, val
 atención requerida = bajo mínimo, sin existencia), tabla por artículo/sucursal/almacén
 (unidad, existencia, costo, valor, estado semáforo), filtros por sucursal y almacén,
 búsqueda. Mínimos/máximos por artículo editables en nuestra web (**no escriben a SR**).
+
+> **Y además (de F2-224):** "artículo bajo mínimo" es una regla del centro de alertas.
+> Agregar `bajo_minimo` al enum `TipoAlerta` (migración), su definición en
+> `api/src/alertas/reglas.ts`, su condición en `api/src/alertas/evaluador.ts` (llave =
+> artículo + almacén) y su texto en `web/src/alertas/textos.ts`.
 
 **Listo cuando:** el valor total estimado cuadra contra el reporte de inventario de SR del
 mismo corte (piloto); artículo bajo mínimo aparece en "atención requerida".

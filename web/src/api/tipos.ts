@@ -379,3 +379,44 @@ export interface VentaPorMesa {
     rotacion: string | null;
   };
 }
+
+/** Centro de alertas (F2-224): `GET /alertas/*` y `PUT /alertas/reglas/:tipo`. */
+export type TipoAlerta =
+  'sucursal_sin_reporte' | 'mesa_abierta' | 'cuenta_sin_imprimir' | 'caida_venta';
+export type SeveridadAlerta = 'critica' | 'advertencia';
+export type MotivoCierreAlerta =
+  'condicion' | 'regla_apagada' | 'sucursal_inactiva' | 'empresa_inactiva';
+
+export interface Alerta {
+  id: string;
+  sucursalId: string;
+  sucursal: string;
+  tipo: TipoAlerta;
+  severidad: SeveridadAlerta;
+  llave: string;
+  /** El umbral de la regla cuando abrió (minutos o %). */
+  umbral: number;
+  /** Por tipo; importes y % como TEXTO decimal (ver OpenAPI de `AlertaDto`). */
+  detalle: Record<string, unknown>;
+  abiertaAt: string;
+  cerradaAt: string | null;
+  motivoCierre: MotivoCierreAlerta | null;
+}
+
+export interface HistorialAlertas {
+  total: number;
+  pagina: number;
+  porPagina: number;
+  filas: Alerta[];
+}
+
+export interface ReglaAlerta {
+  tipo: TipoAlerta;
+  activa: boolean;
+  umbral: number;
+  porDefecto: boolean;
+  unidad: 'minutos' | 'porcentaje';
+  minimo: number;
+  maximo: number;
+  valorPorDefecto: number;
+}

@@ -11,7 +11,11 @@ import { leerMesa, type MesaAbierta } from './mesa';
  */
 export const INTERVALO_AGENTE_S = 30;
 
-/** Backlog F1-050: "si la última lectura tiene > 3 intervalos" → desconectada. */
+/**
+ * Backlog F1-050: "si la última lectura tiene > 3 intervalos" → desconectada.
+ * ESPEJO en el API: `SNAPSHOT_VIVO_S` de api/src/alertas/reglas.ts (F2-224; su spec lee
+ * este archivo y falla si divergen).
+ */
 export const UMBRAL_DESCONEXION_S = 3 * INTERVALO_AGENTE_S;
 
 /** Hasta aquí la lectura se ve verde; de aquí al umbral, ámbar. */
@@ -26,6 +30,7 @@ export type Frescura = 'fresca' | 'demorada' | 'desconectada';
 /**
  * Semáforo de la mesa sobre MINUTOS ENTEROS (ya truncados por `minutosAbierta`):
  * < 40 ok · 40–60 alerta · > 60 rojo. 60 min con 59 s todavía es 60: alerta.
+ * El borde de 60 es el default de la alerta `mesa_abierta` del API (api/src/alertas/reglas.ts).
  */
 export function semaforo(minutos: number | null): Semaforo {
   if (minutos === null) return 'sin-dato';
@@ -341,7 +346,18 @@ type MesaSinFirma = Omit<MesaViva, 'firma'>;
 /** Texto con todo lo que pinta la tarjeta o el detalle (los importes, en centavos). */
 export function firmaDe(m: MesaSinFirma): string {
   return JSON.stringify(
-    [m.clave, m.sucursal, m.mesa, m.mesero, m.folio, m.total, m.comensales, m.impreso, m.apertura, m.partidas],
+    [
+      m.clave,
+      m.sucursal,
+      m.mesa,
+      m.mesero,
+      m.folio,
+      m.total,
+      m.comensales,
+      m.impreso,
+      m.apertura,
+      m.partidas,
+    ],
     (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v),
   );
 }

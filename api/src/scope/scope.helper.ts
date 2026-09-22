@@ -24,6 +24,10 @@ export const LLAVE_EMPRESA = {
   // F2-202. Bandeja del correo falso: hoy sólo la escribe `CorreoFalso` (INSERT) y
   // no la lee nadie; quien la lea lo hará con scope por esta columna.
   CorreoEnviado: 'empresaId',
+  // F2-224. Las escribe SÓLO `EscrituraAlertas` (bajo candado por empresa).
+  Alerta: 'empresaId',
+  ReglaAlerta: 'empresaId',
+  AlertaEvaluacion: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

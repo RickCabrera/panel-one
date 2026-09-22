@@ -4271,3 +4271,195 @@ agregado son supuestos, no hallazgos.
 no" como dos funciones puras (`estadosSucursales` y `mesasVivas`). Con eso, los hooks salen solos y
 el test de rendimiento es casi trivial. Y empezar por el test de poll: el jitter de `apertura` entre
 polls (edad entera + latencia) no se ve con el test de reloj y fue lo que marcó el revisor.
+
+## 2026-09-22 03:40 — F2-224 · Centro de alertas
+**Estado:** CERRADA si el PR se mergea.
+
+Revisor, gate del plan: BLOQUEADO una vez y luego APROBADO CON OBSERVACIONES.
+- B1: carrera tick/PUT.
+- B2: dinero en un JSON sin tipo.
+
+Gate del entregable: BLOQUEADO una vez y luego APROBADO CON OBSERVACIONES.
+- B1: una observación vieja podía aplicarse después de una nueva.
+
+Carriles /api + /web. OpenAPI actualizado (4 rutas nuevas). `docs/esquema-sr.md` §5: sólo
+SUPUESTOS del evaluador, ningún hallazgo (la tarea no lee SR).
+
+**Qué quedó hecho.**
+- **Modelo** (migraciones `20260922083500_centro_alertas` y
+  `20260922091706_marca_evaluacion_alertas`).
+  - `alertas`: una fila por alerta. Abre, se CIERRA con su segunda marca y nunca se borra ni
+    se duplica. Unicidad de la abierta: `@@unique(sucursal_id, tipo, llave_abierta)`.
+    `llave_abierta` = `llave` mientras está abierta y NULL al cerrar (los NULL no chocan).
+  - CHECKs a mano al final de la primera migración: abierta ⇔ `llave_abierta` presente e
+    igual a `llave` ⇔ sin motivo; `cerrada_at >= abierta_at`; `umbral > 0`.
+  - `llave` = `''` (sin reporte), folio (mesa / sin imprimir) o día local AAAA-MM-DD (caída).
+    `umbral` = el de la regla cuando abrió ("la regla que la produjo").
+  - `reglas_alerta` por empresa. Sin fila = regla por defecto.
+  - `alertas_evaluacion`: marca de agua por empresa (ver el bloqueo B1, abajo).
+- **Reglas** (`api/src/alertas/reglas.ts`):
+  - sucursal sin reportar > 10 min (o nunca), severidad crítica;
+  - mesa abierta > 60 min;
+  - cuenta con `impreso === false` y > 30 min;
+  - caída de venta > 30 % contra el mismo día de la semana pasada a la misma altura
+    (`alturaAl` de F2-220, por zona, con `comparativoSucursales`, sin cálculo propio), con
+    base de al menos 5 cuentas.
+  - Importes y % del `detalle` van SIEMPRE como texto decimal (`pesos()` / Decimal).
+- **Evaluación en dos fases** (`api/src/alertas/alertas.service.ts`):
+  - `observar`: sólo lecturas con scope de la empresa, sin candado y sin reglas.
+  - `aplicar`: dentro de `EscrituraAlertas.bajoCandado` (helper de scope,
+    `api/src/scope/escritura-alertas.ts`). Es UNA transacción con
+    `pg_advisory_xact_lock(hashtext('alertas:' || empresa))`, `lock_timeout` 4 s y
+    `statement_timeout` 5 s. Adentro se leen la marca, las reglas, las abiertas, la empresa
+    activa y las sucursales activas; el evaluador PURO (`evaluador.ts`) decide; primero se
+    cierra y luego se abre.
+  - Programador (`programador.ts`): `ALERTAS_INTERVALO_S`, 60 s por defecto; 0 lo apaga; en
+    `NODE_ENV=test` va apagado.
+    - Primer tick al arrancar y sin ticks solapados.
+    - Una empresa que falla no detiene a las demás.
+    - Recorre las empresas activas y también las inactivas que todavía tengan abiertas (las
+      cierra con `empresa_inactiva`).
+- **Endpoints:**
+  - `GET /alertas/abiertas` sin paginar;
+  - `GET /alertas/historial` con 50 por página;
+  - `GET /alertas/reglas`;
+  - `PUT /alertas/reglas/:tipo` (sólo admins): guarda, OBSERVA con el candado tomado y
+    aplica en la misma transacción. AC2 se cumple sin esperar al tick. Responde 503 sólo por
+    `lock_timeout` (55P03).
+  - Empresa ajena = 404; empresa propia con sucursal ajena = 404; visor en PUT = 403 de ruta.
+  - Auditoría `regla_alerta.editar`.
+- **Web:**
+  - **Campana** en `Topbar` (`layout/Campana.tsx`). Su número es `data.length` de la MISMA
+    consulta (`['alertas','abiertas',emp,suc]`) que pintan el panel `/alertas` y la tarjeta
+    del Resumen (AC3). Sin dato no pinta "0"; con error lo dice en el aria-label.
+  - **Vista `/alertas`** (`paginas/Alertas.tsx`): abiertas con la severidad en palabras e
+    historial paginado con sus dos marcas, en la zona de la sucursal.
+  - **Administración → pestaña "Alertas"** (`paginas/admin/ReglasAlertas.tsx`): interruptor y
+    umbral por regla; guardar invalida `['alertas']`.
+  - El **Resumen** dejó su cálculo provisional de F2-220 y lee el centro de alertas.
+- **Seed:** `npm run seed` ahora corre cuatro seeds (`seed:alertas` al final). Siembra 57
+  alertas CERRADAS de 14 días. Las abiertas NO se siembran: las abre el API al arrancar.
+- **Backlog:** agregué "Y además (de F2-224)" en las fichas de F2-110 (folios bajos) y F2-121
+  (bajo mínimo). Esas reglas no existen porque todavía no hay datos: esas tareas agregan su
+  tipo al enum, su regla y su condición.
+
+**Decisiones que tomé y por qué.** Todas llevan `DECISION PROVISIONAL (nocturno)` en el
+código.
+- **Defaults:** 10/60/30 min salen de la ficha. El 30 % de caída NO lo fija la ficha ("por
+  encima de un umbral"): lo elegí conservador (`reglas.ts`).
+- **Severidad fija por tipo:** sin reporte = crítica, lo demás = advertencia (`reglas.ts`).
+- **"Nunca ha reportado" es alerta crítica** (`evaluador.ts`): una sucursal recién dada de
+  alta nace alertada. Era lo que ya decía el Resumen de F2-220.
+- **Caída con base de al menos 5 cuentas** (`CUENTAS_BASE_MINIMAS`), porque 1 contra 0 no es
+  −100 %. Con base chica el día NO se juzga. La caída de un día anterior se cierra aunque hoy
+  no se pueda juzgar.
+- **Mesa y sin imprimir sólo con snapshot recibido hace ≤ 90 s** (`SNAPSHOT_VIVO_S`, espejo
+  del web; `reglas.spec.ts` lee el archivo del web y falla si divergen).
+  - Con un snapshot viejo NO abren ni cierran. Al volver la lectura cierran con la hora de
+    ESA evaluación, porque la hora real no se conoce.
+  - Consecuencia visible: con el snapshot del seed ya viejo, cambiar un umbral de mesa NO
+    mueve esas alertas (apagar la regla sí las cierra). Se arregla re-sembrando las mesas.
+- **La caída sólo se juzga si la sucursal reportó dentro del umbral de sin reporte:** sin eso,
+  la venta de hoy está incompleta.
+- **"Último reporte"** = lo más reciente entre `agente_contacto` y el último snapshot
+  recibido.
+- **Las alertas del Resumen ahora pueden ir hasta ~60 s detrás del Monitor** (antes se
+  calculaban en vivo). Es el precio de que la campana, el panel y el Resumen digan lo mismo.
+  Ningún test de paridad (AC1 de F2-220) dependía de eso.
+- **El seed se ancla al día UTC de `ahora`:** correrlo OTRO día mueve las mismas filas
+  (mismos ids) a las fechas nuevas. No es una falla de idempotencia: con el mismo `ahora` el
+  resultado es idéntico.
+- La tabla de reglas no se siembra: sin fila vale el default (`porDefecto: true`).
+
+**El bloqueo B1 del entregable, para que nadie lo deshaga.**
+- **El problema:** el candado ordena las APLICACIONES, no las observaciones. Una observación
+  tomada fuera del candado (el tick u otra réplica) podía aplicarse después de una más nueva.
+  Eso cerraba con una hora anterior a la apertura (el CHECK truena y da 500) o abría una fila
+  fantasma.
+- **El arreglo:** la marca de agua `alertas_evaluacion`, que se lee y se avanza bajo el
+  candado.
+  - Se descarta la observación de fuera con `observadoAt < marca` (devuelve `false` y no
+    escribe nada).
+  - Se escribe siempre con `max(observadoAt, marca)`, así que ningún cierre queda antes de su
+    apertura aunque el reloj retroceda.
+  - El PUT observa ya con el candado tomado (siempre es la observación más nueva).
+- Hay tests deterministas de orden invertido en `alertas.e2e.spec.ts`. Si quitas la
+  comparación con la marca, fallan 2.
+
+**Riesgos conocidos** (observaciones del revisor que no bloquean).
+- **El PUT observa reteniendo el candado y una conexión.** `observar` abre sus propias
+  conexiones (un snapshot por sucursal y las ventas por zona) mientras la transacción del PUT
+  tiene la suya. Con un pool chico y varios PUT a la vez se puede agotar el pool. Además los
+  ticks de esa empresa pueden recibir 55P03 si `observar` tarda más de 4 s (sólo queda en el
+  log). Salidas posibles: acotar el `Promise.all` de snapshots, subir `connection_limit`, o en
+  el PUT leer la marca antes de observar.
+- **Una observación con la MISMA hora que la marca sí se aplica** (la comparación es `<`). No
+  viola el CHECK, pero dos observaciones del mismo milisegundo con datos distintos podrían
+  abrir y cerrar una fila de duración cero. Con un reloj real es casi imposible. Se usa `<` a
+  propósito: con `<=`, los tests con reloj fijo descartarían observaciones legítimas.
+
+**Trampas que encontré.**
+- **`prisma migrate dev` no pudo reemplazar el DLL del motor** (EPERM) porque en esta máquina
+  hay un `node dist/main` corriendo: el `npm run dev` con `nest start --watch`. Los tipos y el
+  `index.js` sí se generan (el DLL es el mismo). Borra los `query_engine-windows.dll.node.tmp*`
+  que quedan.
+- **Ese `nest start --watch` se recompila con los archivos de la rama.** Desde ahora corre el
+  programador de alertas cada 60 s sobre la base de desarrollo, que es la MISMA que usan los
+  tests. Con `--runInBand` no rompió nada, pero si un e2e de alertas sale raro, apágalo o pon
+  `ALERTAS_INTERVALO_S=0` en tu `api/.env` local.
+- **`npx jest` sin `--runInBand` da deadlocks falsos** (68 fallos) porque las suites comparten
+  los fixtures. Usa `npm test` o `npx jest --runInBand`.
+- `SELECT pg_advisory_xact_lock(...)` va con `$executeRaw`. Con `$queryRaw`, Prisma intenta
+  leer una columna `void`.
+- `prettier --write src/scope/*.spec.ts` tocó el fin de línea de specs ajenos. Git no lo cuenta
+  como cambio de contenido, pero formatea sólo tus archivos.
+- El API NO lleva el prefijo `/api` (`POST /auth/login`); ese prefijo lo pone el proxy de Vite.
+- Un heredoc de bash con `'alertas:' || empresa` dentro murió por la comilla. Para textos
+  largos usa Write.
+
+**Qué quedó abierto.**
+- `para(scope).alerta.updateMany` sigue existiendo por el helper genérico: alguien podría
+  escribir alertas sin candado. Hoy nadie lo hace. Si molesta, se excluye el modelo de
+  `updateMany` en el helper (tarea aparte).
+- Bajo mínimo y folios: fuera (ver las notas en el backlog).
+- No se verificó `/alertas` en Chrome ni a 390 px (la tabla del historial lleva
+  `overflow-x-auto`). Va para F2-250, con las demás vistas de la Ronda 2.
+- Avisar de una alerta por correo o push no lo pedía la ficha. Encaja en F2-141 o F2-146.
+- Si el agente real reusa el folio de una cuenta abierta, su alerta se cierra y se abre otra.
+  Es un supuesto anotado en §5; lo confirma F1-023.
+
+**Tests.**
+- **API, nuevos:**
+  - `alertas/evaluador.spec.ts`.
+  - `alertas/reglas.spec.ts` (espejo del web e intervalo).
+  - `alertas/alertas.e2e.spec.ts`, contra Postgres con reloj fijo y los snapshots del seed:
+    - AC1: una sola fila con sus dos marcas;
+    - AC2: 60 → 200 → 60 por el PUT;
+    - AC4: la regla apagada cierra sin borrar el historial;
+    - idempotencia (tres evaluaciones seguidas);
+    - caída con cifras a mano y `jsonb_typeof` = string;
+    - las dos carreras B1 (plan y entregable) y concurrencia real;
+    - scope: 404, 403 y 400;
+    - helper: FK compuesta y lecturas clavadas a la empresa;
+    - empresa inactiva.
+  - `prisma/seed-alertas.spec.ts`.
+- **API, adaptados** (no aflojados):
+  - `instalacion.spec`: cuatro seeds;
+  - `openapi.spec`: las rutas nuevas y un test nuevo;
+  - `scope.helper.spec` y `scoped-prisma.service.spec`: los modelos nuevos.
+- **Web, nuevos:**
+  - `paginas/Alertas.test.tsx` (11): AC3 con la misma consulta, cambio simultáneo, vacío,
+    error, enlace, historial y paginación, enlace de admin, y reglas con PUT y 400.
+  - `alertas/textos.test.ts`.
+- **Web, adaptados:** `Administracion.test` y `Agentes.test` (pestaña Alertas) y
+  `Resumen.test` (las alertas vienen del endpoint nuevo).
+- **Números:**
+  - API: lint y typecheck limpios; jest **1082/1082** (53 suites, 8 snapshots, 0 skips).
+  - Web: build y lint limpios; vitest **850/850** (57 archivos, 0 skips).
+- **En vivo** (API de la rama en :3099 con el seed): 61 abiertas (Norte sin reportar, 31
+  mesas, 29 sin imprimir) y 119 en el historial. El PUT 60 → 200 → 60 dio 31 → 0 → 31, y el
+  umbral 0 dio 400.
+
+**Qué haría distinto.** Pensar el ORDEN de las observaciones desde el plan, no sólo la
+exclusión mutua: un candado sobre la escritura no ordena lo que se leyó antes de tomarlo. La
+marca de agua (u observar bajo el candado) debió estar en el primer diseño.

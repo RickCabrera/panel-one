@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router';
 
 import { useMinuto } from '../consultas/useMinuto';
+import { useAlertasAbiertas } from '../alertas/consultas';
 import { useAlcance } from '../filtros/alcance';
 import { incluyeHoy, TIPOS_PERIODO } from '../filtros/periodo';
 import { usePeriodo } from '../filtros/usePeriodo';
@@ -53,6 +54,7 @@ export function Resumen() {
   const baseMes = useVentas('resumen', filtro, mes.base.rango, true, mes.base.alturaAl);
 
   const mesas = useMesasAbiertas(filtro);
+  const alertas = useAlertasAbiertas(filtro);
 
   // Del periodo de la cabecera.
   const autoRefresco = rango !== null && incluyeHoy(rango, hoy);
@@ -142,7 +144,11 @@ export function Resumen() {
       )}
 
       <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3">
-        <TarjetaAlertas mesas={mesas} enlaceMonitor={`/mesas${queryVista(parametros)}`} />
+        <TarjetaAlertas
+          alertas={alertas}
+          enlaceAlertas={`/alertas${queryVista(parametros)}`}
+          enlaceMonitor={`/mesas${queryVista(parametros)}`}
+        />
       </div>
     </Vista>
   );

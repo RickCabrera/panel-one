@@ -534,6 +534,28 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
 
 ---
 
+- **Lo que el centro de alertas (F2-224) supone de esta sección.** ⚠️ **SUPUESTO no
+  validado; no es un hallazgo** (la tarea no leyó SR). El API evalúa sus alertas sobre el
+  ÚLTIMO snapshot de cada sucursal, con la MISMA forma provisional de arriba, leída en
+  `api/src/alertas/observar.ts` (espejo de `leerMesa`):
+  - Usa sólo `folio`, `mesa`, `abiertoAt` (ISO con zona) e `impreso`. El **`folio` es la
+    identidad de la alerta** entre lecturas: una cuenta sin folio, o con un folio repetido
+    dentro del mismo snapshot, se ve en el Monitor pero **no abre alerta**. Si en SR el folio
+    de una cuenta abierta cambia (o se reusa) mientras sigue abierta, la alerta se cerraría y
+    abriría otra: lo tiene que confirmar F1-023.
+  - Minutos abierta: la misma regla del Monitor (`capturadoAt − abiertoAt` + edad de
+    recepción), truncados. "Mesa abierta" alerta con `> umbral` (60 por defecto, el borde
+    del semáforo rojo); "cuenta sin imprimir" con `impreso === false` y `> umbral` (30).
+    `impreso` ausente no alerta.
+  - Sólo con un snapshot recibido hace ≤ 90 s (`SNAPSHOT_VIVO_S`, espejo de
+    `UMBRAL_DESCONEXION_S`; un test del API lee `web/.../mesas/reglas.ts` y falla si
+    divergen). Con uno más viejo esas alertas ni abren ni cierran; al volver la lectura, las
+    que ya no están se cierran con la hora de ESA evaluación, no con la hora real del cierre
+    en el POS (que no conocemos).
+  - "Sucursal sin reportar" mide lo más reciente entre `agente_contacto` y el último
+    snapshot recibido (reloj del servidor). Depende del mismo supuesto de F1-061: que el
+    agente mande un lote por ciclo aunque no haya cheques.
+
 > ⚠️ **Sobre §6–§10 y el seed maestro (F2-201).** `api/prisma/seed-maestro/` genera
 > productos, grupos, precios por sucursal, meseros, clientes, áreas y canales, insumos,
 > almacenes, pólizas, existencias, recetas, compras y gastos **sintéticos**. Esas formas

@@ -14,12 +14,34 @@ describe('Contrato OpenAPI', () => {
     expect(versionado.replace(/\r\n/g, '\n')).toBe(serializar(generado));
   });
 
+  it('centro de alertas (F2-224): códigos, roles y dinero como texto en el detalle', async () => {
+    const { paths } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/alertas/abiertas']?.get)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/alertas/historial']?.get)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/alertas/reglas']?.get)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/alertas/reglas/{tipo}']?.put)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+      '503',
+    ]);
+    expect(paths['/alertas/reglas/{tipo}']?.put?.description).toContain('misma transacción');
+    expect(JSON.stringify(paths['/alertas/abiertas'])).toContain('AlertaDto');
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
       [
         '/agente/yo',
         '/agentes/estado',
+        '/alertas/abiertas',
+        '/alertas/historial',
+        '/alertas/reglas',
+        '/alertas/reglas/{tipo}',
         '/auth/login',
         '/auth/logout',
         '/auth/me',

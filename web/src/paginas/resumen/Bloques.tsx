@@ -1,11 +1,10 @@
 import { Link } from 'react-router';
 
-import type { MesasSucursal, ProductoTop, Resumen, VentaSucursal } from '../../api/tipos';
+import { describirAlerta, NOMBRE_SEVERIDAD } from '../../alertas/textos';
+import type { Alerta, MesasSucursal, ProductoTop, Resumen, VentaSucursal } from '../../api/tipos';
 import { aCentavos, pesos } from '../../dinero/dinero';
 import { useAhora } from '../mesas/consultas';
-import { armarMonitor } from '../mesas/reglas';
-import { Esqueleto, ErrorTarjeta, SegunEstado, Tarjeta, Vacio } from '../inicio/Tarjeta';
-import { edadLegible } from '../inicio/ventaEnVivo';
+import { Esqueleto, SegunEstado, Tarjeta, Vacio } from '../inicio/Tarjeta';
 import type { Comparable } from './comparables';
 import { delta, deltaImporte, diferenciaEnPesos, type Delta } from './delta';
 import { avisoIncompleta, mejorYPeor } from './reglas';
@@ -358,89 +357,73 @@ export function TarjetaTop5({
   );
 }
 
-/** Minutos a partir de los cuales una mesa abierta es alerta (backlog F2-220). */
-export const MINUTOS_ALERTA_MESA = 60;
+/** Cuántas alertas abiertas lista el Resumen; el resto, en el centro de alertas. */
+export const MAX_ALERTAS_RESUMEN = 8;
 
 /**
- * Las alertas activas mientras no exista el centro de alertas (F2-224): sucursales que no
- * reportan y mesas con MÁS de 60 minutos. Se filtra por minutos, no por color del semáforo,
- * aunque hoy coincidan (`semaforo()` da rojo en > 60).
+ * Las alertas activas del alcance: la MISMA consulta que la campana y el centro de alertas
+ * (F2-224), que reemplaza el cálculo provisional de F2-220. Llegan del API, que las evalúa
+ * cada minuto: pueden ir hasta ~1 min detrás del Monitor, a cambio de que todas las vistas
+ * digan lo mismo.
  */
 export function TarjetaAlertas({
-  mesas,
+  alertas,
+  enlaceAlertas,
   enlaceMonitor,
 }: {
-  mesas: Consulta<MesasSucursal[]>;
+  alertas: Consulta<Alerta[]>;
+  enlaceAlertas: string;
   enlaceMonitor: string;
 }) {
-  const ahora = useAhora();
   return (
     <Tarjeta titulo="Alertas activas">
-      {mesas.isError ? (
-        <ErrorTarjeta error={mesas.error} />
-      ) : mesas.isPending || mesas.data === undefined ? (
-        <Esqueleto lineas={2} />
-      ) : (
-        <ListaAlertas
-          filas={mesas.data}
-          respuestaAt={mesas.dataUpdatedAt}
-          ahora={ahora}
-          enlaceMonitor={enlaceMonitor}
-        />
-      )}
+      <SegunEstado consulta={alertas} esqueleto={<Esqueleto lineas={2} />}>
+        {(filas) => (
+          <>
+            {filas.length === 0 ? (
+              <Vacio>
+                Sin alertas abiertas: todas las sucursales reportan y ninguna regla se cumple.
+              </Vacio>
+            ) : (
+              <ul className="space-y-1 text-sm" data-testid="resumen-alertas">
+                {filas.slice(0, MAX_ALERTAS_RESUMEN).map((a) => (
+                  <li key={a.id}>
+                    <span
+                      className={
+                        a.severidad === 'critica'
+                          ? 'font-semibold text-peligro'
+                          : 'font-semibold text-aviso'
+                      }
+                    >
+                      {NOMBRE_SEVERIDAD[a.severidad]}:
+                    </span>{' '}
+                    {describirAlerta(a)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {filas.length > MAX_ALERTAS_RESUMEN && (
+              <p className="mt-1 text-xs text-tinta-tenue">
+                y {filas.length - MAX_ALERTAS_RESUMEN} más en el centro de alertas.
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap gap-4 text-sm">
+              <Link
+                to={enlaceAlertas}
+                className="text-acento-texto underline-offset-2 hover:underline"
+              >
+                Ver el centro de alertas
+              </Link>
+              <Link
+                to={enlaceMonitor}
+                className="text-acento-texto underline-offset-2 hover:underline"
+              >
+                Ver el monitor de mesas
+              </Link>
+            </div>
+          </>
+        )}
+      </SegunEstado>
     </Tarjeta>
-  );
-}
-
-function ListaAlertas({
-  filas,
-  respuestaAt,
-  ahora,
-  enlaceMonitor,
-}: {
-  filas: MesasSucursal[];
-  respuestaAt: number;
-  ahora: number;
-  enlaceMonitor: string;
-}) {
-  const monitor = armarMonitor(filas, respuestaAt, ahora);
-  const alertas: { clave: string; texto: string }[] = [];
-  for (const s of monitor.sucursales) {
-    if (s.estado === 'desconectada') {
-      alertas.push({
-        clave: `suc-${s.sucursalId}`,
-        texto: `${s.nombre}: desconectada, última lectura ${s.edadSegundos === null ? 'sin fecha' : edadLegible(s.edadSegundos)}.`,
-      });
-    } else if (s.estado === 'sin-reporte') {
-      alertas.push({ clave: `suc-${s.sucursalId}`, texto: `${s.nombre}: nunca ha reportado.` });
-    }
-  }
-  const largas = monitor.mesas
-    .filter((m) => m.minutos !== null && m.minutos > MINUTOS_ALERTA_MESA)
-    .sort((a, b) => (b.minutos ?? 0) - (a.minutos ?? 0));
-  for (const m of largas) {
-    alertas.push({
-      clave: `mesa-${m.clave}`,
-      texto: `Mesa ${m.mesa ?? 'sin nombre'} (${m.sucursal}): ${m.minutos} min abierta.`,
-    });
-  }
-  return (
-    <>
-      {alertas.length === 0 ? (
-        <Vacio>Sin alertas: todas las sucursales reportan y ninguna mesa pasa de 60 min.</Vacio>
-      ) : (
-        <ul className="space-y-1 text-sm" data-testid="resumen-alertas">
-          {alertas.map((a) => (
-            <li key={a.clave}>{a.texto}</li>
-          ))}
-        </ul>
-      )}
-      <Link
-        to={enlaceMonitor}
-        className="mt-3 inline-block text-sm text-acento-texto underline-offset-2 hover:underline"
-      >
-        Ver el monitor de mesas
-      </Link>
-    </>
   );
 }

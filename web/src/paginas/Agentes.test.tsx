@@ -142,6 +142,7 @@ describe('Administración › Agentes: la tabla', () => {
       'Sucursales',
       'Usuarios',
       'Agentes',
+      'Alertas',
     ]);
     await userEvent.click(screen.getByRole('tab', { name: 'Agentes' }));
     expect(await screen.findByText('Esta empresa no tiene sucursales activas.')).toBeVisible();
@@ -154,6 +155,7 @@ describe('Administración › Agentes: la tabla', () => {
       'Sucursales',
       'Usuarios',
       'Agentes',
+      'Alertas',
       'Empresas',
     ]);
   });

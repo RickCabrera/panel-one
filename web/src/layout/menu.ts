@@ -32,9 +32,15 @@ import type { Rol } from '../api/tipos';
 import { ROLES_ADMIN } from '../auth/roles';
 
 /** Pestañas de Administración (`?tab=`), las mismas que `Administracion.tsx`. */
-export type PestanaAdmin = 'sucursales' | 'usuarios' | 'agentes' | 'empresas';
+export type PestanaAdmin = 'sucursales' | 'usuarios' | 'agentes' | 'alertas' | 'empresas';
 const PESTANA_ADMIN_POR_DEFECTO: PestanaAdmin = 'sucursales';
-const PESTANAS_ADMIN: readonly string[] = ['sucursales', 'usuarios', 'agentes', 'empresas'];
+const PESTANAS_ADMIN: readonly string[] = [
+  'sucursales',
+  'usuarios',
+  'agentes',
+  'alertas',
+  'empresas',
+];
 
 /** A dónde lleva una entrada cuyo módulo ya existe. */
 export interface Destino {

@@ -4,11 +4,12 @@ import { useUsuario } from '../auth/contexto';
 import { useAlcance } from '../filtros/alcance';
 import { Agentes } from './admin/Agentes';
 import { Empresas } from './admin/Empresas';
+import { ReglasAlertas } from './admin/ReglasAlertas';
 import { Sucursales } from './admin/Sucursales';
 import { Usuarios } from './admin/Usuarios';
 import { Vista } from './Vista';
 
-type Pestana = 'sucursales' | 'usuarios' | 'agentes' | 'empresas';
+type Pestana = 'sucursales' | 'usuarios' | 'agentes' | 'alertas' | 'empresas';
 
 const PARAM_PESTANA = 'tab';
 
@@ -16,6 +17,7 @@ const TEXTO: Record<Pestana, string> = {
   sucursales: 'Sucursales',
   usuarios: 'Usuarios',
   agentes: 'Agentes',
+  alertas: 'Alertas',
   empresas: 'Empresas',
 };
 
@@ -31,8 +33,8 @@ export function Administracion() {
   const [parametros, setParametros] = useSearchParams();
   const pestanas: Pestana[] =
     usuario.rol === 'admin_global'
-      ? ['sucursales', 'usuarios', 'agentes', 'empresas']
-      : ['sucursales', 'usuarios', 'agentes'];
+      ? ['sucursales', 'usuarios', 'agentes', 'alertas', 'empresas']
+      : ['sucursales', 'usuarios', 'agentes', 'alertas'];
   const pedida = parametros.get(PARAM_PESTANA) as Pestana | null;
   const actual: Pestana = pedida && pestanas.includes(pedida) ? pedida : 'sucursales';
 
@@ -49,6 +51,8 @@ export function Administracion() {
     contenido = <Empresas />;
   } else if (!empresa) {
     contenido = <p className="text-sm text-tinta-tenue">Cargando empresa…</p>;
+  } else if (actual === 'alertas') {
+    contenido = <ReglasAlertas key={empresa.id} empresa={empresa} />;
   } else if (actual === 'agentes') {
     contenido = <Agentes key={empresa.id} empresa={empresa} />;
   } else if (actual === 'usuarios') {

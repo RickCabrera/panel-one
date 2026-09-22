@@ -44,6 +44,9 @@ model Empresa {
   usuarios           Usuario[]
   formasPagoCatalogo FormaPagoCatalogo[]
   correosEnviados    CorreoEnviado[]
+  alertas            Alerta[]
+  reglasAlerta       ReglaAlerta[]
+  alertaEvaluacion   AlertaEvaluacion?
 
   @@map("empresas")
 }
@@ -67,6 +70,7 @@ model Sucursal {
   agenteContacto AgenteContacto?
   cheques        Cheque[]
   mesaSnapshots  MesaSnapshot[]
+  alertas        Alerta[]
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -369,4 +373,104 @@ model CorreoEnviado {
 
   @@index([empresaId])
   @@map("correos_enviados")
+}
+
+// ---------------------------------------------------------------------------
+// Centro de alertas (F2-224). Todo es Postgres nuestro: nada se lee ni se escribe
+// en SoftRestaurant. Lo único que escribe estas tablas es `EscrituraAlertas`
+// (helper de scope), bajo un candado por empresa (`pg_advisory_xact_lock`): la
+// evaluación y el cambio de una regla van en serie, también entre réplicas.
+// ---------------------------------------------------------------------------
+
+enum TipoAlerta {
+  sucursal_sin_reporte
+  mesa_abierta
+  cuenta_sin_imprimir
+  caida_venta
+
+  @@map("tipo_alerta")
+}
+
+enum SeveridadAlerta {
+  critica
+  advertencia
+
+  @@map("severidad_alerta")
+}
+
+enum MotivoCierreAlerta {
+  // La condición dejó de cumplirse (o el umbral nuevo ya no la alcanza).
+  condicion
+  regla_apagada
+  sucursal_inactiva
+  empresa_inactiva
+
+  @@map("motivo_cierre_alerta")
+}
+
+// Una fila por alerta: abre cuando la condición empieza y se CIERRA (no se borra ni
+// se duplica) cuando deja de cumplirse. El historial conserva las dos marcas.
+//
+// Unicidad de la abierta: `llave_abierta` vale `llave` mientras la alerta está
+// abierta y NULL al cerrarla. Con el único (sucursal, tipo, llave_abierta), la misma
+// condición nunca tiene dos filas abiertas (Postgres trata los NULL como distintos:
+// las cerradas no chocan). Los CHECK que atan `llave_abierta`, `cerrada_at` y
+// `motivo_cierre` viven SÓLO en la migración `..._centro_alertas` (Prisma no los
+// modela).
+model Alerta {
+  id           String              @id @default(uuid()) @db.Uuid
+  empresaId    String              @map("empresa_id") @db.Uuid
+  sucursalId   String              @map("sucursal_id") @db.Uuid
+  tipo         TipoAlerta
+  severidad    SeveridadAlerta
+  // El sujeto dentro de la sucursal: '' (sin reporte), el folio de la cuenta (mesa
+  // abierta, sin imprimir) o el día local AAAA-MM-DD (caída de venta).
+  llave        String
+  llaveAbierta String?             @map("llave_abierta")
+  // El umbral de la regla CUANDO abrió: la regla que la produjo, aunque luego cambie.
+  umbral       Int
+  // Lo que se vio al abrir. Sin floats: los importes van como texto decimal.
+  detalle      Json
+  abiertaAt    DateTime            @map("abierta_at") @db.Timestamptz(3)
+  cerradaAt    DateTime?           @map("cerrada_at") @db.Timestamptz(3)
+  motivoCierre MotivoCierreAlerta? @map("motivo_cierre")
+
+  empresa  Empresa  @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "alertas_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, tipo, llaveAbierta], map: "alertas_abierta_unica")
+  @@index([empresaId, cerradaAt])
+  @@index([empresaId, abiertaAt])
+  @@map("alertas")
+}
+
+// Configuración de cada regla por empresa. Sin fila = la regla por defecto
+// (`src/alertas/reglas.ts`). CHECK `umbral > 0` a mano en la migración.
+model ReglaAlerta {
+  id        String     @id @default(uuid()) @db.Uuid
+  empresaId String     @map("empresa_id") @db.Uuid
+  tipo      TipoAlerta
+  activa    Boolean
+  umbral    Int
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+
+  // Empieza por empresa_id: también es el índice por empresa de esta tabla.
+  @@unique([empresaId, tipo], map: "reglas_alerta_empresa_id_tipo_key")
+  @@map("reglas_alerta")
+}
+
+// Marca de agua de la evaluación de alertas por empresa (F2-224): el instante de la última
+// observación APLICADA. Se lee y se avanza bajo el candado de la empresa. Una observación
+// tomada fuera del candado con un instante anterior a la marca llegó tarde (otra más nueva ya
+// se aplicó) y se descarta: aplicarla cerraría con una hora anterior a la apertura o abriría
+// una fila fantasma.
+model AlertaEvaluacion {
+  empresaId   String   @id @map("empresa_id") @db.Uuid
+  observadoAt DateTime @map("observado_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+
+  @@map("alertas_evaluacion")
 }

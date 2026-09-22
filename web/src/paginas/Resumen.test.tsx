@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { MesasSucursal, ProductoTop, Resumen, VentaSucursal } from '../api/tipos';
+import type { Alerta, MesasSucursal, ProductoTop, Resumen, VentaSucursal } from '../api/tipos';
 import { Proveedores, Rutas } from '../App';
 import { terminarSesion } from '../auth/sesion';
 import { crearQueryClient } from '../consultas/queryClient';
@@ -433,29 +433,73 @@ describe('AC3 · sin datos en la base, el Δ es "—", no "+100 %"', () => {
   });
 });
 
+// F2-224: las alertas del Resumen son las del centro de alertas (misma consulta que la campana),
+// ya no el cálculo provisional de F2-220 sobre las mesas. Qué abre una alerta (> 60 min, sin
+// reporte, etc.) lo prueba el API (`api/src/alertas/*.spec.ts`); aquí, que se pintan tal cual.
+const ALERTAS: Alerta[] = [
+  {
+    id: 'al-1',
+    sucursalId: A2.id,
+    sucursal: 'Tijuana',
+    tipo: 'sucursal_sin_reporte',
+    severidad: 'critica',
+    llave: '',
+    umbral: 10,
+    detalle: { nunca: false, edadSegundos: 900 },
+    abiertaAt: hace(300),
+    cerradaAt: null,
+    motivoCierre: null,
+  },
+  {
+    id: 'al-2',
+    sucursalId: SUCURSAL_A1.id,
+    sucursal: 'Centro',
+    tipo: 'mesa_abierta',
+    severidad: 'advertencia',
+    llave: 'F-9',
+    umbral: 60,
+    detalle: { folio: 'F-9', mesa: '9', minutos: 61 },
+    abiertaAt: hace(600),
+    cerradaAt: null,
+    motivoCierre: null,
+  },
+];
+
 describe('Alertas activas', () => {
-  it('sucursales desconectadas y mesas de MÁS de 60 min (60 justos no), con enlace al monitor', async () => {
-    api();
+  it('pinta las abiertas del centro de alertas, con enlaces al centro y al monitor', async () => {
+    const falsa = api(true, { 'GET /alertas/abiertas': () => json(200, ALERTAS) });
     montar(`/resumen?empresa=${A}`);
     const lista = await screen.findByTestId('resumen-alertas');
     const items = within(lista)
       .getAllByRole('listitem')
       .map((li) => li.textContent);
     expect(items).toEqual([
-      'Tijuana: desconectada, última lectura hace 5 min.',
-      'Mesa 9 (Centro): 130 min abierta.',
-      'Mesa 3 (Centro): 65 min abierta.',
+      'Crítica: Tijuana: sin reportar (última lectura hace 15 min al abrir).',
+      'Advertencia: Mesa 9 (folio F-9, Centro): abierta 61 min al abrir la alerta.',
     ]);
+    expect(screen.getByRole('link', { name: 'Ver el centro de alertas' })).toHaveAttribute(
+      'href',
+      `/alertas?empresa=${A}`,
+    );
     expect(screen.getByRole('link', { name: 'Ver el monitor de mesas' })).toHaveAttribute(
       'href',
       `/mesas?empresa=${A}`,
     );
-    // La venta de hoy avisa que Tijuana no reporta: su Δ puede salir más bajo.
+    // Una sola consulta de alertas aunque la campana y la tarjeta las pinten (misma llave).
+    await waitFor(() => expect(falsa.contar('GET', '/alertas/abiertas')).toBe(1));
+    // La venta de hoy sigue avisando que Tijuana no reporta (eso sale de las mesas).
     expect(texto('resumen-venta-hoy-aviso')).toContain('Sin lectura reciente de Tijuana');
   });
 
-  it('si la API de mesas falla, lo dice: no "sin alertas"', async () => {
-    api(true, { 'GET /mesas/abiertas': () => json(500, { statusCode: 500, message: 'caída' }) });
+  it('sin alertas abiertas lo dice; si la API falla, lo dice: no "sin alertas"', async () => {
+    api(true, { 'GET /alertas/abiertas': () => json(200, []) });
+    montar(`/resumen?empresa=${A}`);
+    await waitFor(() =>
+      expect(tarjeta('Alertas activas')).toHaveTextContent('Sin alertas abiertas'),
+    );
+    cleanup();
+
+    api(true, { 'GET /alertas/abiertas': () => json(500, { statusCode: 500, message: 'caída' }) });
     montar(`/resumen?empresa=${A}`);
     await waitFor(() =>
       expect(tarjeta('Alertas activas')).toHaveTextContent('No se pudo cargar este dato.'),
