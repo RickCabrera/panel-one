@@ -424,6 +424,121 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
       );
       expect(res.status).toBe(400);
     });
+
+    // F2-140 · Comparativos: cada fila de `comparativo-sucursales` es lo que Inicio pinta para
+    // ESA sucursal (`/ventas/resumen?sucursalId=`), y las dos cuadran contra un esperado
+    // calculado a mano sobre el seed. Fechas fijas del reloj del archivo (HOY = 2026-11-15,
+    // 20:00Z): "este mes a la misma altura" y "mes anterior completo". No inserta nada: sólo lee
+    // el seed, así que no mueve los números de ningún otro caso.
+    describe('F2-140: comparativo por sucursal = dashboard individual', () => {
+      const ALTURA = '2026-11-15T20:00:00.000Z';
+
+      /** Milisegundos desde la medianoche LOCAL de `t` en `zona`. */
+      function msDelDia(t: Date, zona: string): number {
+        const partes = new Intl.DateTimeFormat('en-GB', {
+          timeZone: zona,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hourCycle: 'h23',
+        }).formatToParts(t);
+        const v = (tipo: string) => Number(partes.find((p) => p.type === tipo)?.value);
+        return ((v('hour') * 60 + v('minute')) * 60 + v('second')) * 1000 + t.getUTCMilliseconds();
+      }
+
+      /**
+       * Lo que debería decir la fila de `suc`, a mano: cuentas no canceladas cerradas en el
+       * rango (día local de SU zona); con `alturaAl`, las del último día sólo si cerraron ANTES
+       * de la hora local de ese instante en SU zona (corte exclusivo).
+       */
+      function aMano(suc: string, desde: string, hasta: string, alturaAl?: string) {
+        const zona = ZONA[suc];
+        const corte = alturaAl === undefined ? null : msDelDia(new Date(alturaAl), zona);
+        const cuentas = chequesA.filter((c) => {
+          if (c.sucursalId !== suc || c.cancelado || !c.cerradoAt) return false;
+          const dia = diaLocal(c.cerradoAt, zona);
+          if (dia < desde || dia > hasta) return false;
+          return corte === null || dia !== hasta || msDelDia(c.cerradoAt, zona) < corte;
+        });
+        const venta = cuentas.reduce((s, c) => s.plus(c.total), new Prisma.Decimal(0));
+        return {
+          venta: venta.toFixed(2),
+          cuentas: cuentas.length,
+          ticketPromedio:
+            cuentas.length === 0
+              ? null
+              : venta
+                  .div(cuentas.length)
+                  .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
+                  .toFixed(2),
+          comensales: cuentas.reduce((n, c) => n + (c.comensales ?? 0), 0),
+        };
+      }
+
+      it.each([
+        ['este mes a la misma altura', '2026-11-01', HOY, ALTURA],
+        ['mes anterior completo', '2026-10-01', '2026-10-31', undefined],
+      ])('%s', async (_nombre, desde, hasta, alturaAl) => {
+        const q = { empresaId: FX.empresaA, desde, hasta, alturaAl };
+        const filas = (await get(`/ventas/comparativo-sucursales?${Q(q)}`, USUARIOS.visorA))
+          .body as Array<Record<string, unknown>>;
+        expect(filas.map((f) => f.sucursalId).sort()).toEqual(
+          [FX.sucursalA1, FX.sucursalA2].sort(),
+        );
+        for (const suc of [FX.sucursalA1, FX.sucursalA2]) {
+          const esperado = aMano(suc, desde, hasta, alturaAl);
+          expect(esperado.cuentas).toBeGreaterThan(0);
+          const f = filas.find((x) => x.sucursalId === suc)!;
+          expect({
+            venta: f.venta,
+            cuentas: f.cuentas,
+            ticketPromedio: f.ticketPromedio,
+            comensales: f.comensales,
+          }).toEqual(esperado);
+          // Y no trae nada más que esas cifras y su identidad.
+          expect(Object.keys(f).sort()).toEqual([
+            'comensales',
+            'cuentas',
+            'nombre',
+            'sucursalId',
+            'ticketPromedio',
+            'venta',
+          ]);
+
+          const r = (await get(`/ventas/resumen?${Q({ ...q, sucursalId: suc })}`, USUARIOS.visorA))
+            .body;
+          expect({
+            venta: r.venta,
+            cuentas: r.cuentas,
+            ticketPromedio: r.ticketPromedio,
+            comensales: r.comensales.total,
+          }).toEqual(esperado);
+        }
+      });
+
+      it('el corte de Tijuana es a SU hora local (12:00 PST), no a la de CDMX (14:00)', async () => {
+        // Guarda del caso: el seed SÍ trae cuentas de Tijuana cerradas el 15-nov entre las
+        // 12:00 y las 14:00 locales. Si no las trajera, este caso no probaría nada.
+        const entre = chequesA.filter(
+          (c) =>
+            c.sucursalId === FX.sucursalA2 &&
+            !c.cancelado &&
+            c.cerradoAt !== null &&
+            diaLocal(c.cerradoAt, TIJUANA) === HOY &&
+            msDelDia(c.cerradoAt, TIJUANA) >= 12 * 3_600_000 &&
+            msDelDia(c.cerradoAt, TIJUANA) < 14 * 3_600_000,
+        );
+        expect(entre.length).toBeGreaterThan(0);
+
+        const q = { empresaId: FX.empresaA, desde: '2026-11-01', hasta: HOY, alturaAl: ALTURA };
+        const filas = (await get(`/ventas/comparativo-sucursales?${Q(q)}`, USUARIOS.visorA))
+          .body as Array<{ sucursalId: string; cuentas: number }>;
+        const tijuana = filas.find((f) => f.sucursalId === FX.sucursalA2)!;
+        const conHoraDeCdmx = aMano(FX.sucursalA2, '2026-11-01', HOY, '2026-11-15T22:00:00.000Z');
+        expect(tijuana.cuentas).toBe(aMano(FX.sucursalA2, '2026-11-01', HOY, ALTURA).cuentas);
+        expect(conHoraDeCdmx.cuentas - tijuana.cuentas).toBe(entre.length);
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
