@@ -155,11 +155,16 @@ La API no arranca sin `JWT_ACCESS_SECRET` y `JWT_REFRESH_SECRET` (al menos 32 ca
 y distintos entre sí). `api/.env.example` trae unos de relleno para local y el comando
 para generar los tuyos. Si tu `api/.env` es anterior a F1-011, agrégaselos.
 
-> **Quién lee `api/.env`.** No hay `dotenv` ni `ConfigModule`: tanto la CLI de Prisma
-> como la API en marcha reciben esas variables porque **el cliente de Prisma carga
-> `api/.env` solo** al importarse. Una variable que ya exista en el entorno gana sobre
-> la del archivo (así se puede cambiar `PORT` o `DATABASE_URL` para una corrida sin
-> editar `.env`).
+> **Quién lee `api/.env`.** Dos lectores distintos: la **CLI de Prisma** lo carga sola
+> para sus comandos (`migrate`, `db seed`); la **API** y los **seeds sueltos**
+> (`seed:ventas`, `seed:mesas`) lo cargan con `cargarEnvLocal`
+> (`api/src/config/cargar-env.ts`, F2-200), en la primera línea de `main.ts` y de cada
+> seed. Antes de F2-200 ninguno de ellos lo leía: el cliente de Prisma ni lo vuelca a
+> `process.env` ni resuelve `DATABASE_URL` desde él. `npm run dev` moría con
+> `JWT_ACCESS_SECRET es obligatorio` y `npm run seed:ventas` con `Environment variable
+> not found: DATABASE_URL`, aunque el archivo existiera.
+> En los dos casos, una variable que ya exista en el entorno **gana** sobre la del
+> archivo: así se cambia `PORT` o `DATABASE_URL` para una corrida sin editar `.env`.
 
 Los tests de `/api` (`npm test`) corren en serie contra el Postgres de `DATABASE_URL`: en
 local es tu base de desarrollo, a la que sólo le escriben el seed (idempotente) y fixtures
@@ -268,8 +273,9 @@ Encender un carril es parte del entregable de la tarea que lo habilita.
 - **`package.json#prisma` (el `seed`) sigue ahí, aunque Prisma avise que se depreca en
   Prisma 7.** Migrarlo a `prisma.config.ts` **no es directo**: con un archivo de config,
   Prisma 6 **deja de cargar `api/.env`** (`prisma validate` falla en `getConfig`), y hoy la
-  API entera recibe sus variables por esa carga (ver *Quién lee `api/.env`*, arriba).
-  Se hace junto con la subida a Prisma 7, poniendo antes una carga explícita del `.env`.
+  `migrate`, `db seed` y el propio `seed` dependen de esa carga (ver *Quién lee
+  `api/.env`*, arriba). Se hace junto con la subida a Prisma 7, con una carga explícita
+  del `.env` en el `prisma.config.ts`.
 - **El `postinstall` de `/api` (`prisma generate`) y el cliente vacío.** El
   `postinstall` propio de `@prisma/client` corre con el cwd en la **raíz** del monorepo,
   busca ahí `prisma/schema.prisma`, no lo encuentra (vive en `api/prisma/`) y deja un
