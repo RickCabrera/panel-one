@@ -1902,7 +1902,7 @@ marcan en alerta.
 > ver §10 de `docs/esquema-sr.md` (un almacén por póliza).
 
 ### F2-125 · Recetas y consumo teórico
-`[ ]` Ingesta de recetas de SR (explosión de insumos por producto). Cálculo diario de consumo
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** el lector del agente es F2-241 y los 3 insumos de control con el piloto (y la decisión abierta "¿SR descuenta por receta al vender?") son de F2-193 (ver §10 "Recetas" de esquema-sr). Ingesta de recetas de SR (explosión de insumos por producto). Cálculo diario de consumo
 teórico: ventas de Fase 1 × receta = insumo consumido esperado; comparación contra consumo
 real (movimientos F2-122) con % de variación por insumo. Vista "Recetas SoftRestaurant" con
 detalle por producto y ranking de variaciones (posibles mermas/robos).
