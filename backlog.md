@@ -1772,7 +1772,7 @@ catálogo para detectar cambios y no reenviar iguales. Modelos espejo en Postgre
 desde admin); renombrar un insumo actualiza, no duplica.
 
 ### F2-121 · Existencias y valuación
-`[ ]` Lectura periódica (cada 30 min) de existencias por almacén desde SR con costo
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** el lector del agente es F2-241 y el cuadre contra el reporte de SR es F2-193 (ver §10 de esquema-sr). Lectura periódica (cada 30 min) de existencias por almacén desde SR con costo
 promedio. Vista "Existencias" réplica de Arkhon: KPIs (artículos visibles, valor estimado $,
 atención requerida = bajo mínimo, sin existencia), tabla por artículo/sucursal/almacén
 (unidad, existencia, costo, valor, estado semáforo), filtros por sucursal y almacén,
