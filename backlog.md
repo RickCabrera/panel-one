@@ -973,6 +973,15 @@ fila explícita de "sin clasificar" cuando el cheque no trae área (nunca repart
 cambiar el mapeo recalcula los periodos pasados sin re-ingerir nada; y el mapeo sobrevive un
 re-sync de catálogos.
 
+> **Y además (de F2-221):** completa el bloque **"Por área y canal"** de Análisis (`/analisis`).
+> Hoy es un estado vacío con su explicación (`AREA_PENDIENTE` en
+> `web/src/paginas/analisis/textos.ts`) porque `cheques` no guarda área ni canal. Hace falta:
+> endpoint `GET /ventas/por-area` por el helper de scope (venta, cuentas y mezcla por área y por
+> canal, con la fila "sin clasificar"), su DTO y OpenAPI, el bloque en la vista con su CSV y su
+> paginación como los demás, y **el test que afirma Σ área = venta del periodo** (e2e a mano y
+> sobre el seed, como `api/src/ventas/analisis.e2e.spec.ts` y el bloque F2-221 de
+> `lectura.e2e.spec.ts`). Es el tercer desglose del AC de F2-221 que quedó pendiente.
+
 ## BLOQUE H · Agente
 
 > **Estas dos tareas leen SoftRestaurant, y sólo leen.** No dependen de F1-090 para

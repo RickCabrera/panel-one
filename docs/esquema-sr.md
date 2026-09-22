@@ -224,6 +224,31 @@ de arriba y lo aplican así:
 - El **comparativo** es una fila por sucursal en alcance, con la misma definición de venta
   (Σ `total`, sin cancelados); Σ comparativo = `resumen.venta` exacto.
 
+**Lo que Análisis (F2-221, `api/src/ventas/analisis.service.ts`) supone de esta sección.** No
+descubre nada de SR: son supuestos del modelo, sin validar, y se revisan en F1-090 / F2-240.
+
+- ⚠️ **SUPUESTO — `cheques.mesa` nula = cuenta sin mesa asignada.** Se muestra como "Sin mesa" y
+  no entra a la rotación. Que en SR sean mostrador o domicilio es una invención del **seed**, no
+  un hallazgo: no se dice en pantalla.
+- ⚠️ **SUPUESTO — la mesa es (sucursal, texto de `cheques.mesa`).** La "5" de una sucursal no es
+  la "5" de otra. Si SR renombra mesas, una misma mesa física sale como dos filas.
+- ⚠️ **SUPUESTO — duración de la cuenta = `cerrado_at − abierto_at`.** Si SR guarda la apertura
+  con otra semántica (hora de la primera comanda, reapertura), la duración cambia. Una duración
+  negativa (cierre antes que la apertura) no entra al promedio y se cuenta aparte
+  (`duracionesInvalidas`); no se corrige.
+- ⚠️ **SUPUESTO — día de la semana y hora del mapa de calor = los del CIERRE** en la zona de SU
+  sucursal (`dia_semana_local`, `hora_local` de la CTE `ventas`), igual que la venta por día.
+- ⚠️ **SUPUESTO (`DECISION PROVISIONAL (nocturno)` en el servicio) — el monto de un cancelado es su
+  `cheques.total` tal como llega.** Se supone que SR conserva el importe original de la cuenta
+  cancelada y no lo pone en 0 ni en negativo. Si lo pone en 0, "monto cancelado" por mesero saldrá
+  en $0.00 con cuentas > 0.
+- Los cancelados se atribuyen al `mesero` que trae el cheque cancelado, ubicado por
+  `COALESCE(cerrado_at, abierto_at)`, igual que `resumen.cancelados`.
+- ⚠️ **SUPUESTO — texto vacío no es "sin dato".** Una `mesa` en `''` sale como una mesa sin
+  nombre y cuenta en la rotación; un `mesero` en `''` sale separado de "Sin mesero". No se
+  normaliza: si SR manda vacíos en vez de nulos, se decide en F2-231 / F2-222 (o en la ingesta).
+
+
 ---
 
 ## 3. Partidas de cuentas cerradas
@@ -470,6 +495,27 @@ estable.** El contrato de ingesta no trae un id de producto de SR, así que el t
 es la suma de `partidas.total`, **antes** del descuento del cheque: no cuadra con la venta total
 y no debe compararse con ella.
 
+**Lo que el desglose por producto de Análisis (F2-221, `GET /ventas/por-producto`) supone.**
+
+- Agrupa por nombre, igual que el top (mismo supuesto de nombre estable), y trae **todos** los
+  productos, sin límite.
+- ⚠️ **SUPUESTO (`DECISION PROVISIONAL (nocturno)` en `analisis.service.ts`) — lo que no es de
+  ningún producto va en UN renglón de diferencia:** `diferenciaCuentas = venta − Σ partidas.total`.
+  Así Σ importe + diferencia = venta exacto. La diferencia se lleva el descuento de la cuenta, los
+  impuestos **si** `partidas.total` no los trae, y cualquier otro ajuste del POS. **No se sabe**
+  si `partidas.total` incluye el IVA ni cómo reparte SR el descuento de la cuenta.
+- ⚠️ **Ojo con el seed:** en `seed-ventas.ts` el IVA va DENTRO de las partidas y
+  `total = Σ partidas − descuento`, así que con el seed la diferencia sale exactamente −Σ
+  descuentos. Esa igualdad es una regla **del generador**, no evidencia de SR: con datos reales la
+  diferencia puede tener otra forma (el e2e a mano de `analisis.e2e.spec.ts` ya la prueba con un
+  total que no es Σ partidas − descuento).
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — ¿renglón de diferencia o prorrateo?** La alternativa es
+  prorratear el total de cada cuenta entre sus partidas (la venta "neta" de cada producto). Es
+  más útil para margen, pero inventa un reparto que SR no hace. Hasta decidir, el renglón.
+- La participación de cada producto se calcula sobre **Σ partidas**, no sobre la venta, y la
+  columna lo dice.
+
+
 ---
 
 ## 7. Meseros y usuarios del POS
@@ -482,6 +528,16 @@ y no debe compararse con ella.
 |---|---|---|---|
 | | | | |
 
+**Lo que Análisis (F2-221, `GET /ventas/por-mesero`) supone.** El contrato de ingesta sólo trae el
+**nombre** del mesero en `cheques.mesero` (texto, nulo permitido), sin id de SR.
+
+- ⚠️ **SUPUESTO — un mesero es (sucursal, texto).** El mismo nombre en dos sucursales son dos
+  filas: juntarlas mezclaría en silencio a dos personas que se llaman igual; separar a una misma
+  persona que trabaja en las dos es el error menos grave y además se ve. Si SR renombra a un
+  mesero, sale como dos.
+- `mesero` nulo = "Sin mesero" (una fila por sucursal).
+
+
 ---
 
 ## 8. Áreas, estaciones y canales de venta
@@ -490,6 +546,10 @@ y no debe compararse con ella.
 > comedor / mostrador / domicilio / plataformas, y por qué campo.
 
 _(pendiente)_
+
+**Estado del modelo (F2-221):** el contrato de ingesta **no trae** área, estación ni canal, y
+`cheques` no tiene dónde guardarlos. El seed maestro los genera pero no los persiste. Por eso el
+desglose "por área y canal" de Análisis queda vacío con su explicación y lo completa F2-233.
 
 ---
 

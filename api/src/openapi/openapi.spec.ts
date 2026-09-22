@@ -35,8 +35,12 @@ describe('Contrato OpenAPI', () => {
         '/sistema',
         '/ventas/comparativo-sucursales',
         '/ventas/formas-pago',
+        '/ventas/hora-dia',
         '/ventas/por-dia',
         '/ventas/por-hora',
+        '/ventas/por-mesa',
+        '/ventas/por-mesero',
+        '/ventas/por-producto',
         '/ventas/resumen',
         '/ventas/tickets',
         '/ventas/top-productos',
@@ -148,6 +152,10 @@ describe('Contrato OpenAPI', () => {
       '/ventas/formas-pago',
       '/ventas/top-productos',
       '/ventas/tickets',
+      '/ventas/por-mesero',
+      '/ventas/por-producto',
+      '/ventas/hora-dia',
+      '/ventas/por-mesa',
       '/mesas/abiertas',
       '/sucursales',
     ];
@@ -169,6 +177,15 @@ describe('Contrato OpenAPI', () => {
     expect(nombres('/ventas/por-hora')).toEqual(FILTRO);
     expect(nombres('/ventas/formas-pago')).toEqual(FILTRO);
     expect(nombres('/ventas/comparativo-sucursales')).toEqual(FILTRO);
+    // Análisis (F2-221): el mismo filtro común, sin parámetros propios.
+    for (const ruta of [
+      '/ventas/por-mesero',
+      '/ventas/por-producto',
+      '/ventas/hora-dia',
+      '/ventas/por-mesa',
+    ]) {
+      expect(nombres(ruta)).toEqual(FILTRO);
+    }
     expect(nombres('/ventas/top-productos')).toEqual([...FILTRO, 'limite', 'por'].sort());
     expect(nombres('/ventas/tickets')).toEqual(
       // `corte`: corte por recepción del export (F2-203).

@@ -28,6 +28,15 @@ import {
   type VentaHora,
   type VentaSucursal,
 } from '../agregados-ventas.service';
+import type {
+  CeldaHoraDia,
+  ProductoAnalisis,
+  VentaHoraDia,
+  VentaMesa,
+  VentaMesero,
+  VentaPorMesa,
+  VentaPorProducto,
+} from '../analisis.service';
 import type { PagoTicket, PaginaTickets, PartidaTicket, Ticket } from '../tickets.service';
 
 // ---------------------------------------------------------------------------
@@ -464,4 +473,209 @@ export class PaginaTicketsDto implements PaginaTickets {
       'las páginas de una descarga.',
   })
   corte!: string;
+}
+
+// ---------------------------------------------------------------------------
+// Análisis (F2-221)
+// ---------------------------------------------------------------------------
+
+class CanceladosMeseroDto {
+  @ApiProperty({ description: 'Cuentas canceladas del rango. No suman a ninguna venta.' })
+  cuentas!: number;
+
+  @ApiProperty({
+    ...DINERO,
+    description:
+      'Σ total de esas cuentas tal como llegó del POS (supuesto: SR conserva el importe ' +
+      'original de un cancelado).',
+  })
+  monto!: string;
+}
+
+export class VentaMeseroDto implements VentaMesero {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Texto del POS. Null = la cuenta no trae mesero. Se agrupa por (sucursal, texto): el ' +
+      'mismo nombre en dos sucursales son dos filas.',
+  })
+  mesero!: string | null;
+
+  @ApiProperty({ ...DINERO, description: 'Σ total de sus cuentas no canceladas.' })
+  venta!: string;
+
+  @ApiProperty({ description: 'Cuentas no canceladas cerradas en el rango.' })
+  cuentas!: number;
+
+  @ApiProperty({ type: String, nullable: true, description: 'venta / cuentas; null sin cuentas.' })
+  ticketPromedio!: string | null;
+
+  @ApiProperty({ description: 'Σ comensales (las cuentas sin el dato cuentan 0).' })
+  comensales!: number;
+
+  @ApiProperty({ description: 'Cuentas que sí traían comensales.' })
+  cuentasConComensales!: number;
+
+  @ApiProperty(DINERO)
+  propina!: string;
+
+  @ApiProperty({ type: DescuentosDto })
+  descuentos!: DescuentosDto;
+
+  @ApiProperty({ type: CanceladosMeseroDto })
+  cancelados!: CanceladosMeseroDto;
+}
+
+class ProductoAnalisisDto implements ProductoAnalisis {
+  @ApiProperty()
+  producto!: string;
+
+  @ApiProperty({ ...DINERO, description: 'Σ partidas.total (antes del descuento de la cuenta).' })
+  importe!: string;
+
+  @ApiProperty(CANTIDAD)
+  cantidad!: string;
+}
+
+export class VentaPorProductoDto implements VentaPorProducto {
+  @ApiProperty({ ...DINERO, description: 'Σ total de las cuentas: la venta de /ventas/resumen.' })
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+
+  @ApiProperty({
+    type: [ProductoAnalisisDto],
+    description: 'TODOS los productos vendidos, por importe desc y nombre (sin límite).',
+  })
+  productos!: ProductoAnalisisDto[];
+
+  @ApiProperty({
+    ...DINERO,
+    description:
+      'venta − Σ importe: lo que el total de las cuentas no reparte entre sus partidas ' +
+      '(descuentos, impuestos si las partidas no los traen, y otros ajustes). Σ importe + ' +
+      'diferenciaCuentas = venta, exacto. Supuesto provisional: no se prorratea.',
+  })
+  diferenciaCuentas!: string;
+}
+
+class CeldaHoraDiaDto implements CeldaHoraDia {
+  @ApiProperty({ minimum: 1, maximum: 7, description: 'ISO: 1 = lunes … 7 = domingo (local).' })
+  diaSemana!: number;
+
+  @ApiProperty({ minimum: 0, maximum: 23, description: 'Hora LOCAL de cierre.' })
+  hora!: number;
+
+  @ApiProperty(DINERO)
+  venta!: string;
+
+  @ApiProperty({
+    description: '0 = sin ventas en esa celda (distinto de venta "0.00" con cuentas).',
+  })
+  cuentas!: number;
+}
+
+class DiasEnRangoDto {
+  @ApiProperty({ minimum: 1, maximum: 7 })
+  diaSemana!: number;
+
+  @ApiProperty({ description: 'Veces que ese día de la semana cae en desde..hasta (0 = no está).' })
+  dias!: number;
+}
+
+export class VentaHoraDiaDto implements VentaHoraDia {
+  @ApiProperty({
+    type: [CeldaHoraDiaDto],
+    description: 'Siempre 168 celdas, lunes..domingo × 0..23. Σ = /ventas/resumen.',
+  })
+  celdas!: CeldaHoraDiaDto[];
+
+  @ApiProperty({ type: [DiasEnRangoDto], description: 'Siempre 7 filas, lunes..domingo.' })
+  diasEnRango!: DiasEnRangoDto[];
+}
+
+class VentaMesaDto implements VentaMesa {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({ description: 'Texto del POS. Se agrupa por (sucursal, mesa).' })
+  mesa!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+
+  @ApiProperty(DINERO)
+  venta!: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '52.5',
+    description: 'Minutos promedio (cierre − apertura), 1 decimal; null sin duraciones válidas.',
+  })
+  minutosPromedio!: string | null;
+
+  @ApiProperty()
+  cuentasConDuracion!: number;
+}
+
+class SinMesaDto {
+  @ApiProperty()
+  cuentas!: number;
+
+  @ApiProperty(DINERO)
+  venta!: string;
+}
+
+class GlobalMesasDto {
+  @ApiProperty({ ...DINERO, description: 'Σ venta de las filas + sinMesa = /ventas/resumen.' })
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+
+  @ApiProperty({ type: String, nullable: true, example: '48.3' })
+  minutosPromedio!: string | null;
+
+  @ApiProperty()
+  cuentasConDuracion!: number;
+
+  @ApiProperty({ description: 'Cuentas con cierre antes que la apertura: fuera del promedio.' })
+  duracionesInvalidas!: number;
+
+  @ApiProperty({ description: 'Mesas distintas (sucursal, mesa) con al menos una cuenta.' })
+  mesas!: number;
+
+  @ApiProperty()
+  cuentasConMesa!: number;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '3.25',
+    description: 'Rotación: cuentasConMesa / mesas, 2 decimales; null sin mesas.',
+  })
+  rotacion!: string | null;
+}
+
+export class VentaPorMesaDto implements VentaPorMesa {
+  @ApiProperty({ type: [VentaMesaDto] })
+  filas!: VentaMesaDto[];
+
+  @ApiProperty({ type: SinMesaDto, description: 'Cuentas sin mesa: no entran a la rotación.' })
+  sinMesa!: SinMesaDto;
+
+  @ApiProperty({ type: GlobalMesasDto })
+  global!: GlobalMesasDto;
 }

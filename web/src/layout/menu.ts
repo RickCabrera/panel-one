@@ -145,7 +145,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'ventas.analisis',
         texto: 'Análisis',
         icono: ChartColumn,
-        pendiente: construye('F2-221'),
+        destino: { ruta: '/analisis' },
       },
       {
         id: 'ventas.reportes',

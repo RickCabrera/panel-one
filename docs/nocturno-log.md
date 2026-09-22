@@ -3847,3 +3847,159 @@ No se tocó `docs/esquema-sr.md`: no se lee nada nuevo del POS.
 
 **Qué haría distinto.** Escribir primero el test del AC contra Inicio con una API falsa coherente
 por sucursal (el resumen de una sucursal ES su fila). Con eso claro, la vista sale casi sola.
+
+## 2026-09-22 00:31 — F2-221 · Análisis (mesero, producto, hora × día, área, tiempo de mesa)
+**Estado:** CERRADA si el PR se mergea, con **ALCANCE recortado** (área y canal → F2-233).
+Revisor: plan BLOQUEADO una vez (B1: el test "Σ producto = venta" cuadraba por construcción) y
+APROBADO CON OBSERVACIONES en el segundo pase. Entregable APROBADO CON OBSERVACIONES en el primer
+pase, con 0 bloqueos (observaciones atendidas abajo). Carriles /api + /web. OpenAPI actualizado.
+`docs/esquema-sr.md` actualizado (§2, §6, §7, §8): son supuestos, no hallazgos.
+
+**Qué quedó hecho.**
+- **API, 4 endpoints nuevos** con el filtro común de `/ventas/*` y cache de 15 s:
+  - `GET /ventas/por-mesero`: una fila por **(sucursal, mesero)**. Trae venta, cuentas, ticket
+    promedio, comensales (con `cuentasConComensales`), propina, descuentos (monto y cuentas) y
+    cancelados (cuentas y monto). Los cancelados no suman a la venta. Un mesero que sólo tiene
+    cancelados aparece con venta 0.00 y cuentas 0.
+  - `GET /ventas/por-producto`: TODOS los productos, agrupados por nombre y sin límite, más
+    `diferenciaCuentas = venta − Σ partidas`.
+  - `GET /ventas/hora-dia`: 168 celdas (isodow 1..7 × hora 0..23, día y hora LOCALES del cierre en
+    la zona de cada sucursal) más `diasEnRango`, que dice cuántas veces cae cada día de la semana en
+    el periodo.
+  - `GET /ventas/por-mesa`: filas por **(sucursal, mesa)**, `sinMesa` y `global`. `global` trae los
+    minutos promedio (1 decimal), las duraciones inválidas, las mesas y la rotación
+    (cuentasConMesa / mesas).
+  - Todo está en `api/src/ventas/analisis.service.ts`, con **una sola sentencia por desglose**: la Σ
+    y el total salen del mismo snapshot aunque la ingesta esté escribiendo.
+- **Helper de scope** (`consulta-ventas.ts`): sólo se agregaron COLUMNAS a las CTEs. En `ventas`:
+  `mesa`, `mesero`, `abierto_at`, `dia_semana_local` y `segundos_abierta`. En `cancelados`: `mesero`
+  y `total`. Ningún WHERE ni JOIN cambió. El snapshot SQL **no se regeneró**:
+  `consulta-ventas.spec.ts` quita esas columnas (literal, exactamente una vez cada una) y compara
+  contra el snapshot de siempre.
+  - Motivo: la guardia rechaza `extract(x FROM y)` en el cuerpo, así que el día de la semana y la
+    duración se calculan en la CTE.
+- **Web, vista `/analisis`** (`paginas/Analisis.tsx`, `paginas/analisis/`). Está en el menú y en
+  `VISTAS_CON_PERIODO`, y lee `usePeriodo()` (no tiene selector propio). Cinco bloques, cada uno con
+  su estado vacío y su error propios:
+  - **Meseros:** ranking que se puede ordenar, columna Sucursal (dos "Ana" se distinguen) y detalle
+    al tocar la fila. Arriba, el renglón de cancelaciones del periodo (fuera de la venta).
+  - **Productos:** importe, cantidad, participación, el renglón de diferencia y "Venta del
+    periodo". Además, "Más subieron / Más cayeron" contra `periodoComparable()`, con su `alturaAl`.
+  - **Mapa de calor 7×24.**
+  - **Área y canal:** estado vacío que explica por qué.
+  - **Tiempo de mesa:** duración promedio, rotación, "Sin mesa" aparte y un aviso de duraciones
+    inválidas.
+  - Todo bloque paginado va de **50 en 50 en el front**. Cada bloque tiene su CSV con TODAS sus
+    filas (`analisis/csv.ts`): el de productos lleva el renglón de diferencia y el de mesas el de
+    "Sin mesa".
+- **Mapa de calor: qué distingue una celda NO es sólo el color.**
+  - "Sin ventas" es una celda vacía con borde punteado `tinta-tenue`.
+  - "Cero pesos" (hubo cuentas por $0.00) lleva el texto "0".
+  - "No está en el periodo" lleva "—".
+  - Las celdas con venta se rellenan con `serie-1` por quintil, sin texto; la etiqueta accesible
+    trae la cifra.
+  - `analisis/contraste.test.ts` fija 4.5:1 (`tinta-medio`/`superficie`) y 3:1 (`tinta-tenue`) en
+    los dos temas.
+
+**ALCANCE RECORTADO, y dónde quedó escrito.**
+- **Por área y canal: no se construyó.** `cheques` no guarda área ni canal, y el contrato de
+  ingesta no los trae. El seed maestro los genera pero no los persiste: eso lo hace F2-233.
+  - La vista muestra el porqué (`AREA_PENDIENTE` en `paginas/analisis/textos.ts`).
+  - En F2-233 del backlog quedó la nota "Y además (de F2-221)": endpoint `/ventas/por-area`, el
+    bloque, su CSV y el **test Σ área = venta**.
+  - El AC pedía el test de suma "para los tres" (mesero, producto, área). Quedó para mesero y
+    producto, más dos sustitutos: hora×día y mesa. Área va con F2-233.
+- **Cortesías:** siguen sin representarse (decisión abierta de §2). La vista lo dice con una nota
+  visible (`NOTA_CORTESIAS`). Los cancelados sí se muestran aparte, por mesero y en total.
+
+**Decisiones que tomé y por qué.**
+- **Σ producto cuadra con la venta PORQUE el renglón de diferencia absorbe lo que no es de ningún
+  producto.** Es decir, el descuento de la cuenta, los impuestos si las partidas no los traen, y
+  cualquier otro ajuste. No es una prueba de que SR reparta así.
+  - Está marcado `DECISION PROVISIONAL (nocturno)` en `analisis.service.ts`.
+  - En §6 hay una **decisión abierta para Ricardo**: renglón de diferencia o prorrateo del total de
+    la cuenta entre sus partidas.
+  - La etiqueta es honesta: "Diferencia entre el total de las cuentas y sus partidas (descuentos,
+    impuestos y otros ajustes)".
+- **Participación = sobre Σ partidas, NO sobre la venta.** La columna lo dice. Es una desviación
+  del texto de la tarea, que pedía "participación en la venta". Sobre la venta no sumaría 100 % sin
+  inventar un reparto.
+- **Mesero y mesa por (sucursal, texto)** (observación del revisor). Juntar por puro nombre
+  mezclaría en silencio a dos personas que se llaman igual. Separar a una misma persona que trabaja
+  en dos sucursales es el error menos grave, y además se ve.
+- **Monto cancelado = `cheques.total` del cancelado** (`DECISION PROVISIONAL`). Supone que SR
+  conserva el importe original.
+- **Paginación en el front, no en la API.** Productos, meseros y mesas están acotados por catálogo
+  o plantilla, y el CSV necesita todas las filas. Si algún cliente tiene miles de productos, se
+  pagina en la API sin cambiar la vista.
+- El Δ de productos cruza por nombre contra el MISMO endpoint del periodo comparable (sin top 50,
+  a diferencia del Resumen). Así "nuevo" y "dejó de venderse" son ciertos, no "fuera del top".
+
+**Tests.**
+- API:
+  - `analisis.e2e.spec.ts` (24), con cuentas escritas A MANO en una tabla en el comentario. Cubre:
+    - impuestos ≠ 0 y descuentos;
+    - un total que NO es Σ partidas − descuento: diferencia 13.00, mientras −Σ descuentos es −14;
+    - Tijuana: martes 23:30 local, que en CDMX sería miércoles;
+    - una cuenta fuera del rango y otra de otra empresa;
+    - un cancelado sin cierre, un mesero con sólo cancelados y una duración negativa;
+    - 404 para visor→B y para admin_global con una sucursal ajena, en los cuatro endpoints; 400.
+  - Bloque "F2-221" en `lectura.e2e.spec.ts`, sobre el seed:
+    - todos los esperados salen de `chequesA` del generador: cada fila de mesero, cada producto,
+      cada celda, cada mesa y los minutos;
+    - la diferencia = −Σ descuentos (regla DEL SEED, anotada en §6 para que nadie la lea como
+      hecho de SR);
+    - con guarda: el rango trae descuentos, cancelados (con y sin cierre), cuentas sin mesa y dos
+      zonas.
+  - `analisis.service.spec.ts` (12, ejecutor falso): periodo vacío, filas fuera de 7×24 y redondeos.
+  - ADAPTADOS: `consulta-ventas.spec.ts` (el recorte de columnas contra el snapshot viejo) y
+    `openapi.spec.ts` (rutas nuevas y filtro común).
+- Web:
+  - `analisis/reglas.test.ts`, `csv.test.ts` y `contraste.test.ts`.
+  - `Analisis.test.tsx` (14) contra `Rutas` reales:
+    - AC: la Σ de meseros, productos y mesas es igual a la "Venta total" que pinta Inicio, para la
+      empresa y para una sucursal;
+    - la sucursal viaja en todas las consultas;
+    - 600 productos dan 12 páginas y sólo 50 filas en el DOM, y el CSV lleva 600 + la diferencia;
+    - celdas del mapa, estados vacíos sin $0.00, error por bloque, cambio de sucursal sin filas
+      viejas y rango invertido sin consultas.
+  - ADAPTADOS: `vista.test.ts` (+`/analisis`), `menu.test.ts` (Análisis ya navega) y
+    `Sidebar.test.tsx` (la pendiente de ejemplo ahora es Productos/F2-145).
+- **Ajuste de tiempo, no de aserción:** en `Analisis.test.tsx` la PRIMERA espera (`findBy`) de 3
+  tests lleva `{ timeout: 5000 }`. Solos pasaban en ~0.8 s; con la suite completa rozaban el 1 s
+  por defecto y fallaban. Ninguna aserción cambió.
+- Números:
+  - API: lint y typecheck limpios; jest **941/941** (47 suites, 8 snapshots, 0 skips).
+  - Web: build y lint limpios; vitest **753/753** (50 archivos, 0 skips).
+
+**Trampas.**
+- **Un `\u0000` escrito con python en un .tsx quedó como byte NUL real** y git marcó el archivo
+  como binario. Revisa `git show --stat` antes de pushear. Si ves "Bin", busca con
+  `python -c "open(f,'rb').read().find(b'\x00')"`.
+- **Heredocs largos en el Bash tool** (con comillas simples y backticks adentro) mueren con
+  "unexpected EOF while looking for matching `''" SIN ejecutar nada; me pasó dos veces, la segunda
+  con esta nota. Para bloques grandes, usa Write a un archivo del scratchpad y luego insértalo con
+  python.
+- `FULL JOIN ... ON a IS NOT DISTINCT FROM b` no lo acepta Postgres, porque no es merge- ni
+  hash-joinable. Meseros usa `UNION ALL` + `GROUP BY`, que además trae juntos a los de sólo
+  cancelados.
+- `extract(epoch …)::int` redondea. Con el seed da exacto porque las duraciones son minutos
+  enteros.
+- Los 61 archivos de `web/src` marcados M sólo por CRLF siguen ahí. Agrega tus archivos uno por
+  uno.
+
+**Qué quedó abierto.**
+- **Área y canal → F2-233** (arriba).
+- **Verificación visual y a 390 px: NO se hizo.** Las tablas y el mapa tienen su propio
+  `overflow-x-auto`. Queda para F2-250, junto con Resumen y Comparativos.
+- **Texto vacío ≠ nulo** (observación O3 del revisor): una `mesa` en `''` cuenta como mesa en la
+  rotación, y un `mesero` en `''` se separa de "Sin mesero". Está anotado en §2. Decidirlo en
+  F2-231 / F2-222 o en la ingesta.
+- El detalle del mesero no enlaza a Tickets filtrado por mesero: el filtro por mesero lo trae
+  F2-222. Cuando exista, vale agregar el enlace.
+- El orden elegido de meseros y mesas no vive en la URL (se pierde al recargar). No lo pedía el
+  AC; si molesta, `PARAMS` propios de la vista (NO en `PARAMS_VISTA`).
+
+**Qué haría distinto.** Escribir primero la tabla de cuentas a mano del e2e, con una columna
+"total − Σ partidas". Esa columna es la que obliga a que el test de productos pruebe algo y no
+cuadre sola.
