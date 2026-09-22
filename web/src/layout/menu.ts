@@ -120,7 +120,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'principal.comparativos',
         texto: 'Comparativos',
         icono: GitCompareArrows,
-        pendiente: construye('F2-140'),
+        destino: { ruta: '/comparativos' },
       },
     ],
   },

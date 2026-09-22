@@ -82,7 +82,8 @@ describe('las seis secciones de la ficha', () => {
 
   it('las tareas de las pendientes son las de la cola que construyen cada vista', () => {
     const tarea = (id: string) => porId(id).pendiente?.tarea;
-    expect(tarea('principal.comparativos')).toBe('F2-140');
+    // F2-140 construyó Comparativos: ya navega.
+    expect(porId('principal.comparativos').destino).toEqual({ ruta: '/comparativos' });
     // F2-220 construyó el Resumen: ya navega.
     expect(porId('ventas.resumen').destino).toEqual({ ruta: '/resumen' });
     expect(tarea('ventas.analisis')).toBe('F2-221');

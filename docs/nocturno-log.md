@@ -3716,3 +3716,134 @@ Carriles /api + /web. OpenAPI actualizado. Sin hallazgos de SoftRestaurant (no s
 **Qué haría distinto.** Pensar el corte en la API desde el principio como "instante" y no como
 "hora": la zona es de cada sucursal, y cualquier hora que calcule el front ya trae la zona
 equivocada para alguien.
+
+## 2026-09-21 23:55 — F2-140 · Comparativos
+**Estado:** CERRADA si el PR se mergea. Revisor: plan BLOQUEADO una vez y APROBADO CON
+OBSERVACIONES en el segundo pase. El bloqueo (B1) fue que el alcance recortado no quedaba escrito
+en ningún lado que sobreviviera a la sesión. Entregable: APROBADO CON OBSERVACIONES en el
+primer pase, con 0 bloqueos y 5 observaciones, todas atendidas (ver Tests).
+Carriles /web + /api (sólo un test). Sin cambio de API ni de OpenAPI: no hay endpoint nuevo.
+No se tocó `docs/esquema-sr.md`: no se lee nada nuevo del POS.
+
+**Qué quedó hecho.**
+- **Vista `/comparativos`** (`paginas/Comparativos.tsx`, `paginas/comparativos/`). Es una matriz
+  sucursal × métrica: Venta, Tickets, Ticket promedio y Comensales. Cada métrica lleva A, B y Δ,
+  con el % y la diferencia en la misma celda.
+  - Arriba va la fila "Total del alcance", o "Total (Sucursal X)" si hay una sucursal elegida.
+    Nunca "Total <empresa>": un usuario con alcance parcial vería un total que no es de la empresa.
+  - Debajo, una fila por sucursal en el orden del ranking.
+  - La tabla tiene su propio `overflow-x-auto`.
+- **Ninguna cifra de venta se calcula en el front.**
+  - El total es `useVentas('resumen', …)`, con la MISMA llave que "Venta total" de Inicio.
+  - Las filas son `useReporte('comparativo-sucursales', …)`, el mismo endpoint del comparativo de
+    Reportes.
+  - Lo único propio es el Δ (con `delta` del Resumen, en bigint) y el orden.
+- **Periodo A** = el de la cabecera. `/comparativos` se agregó a `VISTAS_CON_PERIODO`.
+- **Periodo B** = selector propio "Comparar contra". Vive en la URL con `b`, `bdesde` y `bhasta`,
+  que NO están en `PARAMS_VISTA` y por eso no viajan a otras vistas. Hay tres modos:
+  - `comparable` (default): `periodoComparable` del Resumen, con `alturaAl` cuando toca.
+  - `mes-anterior`: el mes calendario anterior al de `A.desde`, completo. Con A = "Este mes" da
+    exactamente el rango de "Mes anterior" en Inicio, que es lo que pide el AC.
+  - `rango`: fechas libres, días completos. Si el rango es inválido se explica y no se consulta.
+- **Ranking.** Se ordena por Venta, Tickets, Ticket promedio o Comensales de A, o por Δ % de venta.
+  - El Δ % se compara en producto cruzado bigint (`(a1−b1)·b2` contra `(a2−b2)·b1`, bases > 0).
+  - Las filas sin dato en ese criterio van al final, sin número.
+  - Los criterios de A no excluyen a quien no tiene B.
+- **CSV** (`comparativos/csv.ts`):
+  - Nombre: `comparativos_<A>_vs_<B>[_sucursal].csv`.
+  - Una fila por sucursal, en el orden del ranking.
+  - Sin fila de total (la misma regla que Reportes).
+  - Celda vacía para "sin dato".
+  - Δ % como número sin `%`.
+- **Estados vacíos:**
+  - Una sucursal sin cuentas en un periodo muestra "—" en las cuatro métricas y en sus Δ.
+  - "Sin ventas en el periodo A/B…" dice qué hacer.
+  - Aviso "A va en curso y B está completo": aparece cuando A incluye hoy y B no trae `alturaAl`,
+    sin importar el modo de B.
+  - Si A incluye hoy, `avisoIncompleta` nombra las sucursales que no reportan.
+  - Nota visible: "Tasa de facturación llega con F2-106 · Utilidad llega con F2-126".
+- **Menú:** "Comparativos" ya navega. `useMinuto` se movió de `Resumen.tsx` a
+  `consultas/useMinuto.ts` sin cambiar su comportamiento; `Resumen.test.tsx` no se tocó.
+
+**ALCANCE RECORTADO (bloqueo B1 del revisor), y dónde quedó escrito.**
+- **Tasa de facturación:** no hay datos (F2-106 no existe). Quedó una nota "Y además (de
+  F2-140)" en F2-106 del backlog.
+- **Utilidad:** tampoco hay datos (F2-126 no existe). Quedó la misma nota en F2-126.
+- **Comparar ENTRE empresas (admin_global):** no se hizo. Es una empresa a la vez, la de la
+  cabecera.
+  - Costo desde el front: N empresas × 4 consultas.
+  - Alternativa: un endpoint agregado por empresa.
+  - Quedó como "Decisión abierta" en F2-250.
+- El `[x]` de F2-140 lleva `**ALCANCE:**` en la misma línea. No se usó `PARCIAL` + `F2-140b`
+  porque el resto no se puede construir antes de F2-106/F2-126: queda colgado de ellas.
+
+**Decisiones que tomé y por qué.**
+- **Comensales en 0 con cuentas se pintan "0"**, igual que Inicio, con un `title` que dice que el
+  comparativo no distingue "no se registraron" de "cero". Pintar "—" contradecía a Inicio y
+  rompía el AC.
+  - La fila Total sí trae `cuentasConDato` y avisa "X de Y cuentas traían comensales".
+  - Las filas de sucursal no lo traen. MEJORA POSIBLE: sumar `cuentasConComensales` a
+    `comparativo-sucursales` (cambio de API y de OpenAPI).
+- **Comensales en 0 en A con B > 0:** el Δ sale −100 % (coherente con Inicio), pero su celda lleva
+  el mismo `title` de salvedad ("no distingue no se registraron de cero"). En el CSV no hay dónde
+  ponerla: la fila dice `-100.0`. Es la limitación de arriba, y se quita con la misma mejora de API.
+- **A sin cuentas y B con cuentas → Δ "—"**, no −100 %: "sin datos" no es "cero".
+- **B "mes anterior" depende de A**, no de hoy: con A = julio da junio. La etiqueta nombra el mes.
+- **Selector de B como `<select>`, no como botones:** `Cabecera.test.tsx` exige un solo grupo
+  "Periodo".
+
+**Tests.**
+- Web nuevos:
+  - `comparativos/periodoB.test.ts`: URL, meses de borde (enero y bisiesto), el AC contra
+    `rangoDe('mes-anterior')`, y B dependiente de A.
+  - `comparativos/matriz.test.ts`: "—" contra cero, Δ exacto, ranking con empates, bases
+    distintas y signos mixtos, e ilegibles.
+  - `comparativos/csv.test.ts`: contenido exacto y nombre.
+  - `Comparativos.test.tsx`, 18 casos contra `Rutas` reales:
+    - AC: total (venta, tickets, ticket promedio y comensales) y cada sucursal (venta y tickets),
+      en A y en B, contra lo que pinta Inicio con ese periodo y esa sucursal. Tijuana sin B:
+      Inicio muestra su estado vacío y aquí "—".
+    - Alcance: cambio de sucursal y cambio de EMPRESA (admin_global) con la respuesta retenida,
+      sin filas viejas; el visor de A ve su matriz y ninguna consulta sale con otra empresa.
+      Estos dos últimos casos (empresa y visor) se agregaron por la observación O1 del revisor
+      del entregable.
+    - B comparable con `alturaAl`, rango libre, rango invertido sin consulta, y B que no viaja.
+    - Ranking, vacíos, error, cambio de sucursal sin filas viejas, CSV y auto-refresco con
+      relojes falsos.
+- Web ADAPTADOS (no aflojados): `vista.test.ts` (+`/comparativos`) y `menu.test.ts`
+  (comparativos ya tiene destino).
+- API: en `lectura.e2e.spec.ts` se agregó el bloque "F2-140: comparativo por sucursal = dashboard
+  individual".
+  - Por sucursal (A1 en CDMX, A2 en Tijuana), para "este mes a la misma altura" (20:00Z) y "mes
+    anterior completo", la fila de `comparativo-sucursales` y `/ventas/resumen?sucursalId=`
+    cuadran contra un esperado **calculado a mano** desde `chequesA`.
+  - Un caso prueba que Tijuana se corta a SU hora (12:00 PST) y no a la de CDMX. El guarda afirma
+    que el seed sí trae cuentas de A2 entre 12:00 y 14:00 del 15-nov.
+  - No inserta nada, así que no mueve los números de otros casos.
+- Números:
+  - Web: lint limpio, build limpio, vitest **717/717** (46 archivos, 0 skips).
+  - API: lint y typecheck limpios; jest **900/900** (45 suites, 8 snapshots, 0 skips).
+
+**Trampas.**
+- En el test web, "$0.00" puede aparecer LEGÍTIMAMENTE como Δ de cero (`+$0.00` no, `$0.00` sí:
+  `diferenciaEnPesos(0n)`). No afirmes "la tabla no contiene $0.00" salvo en el escenario sin
+  ninguna cifra.
+- `resumenDe` del test tiene que recibir sus propios totales: si el escenario vacío reusa los
+  llenos, el aviso "sin ventas" no aparece y parece un bug de la vista.
+- `@typescript-eslint/no-unused-vars` no perdona `_x` en destructuring en `/api`: arma el objeto
+  a mano.
+- El árbol de `main` traía 61 archivos de `web/src` marcados `M` sólo por CRLF/LF
+  (`core.autocrlf=true`; `git diff --ignore-cr-at-eol` los deja vacíos). No los toques ni los
+  commitees: agrega tus archivos uno por uno.
+
+**Qué quedó abierto.**
+- Tasa de facturación (F2-106), utilidad (F2-126) y comparación entre empresas (F2-250): arriba.
+- `cuentasConComensales` por sucursal (mejora de API): arriba.
+- **Verificación visual y a 390 px: NO se hizo** (sin arnés en Chrome esta sesión). El layout usa
+  la tarjeta de siempre con la tabla en su propio scroll horizontal. Pendiente para F2-250, junto
+  con la del Resumen.
+- Las limitaciones de `alturaAl` que dejó F2-220 (medianoche con zonas distintas, rango hacia el
+  futuro) aplican igual a B "comparable".
+
+**Qué haría distinto.** Escribir primero el test del AC contra Inicio con una API falsa coherente
+por sucursal (el resumen de una sucursal ES su fila). Con eso claro, la vista sale casi sola.

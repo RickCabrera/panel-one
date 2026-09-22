@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
+import { useMinuto } from '../consultas/useMinuto';
 import { useAlcance } from '../filtros/alcance';
 import { incluyeHoy, TIPOS_PERIODO } from '../filtros/periodo';
 import { usePeriodo } from '../filtros/usePeriodo';
@@ -15,31 +15,12 @@ import {
   TarjetaTop5,
   TarjetaVentaComparada,
 } from './resumen/Bloques';
-import {
-  alturaDe,
-  comparableDelDia,
-  comparableDelMes,
-  periodoComparable,
-} from './resumen/comparables';
+import { comparableDelDia, comparableDelMes, periodoComparable } from './resumen/comparables';
 import { Vista } from './Vista';
 
 /** Cuántos productos muestra el top y en cuántos se busca su importe previo. */
 const TOP = 5;
 const TOP_BASE = 50;
-
-/**
- * El minuto en curso (instante truncado, ver `alturaDe`). Se revisa cada 5 s y sólo
- * re-renderiza cuando CAMBIA el minuto: así la altura de las bases queda a lo más 5 s detrás
- * del minuto real, no hasta 2 min como con un intervalo de 60 s que arranca al montar.
- */
-function useMinuto(): Date {
-  const [minuto, setMinuto] = useState(() => alturaDe(new Date()));
-  useEffect(() => {
-    const id = setInterval(() => setMinuto(alturaDe(new Date())), 5_000);
-    return () => clearInterval(id);
-  }, []);
-  return useMemo(() => new Date(minuto), [minuto]);
-}
 
 /**
  * Resumen ejecutivo (F2-220): lo que un dueño quiere ver en veinte segundos. No calcula nada

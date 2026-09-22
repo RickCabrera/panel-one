@@ -1041,6 +1041,12 @@ escritura contra el POS (test que lo afirma inspeccionando el modo de la conexi�
    OpenAPI al día con todos los endpoints nuevos; `README.md` y `0-INSTALACION.md`
    describiendo el producto que de verdad existe al terminar la ronda.
 
+> **Decisión abierta que dejó F2-140:** Comparativos compara **una empresa a la vez** (la de la
+> cabecera); la dimensión "empresa" de la matriz, para admin_global, no se construyó. Costo de
+> hacerlo en el front: N empresas × 4 consultas (`resumen` y `comparativo-sucursales`, A y B).
+> Alternativa: un endpoint agregado por empresa en `/ventas/*`. Decidir si se hace y, si sí,
+> escribirlo como tarea con su "Listo cuando".
+
 **Listo cuando:** `docs/paridad.md` existe y cada renglón suyo apunta a código o a una tarea;
 no queda ningún `DECISION PROVISIONAL` sin su entrada en `docs/esquema-sr.md`; los tres
 carriles pasan sus checks; y el backlog termina con la lista de lo que falta, que es lo que
@@ -1618,6 +1624,11 @@ código pendiente del periodo.
 **Listo cuando:** cifras cuadran contra los datos de ventas de Fase 1 para el mismo rango
 (mismo seed extendido con CFDIs de sandbox); export CSV de la tabla de CFDI.
 
+> **Y además (de F2-140):** agrega la columna **Tasa de facturación** a Comparativos
+> (`/comparativos`, `web/src/paginas/comparativos/matriz.ts` → `METRICAS`), con A, B y Δ, la
+> misma regla de "—" sin datos, su columna en el CSV y su test; y quita "Tasa de facturación"
+> de la nota de pendientes de la vista (`NOTA_PENDIENTES` en `paginas/Comparativos.tsx`).
+
 ### F2-107 · Factura sin ticket y refacturación
 `[ ]` Vista admin "Facturar sin ticket": captura manual de importe total + datos de receptor
 → emite CFDI ligado a la sucursal sin cheque (marcado `origen=manual`). Refacturación: sobre
@@ -1732,6 +1743,11 @@ con gráfica y export.
 
 **Listo cuando:** el estado de resultados simple del piloto cuadra contra el cálculo del
 contador para el mismo mes (±1% por redondeos documentados).
+
+> **Y además (de F2-140):** agrega la columna **Utilidad** a Comparativos (`/comparativos`,
+> `web/src/paginas/comparativos/matriz.ts` → `METRICAS`), con A, B y Δ, la misma regla de "—"
+> sin datos, su columna en el CSV y su test; y quita "Utilidad" de la nota de pendientes de la
+> vista (`NOTA_PENDIENTES` en `paginas/Comparativos.tsx`).
 
 ### F2-127 · Proyecciones y sugerido de compra
 `[ ]` Proyección de consumo por insumo: promedio móvil ponderado de 4 semanas por
