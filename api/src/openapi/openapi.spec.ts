@@ -126,6 +126,32 @@ describe('Contrato OpenAPI', () => {
     expect(mesero).not.toContain('segundos');
   });
 
+  it('documenta Clientes, el filtro de Tickets por cliente y el cliente de la cuenta (F2-232)', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const nombres = (op?: { parameters?: unknown[] }) =>
+      (op?.parameters ?? []).map((p) => (p as { name: string }).name).sort();
+    const resumen = paths['/catalogos/clientes/resumen']?.get;
+    expect(Object.keys(resumen?.responses ?? {}).sort()).toEqual(['200', '400', '401', '404']);
+    expect(nombres(resumen)).toEqual(
+      ['contacto', 'desde', 'empresaId', 'hasta', 'pagina', 'porPagina', 'q', 'sucursalId'].sort(),
+    );
+    const ficha = paths['/catalogos/clientes/{id}/ficha']?.get;
+    expect(Object.keys(ficha?.responses ?? {}).sort()).toEqual(['200', '400', '401', '404']);
+    expect(nombres(ficha)).toEqual(['desde', 'empresaId', 'hasta', 'id']);
+    expect(nombres(paths['/ventas/tickets']?.get)).toContain('clienteId');
+    const esquemas = doc.components?.schemas as Record<string, { properties?: object }>;
+    expect(Object.keys(esquemas.DatosChequeDto.properties ?? {})).toContain('clienteOrigenSrId');
+    expect(Object.keys(esquemas.FilaResumenClienteDto.properties ?? {})).toEqual(
+      expect.arrayContaining(['cruce', 'visitas', 'ticketPromedio', 'canceladas', 'telefono']),
+    );
+    expect(Object.keys(esquemas.FichaClienteDto.properties ?? {})).toEqual([
+      'cliente',
+      'periodo',
+      'productos',
+    ]);
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
@@ -135,6 +161,8 @@ describe('Contrato OpenAPI', () => {
         '/catalogos/areas',
         '/catalogos/canales',
         '/catalogos/clientes',
+        '/catalogos/clientes/resumen',
+        '/catalogos/clientes/{id}/ficha',
         '/catalogos/grupos',
         '/catalogos/menu',
         '/catalogos/meseros',
@@ -338,6 +366,8 @@ describe('Contrato OpenAPI', () => {
         'importeMax',
         'canceladas',
         'producto',
+        // Filtro por cliente de F2-232.
+        'clienteId',
         'orden',
         'dir',
       ].sort(),

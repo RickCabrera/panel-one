@@ -257,6 +257,13 @@ model Cheque {
   propina    Decimal   @db.Decimal(12, 2)
   total      Decimal   @db.Decimal(12, 2)
   cancelado  Boolean   @default(false)
+  // El cliente de la cuenta, si el POS lo capturó (F2-232): el MISMO id estable que usa el
+  // catálogo de clientes de esa sucursal (`clientes_catalogo.origen_sr_id`). Sin FK: cheques y
+  // catálogos llegan en cualquier orden. Nulo = la cuenta no trae cliente.
+  // DECISION PROVISIONAL (nocturno): que el cheque de SR referencia al cliente por ese id no se
+  // ha visto en una instalación real (docs/esquema-sr.md §2 y §8). CHECK "no vacío" a mano en la
+  // migración `..._cheque_cliente`.
+  clienteOrigenSrId String? @map("cliente_origen_sr_id")
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -273,6 +280,8 @@ model Cheque {
   @@index([empresaId, cerradoAt], map: "cheques_empresa_id_cerrado_at_idx")
   // Agregados de UNA sucursal por rango de cierre (F1-032).
   @@index([sucursalId, cerradoAt], map: "cheques_sucursal_id_cerrado_at_idx")
+  // Las cuentas de UN cliente (F2-232: ficha y filtro de Tickets).
+  @@index([sucursalId, clienteOrigenSrId], map: "cheques_sucursal_id_cliente_origen_sr_id_idx")
   @@map("cheques")
 }
 

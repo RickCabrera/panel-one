@@ -124,8 +124,9 @@ export interface ChequeSeed {
   partidas: PartidaSeed[];
   pagos: PagoSeed[];
   /**
-   * Lo que el catálogo maestro sabe del cheque y la tabla todavía no guarda
-   * (NO se persiste): lo usan el inventario del seed y las tareas de catálogos.
+   * Lo que el catálogo maestro sabe del cheque. Sólo `clienteClave` se persiste (como
+   * `cliente_origen_sr_id`, F2-232); lo demás lo usan el inventario del seed y las tareas de
+   * catálogos.
    */
   maestro: {
     meseroClave: string;
@@ -370,14 +371,15 @@ export async function sembrarVentas(
   const sembrados = {
     cheque: { sucursalId: { in: sucursalIds }, folioSr: { startsWith: PREFIJO_SEED } },
   };
-  // Lo que no tiene columna (partidas y pagos van aparte; `maestro` y la clave de
-  // producto no se persisten hasta F2-230) se quita antes del `createMany`.
+  // Lo que no tiene columna (partidas y pagos van aparte; de `maestro` sólo el cliente, y la
+  // clave de producto no se persiste) se quita antes del `createMany`.
   const filasCheque = cheques.map((c) => {
-    const { partidas: _partidas, pagos: _pagos, maestro: _maestro, ...fila } = c;
+    const { partidas: _partidas, pagos: _pagos, maestro, ...fila } = c;
     void _partidas;
     void _pagos;
-    void _maestro;
-    return fila;
+    // El cliente sí tiene columna desde F2-232: el seed de catálogos usa su clave como
+    // `origenSrId`, así que la cuenta lo referencia por ese mismo id.
+    return { ...fila, clienteOrigenSrId: maestro.clienteClave };
   });
   const partidas = cheques.flatMap((c) =>
     c.partidas.map(({ productoClave: _clave, ...p }) => {

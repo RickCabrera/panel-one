@@ -270,6 +270,18 @@ export class TicketsQueryDto extends FiltroVentasQueryDto {
   producto?: string;
 
   @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'F2-232: sólo las cuentas de ESE cliente (el `id` de `/catalogos/clientes`, nunca su nombre: ' +
+      'ningún dato personal en la URL). El cliente es de UNA sucursal (espejo por sucursal): con ' +
+      '`sucursalId` de otra sucursal el resultado es vacío. Un id que no existe o no es de la ' +
+      'empresa pedida = 404.',
+  })
+  @IsOptional()
+  @IsUUID('all')
+  clienteId?: string;
+
+  @ApiPropertyOptional({
     enum: ORDENES_TICKETS,
     default: 'momento',
     description:

@@ -199,7 +199,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'catalogos.clientes',
         texto: 'Clientes',
         icono: Contact,
-        pendiente: construye('F2-232'),
+        destino: { ruta: '/clientes' },
       },
     ],
   },

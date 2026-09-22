@@ -20,6 +20,8 @@ const PARAMS: ParametrosTickets = {
   importeMax: undefined,
   canceladas: 'excluir',
   producto: 'taco',
+  // F2-232: el cliente también viaja en todas.
+  clienteId: 'c1a2b3c4-0000-4000-8000-000000000001',
   orden: 'total',
   dir: 'asc',
 };
@@ -99,6 +101,7 @@ describe('exportarTickets', () => {
       expect(l.query.get('importeMin')).toBe('100.50');
       expect(l.query.get('canceladas')).toBe('excluir');
       expect(l.query.get('producto')).toBe('taco');
+      expect(l.query.get('clienteId')).toBe('c1a2b3c4-0000-4000-8000-000000000001');
       expect(l.query.get('orden')).toBe('total');
       expect(l.query.get('dir')).toBe('asc');
       // Los que no se eligieron no se mandan.

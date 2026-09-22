@@ -35,6 +35,7 @@ export interface ParametrosTickets {
   importeMax: string | undefined;
   canceladas: Exclude<Canceladas, 'incluir'> | undefined;
   producto: string | undefined;
+  clienteId: string | undefined;
   orden: Orden | undefined;
   dir: Direccion | undefined;
 }
@@ -61,6 +62,7 @@ export function parametrosDe(
     importeMax: filtros.importeMax || undefined,
     canceladas: filtros.canceladas === 'incluir' ? undefined : filtros.canceladas,
     producto: filtros.producto || undefined,
+    clienteId: filtros.cliente || undefined,
     orden: esDefault ? undefined : orden.orden,
     dir: esDefault ? undefined : orden.dir,
   };
@@ -80,6 +82,7 @@ const PARTES: ReadonlyArray<keyof ParametrosTickets> = [
   'importeMax',
   'canceladas',
   'producto',
+  'clienteId',
   'orden',
   'dir',
 ];

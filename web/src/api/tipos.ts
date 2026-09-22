@@ -685,3 +685,77 @@ export interface RendimientoMeseros {
   filas: FilaRendimientoMesero[];
   sinVentas: MeseroSinVentas[];
 }
+
+// --- Clientes (F2-232) ------------------------------------------------------------------------
+
+/** `ficha`: en el espejo; `sin-ficha`: las cuentas traen el id y el espejo no; `sin-sincronizar`. */
+export type CruceCliente = 'ficha' | 'sin-ficha' | 'sin-sincronizar';
+export type EstadoCatalogoClientes = 'sin-sincronizar' | 'vacio' | 'con-clientes';
+
+export interface CifrasCliente {
+  /** Cuentas NO canceladas del periodo con este cliente (= Tickets con `canceladas=excluir`). */
+  visitas: number;
+  venta: Importe;
+  ticketPromedio: Importe | null;
+  /** Cierre de la última visita del periodo (UTC). */
+  ultimaVisita: string | null;
+  canceladas: { cuentas: number; monto: Importe };
+}
+
+export interface FilaResumenCliente extends CifrasCliente {
+  /** Null = no hay ficha que abrir (tampoco filtro de Tickets). */
+  id: string | null;
+  sucursalId: string;
+  sucursal: string;
+  cruce: CruceCliente;
+  origenSrId: string;
+  clave: string | null;
+  nombre: string | null;
+  activo: boolean | null;
+  activoPos: boolean | null;
+  /** Sólo con `contacto=true`. */
+  telefono?: string | null;
+  correo?: string | null;
+  rfc?: string | null;
+}
+
+export interface SucursalClientes {
+  sucursalId: string;
+  sucursal: string;
+  catalogo: EstadoCatalogoClientes;
+  clientesActivos: number;
+  cuentas: number;
+  cuentasConCliente: number;
+}
+
+export interface ResumenClientes {
+  usaClientes: boolean;
+  catalogoTruncado: boolean;
+  cuentas: number;
+  cuentasConCliente: number;
+  ventaConCliente: Importe;
+  sucursales: SucursalClientes[];
+  filas: FilaResumenCliente[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+}
+
+export interface FichaCliente {
+  cliente: {
+    id: string;
+    sucursalId: string;
+    sucursal: string;
+    origenSrId: string;
+    clave: string | null;
+    nombre: string;
+    telefono: string | null;
+    correo: string | null;
+    rfc: string | null;
+    activo: boolean;
+    activoPos: boolean | null;
+    vistoAt: string;
+  };
+  periodo: CifrasCliente;
+  productos: Array<{ producto: string; cantidad: string; importe: Importe; cuentas: number }>;
+}

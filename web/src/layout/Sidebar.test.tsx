@@ -125,17 +125,17 @@ describe('AC2 · una entrada sin módulo no navega a una pantalla rota', () => {
     api(usuario('visor'));
     montar(`/tickets?empresa=${A}`);
     const nav = await menu();
-    // Meseros ya navega (F2-231): la pendiente de ejemplo es Clientes (F2-232).
-    const clientes = within(nav).getByRole('button', { name: 'Clientes' });
+    // Clientes ya navega (F2-232): la pendiente de ejemplo es Existencias (F2-121).
+    const existencias = within(nav).getByRole('button', { name: 'Existencias' });
 
-    expect(clientes).toHaveAttribute('aria-disabled', 'true');
-    expect(clientes).not.toBeDisabled(); // sigue en el orden de Tab
-    expect(clientes).toHaveAccessibleDescription('Se construye en F2-232.');
-    expect(clientes).toHaveAttribute('title', 'Clientes: Se construye en F2-232.');
+    expect(existencias).toHaveAttribute('aria-disabled', 'true');
+    expect(existencias).not.toBeDisabled(); // sigue en el orden de Tab
+    expect(existencias).toHaveAccessibleDescription('Se construye en F2-121.');
+    expect(existencias).toHaveAttribute('title', 'Existencias: Se construye en F2-121.');
 
-    await userEvent.click(clientes);
+    await userEvent.click(existencias);
     expect(ubicacion()).toBe(`/tickets?empresa=${A}`);
-    clientes.focus();
+    existencias.focus();
     await userEvent.keyboard('{Enter}');
     await userEvent.keyboard(' ');
     expect(ubicacion()).toBe(`/tickets?empresa=${A}`);
@@ -225,7 +225,7 @@ describe('AC4 · colapso recordado', () => {
     catalogos.focus();
     await evt.keyboard('{Enter}');
     expect(catalogos).toHaveAttribute('aria-expanded', 'false');
-    expect(within(nav).queryByRole('button', { name: 'Clientes' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Clientes' })).not.toBeInTheDocument();
     // Del encabezado colapsado, Tab brinca directo a la siguiente sección.
     await evt.tab();
     expect(nombre(document.activeElement!)).toBe('Inventario y compras');
@@ -240,7 +240,7 @@ describe('AC4 · colapso recordado', () => {
       'aria-expanded',
       'false',
     );
-    expect(within(nav).queryByRole('button', { name: 'Clientes' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Clientes' })).not.toBeInTheDocument();
 
     cleanup();
     terminarSesion('cerrada');
@@ -251,7 +251,8 @@ describe('AC4 · colapso recordado', () => {
       'aria-expanded',
       'true',
     );
-    expect(within(nav).getByRole('button', { name: 'Clientes' })).toBeInTheDocument();
+    // Clientes ya es enlace (F2-232).
+    expect(within(nav).getByRole('link', { name: 'Clientes' })).toBeInTheDocument();
   });
 });
 

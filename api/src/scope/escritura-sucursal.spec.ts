@@ -21,6 +21,7 @@ function datosCheque(total = '100.00'): DatosCheque {
     mesa: '1',
     mesero: null,
     comensales: 2,
+    clienteOrigenSrId: null,
     subtotal: D(total),
     impuestos: D('0'),
     descuentos: D('0'),

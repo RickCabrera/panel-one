@@ -182,6 +182,24 @@ export class DatosChequeDto {
   @Max(10000)
   comensales?: number | null;
 
+  // DECISION PROVISIONAL (nocturno): se supone que el cheque de SR trae el MISMO id del cliente
+  // que su catálogo de clientes; no se ha visto una instalación real (docs/esquema-sr.md §2, §13).
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'C001',
+    maxLength: 64,
+    description:
+      'F2-232: el id estable del cliente en el POS, el MISMO `origenSrId` que manda el catálogo de ' +
+      'clientes de esta sucursal. Nulo, ausente o sólo espacios = la cuenta no trae cliente (el ' +
+      'cheque se manda completo cada vez: omitirlo guarda nulo). No hace falta que el cliente ya ' +
+      'esté en el catálogo.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  clienteOrigenSrId?: string | null;
+
   @ApiProperty(DOC_DINERO)
   @IsString()
   @Matches(DINERO, { message: MENSAJE_DINERO })

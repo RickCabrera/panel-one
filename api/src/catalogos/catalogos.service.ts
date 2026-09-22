@@ -6,6 +6,7 @@ import { Auditoria, type Actor } from '../comun/auditoria';
 import { CATALOGOS, solicitudPendiente } from '../ingesta/catalogos';
 import { verificarAlcance } from '../scope/alcance';
 import type { EmpresaScope } from '../scope/empresa-scope';
+import type { ConsultaVentas } from '../scope/consulta-ventas';
 import { encontradoOr404 } from '../scope/scope.helper';
 import { ScopedPrismaService, type DatosScoped } from '../scope/scoped-prisma.service';
 import { AgregadosVentasService } from '../ventas/agregados-ventas.service';
@@ -17,6 +18,14 @@ import {
   normalizarNombre,
   vendidosSinCatalogo,
 } from './menu';
+import {
+  cifrasDe,
+  MAX_CATALOGO_CLIENTES,
+  resumenClientes,
+  type CifrasCliente,
+  type CifrasClienteLeidas,
+  type ResumenClientes,
+} from './clientes';
 import { MAX_CATALOGO_MESEROS, rendimientoMeseros, type RendimientoMeseros } from './meseros';
 import type {
   DetalleProductoDto,
@@ -31,6 +40,29 @@ import type {
 } from './dto/catalogos.dto';
 
 export const POR_PAGINA = 50;
+/** Productos que muestra la ficha de un cliente (F2-232). */
+export const MAX_PRODUCTOS_FICHA = 10;
+/** Pares (sucursal, id) por consulta al buscar los clientes de las cuentas (F2-232). */
+const LOTE_CLIENTES = 500;
+
+export interface FichaCliente {
+  cliente: {
+    id: string;
+    sucursalId: string;
+    sucursal: string;
+    origenSrId: string;
+    clave: string | null;
+    nombre: string;
+    telefono: string | null;
+    correo: string | null;
+    rfc: string | null;
+    activo: boolean;
+    activoPos: boolean | null;
+    vistoAt: string;
+  };
+  periodo: CifrasCliente;
+  productos: Array<{ producto: string; cantidad: string; importe: string; cuentas: number }>;
+}
 
 export interface FiltroCatalogo {
   empresaId: string;
@@ -551,6 +583,231 @@ export class CatalogosService {
         sincronizado: sincronizado.has(s.id),
       })),
     });
+  }
+
+  /**
+   * Clientes (F2-232): la lista del periodo, ligada con el espejo. Las cifras salen de las CTEs
+   * `ventas` y `cancelados` del helper de scope (empresa o sucursal fuera del scope = 404 ANTES
+   * de leer nada más); el espejo, las sucursales y su sincronización, de `datos.para(scope)` con
+   * la empresa (y la sucursal) del filtro. `q` se aplica EN CÓDIGO: el texto buscado (que puede
+   * ser un nombre) no viaja a ninguna consulta ni a ningún log.
+   */
+  async resumenClientes(
+    scope: EmpresaScope,
+    filtro: { empresaId: string; sucursalId?: string; desde: string; hasta: string },
+    opciones: { q?: string; pagina: number; porPagina: number; contacto: boolean },
+  ): Promise<ResumenClientes> {
+    const q = await this.agregados.consulta(scope, filtro);
+    const [cifras, cuentas] = await Promise.all([
+      this.cifrasClientes(q),
+      q.consultar<{ sucursal_id: string; cuentas: number; con_cliente: number }>(
+        Prisma.sql`SELECT sucursal_id, count(*)::int AS cuentas,
+          count(cliente_origen_sr_id)::int AS con_cliente
+        FROM ventas GROUP BY sucursal_id`,
+      ),
+    ]);
+    const datos = this.datos.para(scope);
+    const deLaSucursal = filtro.sucursalId ? { sucursalId: filtro.sucursalId } : {};
+    const seleccion = {
+      id: true,
+      sucursalId: true,
+      origenSrId: true,
+      clave: true,
+      nombre: true,
+      activo: true,
+      activoPos: true,
+      vistoAt: true,
+      telefono: opciones.contacto,
+      correo: opciones.contacto,
+      rfc: opciones.contacto,
+    };
+    const [sucursales, sincronizadas, activos, lista, ligados] = await Promise.all([
+      datos.sucursal.findMany({
+        where: {
+          empresaId: filtro.empresaId,
+          ...(filtro.sucursalId ? { id: filtro.sucursalId } : {}),
+        },
+        select: { id: true, nombre: true },
+        orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
+      }),
+      datos.sincronizacionCatalogo.findMany({
+        where: { empresaId: filtro.empresaId, catalogo: 'clientes', ...deLaSucursal },
+        select: { sucursalId: true },
+      }),
+      datos.clienteCatalogo.groupBy({
+        by: ['sucursalId'],
+        where: { empresaId: filtro.empresaId, activo: true, ...deLaSucursal },
+        _count: { _all: true },
+      }),
+      // La lista (los vigentes; los dados de baja sólo entran por `ligados`), con tope.
+      datos.clienteCatalogo.findMany({
+        where: { empresaId: filtro.empresaId, activo: true, ...deLaSucursal },
+        select: seleccion,
+        orderBy: [{ sucursalId: 'asc' }, { nombre: 'asc' }, { id: 'asc' }],
+        take: MAX_CATALOGO_CLIENTES + 1,
+      }),
+      // Los registros de los ids que traen las cuentas, SIN el tope de la lista: así un id sólo
+      // sale "sin ficha" si de verdad no está en el espejo.
+      this.clientesDe(datos, filtro.empresaId, cifras, seleccion),
+    ]);
+    const sincronizado = new Set(sincronizadas.map((s) => s.sucursalId));
+    const activosDe = new Map(activos.map((a) => [a.sucursalId, a._count._all]));
+    const cuentasDe = new Map(cuentas.map((c) => [c.sucursal_id, c]));
+    return resumenClientes({
+      cifras,
+      clientes: [...lista.slice(0, MAX_CATALOGO_CLIENTES), ...ligados],
+      catalogoTruncado: lista.length > MAX_CATALOGO_CLIENTES,
+      sucursales: sucursales.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        sincronizado: sincronizado.has(s.id),
+        clientesActivos: activosDe.get(s.id) ?? 0,
+        cuentas: cuentasDe.get(s.id)?.cuentas ?? 0,
+        cuentasConCliente: cuentasDe.get(s.id)?.con_cliente ?? 0,
+      })),
+      q: opciones.q,
+      pagina: opciones.pagina,
+      porPagina: opciones.porPagina,
+      contacto: opciones.contacto,
+    });
+  }
+
+  /**
+   * La ficha de UN cliente (F2-232): su registro del espejo con sus datos de contacto, sus
+   * cifras del periodo en SU sucursal y lo que más pide. Id ajeno o inexistente = el mismo 404.
+   */
+  async fichaCliente(
+    scope: EmpresaScope,
+    id: string,
+    filtro: { empresaId: string; desde: string; hasta: string },
+  ): Promise<FichaCliente> {
+    // Valida el filtro (400) y la empresa (404) antes de buscar al cliente.
+    await this.agregados.consulta(scope, filtro);
+    const datos = this.datos.para(scope);
+    const c = encontradoOr404(
+      await datos.clienteCatalogo.findFirst({
+        where: { id, empresaId: filtro.empresaId },
+        select: {
+          id: true,
+          sucursalId: true,
+          origenSrId: true,
+          clave: true,
+          nombre: true,
+          telefono: true,
+          correo: true,
+          rfc: true,
+          activo: true,
+          activoPos: true,
+          vistoAt: true,
+          sucursal: { select: { nombre: true } },
+        },
+      }),
+    );
+    const q = await this.agregados.consulta(scope, { ...filtro, sucursalId: c.sucursalId });
+    const origen = c.origenSrId;
+    const [cifras, productos] = await Promise.all([
+      this.cifrasClientes(q, origen),
+      q.consultar<{ producto: string; cantidad: unknown; importe: unknown; cuentas: number }>(
+        Prisma.sql`SELECT p.producto, sum(p.cantidad) AS cantidad, sum(p.total) AS importe,
+          count(DISTINCT p.cheque_id)::int AS cuentas
+        FROM partidas_ventas p
+        JOIN ventas v ON v.id = p.cheque_id AND v.empresa_id = p.empresa_id
+        WHERE v.cliente_origen_sr_id = ${origen}
+        GROUP BY p.producto
+        ORDER BY sum(p.cantidad) DESC, sum(p.total) DESC, p.producto COLLATE ucs_basic
+        LIMIT ${MAX_PRODUCTOS_FICHA}`,
+      ),
+    ]);
+    const dec = (v: unknown) => new Prisma.Decimal((v ?? 0) as Prisma.Decimal.Value);
+    return {
+      cliente: {
+        id: c.id,
+        sucursalId: c.sucursalId,
+        sucursal: c.sucursal.nombre,
+        origenSrId: c.origenSrId,
+        clave: c.clave,
+        nombre: c.nombre,
+        telefono: c.telefono,
+        correo: c.correo,
+        rfc: c.rfc,
+        activo: c.activo,
+        activoPos: c.activoPos,
+        vistoAt: c.vistoAt.toISOString(),
+      },
+      periodo: cifrasDe(cifras[0]),
+      productos: productos.map((p) => ({
+        producto: p.producto,
+        cantidad: dec(p.cantidad).toFixed(3),
+        importe: dec(p.importe).toFixed(2, Prisma.Decimal.ROUND_HALF_UP),
+        cuentas: p.cuentas,
+      })),
+    };
+  }
+
+  /**
+   * Visitas, venta y canceladas del periodo por (sucursal, id del cliente en el POS), de las
+   * CTEs con scope. Con `origen`, sólo las de ese id (la ficha ya fijó la sucursal).
+   */
+  private async cifrasClientes(q: ConsultaVentas, origen?: string): Promise<CifrasClienteLeidas[]> {
+    const deQuien =
+      origen === undefined
+        ? Prisma.sql`cliente_origen_sr_id IS NOT NULL`
+        : Prisma.sql`cliente_origen_sr_id = ${origen}`;
+    const filas = await q.consultar<{
+      sucursal_id: string;
+      origen: string;
+      visitas: number;
+      venta: unknown;
+      ultima: Date | null;
+      canceladas: number;
+      monto_cancelado: unknown;
+    }>(Prisma.sql`SELECT sucursal_id, origen,
+        sum(visitas)::int AS visitas, sum(venta) AS venta, max(ultima) AS ultima,
+        sum(canceladas)::int AS canceladas, sum(monto_cancelado) AS monto_cancelado
+      FROM (
+        SELECT sucursal_id, cliente_origen_sr_id AS origen, count(*) AS visitas,
+          sum(total) AS venta, max(cerrado_at) AS ultima,
+          0 AS canceladas, 0::numeric AS monto_cancelado
+        FROM ventas WHERE ${deQuien} GROUP BY sucursal_id, cliente_origen_sr_id
+        UNION ALL
+        SELECT sucursal_id, cliente_origen_sr_id, 0, 0::numeric, NULL::timestamptz,
+          count(*), sum(total)
+        FROM cancelados WHERE ${deQuien} GROUP BY sucursal_id, cliente_origen_sr_id
+      ) x
+      GROUP BY sucursal_id, origen`);
+    const dec = (v: unknown) => new Prisma.Decimal((v ?? 0) as Prisma.Decimal.Value);
+    return filas.map((f) => ({
+      sucursalId: f.sucursal_id,
+      origenSrId: f.origen,
+      visitas: f.visitas,
+      venta: dec(f.venta),
+      ultimaVisita: f.ultima,
+      canceladas: f.canceladas,
+      montoCancelado: dec(f.monto_cancelado),
+    }));
+  }
+
+  /** Los registros del espejo de los ids de `cifras`, por lotes, con scope y como parámetros. */
+  private async clientesDe<S extends Prisma.ClienteCatalogoSelect>(
+    datos: DatosScoped,
+    empresaId: string,
+    cifras: readonly CifrasClienteLeidas[],
+    select: S,
+  ) {
+    const lotes: Array<Array<{ sucursalId: string; origenSrId: string }>> = [];
+    for (let i = 0; i < cifras.length; i += LOTE_CLIENTES) {
+      lotes.push(
+        cifras
+          .slice(i, i + LOTE_CLIENTES)
+          .map((c) => ({ sucursalId: c.sucursalId, origenSrId: c.origenSrId })),
+      );
+    }
+    const leidos = await Promise.all(
+      lotes.map((pares) =>
+        datos.clienteCatalogo.findMany({ where: { empresaId, OR: pares }, select }),
+      ),
+    );
+    return leidos.flat();
   }
 
   /** Resuelve el nombre del grupo de cada producto en SU sucursal (sin FK: por texto). */

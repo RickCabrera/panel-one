@@ -29,12 +29,17 @@ import { ErrorDto } from '../auth/dto/sesion.dto';
 import type { RequestAutenticado } from '../auth/request-autenticado';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
-import { CatalogosService, type Pagina } from './catalogos.service';
+import { CatalogosService, type FichaCliente, type Pagina } from './catalogos.service';
+import { POR_PAGINA_CLIENTES, type ResumenClientes } from './clientes';
 import type { RendimientoMeseros } from './meseros';
 import {
   CatalogoQueryDto,
   DetalleProductoDto,
   EmpresaQueryDto,
+  FichaClienteDto,
+  FichaClienteQueryDto,
+  ResumenClientesDto,
+  ResumenClientesQueryDto,
   ForzarSincronizacionDto,
   GuardarMetadataDto,
   MenuDto,
@@ -196,6 +201,54 @@ export class CatalogosController {
     return this.catalogos.rendimientoMeseros(scope, {
       empresaId: q.empresaId,
       sucursalId: q.sucursalId,
+      desde: q.desde,
+      hasta: q.hasta,
+    });
+  }
+
+  @Get('clientes/resumen')
+  @ApiOperation({
+    summary: 'Clientes (F2-232): la lista del periodo, con lo derivable de las cuentas.',
+    description:
+      'Visitas, venta, ticket promedio, última visita y canceladas (aparte) por cliente, de las ' +
+      'cuentas del periodo (días LOCALES de cada sucursal) ligadas con el espejo por (sucursal, id ' +
+      'del cliente en el POS). Un id que las cuentas traen y el espejo no tiene sale sin ficha, sin ' +
+      'inventarle una. Por sucursal, el estado de su catálogo y cuántas cuentas traen cliente. Sin ' +
+      'teléfono, correo ni RFC salvo `contacto=true`. Sin cache.',
+  })
+  @ApiOkResponse({ type: ResumenClientesDto })
+  resumenClientes(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: ResumenClientesQueryDto,
+  ): Promise<ResumenClientes> {
+    return this.catalogos.resumenClientes(
+      scope,
+      { empresaId: q.empresaId, sucursalId: q.sucursalId, desde: q.desde, hasta: q.hasta },
+      {
+        q: q.q,
+        pagina: q.pagina ?? 1,
+        porPagina: q.porPagina ?? POR_PAGINA_CLIENTES,
+        contacto: q.contacto === 'true',
+      },
+    );
+  }
+
+  @Get('clientes/:id/ficha')
+  @ApiOperation({
+    summary: 'Clientes (F2-232): la ficha de un cliente, con sus datos y su periodo.',
+    description:
+      'Datos del POS (teléfono, correo, RFC tal como los guarda), cifras del periodo en SU ' +
+      'sucursal (las mismas que /ventas/tickets con `clienteId` y `canceladas=excluir`) y lo que ' +
+      'más pide. Un id que no existe o no es de la empresa = 404.',
+  })
+  @ApiOkResponse({ type: FichaClienteDto })
+  fichaCliente(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() q: FichaClienteQueryDto,
+  ): Promise<FichaCliente> {
+    return this.catalogos.fichaCliente(scope, id, {
+      empresaId: q.empresaId,
       desde: q.desde,
       hasta: q.hasta,
     });
