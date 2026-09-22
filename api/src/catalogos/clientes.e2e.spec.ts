@@ -610,6 +610,10 @@ describe('Clientes (e2e, F2-232)', () => {
     const texto = JSON.stringify(logs, (_k, v: unknown) =>
       v instanceof Error ? `${v.name}: ${v.message} ${v.stack ?? ''}` : v,
     );
+    // Que no pase en vacío: el espía sí capturó lo que loguea la app (el arranque de Nest registra
+    // las rutas nuevas con el mismo Logger que usan los servicios).
+    expect(logs.length).toBeGreaterThan(0);
+    expect(texto).toContain('/catalogos/clientes/resumen');
     for (const dato of PII) {
       expect(texto).not.toContain(dato);
     }

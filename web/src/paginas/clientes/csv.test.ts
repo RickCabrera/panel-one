@@ -26,21 +26,24 @@ const fila = (p: Partial<FilaResumenCliente> = {}): FilaResumenCliente => ({
   ...p,
 });
 
+const ZONAS = new Map([['s1', 'America/Mexico_City']]);
+
 const lineas = (csv: string) => csv.replace(/^\uFEFF/, '').split('\r\n');
 
 describe('clientesACsv (F2-232)', () => {
   it('sin `contacto`: ni nombre, ni teléfono, ni correo, ni RFC, aunque la fila los traiga', () => {
-    const csv = clientesACsv([fila()], false);
+    const csv = clientesACsv([fila()], false, ZONAS);
     expect(csv).not.toMatch(/Ana Cliente|555-010|ejemplo\.test|XAXX/);
     const [enc, uno] = lineas(csv);
     expect(enc).toBe(ENCABEZADOS_CLIENTES.join(','));
     expect(uno).toBe(
-      'Centro,C001,SR-17,En el catálogo,3,183.34,61.11,2026-09-11T05:30:00.000Z,1,80.00',
+      // 05:30Z del 11 es el 10 a las 23:30 en CDMX: la fecha es la de la sucursal, no la UTC.
+      'Centro,C001,SR-17,En el catálogo,3,183.34,61.11,2026-09-10,23:30,1,80.00',
     );
   });
 
   it('con `contacto`: agrega las cuatro columnas al final', () => {
-    const [enc, uno] = lineas(clientesACsv([fila()], true));
+    const [enc, uno] = lineas(clientesACsv([fila()], true, ZONAS));
     expect(enc).toBe([...ENCABEZADOS_CLIENTES, ...ENCABEZADOS_CONTACTO].join(','));
     expect(uno.endsWith(',Ana Cliente,555-010-9901,ana@ejemplo.test,XAXX010101000')).toBe(true);
   });
@@ -61,14 +64,24 @@ describe('clientesACsv (F2-232)', () => {
         }),
       ],
       false,
+      ZONAS,
     );
     const [, uno] = lineas(csv);
     expect(uno).toContain(`'=HYPERLINK`);
-    expect(uno).toContain('Sin ficha en el catálogo,0,0.00,,,1,80.00');
+    expect(uno).toContain('Sin ficha en el catálogo,0,0.00,,,,1,80.00');
   });
 
   it('un importe ilegible detiene el archivo', () => {
-    expect(() => clientesACsv([fila({ venta: '12,5' })], false)).toThrow(/importe inválido/);
+    expect(() => clientesACsv([fila({ venta: '12,5' })], false, ZONAS)).toThrow(/importe inválido/);
+  });
+
+  it('la misma visita en Tijuana cae en su hora; sin la zona de la sucursal no hay archivo', () => {
+    const tj = new Map([['s1', 'America/Tijuana']]);
+    const [, uno] = lineas(clientesACsv([fila()], false, tj));
+    expect(uno).toContain(',2026-09-10,22:30,');
+    expect(() => clientesACsv([fila({ sucursalId: 'otra' })], false, ZONAS)).toThrow(
+      /sucursal que no está en tu lista/,
+    );
   });
 
   it('nombre del archivo', () => {

@@ -95,7 +95,13 @@ export function Clientes() {
                 <Tarjeta titulo="Clientes del periodo" className="mt-4">
                   <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                     <Busqueda inicial={q} buscar={buscar} />
-                    <Exportar filtro={filtro} rango={rango} q={q} sucursal={sucursal?.nombre} />
+                    <Exportar
+                      filtro={filtro}
+                      rango={rango}
+                      q={q}
+                      sucursal={sucursal?.nombre}
+                      zonas={zonas}
+                    />
                   </div>
                   {r.filas.length === 0 ? (
                     <Vacio>
@@ -211,11 +217,13 @@ function Exportar({
   rango,
   q,
   sucursal,
+  zonas,
 }: {
   filtro: Filtro;
   rango: Rango;
   q: string;
   sucursal?: string;
+  zonas: ReadonlyMap<string, string>;
 }) {
   const [contacto, setContacto] = useState(false);
   const [ocupado, setOcupado] = useState(false);
@@ -225,7 +233,7 @@ function Exportar({
     setError(null);
     try {
       const filas = await todasLasFilas(filtro, rango, q, contacto);
-      descargar(nombreCsvClientes(rango, sucursal), clientesACsv(filas, contacto));
+      descargar(nombreCsvClientes(rango, sucursal), clientesACsv(filas, contacto, zonas));
     } catch (e) {
       setError(e instanceof ErrorCsv ? e.message : 'No se pudo generar el archivo.');
     } finally {
