@@ -4144,3 +4144,130 @@ OBSERVACIONES en el primer pase (0 bloqueos). Carriles /api + /web. OpenAPI actu
 **Qué haría distinto.** Correr la suite COMPLETA del API antes de dar por buena una consulta nueva
 con EXISTS o joins: el EXPLAIN aislado y la prueba sola me dijeron 17 ms y 170 ms, y el problema
 sólo salía con el estado de estadísticas que dejan las otras suites.
+
+## 2026-09-22 02:25 — F2-223 · Monitor de mesas: paridad fina
+**Estado:** CERRADA si el PR se mergea.
+Revisor, gate del plan: BLOQUEADO una vez y luego APROBADO CON OBSERVACIONES. El bloqueo fue B1:
+`partidas[].comandaImpresa` cambiaba la forma descrita en el DTO/OpenAPI de `GET /mesas/abiertas` y
+el plan no los tocaba. Gate del entregable: APROBADO CON OBSERVACIONES en el primer pase, 0
+bloqueos. Carriles /web + /api (sólo seed y descripción del DTO). OpenAPI actualizado (sólo la
+descripción de `mesas`; no hay endpoint nuevo). `docs/esquema-sr.md` §5 actualizado: todo lo
+agregado son supuestos, no hallazgos.
+
+**Qué quedó hecho.**
+- **Orden** por Mesa (el de siempre), Antigüedad (la más vieja primero) o Importe (el mayor
+  primero). "Sin dato" siempre va al final y los empates conservan el orden por mesa.
+- **Filtro por estado:** Todas / Sólo atención (semáforo rojo, > 60 min) / Sólo sin imprimir
+  (`impreso === false`; `null` no entra).
+  - El filtro por **sucursal** es el selector de la cabecera (F2-212); no se duplicó.
+- **Persistencia:** orden y filtro van en la URL (`?orden=&estado=`, propios de la vista, NO en
+  `PARAMS_VISTA`) y además se guardan en localStorage **por usuario**
+  (`monitor-mesas:<usuarioId>`, no por empresa; es una decisión). Precedencia: URL válida >
+  guardado válido > default. Entrar desde el menú (que no lleva esos params) aplica lo guardado.
+- **KPI "Atención requerida"** (antes "Atención >60 min"): es un botón con `aria-pressed` que activa
+  o quita el filtro, con borde de peligro si hay > 0.
+- **Vacíos que dicen por qué:**
+  - Todas desconectadas: "Ninguna sucursal está reportando en vivo: sus mesas aparecen cuando su
+    agente vuelva a mandar lectura." Sin KPIs.
+  - Filtro vacío: "Ninguna mesa requiere atención (N sin hora de apertura: no se pueden medir)" y
+    "Ninguna cuenta sin imprimir (N no dicen si ya se imprimieron)".
+- **Vista de pared `/mesas/pared`:**
+  - Ruta dentro de `RutaProtegida` y FUERA de `Layout` (sin menú ni cabecera). Llama a
+    `useNormalizarAlcance()` porque ahí nadie más corrige la URL.
+  - Tipografía: raíz `text-2xl`, mesa `text-5xl`, minutos `text-4xl` e importe `text-3xl`.
+  - Sin partidas y sin detalle.
+  - Botones "Pantalla completa" y "Salir"; este último vuelve a `/mesas` con alcance y criterio.
+  - El enlace "Vista de pared" de `/mesas` pide pantalla completa en el clic (gesto del usuario) y
+    sigue funcionando sin ella si el navegador no la da.
+- **El reloj ya no repinta la vista** (lo central de la tarea):
+  - `Mesas` ya no usa `useAhora`. `useMonitorVivo` (`mesas/vivo.ts`) sólo recibe del reloj un TEXTO
+    con el estado de cada sucursal, así que la vista se recalcula cuando una sucursal se conecta o
+    desconecta.
+  - Cada tarjeta es `memo` (compara `firma`) y calcula SUS minutos con `useConReloj`.
+  - Tienen su propio reloj y se pintan sólo si cambia su texto: KPI de atención, "Última lectura" y
+    banners.
+  - `useConReloj` usa ahora UN intervalo compartido (antes era uno por suscriptor; con 60 tarjetas
+    habrían sido 60).
+- **Estabilidad entre polls:**
+  - Los minutos del Monitor salen de `apertura` = `respuestaAt − edadRecepcion·1000 − (capturadoAt −
+    abiertoAt)`, en reloj del navegador e invariante en el tiempo.
+  - `estabilizarAperturas` conserva la apertura del poll anterior (por sucursal + folio) si difiere
+    < 2 s. Así, un poll con los mismos datos no repinta ninguna tarjeta y el orden por antigüedad no
+    salta.
+- **Pendientes de imprimir en el detalle:**
+  - `partidas[].comandaImpresa` (bool, opcional) es forma NUESTRA.
+  - `false` → etiqueta de texto "Pendiente de imprimir" + un conteo.
+  - Si ninguna partida trae el dato: "El agente no reporta qué partidas faltan por imprimir."
+- **Seed:** la sucursal en vivo pasa de 8 a **60 mesas**. Las 8 a mano siguen iguales y se agregan 52
+  generadas sin azar con el catálogo maestro, más `comandaImpresa` (todas `true` en una cuenta
+  impresa; en una sin imprimir de índice impar, la última va `false`).
+
+**Decisiones que tomé y por qué.**
+- **`armarMonitor` NO cambió de salida.** Lo usan Inicio, Resumen y la cabecera, y sólo se reorganizó
+  por dentro (`estadosSucursales` + `mesasDeFila`).
+  - El Monitor usa `minutosDesde(apertura)`, que puede diferir de `minutosAbierta` **< 2 s** en el
+    borde de un minuto (la edad llega en segundos enteros, más la tolerancia de 2 s).
+  - En el borde de los 60 min, el KPI de Atención del Monitor y el de Inicio/cabecera pueden
+    discrepar esos ~2 s. Dentro del Monitor todo usa la misma función.
+- `DECISION PROVISIONAL (nocturno)`: `comandaImpresa` va en `web/src/paginas/mesas/mesa.ts`
+  (comentario de `leerMesa`) y en `api/prisma/seed-mesas.ts` (`PartidaMesaSeed`).
+  - Ni el nombre ni la semántica salen de SR. Pendiente para F1-023/F2-240: encontrar la columna y
+    mandarlo por partida (está en §5).
+  - No edité la ficha de F1-023, para no tocar el backlog en la rama.
+- El caché de `useMonitorVivo` usa el patrón "estado del render anterior" (`setState` en render). La
+  lint `react-hooks/immutability` rechaza mutar un contenedor de `useState`/ref en un `useMemo`.
+- "Sólo atención" con el reloj: el grid SÍ se repinta cuando una mesa entra o sale del filtro (cruza
+  los 60 min). Es lo esperado, porque la lista cambia; no es regresión del aislamiento.
+
+**Trampas que encontré.**
+- **Heredoc con `\\?` dentro de un script python en el Bash tool:** murió con "unexpected EOF" sin
+  escribir nada (la trampa del log de F2-221/F2-222, otra vez). Para archivos enteros, usa Write.
+- Una prueba de igualdad de minutos contra `armarMonitor` a +7 min "fallaba" porque a esa altura la
+  sucursal ya está desconectada (> 90 s) y `armarMonitor` no devuelve mesas. Pruébalo dentro de los
+  90 s.
+- **Los tests de rendimiento se verificaron por mutación:**
+  - Poner el comparador del `memo` en `false` hace fallar los dos de poll.
+  - Reintroducir `useAhora()` en `Mesas` hace fallar los dos de reloj.
+  - Cuentan renders con mocks parciales de `nombreMesa` (1 por render de tarjeta) y `zonaDelPanel`
+    (sólo en el cuerpo de `Mesas`). Si alguien mueve esas llamadas, el `listo()` del test (contador
+    > 0 tras el render inicial) lo delata en vez de dar verde vacío.
+
+**Qué quedó abierto.**
+- **"60 fps" NO se midió.** jsdom no mide fotogramas; está probado el aislamiento de renders (la
+  causa), igual que el badge de F1-094.
+- **"Se lee a dos metros" es un criterio tipográfico, no se vio a ojo** en una pantalla real. Tampoco
+  se revisó `/mesas` ni `/mesas/pared` a 390 px (los controles nuevos hacen `flex-wrap`). Va para
+  F2-250, junto con Resumen/Comparativos/Análisis/Tickets.
+- **Llave de React con la posición en el snapshot** (`sucursal:folio:i`, de F1-050): si el agente
+  reordena cuentas, las tarjetas se remontan. Costo de repintado, no de datos; está en §5. Las
+  mesas **sin folio** no se estabilizan y se repintan en cada poll.
+- El KPI "Cuentas sin imprimir" no es clicable (la ficha sólo lo pedía para atención; el filtro
+  existe en los botones).
+- La vista de pared no tiene manejo propio de sesión vencida en una pantalla que se queda días
+  prendida: usa el refresh normal. Si eso molesta en campo, es tarea aparte.
+
+**Tests.**
+- Web, nuevos:
+  - `mesas/vivas.test.ts`: apertura, minutos = `armarMonitor`, estabilización, firma y estados.
+  - `mesas/orden.test.ts`: orden, filtro, precedencia y storage que lanza, inválido o roto.
+  - `MesasPared.test.tsx` (6): sin nav, normaliza la empresa, el alcance viaja, criterio, "Salir",
+    nada bajo `text-2xl` en tarjetas/banner/vacíos, y todas desconectadas.
+  - `Mesas.rendimiento.test.tsx` (4, con 60 mesas de folio único): 3 pulsos → 0 commits; una mesa
+    cruza de minuto → sólo su tarjeta; poll igual → 0 tarjetas; poll con UNA mesa cambiada → sólo esa.
+  - `consultas.test.tsx` (+2): el ticker compartido y el orden de desuscripción.
+  - `Mesas.test.tsx` (+11): orden/URL/preferencia, recarga, lo recordado, inválido en URL, KPI
+    clicable, vacíos del filtro, filtro que sigue al reloj, enlace a la pared y pendientes de
+    imprimir.
+- Web, adaptados:
+  - `mesa.test.ts`: el campo nuevo `comandaImpresa: null` en los `toEqual`, más un test del campo.
+  - `Mesas.test.tsx`: el texto del vacío con todas desconectadas.
+- API: `seed-mesas.spec.ts` +2 (60 mesas únicas y los tres colores en las generadas; la regla de
+  `comandaImpresa`), y `toHaveLength(8)` → 60, adaptado por comportamiento nuevo.
+- Números:
+  - Web: build y lint limpios; vitest **834/834** (55 archivos, 0 skips).
+  - API: lint y typecheck limpios; jest **1029/1029** (49 suites, 8 snapshots, 0 skips).
+
+**Qué haría distinto.** Diseñar desde el principio la separación "lo que depende del reloj / lo que
+no" como dos funciones puras (`estadosSucursales` y `mesasVivas`). Con eso, los hooks salen solos y
+el test de rendimiento es casi trivial. Y empezar por el test de poll: el jitter de `apertura` entre
+polls (edad entera + latencia) no se ve con el test de reloj y fue lo que marcó el revisor.

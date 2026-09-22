@@ -62,4 +62,40 @@ describe('useConReloj', () => {
     unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('F2-223: UN solo intervalo para todos; se detiene con el último, salgan en el orden que salgan', () => {
+    const a = renderHook(() => useConReloj((ahora) => Math.floor((ahora - T0) / PULSO_MS)));
+    const b = renderHook(() => useConReloj(() => 'b'));
+    const c = renderHook(() => useConReloj((ahora) => Math.floor((ahora - T0) / PULSO_MS)));
+    expect(vi.getTimerCount()).toBe(1);
+
+    b.unmount();
+    a.unmount();
+    expect(vi.getTimerCount()).toBe(1);
+    // El que queda sigue recibiendo pulsos.
+    pulsos(2);
+    expect(c.result.current).toBe(2);
+
+    c.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+
+    // Y vuelve a arrancar con un suscriptor nuevo.
+    const d = renderHook(() => useConReloj(() => 1));
+    expect(vi.getTimerCount()).toBe(1);
+    d.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('F2-223: lo que cambia en un mismo pulso sale en el mismo tick del reloj', () => {
+    const vistos: number[][] = [[], []];
+    for (const i of [0, 1]) {
+      renderHook(() => {
+        const v = useConReloj((ahora) => ahora - T0 >= PULSO_MS);
+        vistos[i].push(v ? 1 : 0);
+        return v;
+      });
+    }
+    pulsos(1);
+    expect(vistos.map((v) => v.at(-1))).toEqual([1, 1]);
+  });
 });

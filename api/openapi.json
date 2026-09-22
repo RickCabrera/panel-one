@@ -4325,7 +4325,7 @@
               "type": "object",
               "additionalProperties": true
             },
-            "description": "Las cuentas abiertas tal como las mandó el agente; el API no valida su forma. Forma PROVISIONAL que lee el panel (F1-050/F1-051; SUPUESTO, esquema-sr.md §5, la valida F1-023): `{ mesa, mesero, folio, abiertoAt (ISO UTC, reloj del POS), total (\"350.50\" o número), comensales, impreso (bool), partidas: [{ producto, categoria, cantidad, precioUnit, total, modificadores: [{ nombre, precio, modificadores?: [...] }] }] }`. Los modificadores se anidan con la misma llave (el panel lee hasta 4 niveles). Importes con 2 decimales como máximo. Un campo ausente o ilegible se muestra como \"Sin dato\"."
+            "description": "Las cuentas abiertas tal como las mandó el agente; el API no valida su forma. Forma PROVISIONAL que lee el panel (F1-050/F1-051; SUPUESTO, esquema-sr.md §5, la valida F1-023): `{ mesa, mesero, folio, abiertoAt (ISO UTC, reloj del POS), total (\"350.50\" o número), comensales, impreso (bool), partidas: [{ producto, categoria, cantidad, precioUnit, total, modificadores: [{ nombre, precio, modificadores?: [...] }], comandaImpresa? (bool) }] }`. `comandaImpresa` (F2-223, SUPUESTO: forma nuestra, no de SR) dice si la comanda de esa partida ya salió impresa; ausente = el panel dice que no recibe el dato. Los modificadores se anidan con la misma llave (el panel lee hasta 4 niveles). Importes con 2 decimales como máximo. Un campo ausente o ilegible se muestra como \"Sin dato\"."
           }
         },
         "required": [

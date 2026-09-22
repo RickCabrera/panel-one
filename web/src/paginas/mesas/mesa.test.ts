@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { leerMesa, PROFUNDIDAD_MAX_MODIFICADORES } from './mesa';
 
 /** Lo que el modal agrega a cada partida, cuando no viene nada de eso. */
-const SIN_DETALLE = { categoria: null, precioUnit: null, total: null, modificadores: [] };
+const SIN_DETALLE = {
+  categoria: null,
+  precioUnit: null,
+  total: null,
+  modificadores: [],
+  comandaImpresa: null,
+};
 const ILEGIBLE = {
   producto: null,
   cantidad: null,
@@ -11,6 +17,7 @@ const ILEGIBLE = {
   precioUnit: null,
   total: null,
   modificadores: null,
+  comandaImpresa: null,
 };
 
 describe('leerMesa: la forma provisional del snapshot (esquema-sr.md §5)', () => {
@@ -129,7 +136,17 @@ describe('leerMesa: el detalle de cada partida (F1-051)', () => {
         // $0.00 es un precio legible (0n), no "Sin dato".
         { nombre: 'Sin cebolla', precio: 0n, modificadores: [], truncado: false },
       ],
+      comandaImpresa: null,
     });
+  });
+
+  it('F2-223: comandaImpresa sólo se cree si es booleano; si no, "no se sabe" (null)', () => {
+    expect(partida({ producto: 'x', comandaImpresa: false }).comandaImpresa).toBe(false);
+    expect(partida({ producto: 'x', comandaImpresa: true }).comandaImpresa).toBe(true);
+    expect(partida({ producto: 'x' }).comandaImpresa).toBeNull();
+    for (const raro of ['false', 0, 1, null, {}]) {
+      expect(partida({ producto: 'x', comandaImpresa: raro }).comandaImpresa).toBeNull();
+    }
   });
 
   it('el total de la partida nunca se calcula con cantidad × precio', () => {
