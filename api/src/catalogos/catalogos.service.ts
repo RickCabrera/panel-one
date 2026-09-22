@@ -37,6 +37,7 @@ import type {
   EstadoFiltro,
   FilaCatalogoDto,
   FilaClienteDto,
+  FilaInsumoDto,
   FilaProductoDto,
   GuardarMetadataDto,
   SincronizacionSucursalDto,
@@ -127,7 +128,7 @@ export interface Pagina<T> {
   porPagina: number;
 }
 
-/** Columnas comunes que se leen de las seis tablas espejo. */
+/** Columnas comunes que se leen de las tablas espejo. */
 const SELECT_COMUN = {
   id: true,
   sucursalId: true,
@@ -154,7 +155,7 @@ interface FilaComun {
   sucursal: { nombre: string };
 }
 
-/** La forma común de los seis delegados CON scope que usa la lectura. */
+/** La forma común de los delegados espejo CON scope que usa la lectura. */
 interface DelegadoLectura {
   findMany(args: object): Promise<Array<FilaComun & Record<string, unknown>>>;
   count(args: object): Promise<number>;
@@ -168,6 +169,11 @@ function delegado(datos: DatosScoped, catalogo: CatalogoSr): DelegadoLectura {
     clientes: datos.clienteCatalogo,
     areas: datos.areaCatalogo,
     canales: datos.canalVentaCatalogo,
+    unidades: datos.unidadCatalogo,
+    grupos_insumo: datos.grupoInsumo,
+    insumos: datos.insumo,
+    almacenes: datos.almacenCatalogo,
+    proveedores: datos.proveedorCatalogo,
   };
   return d[catalogo] as DelegadoLectura;
 }
@@ -182,6 +188,8 @@ function extraSelect(catalogo: CatalogoSr): Record<string, unknown> {
       };
     case 'clientes':
       return { telefono: true, correo: true, rfc: true };
+    case 'insumos':
+      return { grupoOrigenSrId: true, unidadOrigenSrId: true };
     default:
       return {};
   }
@@ -221,7 +229,7 @@ export class CatalogosService {
     scope: EmpresaScope,
     catalogo: CatalogoSr,
     f: FiltroCatalogo,
-  ): Promise<Pagina<FilaCatalogoDto | FilaProductoDto | FilaClienteDto>> {
+  ): Promise<Pagina<FilaCatalogoDto | FilaProductoDto | FilaClienteDto | FilaInsumoDto>> {
     const datos = this.datos.para(scope);
     await verificarAlcance(datos, f.empresaId, f.sucursalId);
     const pagina = f.pagina ?? 1;
@@ -257,14 +265,16 @@ export class CatalogosService {
     const vistas =
       catalogo === 'productos'
         ? await this.conGrupo(datos, f.empresaId, filas)
-        : catalogo === 'clientes'
-          ? filas.map((r) => ({
-              ...vistaComun(r),
-              telefono: r.telefono as string | null,
-              correo: r.correo as string | null,
-              rfc: r.rfc as string | null,
-            }))
-          : filas.map(vistaComun);
+        : catalogo === 'insumos'
+          ? await this.conGrupoYUnidad(datos, f.empresaId, filas)
+          : catalogo === 'clientes'
+            ? filas.map((r) => ({
+                ...vistaComun(r),
+                telefono: r.telefono as string | null,
+                correo: r.correo as string | null,
+                rfc: r.rfc as string | null,
+              }))
+            : filas.map(vistaComun);
     return { filas: vistas, total, pagina, porPagina: POR_PAGINA };
   }
 
@@ -356,7 +366,11 @@ export class CatalogosService {
    * Las áreas del espejo con su canal de negocio (F2-233), en cualquier estado: un área dada de
    * baja sigue teniendo ventas en periodos pasados y su canal se puede corregir.
    */
-  async mapeoAreas(scope: EmpresaScope, empresaId: string, sucursalId?: string): Promise<MapeoAreas> {
+  async mapeoAreas(
+    scope: EmpresaScope,
+    empresaId: string,
+    sucursalId?: string,
+  ): Promise<MapeoAreas> {
     const datos = this.datos.para(scope);
     await verificarAlcance(datos, empresaId, sucursalId);
     const deLaSucursal = sucursalId ? { sucursalId } : {};
@@ -921,6 +935,51 @@ export class CatalogosService {
       ),
     );
     return leidos.flat();
+  }
+
+  /**
+   * Resuelve el grupo de insumo y la unidad de cada insumo en SU sucursal (F2-120; sin FK: por
+   * texto, como el grupo del producto). Con el scope y la empresa en el WHERE: un grupo o una
+   * unidad con el mismo `origenSrId` en otra sucursal (o empresa) no cuenta.
+   */
+  private async conGrupoYUnidad(
+    datos: DatosScoped,
+    empresaId: string,
+    filas: ReadonlyArray<FilaComun & Record<string, unknown>>,
+  ): Promise<FilaInsumoDto[]> {
+    const pedidos = (col: 'grupoOrigenSrId' | 'unidadOrigenSrId') =>
+      filas.flatMap((f) =>
+        typeof f[col] === 'string' ? [{ sucursalId: f.sucursalId, origenSrId: f[col] }] : [],
+      );
+    const select = { sucursalId: true, origenSrId: true, nombre: true } as const;
+    const pg = pedidos('grupoOrigenSrId');
+    const pu = pedidos('unidadOrigenSrId');
+    const [grupos, unidades] = await Promise.all([
+      pg.length === 0 ? [] : datos.grupoInsumo.findMany({ where: { empresaId, OR: pg }, select }),
+      pu.length === 0
+        ? []
+        : datos.unidadCatalogo.findMany({ where: { empresaId, OR: pu }, select }),
+    ]);
+    const llave = (sucursalId: string, origen: string) => `${sucursalId}|${origen}`;
+    const nombreGrupo = new Map(grupos.map((g) => [llave(g.sucursalId, g.origenSrId), g.nombre]));
+    const nombreUnidad = new Map(
+      unidades.map((u) => [llave(u.sucursalId, u.origenSrId), u.nombre]),
+    );
+    return filas.map((f) => {
+      const grupoOrigenSrId = (f.grupoOrigenSrId as string | null) ?? null;
+      const unidadOrigenSrId = (f.unidadOrigenSrId as string | null) ?? null;
+      return {
+        ...vistaComun(f),
+        grupoOrigenSrId,
+        grupo: grupoOrigenSrId
+          ? (nombreGrupo.get(llave(f.sucursalId, grupoOrigenSrId)) ?? null)
+          : null,
+        unidadOrigenSrId,
+        unidad: unidadOrigenSrId
+          ? (nombreUnidad.get(llave(f.sucursalId, unidadOrigenSrId)) ?? null)
+          : null,
+      };
+    });
   }
 
   /** Resuelve el nombre del grupo de cada producto en SU sucursal (sin FK: por texto). */

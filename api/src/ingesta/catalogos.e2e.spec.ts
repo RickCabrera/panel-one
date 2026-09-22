@@ -751,7 +751,7 @@ describe('Catálogos espejo (e2e, F2-230)', () => {
   });
 
   describe('forzado manual de la sincronización', () => {
-    it('la solicitud en A1 sólo la ve el agente de A1, y queda pendiente hasta cerrar los seis', async () => {
+    it('la solicitud en A1 sólo la ve el agente de A1, y queda pendiente hasta cerrar los once', async () => {
       expect((await solicitud(KEYS.a1)).body).toEqual({ solicitadaAt: null, pendiente: false });
       const f = await post('/catalogos/sincronizacion/forzar', USUARIOS.adminEmpresaA, {
         empresaId: FX.empresaA,
@@ -759,7 +759,7 @@ describe('Catálogos espejo (e2e, F2-230)', () => {
       });
       expect(f.status).toBe(202);
       expect(f.body).toMatchObject({ sucursalId: FX.sucursalA1, solicitud: { pendiente: true } });
-      expect(f.body.catalogos).toHaveLength(6);
+      expect(f.body.catalogos).toHaveLength(11);
 
       const a1 = await solicitud(KEYS.a1);
       expect(a1.body.pendiente).toBe(true);
@@ -789,6 +789,18 @@ describe('Catálogos espejo (e2e, F2-230)', () => {
       }
       expect((await solicitud(KEYS.a1)).body.pendiente).toBe(true);
       expect((await cierre(KEYS.a1, 'canales', 79, t, 0)).status).toBe(200);
+      // F2-120: los seis de F2-230 ya no bastan; faltan los cinco de inventario (vacíos en A1).
+      const inventario: CatalogoSr[] = [
+        'unidades',
+        'grupos_insumo',
+        'insumos',
+        'almacenes',
+        'proveedores',
+      ];
+      for (const [i, c] of inventario.entries()) {
+        expect((await solicitud(KEYS.a1)).body.pendiente).toBe(true);
+        expect((await cierre(KEYS.a1, c, 80 + i, t, 0)).status).toBe(200);
+      }
       expect((await solicitud(KEYS.a1)).body.pendiente).toBe(false);
 
       const estado = await get('/catalogos/sincronizacion', USUARIOS.visorA, {
@@ -803,6 +815,11 @@ describe('Catálogos espejo (e2e, F2-230)', () => {
         'clientes',
         'areas',
         'canales',
+        'unidades',
+        'grupos_insumo',
+        'insumos',
+        'almacenes',
+        'proveedores',
       ]);
       expect(
         deA1.catalogos.every((c: { ultimaCompletaAt: string | null }) => c.ultimaCompletaAt === t),

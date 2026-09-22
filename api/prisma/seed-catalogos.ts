@@ -12,7 +12,8 @@ import type { Universo } from './seed-maestro';
 /**
  * Persiste los catálogos del seed maestro (F2-201) en las tablas espejo de F2-230:
  * **grupos, productos (con su precio por sucursal, F2-145), meseros, clientes, áreas y canales
- * (F2-233)**, y el mapeo demo área → canal de negocio (F2-233, `areas_canal`).
+ * (F2-233)**, los de inventario (F2-120: **unidades, grupos de insumo, insumos, almacenes y
+ * proveedores**), y el mapeo demo área → canal de negocio (F2-233, `areas_canal`).
  *
  * No escribe directo: hace, por cada sucursal y catálogo, una sincronización COMPLETA
  * (páginas + cierre) por el MISMO servicio de la ingesta del agente
@@ -27,6 +28,10 @@ import type { Universo } from './seed-maestro';
  *   en la suya.
  * - Áreas: las de SU sucursal (`origenSrId` = `clave` A01…). Canales: los tres tipos de servicio
  *   del universo (S01…), en cada sucursal; no intervienen en el cálculo del canal de negocio.
+ * - Inventario (F2-120): unidades, grupos de insumo, insumos y proveedores del universo en cada
+ *   sucursal (cada una es su POS); los almacenes, los de SU sucursal (`origenSrId` = `clave`
+ *   `<sucursal>-GEN|BAR`). El insumo lleva su grupo y su unidad por clave. Nada nuevo se genera:
+ *   el PRNG no se mueve.
  * - Mapeo demo: el `canal` de cada área del universo, sólo donde el área NO tiene mapeo todavía
  *   (`skipDuplicates`): re-sembrar no pisa lo que alguien cambió en el panel. La `empresa_id` sale
  *   de la fila espejo, no de una constante.
@@ -42,6 +47,11 @@ export const CATALOGOS_SEMBRADOS: readonly CatalogoSr[] = [
   'clientes',
   'areas',
   'canales',
+  'unidades',
+  'grupos_insumo',
+  'insumos',
+  'almacenes',
+  'proveedores',
 ];
 
 /** `actualizado_por` del mapeo demo: no es un usuario (la columna no tiene FK). */
@@ -94,6 +104,24 @@ export function registrosDe(u: Universo, sucursalId: string, catalogo: CatalogoS
         const clave = `S${String(i + 1).padStart(2, '0')}`;
         return { origenSrId: clave, clave, nombre: nombreCanal(c) };
       });
+    case 'unidades':
+      return u.unidades.map((x) => ({ origenSrId: x.clave, clave: x.clave, nombre: x.nombre }));
+    case 'grupos_insumo':
+      return u.gruposInsumo.map((g) => ({ origenSrId: g.clave, clave: g.clave, nombre: g.nombre }));
+    case 'insumos':
+      return u.insumos.map((i) => ({
+        origenSrId: i.clave,
+        clave: i.clave,
+        nombre: i.nombre,
+        grupoOrigenSrId: i.grupo,
+        unidadOrigenSrId: i.unidad,
+      }));
+    case 'almacenes':
+      return u.almacenes
+        .filter((a) => a.sucursalId === sucursalId)
+        .map((a) => ({ origenSrId: a.clave, clave: a.clave, nombre: a.nombre }));
+    case 'proveedores':
+      return u.proveedores.map((p) => ({ origenSrId: p.clave, clave: p.clave, nombre: p.nombre }));
     default:
       return [];
   }

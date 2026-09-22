@@ -59,6 +59,12 @@ describe('whereEmpresa / whereScoped', () => {
       AreaCanal: 'empresaId',
       SincronizacionCatalogo: 'empresaId',
       SolicitudSincronizacion: 'empresaId',
+      // F2-120: catálogos de inventario.
+      UnidadCatalogo: 'empresaId',
+      GrupoInsumo: 'empresaId',
+      Insumo: 'empresaId',
+      AlmacenCatalogo: 'empresaId',
+      ProveedorCatalogo: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });

@@ -55,6 +55,7 @@ import {
   MenuQueryDto,
   PaginaCatalogoLecturaDto,
   PaginaClientesDto,
+  PaginaInsumosDto,
   PaginaProductosDto,
   RendimientoMeserosDto,
   RendimientoMeserosQueryDto,
@@ -153,6 +154,61 @@ export class CatalogosController {
     @Query() q: CatalogoQueryDto,
   ): Promise<Pagina<FilaCatalogoDto>> {
     return this.listar(scope, 'canales', q);
+  }
+
+  // --- inventario (F2-120) ---
+
+  @Get('unidades')
+  @ApiOperation({ summary: 'Unidades de medida del inventario del POS.', description: DESC_LISTA })
+  @ApiOkResponse({ type: PaginaCatalogoLecturaDto })
+  unidades(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: CatalogoQueryDto,
+  ): Promise<Pagina<FilaCatalogoDto>> {
+    return this.listar(scope, 'unidades', q);
+  }
+
+  @Get('grupos-insumo')
+  @ApiOperation({ summary: 'Grupos de insumos del inventario del POS.', description: DESC_LISTA })
+  @ApiOkResponse({ type: PaginaCatalogoLecturaDto })
+  gruposInsumo(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: CatalogoQueryDto,
+  ): Promise<Pagina<FilaCatalogoDto>> {
+    return this.listar(scope, 'grupos_insumo', q);
+  }
+
+  @Get('insumos')
+  @ApiOperation({
+    summary: 'Insumos del inventario del POS, con su grupo y su unidad en la misma sucursal.',
+    description: `${DESC_LISTA} Sin costo: el costo con que se valúa va por almacén (existencias).`,
+  })
+  @ApiOkResponse({ type: PaginaInsumosDto })
+  insumos(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: CatalogoQueryDto,
+  ): Promise<Pagina<FilaCatalogoDto>> {
+    return this.listar(scope, 'insumos', q);
+  }
+
+  @Get('almacenes')
+  @ApiOperation({ summary: 'Almacenes de cada sucursal en el POS.', description: DESC_LISTA })
+  @ApiOkResponse({ type: PaginaCatalogoLecturaDto })
+  almacenes(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: CatalogoQueryDto,
+  ): Promise<Pagina<FilaCatalogoDto>> {
+    return this.listar(scope, 'almacenes', q);
+  }
+
+  @Get('proveedores')
+  @ApiOperation({ summary: 'Proveedores registrados en el POS.', description: DESC_LISTA })
+  @ApiOkResponse({ type: PaginaCatalogoLecturaDto })
+  proveedores(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: CatalogoQueryDto,
+  ): Promise<Pagina<FilaCatalogoDto>> {
+    return this.listar(scope, 'proveedores', q);
   }
 
   @Get('areas/mapeo')
@@ -333,7 +389,7 @@ export class CatalogosController {
 
   @Get('sincronizacion')
   @ApiOperation({
-    summary: 'Estado de sincronización de los seis catálogos de cada sucursal de la empresa.',
+    summary: 'Estado de sincronización de los once catálogos de cada sucursal de la empresa.',
   })
   @ApiOkResponse({ type: [SincronizacionSucursalDto] })
   sincronizacion(

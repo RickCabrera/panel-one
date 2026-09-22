@@ -7,6 +7,7 @@ import { validate, type ValidationError } from 'class-validator';
 import {
   RegistroCatalogoDto,
   RegistroClienteDto,
+  RegistroInsumoDto,
   RegistroProductoDto,
   type RechazoRegistroDto,
 } from './dto/catalogos.dto';
@@ -25,11 +26,19 @@ export const CATALOGOS: readonly CatalogoSr[] = [
   'clientes',
   'areas',
   'canales',
+  // F2-120: inventario. Entran también al forzado manual: una solicitud sigue pendiente
+  // hasta que cierran los ONCE (el agente de F2-240 sin los lectores de F2-241 la deja
+  // pendiente; ver la nota "Y además (de F2-120)" en F2-240).
+  'unidades',
+  'grupos_insumo',
+  'insumos',
+  'almacenes',
+  'proveedores',
 ];
 
 /**
- * ¿Sigue pendiente una solicitud de sincronización? Sí mientras algún catálogo de los seis
- * no haya RECIBIDO un cierre (reloj del API) después de la solicitud. Un cierre tomado antes
+ * ¿Sigue pendiente una solicitud de sincronización? Sí mientras algún catálogo de `CATALOGOS`
+ * (los once) no haya RECIBIDO un cierre (reloj del API) después de la solicitud. Un cierre tomado antes
  * pero recibido después la da por atendida: desfase de relojes aceptado (F2-230).
  */
 export function solicitudPendiente(
@@ -62,6 +71,8 @@ function claseDe(catalogo: CatalogoSr): ClassConstructor<RegistroCatalogoDto> {
       return RegistroProductoDto;
     case 'clientes':
       return RegistroClienteDto;
+    case 'insumos':
+      return RegistroInsumoDto;
     default:
       return RegistroCatalogoDto;
   }
@@ -75,6 +86,8 @@ export function columnasDe(catalogo: CatalogoSr): readonly string[] {
       return [...comunes, 'grupoOrigenSrId', 'precio'];
     case 'clientes':
       return [...comunes, 'telefono', 'correo', 'rfc'];
+    case 'insumos':
+      return [...comunes, 'grupoOrigenSrId', 'unidadOrigenSrId'];
     default:
       return comunes;
   }

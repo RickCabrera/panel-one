@@ -45,6 +45,13 @@ export const LLAVE_EMPRESA = {
   AreaCanal: 'empresaId',
   SincronizacionCatalogo: 'empresaId',
   SolicitudSincronizacion: 'empresaId',
+  // F2-120. Catálogos de inventario: como los espejos de F2-230, los escribe SÓLO
+  // `IngestaCatalogos` (clavada a la sucursal del agente).
+  UnidadCatalogo: 'empresaId',
+  GrupoInsumo: 'empresaId',
+  Insumo: 'empresaId',
+  AlmacenCatalogo: 'empresaId',
+  ProveedorCatalogo: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

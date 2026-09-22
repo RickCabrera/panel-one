@@ -272,6 +272,39 @@ export class PaginaProductosDto extends PaginaBaseDto {
   filas!: FilaProductoDto[];
 }
 
+/** Un insumo del inventario (F2-120), con su grupo y su unidad resueltos en SU sucursal. */
+export class FilaInsumoDto extends FilaCatalogoDto {
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'El `origenSrId` de su grupo de insumo.',
+  })
+  grupoOrigenSrId!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Nombre del grupo de insumo en la MISMA sucursal; nulo si no trae grupo o aún no llegó.',
+  })
+  grupo!: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: 'El `origenSrId` de su unidad.' })
+  unidadOrigenSrId!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Nombre de la unidad en la MISMA sucursal; nulo si no trae unidad o aún no llegó.',
+  })
+  unidad!: string | null;
+}
+
+export class PaginaInsumosDto extends PaginaBaseDto {
+  @ApiProperty({ type: [FilaInsumoDto] })
+  filas!: FilaInsumoDto[];
+}
+
 export class PaginaClientesDto extends PaginaBaseDto {
   @ApiProperty({ type: [FilaClienteDto] })
   filas!: FilaClienteDto[];
@@ -357,7 +390,11 @@ export class SincronizacionSucursalDto {
   @ApiProperty()
   sucursal!: string;
 
-  @ApiProperty({ type: [EstadoCatalogoDto], description: 'Siempre los seis, en orden fijo.' })
+  @ApiProperty({
+    type: [EstadoCatalogoDto],
+    description:
+      'Siempre los once, en orden fijo (los seis de F2-230 y los cinco de inventario de F2-120).',
+  })
   catalogos!: EstadoCatalogoDto[];
 
   @ApiProperty({ type: SolicitudPanelDto })

@@ -84,7 +84,7 @@ function sinIntocables(contenido: Contenido): Contenido {
 type Tx = Prisma.TransactionClient;
 
 /**
- * La forma común de los seis delegados espejo. Prisma genera un tipo por modelo; todos
+ * La forma común de los delegados espejo (F2-230 y F2-120). Prisma genera un tipo por modelo; todos
  * comparten estas columnas y operaciones, y el helper sólo usa éstas.
  */
 interface DelegadoCatalogo {
@@ -108,6 +108,11 @@ export function delegadoDe(tx: Tx, catalogo: CatalogoSr): DelegadoCatalogo {
     clientes: tx.clienteCatalogo,
     areas: tx.areaCatalogo,
     canales: tx.canalVentaCatalogo,
+    unidades: tx.unidadCatalogo,
+    grupos_insumo: tx.grupoInsumo,
+    insumos: tx.insumo,
+    almacenes: tx.almacenCatalogo,
+    proveedores: tx.proveedorCatalogo,
   };
   return delegados[catalogo] as DelegadoCatalogo;
 }
