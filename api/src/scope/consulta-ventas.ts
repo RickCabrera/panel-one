@@ -28,12 +28,17 @@ import type { EmpresaScope } from './empresa-scope';
  *   la lista de tickets (F1-033) = `ventas` ∪ `cancelados`; `momento` es
  *   `cerrado_at` en los no cancelados. Las columnas de `mesa` en adelante son de los
  *   filtros y el orden de F2-222.
- * - `partidas_tickets(cheque_id, empresa_id, sucursal_id, producto)` y
- *   `pagos_tickets(cheque_id, empresa_id, sucursal_id, forma_raw)` (F2-222): partidas y
- *   pagos de los TICKETS del rango, cancelados incluidos (para buscar por producto o forma
- *   de pago). Se atan a `ventas` ∪ `cancelados` y no a la CTE `tickets` a propósito: así
- *   `tickets` sigue referenciada una sola vez y Postgres puede seguir metiéndola dentro de
- *   la consulta (sin materializarla) en la lista sin filtros.
+ * - `partidas_empresa(cheque_id, empresa_id, producto)` y
+ *   `pagos_empresa(cheque_id, empresa_id, forma_raw)` (F2-222): partidas y pagos de la
+ *   EMPRESA pedida (con tenant), SIN corte de rango ni de sucursal. Sólo sirven
+ *   CORRELACIONADAS con un ticket (`EXISTS (... WHERE x.cheque_id = t.id AND x.empresa_id =
+ *   t.empresa_id)`): el rango y la sucursal los pone `tickets`. NUNCA se agregan solas (una
+ *   Σ sobre ellas sería de toda la historia). Por qué sin rango: atarlas a `ventas` ∪
+ *   `cancelados` (CTEs materializadas, sin índice y con estimación de 1 fila) hacía que
+ *   Postgres las resolviera con nested loops de CTE Scan por cada ticket, O(n²), y con
+ *   estadísticas viejas el filtro pasaba el timeout de 5 s. Así, cada ticket busca las suyas
+ *   por índice (`cheque_id`). Tampoco se atan a `tickets`: así `tickets` sigue referenciada
+ *   una sola vez y Postgres puede meterla dentro de la consulta en la lista sin filtros.
  *
  * `recibido_at` es `cheques.created_at`: cuándo llegó el cheque a NUESTRA base
  * por primera vez (el upsert de la ingesta no lo reescribe). Sirve para el corte
@@ -89,8 +94,8 @@ export const CTES_VENTAS = [
   'pagos_ventas',
   'catalogo_formas',
   'tickets',
-  'partidas_tickets',
-  'pagos_tickets',
+  'partidas_empresa',
+  'pagos_empresa',
 ] as const;
 
 const HORA_ISO = /T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/;
@@ -372,20 +377,14 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
            recibido_at,
            mesa, mesero, comensales, propina, total, abierto_at, cerrado_at FROM cancelados
   ),
-  partidas_tickets AS (
-    SELECT p.cheque_id, p.empresa_id, t.sucursal_id, p.producto
+  partidas_empresa AS (
+    SELECT p.cheque_id, p.empresa_id, p.producto
     FROM cheque_partidas p
-    JOIN (SELECT id, empresa_id, sucursal_id FROM ventas
-          UNION ALL SELECT id, empresa_id, sucursal_id FROM cancelados) t
-      ON t.id = p.cheque_id AND t.empresa_id = p.empresa_id
     WHERE p.empresa_id = ${empresa} ${filtroTenant(scope, 'p')}
   ),
-  pagos_tickets AS (
-    SELECT g.cheque_id, g.empresa_id, t.sucursal_id, g.forma_raw
+  pagos_empresa AS (
+    SELECT g.cheque_id, g.empresa_id, g.forma_raw
     FROM cheque_pagos g
-    JOIN (SELECT id, empresa_id, sucursal_id FROM ventas
-          UNION ALL SELECT id, empresa_id, sucursal_id FROM cancelados) t
-      ON t.id = g.cheque_id AND t.empresa_id = g.empresa_id
     WHERE g.empresa_id = ${empresa} ${filtroTenant(scope, 'g')}
   )`;
 }

@@ -160,13 +160,13 @@ function condicionesFiltro(opciones: OpcionesTickets): Prisma.Sql[] {
   if (opciones.canceladas === 'solo') c.push(Prisma.sql`t.cancelado`);
   if (opciones.producto !== undefined) {
     // `strpos` y no LIKE: el texto es literal, sin comodines que escapar.
-    c.push(Prisma.sql`EXISTS (SELECT 1 FROM partidas_tickets pt
+    c.push(Prisma.sql`EXISTS (SELECT 1 FROM partidas_empresa pt
       WHERE pt.cheque_id = t.id AND pt.empresa_id = t.empresa_id
         AND strpos(lower(pt.producto), lower(${opciones.producto})) > 0)`);
   }
   if (opciones.forma !== undefined) {
     // El MISMO criterio que `pagos[].forma` del detalle: catálogo de la empresa, o `otro`.
-    c.push(Prisma.sql`EXISTS (SELECT 1 FROM pagos_tickets gt
+    c.push(Prisma.sql`EXISTS (SELECT 1 FROM pagos_empresa gt
       LEFT JOIN catalogo_formas cf ON cf.empresa_id = gt.empresa_id AND cf.forma_raw = gt.forma_raw
       WHERE gt.cheque_id = t.id AND gt.empresa_id = t.empresa_id
         AND COALESCE(cf.forma, ${FormaPago.otro}) = ${opciones.forma})`);

@@ -57,7 +57,7 @@ const COLUMNAS_F2_222: ReadonlyArray<readonly [string, string]> = [
   ],
 ];
 const CTES_F2_222 =
-  /,\n {2}partidas_tickets AS \([\s\S]*?\n {2}\),\n {2}pagos_tickets AS \([\s\S]*?\n {2}\)(?= SELECT )/;
+  /,\n {2}partidas_empresa AS \([\s\S]*?\n {2}\),\n {2}pagos_empresa AS \([\s\S]*?\n {2}\)(?= SELECT )/;
 
 function sinF2222(texto: string): string {
   let resto = texto.replace(/\r\n/g, '\n');
@@ -202,7 +202,7 @@ describe('alturaAl (F2-220)', () => {
     const armado = await sqlDe(ok);
     // F2-221 sólo agregó columnas al SELECT de `ventas` y `cancelados`. Se quitan aquí y lo que
     // queda tiene que ser el snapshot de SIEMPRE (no se regeneró): ningún filtro cambió.
-    // F2-222 agregó columnas y dos CTEs AL FINAL (`partidas_tickets`, `pagos_tickets`), con sus
+    // F2-222 agregó columnas y dos CTEs AL FINAL (`partidas_empresa`, `pagos_empresa`), con sus
     // 4 parámetros también al final: se quitan, y lo demás sigue siendo el snapshot de siempre.
     expect(sinColumnasF2221(sinF2222(armado.sql))).toMatchSnapshot();
     expect(armado.values.slice(0, -4)).toMatchSnapshot();
@@ -211,7 +211,7 @@ describe('alturaAl (F2-220)', () => {
 
   // Las CTEs nuevas se quitan del snapshot: su filtro de tenant se prueba AQUÍ, texto y valores,
   // con scope empresa y con scope global.
-  describe('CTEs de F2-222 (partidas_tickets, pagos_tickets)', () => {
+  describe('CTEs de F2-222 (partidas_empresa, pagos_empresa)', () => {
     async function armadoCon(scope: EmpresaScope): Promise<Prisma.Sql> {
       let capturado: Prisma.Sql | undefined;
       const consulta = new ConsultaVentas(
@@ -227,30 +227,28 @@ describe('alturaAl (F2-220)', () => {
     }
 
     it.each([
-      ['partidas_tickets', 'p', 'cheque_partidas'],
-      ['pagos_tickets', 'g', 'cheque_pagos'],
-    ])('%s: empresa pedida + tenant del usuario, atada a ventas ∪ cancelados', async (cte, a) => {
+      ['partidas_empresa', 'p', 'cheque_partidas'],
+      ['pagos_empresa', 'g', 'cheque_pagos'],
+    ])('%s: SÓLO su tabla, empresa pedida + tenant del usuario', async (cte, a, tabla) => {
       const armado = await armadoCon(A);
       const texto = armado.sql.replace(/\r\n/g, '\n');
       const cuerpo = new RegExp(`\\n {2}${cte} AS \\(([\\s\\S]*?)\\n {2}\\)`).exec(texto)![1];
-      expect(cuerpo).toContain(`ON t.id = ${a}.cheque_id AND t.empresa_id = ${a}.empresa_id`);
-      expect(cuerpo).toContain(
-        '(SELECT id, empresa_id, sucursal_id FROM ventas\n' +
-          '          UNION ALL SELECT id, empresa_id, sucursal_id FROM cancelados) t',
-      );
+      expect(cuerpo).toContain(`FROM ${tabla} ${a}\n`);
       expect(cuerpo).toMatch(
         new RegExp(`WHERE ${a}\\.empresa_id = \\?::uuid AND ${a}\\.empresa_id = \\?::uuid$`),
       );
-      // Nunca contra la CTE `tickets`: la dejaría con dos referencias y Postgres la materializaría.
-      expect(cuerpo).not.toMatch(/\btickets\b/);
+      // Sin JOIN: atarlas a `ventas`/`cancelados` (CTEs materializadas) daba nested loops O(n²)
+      // que pasaban el timeout; a `tickets`, la dejaría con dos referencias (materializada).
+      expect(cuerpo).not.toMatch(/\bjoin\b/i);
+      expect(cuerpo).not.toMatch(/\b(tickets|ventas|cancelados)\b/);
     });
 
     it('con scope global sólo va la empresa pedida (sin tenant), 2 parámetros', async () => {
       const armado = await armadoCon({ tipo: 'global' });
       const texto = armado.sql.replace(/\r\n/g, '\n');
       for (const [cte, a] of [
-        ['partidas_tickets', 'p'],
-        ['pagos_tickets', 'g'],
+        ['partidas_empresa', 'p'],
+        ['pagos_empresa', 'g'],
       ]) {
         const cuerpo = new RegExp(`\\n {2}${cte} AS \\(([\\s\\S]*?)\\n {2}\\)`).exec(texto)![1];
         expect(cuerpo).toMatch(new RegExp(`WHERE ${a}\\.empresa_id = \\?::uuid\\s*$`));
