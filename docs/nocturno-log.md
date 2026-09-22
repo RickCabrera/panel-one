@@ -5626,6 +5626,13 @@ backlog.
 - `.wt-main/` sigue en la raíz (de F2-230). ACCIÓN PARA RICARDO: borrarla. Agrego por ruta, nunca
   `git add -A`.
 - Rojo local preexistente: `prisma/esquema.spec.ts` (argon2id del admin). Igual que en F2-120/F2-121.
+- **CI rojo 1 de 2: `alertas.e2e.spec.ts` › AC1 (de F2-224, no de esta tarea), INTERMITENTE.** Las
+  62 alertas del seed abren en el MISMO `T0` y `/alertas/historial` pagina de 50 con desempate por
+  id (uuid aleatorio): ~1 de cada 5 corridas la fila buscada cae en la página 2 y el test la busca
+  sólo en la 1. Lo reproduje en local (1 rojo de 2, y con un conteo temporal: total 62, todas en
+  T0). Arreglo en el test, sin aflojar la aserción: recorre todas las páginas del historial y exige
+  la misma fila con sus dos marcas. 5 de 5 verdes después. El servicio no cambió. Si otra suite
+  pagina sobre filas con el mismo instante, tiene el mismo riesgo.
 
 **Qué quedó abierto.**
 - El lector de movimientos del agente (F2-241) y el cuadre real (F2-193).
