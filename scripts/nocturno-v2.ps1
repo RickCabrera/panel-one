@@ -55,6 +55,16 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+
+# CONSOLA EN UTF-8 (F2-203). La consola de PowerShell 5.1 arranca en la pagina
+# de codigos OEM (850/437) y pinta los acentos que le llegan de git y de claude
+# como "revocaci?n" roto en dos simbolos. El repo esta bien; es la consola.
+# OutputEncoding de [Console] es lo que se PINTA; $OutputEncoding es lo que este
+# script le manda por tuberia a un ejecutable nativo. Va despues del param():
+# antes de el, PowerShell no acepta ninguna instruccion.
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$OutputEncoding = [Text.Encoding]::UTF8
+
 $raiz = Split-Path -Parent $PSScriptRoot
 Set-Location $raiz
 

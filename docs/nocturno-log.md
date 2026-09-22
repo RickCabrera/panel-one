@@ -3072,3 +3072,143 @@ aprobado al segundo intento.
 
 **Qué haría distinto.** Probar la lectura de fechas de terceros con `TZ=UTC` desde el
 primer test: cualquier `new Date(texto)` sin zona en un adaptador es sospechoso.
+
+## 2026-09-21 21:17 — F2-203 · Deudas visuales y de datos detectadas en la revisión
+**Estado:** CERRADA si el PR se mergea (el número lo da `gh pr create`). Revisor: plan APROBADO
+CON OBSERVACIONES (sin bloqueo); entregable: ver el final de esta entrada.
+
+**Qué quedó hecho, punto por punto de la ficha.**
+1. **Leyenda de formas de pago** (`web/src/paginas/inicio/Tarjetas.tsx`, `formasPago.ts`).
+   - **La causa real no era sólo el `truncate`.** La dona se ponía al lado de la lista con
+     `sm:flex-row`, o sea según el ancho de la PANTALLA. En la rejilla de 3 y 4 columnas la
+     tarjeta mide 220–360 px, y al lado de la dona la lista se quedaba en 84 px a 1280 px
+     (de ahí el `E…`/`T…`) y en **0 px a 1024 px**: las letras se apilaban y la página
+     desbordaba 34 px.
+   - Arreglo: un contenedor `@container` con `@sm:flex-row` (dona al lado sólo si la TARJETA
+     mide ≥ 24rem). El nombre va sin `truncate` ni `min-w-0` (`flex-1 whitespace-nowrap`), y
+     la fila tiene `flex-wrap`: si no cabe, el importe baja de renglón.
+   - Medido en Chrome a 390, 640, 820, 1024, 1280, 1440 y 1920 px: nombre completo en todos,
+     ninguno recortado (`scrollWidth <= clientWidth` del span) y sin desborde de página.
+   - Tests: `formasPago.test.ts` (etiquetas distintas por par, sin abreviaturas) e
+     `Inicio.test.tsx` (4 textos visibles distintos, ninguno con `truncate`).
+2. **Pendientes del log (F1-092 "Pendientes" y F1-094), uno por uno:**
+   - a. **Anti-inyección CSV** (`web/src/csv/csv.ts`, `PARECE_FORMULA = /^\s*[=+\-@|\t\r\n]/`):
+     neutraliza también con blancos iniciales (espacio, U+00A0, U+FEFF, tab) y `|` (DDE).
+     `textoExcel` (folios) no cambia y su caída a `texto()` hereda la regla. **CERRADO**, con
+     tests en `csv/csv.test.ts`.
+   - b. **Cancelados en Tickets: NO se cambió código.** Es decisión de producto, y **F2-222 ya
+     la trae** como filtro "canceladas sí/no/sólo". Queda para F2-222.
+   - c. **"Hoy" en hora pico abortando el export: CERRADO CON SALVEDAD.** Se agregó un corte
+     por RECEPCIÓN a `GET /ventas/tickets`:
+     - `corte` opcional (ISO con zona obligatoria; sin zona → 400). Filtra
+       `recibido_at <= corte`, donde `recibido_at` = `cheques.created_at`. Es una columna
+       nueva y aditiva en las CTEs `ventas`, `cancelados` y `tickets` del helper de scope, sin
+       tocar ningún filtro.
+     - La respuesta trae siempre `corte`: el pedido, o si no vino, uno SUGERIDO, que es
+       "ahora − 30 s" del reloj de POSTGRES. **Sin `corte` no se filtra:** la lista normal ve
+       todo.
+     - El export (`exportar.ts`) primero hace una llamada de 1 ticket para obtener el corte, y
+       luego pide TODAS las páginas (la 1 incluida) con ese corte.
+     - **Salvedad (revisor, obligatoria):** el corte sólo congela lo que LLEGA. Un cheque ya
+       recibido que cambia de rango o de estado (se cancela, se corrige su fecha, o una cuenta
+       abierta que se cierra, si el agente llegara a mandarlas) sigue moviendo el conteo, y el
+       export aborta. Está anotado en `docs/esquema-sr.md` §2 como supuesto no validado, con
+       `DECISION PROVISIONAL (nocturno)` en `api/src/ventas/tickets.service.ts`. Lo fija el
+       e2e "una cuenta abierta que se cierra SÍ mueve el total".
+     - **Lo que el export tampoco detecta:** un IMPORTE corregido de un ticket ya bajado,
+       porque el conteo no se mueve. Hay un test que lo fija como límite conocido (en
+       `exportar.test.ts`). Detectarlo sería alcance nuevo (p. ej. un hash de la página o
+       `updated_at <= corte`).
+   - d. **Throttles** (`api/src/auth/throttlers.ts`): cubo nuevo `login-hora` (30/h por IP) en
+     `/auth/login` y `/cuenta/password`, además del de 5/min; cubo nuevo `reset` (10/min por IP)
+     en `POST /usuarios/:id/password`. **CERRADO**, con `throttlers.e2e.spec.ts`.
+     - **`SoloThrottlers(...propios)`** reemplaza los `@SkipThrottle` a mano: salta todos los
+       cubos de `THROTTLERS` menos los nombrados. **Un cubo nuevo va en `THROTTLERS` y queda
+       saltado solo en las demás rutas.** Un test por metadata afirma que cada ruta aplica
+       exactamente sus cubos (el agente incluido, que va en la clase).
+     - El test del intento 31 "vence" sólo el cubo `login` entre tandas de 5 (pone su contador
+       en cero en el storage), sin tocar límites, y atribuye cada 429 por `Retry-After-<cubo>`.
+   - e. **Lint de Prisma** (`api/eslint.config.mjs`): subrutas (`@prisma/client/*`,
+     `.prisma/client`) en `no-restricted-imports`, y `no-restricted-syntax` para `require()`,
+     `import x = require()` e `import()` dinámico de esos módulos y de `prisma.service`.
+     **CERRADO**, con casos positivos y negativos en `restriccion-prisma.spec.ts`.
+   - f. **`statement_timeout` en nuestra base: CERRADO.** `PrismaService` abre sus conexiones
+     con `options=-c statement_timeout=15000` en la URL (`api/src/prisma/url-timeout.ts`).
+     - Si la URL ya trae `options`, se combina en el mismo parámetro; si ya fija el timeout, se
+       respeta el que trae.
+     - **Verificado ANTES de escribirlo:** Prisma 6.19.3 sí pasa `options` al servidor
+       (`SHOW statement_timeout` devolvió `1234ms` con un valor de prueba). El test lo vuelve a
+       comprobar contra Postgres real: `15s`, y un `pg_sleep(2)` con tope de 200 ms se corta.
+     - Los agregados siguen con su `SET LOCAL` de 5 s. `prisma migrate` y los seeds no
+       heredan el tope (usan `DATABASE_URL` crudo).
+   - g. **390 px: MEDIDO en Chrome real.** Usé un arnés temporal (`web/arnes-390.html` +
+     `src/arnes390.tsx`, con `fetch` falso, datos sintéticos de nombres larguísimos y sin
+     teclear contraseñas). **Ya está borrado y no está en el commit.** Cada vista se cargó en
+     un iframe de 390 px del mismo origen.
+     - Todas dan `scrollWidth == clientWidth` (375 = 390 − barra de scroll) y cero elementos
+       pasan del borde derecho: login sin sesión, `/`, `/mesas`, el modal de consumo abierto
+       (390/390), `/tickets` con una fila expandida, `/reportes`, `/cuenta`, `/admin` en sus
+       4 pestañas, la 404 y el menú móvil abierto.
+     - **jsdom no mide layout:** de esto no hay test automatizado, sólo esta medida.
+3. **Consola UTF-8** (`scripts/nocturno-v2.ps1`): `[Console]::OutputEncoding` y
+   `$OutputEncoding` en UTF-8, justo después del `param()`. El script sigue siendo ASCII con BOM.
+   - Probado con **PowerShell 5.1.22621** (el que usa el orquestador), leyendo la salida de git
+     del commit de F1-093. Antes: consola 850, `revocaci` + `U+251C U+2502` (`├│`, el bug).
+     Después: `U+00F3` (`ó`).
+   - `Parser::ParseFile` del script da 0 errores.
+
+**Decisiones que tomé y por qué.**
+- **Corte por `created_at` y no por `momento`:** el agente puede mandar cheques viejos (cola
+  offline); cortar por la hora de cierre dejaría entrar a media descarga un cheque que cerró
+  hace una hora y llegó ahora.
+- **Corte del reloj de Postgres, no de Node.** Medido: un cheque creado ANTES de tomar un
+  `new Date()` en Node quedó con `created_at` 3 ms DESPUÉS. El margen de 30 s es mayor que el
+  timeout de 5 s de la transacción de ingesta.
+- **30/h cuenta aciertos también** (la librería no distingue fallos). Una oficina detrás de
+  una IP tiene 30 inicios de sesión por hora entre todos; con sesiones de 7 días sobra. **El
+  límite por CUENTA (no por IP) queda fuera**; sería otra tarea.
+- **Hallazgos sobre SoftRestaurant: ninguno nuevo.** Sólo el supuesto de 2c, que se agregó a
+  `docs/esquema-sr.md` §2 ("Corte por recepción").
+
+**Trampas que encontré.**
+- **`npx prettier --write <carpeta>` reescribió 20 archivos que no toqué** (sólo fines de
+  línea). Revertí con: los de `git diff --name-only` que no salen en
+  `git diff -w --ignore-cr-at-eol --name-only` → `git checkout --`. **Formatea sólo archivos.**
+- `@typescript-eslint/no-require-imports` (del preset) ya marca cualquier `require`; los tests
+  negativos de la regla de scope filtran a `no-restricted-imports`/`no-restricted-syntax`.
+- La ruta de reset es `/usuarios/:id/password` (controlador `usuarios`), no `/admin/...`.
+- Un heredoc con template literals y comillas mezcladas truena en el Bash de esta máquina; los
+  scripts de edición largos van mejor a un archivo en el scratchpad.
+
+**Qué quedó abierto.**
+- F2-222 decide cancelados sí/no/sólo (2b).
+- Export: el cambio de importe de un ticket ya bajado no se detecta (2c).
+- Si el agente manda cuentas abiertas, el corte no basta (2c, esquema-sr §2).
+- Throttle por cuenta, y el storage en memoria por proceso (con varias réplicas no alcanza,
+  como ya decía el log).
+- **El CSV deja fuera, sin avisarlo en la pantalla, lo recibido en los 30 s antes de pulsar
+  exportar**: su conteo puede no coincidir con el que muestra la lista en ese momento. Hoy sólo
+  lo dice el contrato. Mostrarlo en la UI ("recibidos hasta HH:MM:SS") le toca a F2-222, que
+  rehace el export de lo filtrado.
+- Falta un test que reenvíe un lote por la ingesta y compruebe que `created_at` no se mueve.
+  Hoy lo garantiza el tipo `DatosCheque` (no trae `createdAt`) y `sinIntocables`.
+
+**Revisor del entregable.** Hubo un **BLOQUEO (1 de 2 en este gate)**:
+- Causa: el e2e "un cheque que llega DESPUÉS del corte…" pasaba de los 5 s por defecto de jest
+  en la máquina del revisor. Recorría ~14 páginas de 37 con detalle, más ~200 ms de esperas del
+  reloj. Arrastraba a la prueba siguiente con `ECONNRESET`.
+- Arreglo, sin tocar ninguna aserción: timeout explícito de 30 s en las pruebas del bloque del
+  corte, y `porPagina: 100` (6 páginas).
+- Además, un e2e nuevo: con `corte`, otra empresa sigue dando 404.
+- `lectura.e2e.spec.ts` corrido dos veces seguidas: 138/138 las dos (22.4 s y 20.6 s). Tras el
+  arreglo: lint y typecheck limpios, y jest completo **868/868, 44 suites, 0 skips**. Web:
+  build y lint limpios, vitest 369/369, bundle 211.5 kB gzip.
+- El revisor aprobó sin objeciones la revisión aparte de 2c (helper de scope aditivo, corte
+  opt-in, aislamiento intacto).
+- **Segunda pasada: APROBADO CON OBSERVACIONES** (sin bloqueo). El revisor corrió él mismo
+  `lectura.e2e.spec.ts` dos veces: 138/138 las dos (20.0 s). Quedó sugerida, no hecha, la
+  prueba de reenvío de lote (ver "Qué quedó abierto").
+
+**Qué haría distinto.** Medir la tarjeta en varios anchos ANTES de arreglar la leyenda: el
+síntoma era de 1280 px y a 390 px no se veía nada. Y ponerle timeout explícito desde el principio
+a todo e2e que recorra páginas.

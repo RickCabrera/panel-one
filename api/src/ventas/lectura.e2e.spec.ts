@@ -460,6 +460,159 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
         total: esperados().length,
         pagina: 9999,
         porPagina: 50,
+        corte: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      });
+    });
+
+    // F2-203: corte por recepción, para que el export no aborte en hora pico.
+    describe('corte por recepción (F2-203)', () => {
+      const FOLIOS_SR = ['CORTE-NUEVO', 'CORTE-ABIERTA'];
+      const datosCheque = (folioSr: string, cerradoAt: Date | null) => ({
+        sucursalId: FX.sucursalA1,
+        empresaId: FX.empresaA,
+        folio: folioSr,
+        folioSr,
+        abiertoAt: new Date('2026-11-10T17:00:00Z'),
+        cerradoAt,
+        subtotal: new Prisma.Decimal('100.00'),
+        impuestos: new Prisma.Decimal('16.00'),
+        descuentos: new Prisma.Decimal('0.00'),
+        propina: new Prisma.Decimal('0.00'),
+        total: new Prisma.Decimal('116.00'),
+      });
+      const pedir = (extra: Record<string, string | number> = {}) =>
+        get(`/ventas/tickets?${Q({ ...base, porPagina: 100, ...extra })}`, USUARIOS.visorA);
+      const borrar = () =>
+        prisma.cheque.deleteMany({
+          where: { sucursalId: FX.sucursalA1, folioSr: { in: FOLIOS_SR } },
+        });
+      beforeEach(borrar);
+      afterAll(borrar);
+      // Estas pruebas recorren páginas con detalle completo y esperan al reloj de la
+      // base: en una máquina lenta pasan de los 5 s por defecto de jest (revisor,
+      // F2-203). El tope sólo da tiempo; lo que se afirma no cambia.
+      const TIMEOUT = 30_000;
+
+      const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      /**
+       * Un instante estrictamente posterior a todo lo ya guardado y anterior a lo que
+       * venga, con el reloj de la BASE: el de Node va unos ms atrás del que pone
+       * `created_at` en esta máquina (medido: un cheque creado antes quedaba 3 ms
+       * DESPUÉS de un `new Date()` tomado luego). Por eso la API tampoco usa el de Node.
+       */
+      async function corteAhora(): Promise<string> {
+        await esperar(50);
+        const [{ t }] = await prisma.$queryRaw<{ t: Date }[]>`
+          SELECT date_trunc('milliseconds', clock_timestamp()) AS t`;
+        await esperar(50);
+        return t.toISOString();
+      }
+
+      it(
+        'sin corte no filtra, y sugiere "ahora − 30 s" del reloj de la base',
+        async () => {
+          const antes = Date.now();
+          const res = await pedir();
+          expect(res.status).toBe(200);
+          expect(res.body.total).toBe(esperados().length);
+          const sugerido = Date.parse(res.body.corte);
+          // Mismo host: el reloj de Postgres y el de Node coinciden al segundo.
+          expect(sugerido).toBeGreaterThan(antes - 35_000);
+          expect(sugerido).toBeLessThan(Date.now() - 25_000);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'un cheque que llega DESPUÉS del corte no cuenta ni sale; sin corte, sí',
+        async () => {
+          const corte = await corteAhora();
+          const conCorte = await pedir({ corte });
+          expect(conCorte.body.total).toBe(esperados().length);
+          expect(conCorte.body.corte).toBe(corte);
+
+          const nuevo = await prisma.cheque.create({
+            data: datosCheque('CORTE-NUEVO', new Date('2026-11-10T18:00:00Z')),
+          });
+
+          const otraVez = await pedir({ corte });
+          expect(otraVez.body.total).toBe(esperados().length);
+          expect(otraVez.body.items.map((i: { id: string }) => i.id)).not.toContain(nuevo.id);
+          // Página a página con el mismo corte: la unión sigue siendo la de antes.
+          const ids: string[] = [];
+          for (let pagina = 1; ; pagina++) {
+            const r = await get(
+              `/ventas/tickets?${Q({ ...base, pagina, porPagina: 100, corte })}`,
+              USUARIOS.visorA,
+            );
+            expect(r.body.total).toBe(esperados().length);
+            if (r.body.items.length === 0) break;
+            ids.push(...r.body.items.map((i: { id: string }) => i.id));
+          }
+          expect(ids).toEqual(esperados().map(({ c }) => c.id));
+
+          const sinCorte = await pedir();
+          expect(sinCorte.body.total).toBe(esperados().length + 1);
+          const despues = await pedir({ corte: await corteAhora() });
+          expect(despues.body.total).toBe(esperados().length + 1);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'el corte NO congela un cheque ya recibido que cambia: una cuenta abierta que se cierra SÍ mueve el total',
+        async () => {
+          // DECISION PROVISIONAL (nocturno): si el agente llegara a mandar cuentas
+          // abiertas (esquema-sr.md §2, "Corte por recepción"), llegan antes del corte
+          // y entran al rango al cerrarse. El total cambia con el mismo corte, y el
+          // export (web) lo detecta y aborta: nunca falta en silencio.
+          await prisma.cheque.create({ data: datosCheque('CORTE-ABIERTA', null) });
+          const corte = await corteAhora();
+          expect((await pedir({ corte })).body.total).toBe(esperados().length);
+
+          await prisma.cheque.update({
+            where: {
+              sucursalId_folioSr: { sucursalId: FX.sucursalA1, folioSr: 'CORTE-ABIERTA' },
+            },
+            data: { cerradoAt: new Date('2026-11-10T18:30:00Z') },
+          });
+          expect((await pedir({ corte })).body.total).toBe(esperados().length + 1);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'con corte, otra empresa sigue siendo 404 (el corte no abre el alcance)',
+        async () => {
+          const res = await get(
+            `/ventas/tickets?${Q({ ...RANGO, empresaId: FX.empresaB, corte: await corteAhora() })}`,
+            USUARIOS.visorA,
+          );
+          expect(res.status).toBe(404);
+        },
+        TIMEOUT,
+      );
+
+      it('el corte vuelve idéntico, en ms UTC, aunque venga con offset', async () => {
+        const res = await pedir({ corte: '2026-11-15T14:00:00.123-06:00' });
+        expect(res.status).toBe(200);
+        expect(res.body.corte).toBe('2026-11-15T20:00:00.123Z');
+        const otra = await pedir({ corte: res.body.corte });
+        expect(otra.body.corte).toBe(res.body.corte);
+      });
+
+      it.each([
+        ['sin zona', '2026-11-15T14:00:00'],
+        ['sin zona con ms', '2026-11-15T14:00:00.123'],
+        ['sólo fecha', '2026-11-15'],
+        ['basura', 'ayer'],
+        ['vacío', ''],
+      ])('400: corte %s', async (_n, corte) => {
+        const res = await get(
+          `/ventas/tickets?${Q(base)}&corte=${encodeURIComponent(corte)}`,
+          USUARIOS.visorA,
+        );
+        expect(res.status).toBe(400);
       });
     });
 

@@ -198,6 +198,18 @@ descubre nada nuevo de SR; hereda los supuestos de arriba y fija este criterio:
 - Los pagos de cada ticket traen la forma derivada AL LEER con el catálogo de §4, igual que
   el desglose; los pagos no traen orden propio del POS (el contrato de ingesta no lo manda) y
   salen en un orden estable pero arbitrario.
+- **Corte por recepción (F2-203, `corte` de `GET /ventas/tickets`).** Para que el export CSV no
+  aborte en hora pico, todas sus páginas se piden con un mismo instante y sólo entran los
+  cheques que ya habían llegado a NUESTRA base en él (`cheques.created_at`, expuesto como
+  `recibido_at` en las CTEs; no es un dato de SR y el upsert de la ingesta no lo reescribe).
+  ⚠️ **SUPUESTO NO VALIDADO (nocturno): el agente sólo manda cheques ya cerrados o cancelados.**
+  El modelo y la ingesta aceptan un no cancelado con `cerrado_at` nulo, y todavía no hay un
+  lector de cheques en el agente que diga si SR expone la cuenta al abrirla. Si la llegara a
+  mandar abierta, la cuenta llega ANTES del corte y entra al rango al cerrarse: el corte no la
+  congela, el conteo se mueve a media descarga y el export aborta (nunca falta en silencio;
+  lo fija `lectura.e2e.spec.ts`). En ese caso el corte sólo estabiliza las cuentas que llegan
+  nuevas, y habría que cortar también por `updated_at` o por el instante de cierre. Validar en
+  F1-090 / F2-240 junto con el lector de cheques.
 
 **Lo que los reportes (F1-043, `GET /ventas/por-dia` y `GET /ventas/comparativo-sucursales`)
 suponen de esta sección.** No descubren nada nuevo de SR; heredan el supuesto del día de cierre

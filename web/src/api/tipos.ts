@@ -288,6 +288,11 @@ export interface PaginaTickets {
   total: number;
   pagina: number;
   porPagina: number;
+  /**
+   * Corte por recepción (F2-203): el pedido con `corte`, que filtró la página; sin
+   * él, uno SUGERIDO para mandar en todas las páginas de una descarga.
+   */
+  corte: string;
 }
 
 /** `GET /sistema` (F2-202): lo que la SPA necesita saber del servidor antes del login. */

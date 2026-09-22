@@ -72,6 +72,7 @@ describe('Contrato OpenAPI', () => {
       '401',
       '403',
       '404',
+      '429', // F2-203: throttle `reset`, 10/min por IP.
     ]);
     expect(codigos(paths['/cuenta/password']?.post)).toEqual(['200', '400', '401', '429']);
     for (const op of [paths['/usuarios']?.post, paths['/cuenta/password']?.post]) {
@@ -173,7 +174,8 @@ describe('Contrato OpenAPI', () => {
       ['desde', 'empresaId', 'hasta', 'limite', 'por', 'sucursalId'].sort(),
     );
     expect(nombres('/ventas/tickets')).toEqual(
-      ['desde', 'empresaId', 'folio', 'hasta', 'pagina', 'porPagina', 'sucursalId'].sort(),
+      // `corte`: corte por recepción del export (F2-203).
+      ['corte', 'desde', 'empresaId', 'folio', 'hasta', 'pagina', 'porPagina', 'sucursalId'].sort(),
     );
 
     const esquemas = components?.schemas ?? {};

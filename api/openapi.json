@@ -47,7 +47,7 @@
             }
           },
           "429": {
-            "description": "Más de 5 intentos por minuto desde la misma IP."
+            "description": "Más de 5 intentos por minuto, o de 30 por hora, desde la misma IP."
           }
         },
         "summary": "Inicia sesión. Pone la cookie `monitor_refresh` (httpOnly, SameSite=Strict, Path=/auth, 7 días; Secure en producción) con el refresh token.",
@@ -204,7 +204,7 @@
             }
           },
           "429": {
-            "description": "Más de 5 intentos por minuto desde la misma IP."
+            "description": "Más de 5 intentos por minuto, o de 30 por hora, desde la misma IP."
           }
         },
         "security": [
@@ -1187,6 +1187,18 @@
               "maxLength": 40,
               "type": "string"
             }
+          },
+          {
+            "name": "corte",
+            "required": false,
+            "in": "query",
+            "description": "Corte por RECEPCIÓN (F2-203): sólo cuentan los tickets que ya habían llegado a la base en ese instante; lo que llegue después no entra. Sin él, no se filtra por recepción. ISO-8601 con zona obligatoria (sin zona, 400). Para bajar un filtro completo por páginas, pide una primera sin él y manda en TODAS (la 1 incluida) el `corte` que devolvió: así un cheque que llega a media descarga no mueve el total. Un ticket ya recibido que cambia (se cancela, cambia de fecha) SÍ puede moverlo.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-09-21T19:42:10.123Z",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2067,6 +2079,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Más de 10 restablecimientos por minuto desde la misma IP."
           }
         },
         "security": [
@@ -3285,13 +3300,20 @@
           },
           "porPagina": {
             "type": "number"
+          },
+          "corte": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-09-21T19:41:40.123Z",
+            "description": "Con `corte` pedido, ese mismo (y la página quedó filtrada por él). Sin él, uno SUGERIDO: \"ahora − 30 s\" del reloj de la base; esta página no se filtró. Mándalo tal cual en todas las páginas de una descarga."
           }
         },
         "required": [
           "items",
           "total",
           "pagina",
-          "porPagina"
+          "porPagina",
+          "corte"
         ]
       },
       "SnapshotMesasDto": {

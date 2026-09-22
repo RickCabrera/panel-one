@@ -8,10 +8,9 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 
-import { THROTTLER_AGENTE } from '../agentes/throttle-agente';
 import { Auditoria } from '../comun/auditoria';
 import { AUTH_CONFIG, COOKIE_REFRESH, type AuthConfig } from '../config/auth.config';
 import { responderSesion } from './auth.controller';
@@ -19,7 +18,7 @@ import { AuthService } from './auth.service';
 import { CambiarPasswordDto } from './dto/password.dto';
 import { ErrorDto, SesionDto } from './dto/sesion.dto';
 import type { RequestAutenticado } from './request-autenticado';
-import { THROTTLER_REFRESH } from './throttlers';
+import { SoloThrottlers, THROTTLER_LOGIN, THROTTLER_LOGIN_HORA } from './throttlers';
 
 /**
  * La cuenta del propio usuario (F1-060), para CUALQUIER rol. Vive fuera de
@@ -37,10 +36,10 @@ export class CuentaController {
   ) {}
 
   @Post('password')
-  // Mismo límite que el login (5/min por IP): adivinar la contraseña actual con
-  // un token robado no sale más barato que por el login.
+  // Mismos límites que el login (5/min y 30/h por IP): adivinar la contraseña
+  // actual con un token robado no sale más barato que por el login.
   @UseGuards(ThrottlerGuard)
-  @SkipThrottle({ [THROTTLER_REFRESH]: true, [THROTTLER_AGENTE]: true })
+  @SoloThrottlers(THROTTLER_LOGIN, THROTTLER_LOGIN_HORA)
   @HttpCode(200)
   @ApiOperation({
     summary: 'Cambia la contraseña del usuario autenticado.',
@@ -58,7 +57,9 @@ export class CuentaController {
     type: ErrorDto,
     description: 'Sin token, token inválido o vencido, o usuario/empresa ya inactivos.',
   })
-  @ApiTooManyRequestsResponse({ description: 'Más de 5 intentos por minuto desde la misma IP.' })
+  @ApiTooManyRequestsResponse({
+    description: 'Más de 5 intentos por minuto, o de 30 por hora, desde la misma IP.',
+  })
   async cambiarPassword(
     @Req() req: RequestAutenticado,
     @Body() dto: CambiarPasswordDto,

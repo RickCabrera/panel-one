@@ -7,12 +7,13 @@ import {
 } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
 import { ApiSecurity, ApiTooManyRequestsResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
-import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerGuard } from '@nestjs/throttler';
 
 import { ErrorDto } from '../auth/dto/sesion.dto';
 import type { AgenteAutenticado, RequestAutenticado } from '../auth/request-autenticado';
-import { THROTTLER_LOGIN, THROTTLER_REFRESH } from '../auth/throttlers';
+import { SoloThrottlers } from '../auth/throttlers';
 import { AgentAuthGuard } from './agente-auth.guard';
+import { THROTTLER_AGENTE } from './throttle-agente';
 
 /** Nombre del esquema de seguridad `X-Api-Key` en el contrato OpenAPI. */
 export const SEGURIDAD_AGENTE = 'agente';
@@ -30,7 +31,7 @@ const ES_RUTA_AGENTE = 'agentes:es-ruta-agente';
 export const AutenticacionAgente = () =>
   applyDecorators(
     SetMetadata(ES_RUTA_AGENTE, true),
-    SkipThrottle({ [THROTTLER_LOGIN]: true, [THROTTLER_REFRESH]: true }),
+    SoloThrottlers(THROTTLER_AGENTE),
     // En este orden: primero quién es la sucursal, luego se cuenta a ella.
     UseGuards(AgentAuthGuard, ThrottlerGuard),
     ApiSecurity(SEGURIDAD_AGENTE),

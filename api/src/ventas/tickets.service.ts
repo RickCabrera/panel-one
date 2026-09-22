@@ -45,6 +45,11 @@ export interface PaginaTickets {
   total: number;
   pagina: number;
   porPagina: number;
+  /**
+   * Corte por recepción (ISO, ms, UTC): el pedido, que filtró esta página; o, sin
+   * él, el que se SUGIERE mandar en las siguientes (esta página no se filtró).
+   */
+  corte: string;
 }
 
 export interface OpcionesTickets {
@@ -52,7 +57,19 @@ export interface OpcionesTickets {
   porPagina: number;
   /** Prefijo literal del folio. */
   folio?: string;
+  /** Instante ISO con zona: sólo tickets recibidos hasta él (F2-203). */
+  corte?: string;
 }
+
+/**
+ * Sin `corte` pedido, la página no se filtra por recepción (la lista normal ve
+ * todo lo recibido) y el corte que se sugiere es "ahora − 30 s" según el reloj de
+ * POSTGRES, el mismo que pone `created_at`. El margen es mayor que el timeout de
+ * 5 s de la transacción de ingesta: una fila con `created_at` anterior al corte
+ * ya está commiteada cuando el corte se calcula, así que repetir la consulta con
+ * él no puede sumar a nadie.
+ */
+export const MARGEN_CORTE_S = 30;
 
 /**
  * Lista paginada de tickets (F1-033) con su detalle, para la vista Tickets
@@ -82,18 +99,45 @@ export class TicketsService {
     const { pagina, porPagina, folio } = opciones;
     // Valida el filtro (400) y el alcance (404) igual que los agregados.
     const q = await this.agregados.consulta(scope, filtro);
+
+    // Corte por RECEPCIÓN (F2-203): el export de Tickets baja decenas de páginas y,
+    // en hora pico, un cheque que llega a media descarga movía el total y lo
+    // abortaba. Con el mismo corte en todas las páginas, lo que llega después no
+    // entra. Sólo filtra si se pide; sin él, se devuelve uno sugerido. Milisegundos, como `created_at` (`Timestamptz(3)`), para que el valor
+    // que devolvemos vuelva idéntico.
+    // DECISION PROVISIONAL (nocturno): el corte sólo congela los cheques que
+    // LLEGAN. Uno que ya estaba y cambia de rango o de estado a media descarga (se
+    // cancela, o se cierra si el agente manda cuentas abiertas, cosa que hoy nadie
+    // sabe: docs/esquema-sr.md §2, "Corte por recepción") sigue moviendo el total,
+    // y el export aborta en vez de entregar un archivo incompleto.
+    const [{ corte }] =
+      opciones.corte === undefined
+        ? await q.consultar<{ corte: Date }>(
+            Prisma.sql`SELECT date_trunc('milliseconds', now() - make_interval(secs => ${MARGEN_CORTE_S})) AS corte`,
+          )
+        : [{ corte: new Date(opciones.corte) }];
+
     // `starts_with` con el prefijo como parámetro: literal, sin comodines que escapar.
-    const porFolio =
-      folio === undefined ? Prisma.empty : Prisma.sql`WHERE starts_with(folio, ${folio})`;
+    const condiciones: Prisma.Sql[] = [];
+    if (opciones.corte !== undefined) {
+      condiciones.push(Prisma.sql`recibido_at <= ${corte.toISOString()}::timestamptz`);
+    }
+    if (folio !== undefined) {
+      condiciones.push(Prisma.sql`starts_with(folio, ${folio})`);
+    }
+    const donde =
+      condiciones.length === 0
+        ? Prisma.empty
+        : Prisma.sql`WHERE ${Prisma.join(condiciones, ' AND ')}`;
     const [conteo] = await q.consultar<{ total: number }>(
-      Prisma.sql`SELECT count(*)::int AS total FROM tickets ${porFolio}`,
+      Prisma.sql`SELECT count(*)::int AS total FROM tickets ${donde}`,
     );
     const pag = await q.consultar<{ id: string }>(
-      Prisma.sql`SELECT id FROM tickets ${porFolio}
+      Prisma.sql`SELECT id FROM tickets ${donde}
         ORDER BY momento DESC, id DESC
         LIMIT ${porPagina} OFFSET ${(pagina - 1) * porPagina}`,
     );
-    const base = { total: conteo.total, pagina, porPagina };
+    const base = { total: conteo.total, pagina, porPagina, corte: corte.toISOString() };
     if (pag.length === 0) {
       return { items: [], ...base };
     }

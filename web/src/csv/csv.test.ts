@@ -36,3 +36,40 @@ describe('textoExcel', () => {
     expect(textoExcel(null)).toBe('');
   });
 });
+
+// F2-203: la regla del apóstrofo ya no mira sólo el primer carácter.
+describe('texto (anti-inyección CSV)', () => {
+  it.each([
+    ['=1+1', "'=1+1"],
+    ['+1', "'+1"],
+    ['-1', "'-1"],
+    ['@SUM(A1)', "'@SUM(A1)"],
+    ['|calc', "'|calc"],
+    ['\tx', "'\tx"],
+    ['  =CMD()', "'  =CMD()"],
+    [' =1+1', "' =1+1"],
+    ['﻿@x', "'﻿@x"],
+    [' \t -1', "' \t -1"],
+  ])('neutraliza %j', (entrada, salida) => {
+    expect(texto(entrada)).toBe(salida);
+  });
+
+  it('CR y LF iniciales se neutralizan y además van entrecomillados', () => {
+    expect(texto('\n=1')).toBe(`"'\n=1"`);
+    expect(texto('\r@x')).toBe(`"'\r@x"`);
+  });
+
+  it.each(['Mesa 4', '  Mesa 4', 'Juan-Pérez', 'a=b', 'a|b', 'Café @ Centro', ''])(
+    'deja igual %j (el signo no va al principio)',
+    (entrada) => {
+      expect(texto(entrada)).toBe(entrada);
+    },
+  );
+
+  it('textoExcel no cambia, y su caída a texto() hereda la regla nueva', () => {
+    expect(textoExcel('  =1')).toBe('"=""  =1"""');
+    expect(textoExcel('  =1\n2')).toBe(`"'  =1\n2"`);
+    const largo = ' ' + '='.repeat(MAX_TEXTO_EXCEL);
+    expect(textoExcel(largo)).toBe(`'${largo}`);
+  });
+});

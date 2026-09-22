@@ -269,6 +269,30 @@ describe('ScopedPrismaService.ventas() (contra Postgres)', () => {
     ).resolves.toEqual([]);
   });
 
+  it('recibido_at (F2-203) es created_at del cheque, en las dos ramas de tickets', async () => {
+    const q = () => servicio.ventas(A, { empresaId: FX.empresaA, ...dia });
+    const tickets = await q().consultar<{ id: string; cancelado: boolean; recibido_at: Date }>(
+      Prisma.sql`SELECT id, cancelado, recibido_at FROM tickets`,
+    );
+    const guardados = await prisma.cheque.findMany({
+      where: { id: { in: tickets.map((t) => t.id) } },
+      select: { id: true, createdAt: true },
+    });
+    const creado = new Map(guardados.map((g) => [g.id, g.createdAt.getTime()]));
+    // Una fila de cada rama del UNION: si la columna quedara en otra posición en
+    // alguna, aquí saldría el `momento` o un booleano, no el created_at.
+    expect(tickets.some((t) => t.cancelado)).toBe(true);
+    expect(tickets.some((t) => !t.cancelado)).toBe(true);
+    for (const t of tickets) {
+      expect(t.recibido_at).toBeInstanceOf(Date);
+      expect(t.recibido_at.getTime()).toBe(creado.get(t.id));
+    }
+    const [v] = await q().consultar<{ n: number }>(
+      Prisma.sql`SELECT count(*)::int AS n FROM ventas WHERE recibido_at IS NULL`,
+    );
+    expect(v.n).toBe(0);
+  });
+
   it('valida el filtro antes de consultar', () => {
     expect(() => servicio.ventas(A, { empresaId: 'no-uuid', ...dia })).toThrow(BadRequestException);
   });

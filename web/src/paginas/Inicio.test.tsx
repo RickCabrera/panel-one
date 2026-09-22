@@ -169,6 +169,14 @@ describe('Panel de ventas: los números son los de la API', () => {
     expect(screen.getByTestId('forma-tarjeta')).toHaveTextContent('Tarjeta$2.0066.7 %');
     expect(screen.getByTestId('forma-transferencia')).toHaveTextContent('$0.000.0 %');
 
+    // F2-203: la leyenda dice el nombre completo, sin recortarlo, y dos formas
+    // distintas nunca comparten etiqueta visible (tarjeta ≠ transferencia).
+    const nombres = within(tarjeta('Formas de pago')).getAllByTestId('nombre-forma');
+    const visibles = nombres.map((n) => n.textContent);
+    expect(visibles).toEqual(expect.arrayContaining(['Efectivo', 'Tarjeta', 'Transferencia']));
+    expect(new Set(visibles).size).toBe(visibles.length);
+    for (const n of nombres) expect(n).not.toHaveClass('truncate');
+
     // Venta en vivo: 350.50 + 1200.00 del snapshot de Centro; Tijuana no reporta.
     expect(await screen.findByTestId('venta-en-vivo')).toHaveTextContent('$1,550.50');
     expect(tarjeta('Venta en vivo')).toHaveTextContent(

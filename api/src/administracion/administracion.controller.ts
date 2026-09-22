@@ -9,6 +9,7 @@ import {
   Post,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -21,13 +22,16 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { RolUsuario } from '@prisma/client';
 
 import { Roles } from '../auth/decoradores';
 import { ErrorDto } from '../auth/dto/sesion.dto';
 import type { RequestAutenticado } from '../auth/request-autenticado';
+import { SoloThrottlers, THROTTLER_RESET } from '../auth/throttlers';
 import { EmpresaDto, SucursalDto } from '../organizacion/dto/organizacion.dto';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
@@ -212,6 +216,10 @@ export class UsuariosAdminController {
   }
 
   @Post(':id/password')
+  // 10 por minuto por IP (throttler `reset`, F2-203). Detrás del JWT global y del
+  // guard de roles: sólo cuenta a quien ya pasó como admin.
+  @UseGuards(ThrottlerGuard)
+  @SoloThrottlers(THROTTLER_RESET)
   @HttpCode(204)
   @ApiOperation({
     summary: 'Restablece la contraseña de un usuario de tu alcance.',
@@ -226,6 +234,9 @@ export class UsuariosAdminController {
   })
   @ApiForbiddenResponse({ type: ErrorDto, description: DESC_403_RUTA })
   @ApiNotFoundResponse({ type: ErrorDto, description: DESC_404 })
+  @ApiTooManyRequestsResponse({
+    description: 'Más de 10 restablecimientos por minuto desde la misma IP.',
+  })
   resetPassword(
     @Req() req: RequestAutenticado,
     @EmpresaScopeActual() scope: EmpresaScope,

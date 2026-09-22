@@ -28,20 +28,31 @@ export const MENSAJE_CAMBIARON =
  * Baja TODAS las páginas del filtro actual, en serie, y devuelve los tickets en el
  * orden de la API.
  *
- * El conteo y las páginas de la API son lecturas separadas, no una foto (log de
- * F1-033). DECISION PROVISIONAL (nocturno): si el `total` cambia entre páginas o
- * los tickets únicos no cuadran con él, NO se entrega archivo: un CSV al que le
- * falta o le sobra un cheque sin avisar es peor que pedir que se repita. Con
- * "Hoy" en hora pico eso va a pasar seguido. Sigue abierto: F1-092 no lo tomó y
- * F1-094 tampoco; ver docs/nocturno-log.md (F1-092, "Pendientes", punto 3).
+ * Corte por recepción (F2-203): una primera llamada de un solo ticket trae el
+ * `corte` que sugiere la API ("ahora − 30 s" del reloj de la base), y todas las
+ * páginas, la 1 incluida, se piden con él. Así un cheque que LLEGA a media
+ * descarga, lo normal en "Hoy" en hora pico, ya no entra y ya no aborta nada.
+ *
+ * Lo que el corte NO congela: un ticket ya recibido que cambia de rango o de
+ * estado a media descarga (se cancela, se corrige su fecha, o una cuenta abierta
+ * que se cierra si el agente las llegara a mandar; docs/esquema-sr.md §2). Eso
+ * mueve el conteo, y DECISION PROVISIONAL (nocturno): si el `total` cambia entre
+ * páginas o los tickets únicos no cuadran con él, NO se entrega archivo: un CSV al
+ * que le falta o le sobra un cheque sin avisar es peor que pedir que se repita.
+ * Lo que tampoco se detecta: que cambie el IMPORTE de un ticket ya bajado (el
+ * conteo no se mueve). Ver docs/nocturno-log.md (F2-203).
  */
 export async function exportarTickets(
   parametros: ParametrosTickets,
   opciones: { signal?: AbortSignal; onProgreso?: (hechos: number, total: number) => void } = {},
 ): Promise<Ticket[]> {
+  const { corte } = await pedir<PaginaTickets>('/ventas/tickets', {
+    query: { ...parametros, pagina: 1, porPagina: 1 },
+    signal: opciones.signal,
+  });
   const pedirPagina = (pagina: number) =>
     pedir<PaginaTickets>('/ventas/tickets', {
-      query: { ...parametros, pagina, porPagina: POR_PAGINA_EXPORT },
+      query: { ...parametros, pagina, porPagina: POR_PAGINA_EXPORT, corte },
       signal: opciones.signal,
     });
 

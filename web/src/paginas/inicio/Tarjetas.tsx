@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 
-import type { FormaPago, FormasPago, MesasSucursal, Resumen, VentaHora } from '../../api/tipos';
+import type { FormasPago, MesasSucursal, Resumen, VentaHora } from '../../api/tipos';
 import {
   aCentavos,
   formatearPesos,
@@ -11,6 +11,7 @@ import {
 } from '../../dinero/dinero';
 import type { Rango } from '../../filtros/periodo';
 import { useAhora } from '../mesas/consultas';
+import { etiquetaForma } from './formasPago';
 import { COLORES_FORMA, datosPorHora } from './puntosHora';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './Tarjeta';
 import { edadLegible, ventaEnVivo } from './ventaEnVivo';
@@ -106,13 +107,6 @@ export function TarjetaVentaTotal({
   );
 }
 
-const NOMBRE_FORMA: Record<FormaPago, string> = {
-  efectivo: 'Efectivo',
-  tarjeta: 'Tarjeta',
-  transferencia: 'Transferencia',
-  otro: 'Otro',
-};
-
 export function TarjetaFormasPago({ consulta }: { consulta: Consulta<FormasPago> }) {
   return (
     <Tarjeta titulo="Formas de pago">
@@ -136,46 +130,58 @@ export function TarjetaFormasPago({ consulta }: { consulta: Consulta<FormasPago>
           if (total === 0n) return <Vacio>Sin pagos en este periodo.</Vacio>;
           return (
             <>
-              <div className="flex flex-col items-center gap-4 sm:flex-row">
-                {total !== null && (
-                  <div data-testid="dona-formas" className="shrink-0">
-                    <Suspense fallback={<div className="h-44 w-44 shrink-0" />}>
-                      <Dona
-                        datos={legibles
-                          .filter((f) => f.centavos > 0n)
-                          .map((f) => ({
-                            nombre: NOMBRE_FORMA[f.forma],
-                            valor: paraGrafica(f.centavos),
-                            color: f.color,
-                          }))}
-                      />
-                    </Suspense>
-                  </div>
-                )}
-                <ul className="w-full min-w-0 space-y-1 text-sm">
-                  {formas.map((f) => (
-                    <li
-                      key={f.forma}
-                      className="flex items-center gap-2"
-                      data-testid={`forma-${f.forma}`}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="h-3 w-3 shrink-0 rounded-full"
-                        style={{ backgroundColor: f.color }}
-                      />
-                      <span className="min-w-0 flex-1 truncate">{NOMBRE_FORMA[f.forma]}</span>
-                      <span className="tabular-nums">
-                        {f.centavos === null ? 'Sin dato' : formatearPesos(f.centavos)}
-                      </span>
-                      {total !== null && f.centavos !== null && (
-                        <span className="w-16 text-right text-slate-500 tabular-nums">
-                          {porcentaje(f.centavos, total)}
+              {/* La dona va al lado de la lista según el ancho de la TARJETA
+                  (container query), no el de la pantalla: en la rejilla de 3 y 4
+                  columnas la tarjeta mide ~220–360 px aunque la pantalla sea ancha, y
+                  al lado de la dona la leyenda se quedaba en 0–84 px (F2-203). */}
+              <div className="@container">
+                <div className="flex flex-col items-center gap-4 @sm:flex-row">
+                  {total !== null && (
+                    <div data-testid="dona-formas" className="shrink-0">
+                      <Suspense fallback={<div className="h-44 w-44 shrink-0" />}>
+                        <Dona
+                          datos={legibles
+                            .filter((f) => f.centavos > 0n)
+                            .map((f) => ({
+                              nombre: etiquetaForma(f.forma),
+                              valor: paraGrafica(f.centavos),
+                              color: f.color,
+                            }))}
+                        />
+                      </Suspense>
+                    </div>
+                  )}
+                  <ul className="w-full min-w-0 space-y-1 text-sm">
+                    {formas.map((f) => (
+                      <li
+                        key={f.forma}
+                        className="flex flex-wrap items-center gap-x-2"
+                        data-testid={`forma-${f.forma}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="h-3 w-3 shrink-0 rounded-full"
+                          style={{ backgroundColor: f.color }}
+                        />
+                        {/* Sin `truncate` ni `min-w-0`: a lo angosto el nombre salía `E…`/`T…`
+                          y no se distinguía tarjeta de transferencia (F2-203). Su ancho mínimo
+                          es el de la palabra: si no cabe junto al importe, el importe baja de
+                          renglón (`flex-wrap`); el nombre nunca se recorta. */}
+                        <span className="flex-1 whitespace-nowrap" data-testid="nombre-forma">
+                          {etiquetaForma(f.forma)}
                         </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                        <span className="tabular-nums">
+                          {f.centavos === null ? 'Sin dato' : formatearPesos(f.centavos)}
+                        </span>
+                        {total !== null && f.centavos !== null && (
+                          <span className="w-16 text-right text-slate-500 tabular-nums">
+                            {porcentaje(f.centavos, total)}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
               {total === null && (
                 <p className="mt-3 text-xs text-slate-500" data-testid="formas-incompletas">
