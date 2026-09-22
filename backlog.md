@@ -620,7 +620,7 @@ propio "Listo cuando"**. Lo que no está aquí no se hace de pasada.
 ## BLOQUE A · Cimientos
 
 ### F2-200 · Instalación limpia sin fricción
-`[ ]` **Bloque A** · /api + /web + /docs
+`[x]` **Bloque A** · /api + /web + /docs
 
 Una instalación limpia del repo **hoy no compila**. Se reprodujo entero el 21/09/2026 en la
 máquina de desarrollo y cada tropiezo está aquí. Ninguno es un bug de lógica: son huecos del
