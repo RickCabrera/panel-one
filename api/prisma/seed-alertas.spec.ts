@@ -30,9 +30,11 @@ describe('generarAlertasSeed()', () => {
     expect(dias.size).toBe(DIAS_HISTORIA);
     expect(new Set(filas.map((f) => f.sucursalId))).toEqual(new Set(OPCIONES.sucursales));
     // Los cuatro tipos de F2-224. `bajo_minimo` (F2-121) NO tiene historial sintético: lo abre la
-    // evaluación con las existencias del seed, no se inventa.
+    // evaluación con las existencias del seed, no se inventa. Tampoco `traspaso_sin_conciliar`
+    // (F2-124): la abre la evaluación con los traspasos del seed.
+    const sinHistorial: TipoAlerta[] = [TipoAlerta.bajo_minimo, TipoAlerta.traspaso_sin_conciliar];
     expect(new Set(filas.map((f) => f.tipo))).toEqual(
-      new Set(Object.values(TipoAlerta).filter((t) => t !== TipoAlerta.bajo_minimo)),
+      new Set(Object.values(TipoAlerta).filter((t) => !sinHistorial.includes(t))),
     );
     for (const f of filas) {
       expect(f.cerradaAt.getTime()).toBeGreaterThan(f.abiertaAt.getTime());

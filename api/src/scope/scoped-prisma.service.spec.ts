@@ -108,6 +108,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // F2-122: pólizas y movimientos; se escriben por `movimientosDeSucursal(agente)`.
       'movimientoInventario',
       'partidaConteo',
+      // F2-124: traspasos; se escriben por `traspasos(scope)`, no por aquí.
+      'partidaTraspaso',
       'polizaInventario',
       'producto',
       'productoMetadata',
@@ -118,6 +120,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'solicitudSincronizacion',
       'sucursal',
       'suscripcionReporte',
+      'traspaso',
       'unidadCatalogo',
       'usuario',
     ]);

@@ -44,7 +44,7 @@ function FilaRegla({ empresaId, regla }: { empresaId: string; regla: ReglaAlerta
   const numero = Number(umbral);
   const valido = /^\d+$/.test(umbral.trim()) && numero >= regla.minimo && numero <= regla.maximo;
   const cambio = activa !== regla.activa || numero !== regla.umbral;
-  const unidad = regla.unidad === 'minutos' ? 'min' : '%';
+  const unidad = regla.unidad === 'minutos' ? 'min' : regla.unidad === 'horas' ? 'h' : '%';
   const idUmbral = `umbral-${regla.tipo}`;
 
   async function guardar() {

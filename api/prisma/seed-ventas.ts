@@ -29,6 +29,7 @@ import { sembrarCatalogos } from './seed-catalogos';
 import { sembrarConteos } from './seed-conteos';
 import { sembrarExistencias } from './seed-existencias';
 import { sembrarMovimientos } from './seed-movimientos';
+import { sembrarTraspasos } from './seed-traspasos';
 import { generarUniverso, resumenPorModulo } from './seed-maestro';
 
 // Se re-exportan: los specs y los consumidores los importaban de aquí.
@@ -550,6 +551,19 @@ async function main(): Promise<void> {
     console.log(
       `Conteos físicos sembrados (F2-123): ${conteos.creados} creados, ` +
         `${conteos.conservados} sin cambios, ${conteos.borrados} de otra foto rehechos.`,
+    );
+    // Traspasos del panel (F2-124): dato propio, sobre las pólizas y existencias de arriba. Uno
+    // conciliado contra un traspaso de SR del seed, dos pendientes y uno en alerta (> 48 h).
+    const traspasos = await sembrarTraspasos(prisma, {
+      empresaId: op.empresaId,
+      sucursales,
+      universo,
+      ahora,
+    });
+    console.log(
+      `Traspasos sembrados (F2-124): ${traspasos.creados} creados, ` +
+        `${traspasos.conservados} sin cambios, ${traspasos.borrados} de otro reloj rehechos; ` +
+        `${traspasos.conciliados} conciliados en esta corrida.`,
     );
     // El resto del universo todavía no tiene tabla: se genera (y se valida en los
     // specs) para que la tarea que la cree lo persista desde aquí.

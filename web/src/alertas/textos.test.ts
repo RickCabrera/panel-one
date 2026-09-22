@@ -80,6 +80,33 @@ describe('bajo mínimo (F2-121)', () => {
   });
 });
 
+describe('traspaso sin conciliar (F2-124)', () => {
+  it('folio, horas, origen y destino; lo que falta dice "sin dato"', () => {
+    expect(
+      describirAlerta({
+        ...base,
+        tipo: 'traspaso_sin_conciliar',
+        llave: 't-1',
+        detalle: {
+          folio: 3,
+          horas: 49,
+          almacenOrigen: 'General',
+          sucursalDestino: 'Norte',
+          almacenDestino: 'Barra',
+        },
+      }),
+    ).toBe(
+      'Traspaso #3 (General, Centro → Norte · Barra): 49 h sin registrarse en SoftRestaurant al abrir la alerta.',
+    );
+    expect(
+      describirAlerta({ ...base, tipo: 'traspaso_sin_conciliar', llave: 't', detalle: {} }),
+    ).toBe(
+      'Traspaso sin folio (Centro → destino sin dato): más del umbral sin registrarse en SoftRestaurant al abrir la alerta.',
+    );
+    expect(textoRegla('traspaso_sin_conciliar', 48)).toContain('más de 48 h');
+  });
+});
+
 describe('textos auxiliares', () => {
   it('duración', () => {
     const t = Date.parse('2026-09-22T19:00:00Z');

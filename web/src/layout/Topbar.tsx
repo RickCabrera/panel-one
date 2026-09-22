@@ -26,7 +26,7 @@ export function Topbar({ menuAbierto, onMenu }: { menuAbierto: boolean; onMenu: 
   const [saliendo, setSaliendo] = useState(false);
 
   return (
-    <header className="flex min-w-0 flex-wrap items-start gap-3 border-b border-linea bg-superficie px-4 py-2 md:items-center">
+    <header className="print:hidden flex min-w-0 flex-wrap items-start gap-3 border-b border-linea bg-superficie px-4 py-2 md:items-center">
       <button
         type="button"
         className="rounded-md border border-linea-fuerte px-2 py-1 text-sm md:hidden"

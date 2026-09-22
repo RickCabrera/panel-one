@@ -35,6 +35,16 @@ describe('reglas del centro de alertas', () => {
     });
   });
 
+  it('traspaso sin conciliar (F2-124): 48 h por defecto (la ficha), 1–720 h, advertencia', () => {
+    expect(definicion(TipoAlerta.traspaso_sin_conciliar)).toMatchObject({
+      unidad: 'horas',
+      minimo: 1,
+      maximo: 720,
+      porDefecto: 48,
+      severidad: 'advertencia',
+    });
+  });
+
   it('reglasEfectivas: lo guardado gana; sin fila, el default activo', () => {
     const r = reglasEfectivas([{ tipo: TipoAlerta.mesa_abierta, activa: false, umbral: 90 }]);
     expect(r.find((x) => x.tipo === TipoAlerta.mesa_abierta)).toEqual({

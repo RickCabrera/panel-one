@@ -1074,6 +1074,15 @@ escritura contra el POS (test que lo afirma inspeccionando el modo de la conexi�
 > Documentar en §10 si el costo promedio de SR es por almacén o por insumo. Ver
 > `docs/esquema-sr.md` §10 y §13.
 
+> **Y además (de F2-124).** Los traspasos de SR viajan como pólizas F2-122 y el panel concilia contra
+> ellas los traspasos que se capturan en la web: (1) un documento de traspaso de SR se manda como
+> DOS pólizas —`traspaso_salida` (cantidades negativas) en el almacén de origen y `traspaso_entrada`
+> (positivas) en el de destino, cada una desde el agente de SU sucursal— con la `referencia` del
+> documento en las dos; (2) la `fecha` con la hora real del movimiento, no medianoche; (3) si SR
+> cancela el traspaso, mandar las dos pólizas con `cancelada = true` (así el panel lo desconcilia);
+> (4) documentar en §10 cómo guarda SR un traspaso entre sucursales (un documento o dos) y si hay
+> almacenes compartidos. Ver `docs/esquema-sr.md` §10 ("Traspasos").
+
 > **Y además (de F2-122).** El panel ya acepta los movimientos por `POST /ingesta/movimientos`: un
 > **lote de pólizas**, cada una con TODAS sus partidas (`{ leidoAt, polizas: [{ origenSrId, folio,
 > tipo, tipoSr, almacenOrigenSrId, fecha, referencia, cancelada, partidas: [{ insumoOrigenSrId,
@@ -1467,6 +1476,16 @@ Recorre el AC original de F2-121, F2-122, F2-125, F2-126 y F2-127 con datos del 
 > confirmar que el lector (F2-241) lo trae como póliza `ajuste` y la foto siguiente lo refleja;
 > escribir en la ayuda (`web/src/paginas/AyudaConteos.tsx`) el menú exacto de SR, que hoy está en
 > genérico. Todo en `docs/esquema-sr.md` §10 ("Conteos físicos").
+
+> **Y además (de F2-124).** Los traspasos se concilian contra el seed; en el piloto: (1) registrar en
+> SR un traspaso capturado antes en el panel y confirmar que el lector (F2-241) lo trae como DOS
+> pólizas (`traspaso_salida` en el origen y `traspaso_entrada` en el destino) y que el panel lo
+> marca conciliado en la siguiente vuelta; (2) confirmar que la `fecha` de esas pólizas trae hora
+> (si SR guarda sólo fecha, la ventana de ± 24 h sigue cubriendo el mismo día, pero hay que
+> anotarlo); (3) confirmar que la clave del insumo es la MISMA en las dos sucursales (si no, la
+> entrada nunca concilia); (4) medir cuántos traspasos quedan en alerta a las 48 h por captura
+> tardía en SR y ajustar el umbral por defecto si hace falta. Todo en `docs/esquema-sr.md` §10
+> ("Traspasos").
 
 **Listo cuando:** el valor de inventario cuadra contra el reporte de SR del mismo corte; el
 kardex de un artículo reproduce su saldo real; la variación teórico contra real de tres

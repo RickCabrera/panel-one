@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import type { MotivoCierreAlerta, Prisma, SeveridadAlerta, TipoAlerta } from '@prisma/client';
 
 import { Auditoria, type Actor } from '../comun/auditoria';
@@ -13,6 +18,7 @@ import {
   type ExistenciasObservadas,
   type Observacion,
   type SucursalObservada,
+  type TraspasoObservado,
   type VentaObservada,
 } from './evaluador';
 import { cuentasDelSnapshot, diaLocal, existenciasObservadas, restarDias } from './observar';
@@ -101,6 +107,8 @@ const SCOPE_SISTEMA: EmpresaScope = { tipo: 'global' };
  */
 @Injectable()
 export class AlertasService {
+  private readonly logger = new Logger('Alertas');
+
   constructor(
     private readonly datos: ScopedPrismaService,
     private readonly ventas: AgregadosVentasService,
@@ -134,6 +142,7 @@ export class AlertasService {
     const contactoDe = new Map(contactos.map((c) => [c.sucursalId, c.ultimoContactoAt]));
     const ventas = await this.ventasPorZona(scope, empresaId, sucursales, ahora);
     const existencias = await this.existenciasPorSucursal(scope, empresaId, ids);
+    const traspasos = await this.traspasosPorSucursal(scope, empresaId, ids, ahora);
 
     const observadas = await Promise.all(
       sucursales.map(async (s): Promise<SucursalObservada> => {
@@ -166,10 +175,73 @@ export class AlertasService {
               : [],
           venta: ventas.get(s.id) ?? null,
           existencias: existencias.get(s.id) ?? null,
+          traspasos: traspasos.get(s.id) ?? [],
         };
       }),
     );
     return { empresaId, sucursales: observadas };
+  }
+
+  /**
+   * Los traspasos del panel (F2-124) sin conciliar, no cancelados, por su sucursal de ORIGEN, con
+   * su edad desde el envío. Con el scope de la empresa. Los nombres de destino salen de los
+   * catálogos (el almacén, sin catálogo, va por su id).
+   */
+  private async traspasosPorSucursal(
+    scope: EmpresaScope,
+    empresaId: string,
+    ids: readonly string[],
+    ahora: number,
+  ): Promise<Map<string, TraspasoObservado[]>> {
+    const datos = this.datos.para(scope);
+    const filas = await datos.traspaso.findMany({
+      where: {
+        empresaId,
+        sucursalId: { in: [...ids] },
+        estado: { not: 'cancelado' },
+        conciliadoAt: null,
+      },
+      select: {
+        id: true,
+        folio: true,
+        sucursalId: true,
+        almacenOrigenSrId: true,
+        sucursalDestinoId: true,
+        almacenDestinoSrId: true,
+        enviadoAt: true,
+      },
+      orderBy: [{ enviadoAt: 'asc' }, { folio: 'asc' }],
+    });
+    const salida = new Map<string, TraspasoObservado[]>();
+    if (filas.length === 0) return salida;
+    const [sucursales, almacenes] = await Promise.all([
+      datos.sucursal.findMany({ where: { empresaId }, select: { id: true, nombre: true } }),
+      datos.almacenCatalogo.findMany({
+        where: {
+          empresaId,
+          sucursalId: { in: [...new Set(filas.flatMap((f) => [f.sucursalId, f.sucursalDestinoId]))] },
+        },
+        select: { sucursalId: true, origenSrId: true, nombre: true },
+      }),
+    ]);
+    const nombreSucursal = new Map(sucursales.map((s) => [s.id, s.nombre]));
+    const nombreAlmacen = new Map(
+      almacenes.map((a) => [JSON.stringify([a.sucursalId, a.origenSrId]), a.nombre]),
+    );
+    const almacen = (s: string, a: string) => nombreAlmacen.get(JSON.stringify([s, a])) ?? a;
+    for (const f of filas) {
+      const lista = salida.get(f.sucursalId) ?? [];
+      lista.push({
+        id: f.id,
+        folio: f.folio,
+        edadS: Math.max(0, Math.floor((ahora - f.enviadoAt.getTime()) / 1000)),
+        almacenOrigen: almacen(f.sucursalId, f.almacenOrigenSrId),
+        sucursalDestino: nombreSucursal.get(f.sucursalDestinoId) ?? '',
+        almacenDestino: almacen(f.sucursalDestinoId, f.almacenDestinoSrId),
+      });
+      salida.set(f.sucursalId, lista);
+    }
+    return salida;
   }
 
   /**
@@ -338,9 +410,28 @@ export class AlertasService {
    * vuelve a observar.
    */
   async evaluarEmpresa(empresaId: string): Promise<boolean> {
+    await this.conciliarTraspasos(empresaId);
     const ahora = this.reloj.ahora();
     const obs = await this.observar(empresaId, ahora);
     return this.aplicar(obs, ahora);
+  }
+
+  /**
+   * F2-124: concilia los traspasos de la empresa ANTES de observar, en la misma vuelta: así una
+   * alerta de "sin conciliar" nunca se abre sobre un traspaso cuyo espejo ya llegó. Con el scope de
+   * la EMPRESA (nunca el global). Si el candado está ocupado (otra escritura de traspasos en
+   * curso) se registra y se evalúa con lo que hay: a lo más retrasa una alerta una vuelta, nunca
+   * inventa una. Cualquier otro error se propaga (no se deja la alerta ciega en silencio).
+   */
+  async conciliarTraspasos(empresaId: string): Promise<void> {
+    try {
+      await this.datos
+        .traspasos(scopeDe(empresaId))
+        .conciliar(empresaId, new Date(this.reloj.ahora()));
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableException)) throw error;
+      this.logger.warn(`Conciliación de traspasos de ${empresaId} pospuesta: ${error.message}`);
+    }
   }
 
   /** Empresas a evaluar: las activas, más las inactivas que aún tengan alertas abiertas. */
@@ -432,6 +523,8 @@ export class AlertasService {
     }
     // 404 con el scope del USUARIO antes de observar nada.
     await verificarAlcance(this.datos.para(scope), empresaId);
+    // Como en la vuelta del programador: primero se concilian los traspasos (F2-124).
+    await this.conciliarTraspasos(empresaId);
     try {
       await this.datos.alertas(scope).bajoCandado(empresaId, async (tx) => {
         await tx.guardarRegla(tipo, cambio.activa, cambio.umbral);

@@ -390,7 +390,9 @@ export type TipoAlerta =
   | 'cuenta_sin_imprimir'
   | 'caida_venta'
   // F2-121: un artículo por debajo de su mínimo en su almacén.
-  | 'bajo_minimo';
+  | 'bajo_minimo'
+  // F2-124: un traspaso del panel sin conciliar con SR pasado su umbral (horas).
+  | 'traspaso_sin_conciliar';
 export type SeveridadAlerta = 'critica' | 'advertencia';
 export type MotivoCierreAlerta =
   'condicion' | 'regla_apagada' | 'sucursal_inactiva' | 'empresa_inactiva';
@@ -402,7 +404,7 @@ export interface Alerta {
   tipo: TipoAlerta;
   severidad: SeveridadAlerta;
   llave: string;
-  /** El umbral de la regla cuando abrió (minutos o %). */
+  /** El umbral de la regla cuando abrió (minutos, % u horas). */
   umbral: number;
   /** Por tipo; importes y % como TEXTO decimal (ver OpenAPI de `AlertaDto`). */
   detalle: Record<string, unknown>;
@@ -423,7 +425,7 @@ export interface ReglaAlerta {
   activa: boolean;
   umbral: number;
   porDefecto: boolean;
-  unidad: 'minutos' | 'porcentaje';
+  unidad: 'minutos' | 'porcentaje' | 'horas';
   minimo: number;
   maximo: number;
   valorPorDefecto: number;
@@ -1113,4 +1115,115 @@ export interface ConteoDetalle {
 /** `CapturaRespuestaDto`: `PUT /inventario/conteos/{id}/partidas`. */
 export interface CapturaRespuesta {
   guardadas: Array<{ insumoOrigenSrId: string; contado: string | null }>;
+}
+
+// --- Traspasos (F2-124) --------------------------------------------------------------
+
+/** `EstadoTraspaso`: el flujo del panel (enviado → recibido; cancelado sólo desde enviado). */
+export type EstadoTraspaso = 'enviado' | 'recibido' | 'cancelado';
+
+/** `EstadoConciliacionTraspaso`: contra SoftRestaurant. */
+export type EstadoConciliacionTraspaso = 'conciliado' | 'pendiente_sr' | 'en_alerta' | 'cancelado';
+
+/** `TraspasoResumenDto`. */
+export interface TraspasoResumen {
+  id: string;
+  folio: number;
+  sucursalId: string;
+  sucursal: string;
+  almacenOrigenSrId: string;
+  almacenOrigen: string | null;
+  sucursalDestinoId: string;
+  sucursalDestino: string;
+  almacenDestinoSrId: string;
+  almacenDestino: string | null;
+  nota: string | null;
+  estado: EstadoTraspaso;
+  conciliacion: EstadoConciliacionTraspaso;
+  enviadoAt: string;
+  recibidoAt: string | null;
+  canceladoAt: string | null;
+  conciliadoAt: string | null;
+  articulos: number;
+  conciliados: number;
+}
+
+export interface SucursalTraspaso {
+  sucursalId: string;
+  sucursal: string;
+  zonaHoraria: string;
+}
+
+export interface AlmacenTraspaso {
+  sucursalId: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+}
+
+/** `TraspasosDto`: `GET /inventario/traspasos`. */
+export interface Traspasos {
+  traspasos: TraspasoResumen[];
+  total: number;
+  umbralAlertaHoras: number;
+  sucursales: SucursalTraspaso[];
+  almacenes: AlmacenTraspaso[];
+}
+
+/** `EspejoDto`: el renglón de una póliza de SR que concilia un renglón del traspaso. */
+export interface EspejoTraspaso {
+  polizaId: string;
+  folio: string;
+  referencia: string | null;
+  renglon: number;
+  fecha: string;
+}
+
+/** `PartidaTraspasoDto`. */
+export interface PartidaTraspaso {
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  clave: string | null;
+  unidad: string | null;
+  cantidad: string;
+  costoUnitario: Importe | null;
+  importe: Importe | null;
+  salida: EspejoTraspaso | null;
+  entrada: EspejoTraspaso | null;
+}
+
+/** `TraspasoDetalleDto`: `GET /inventario/traspasos/{id}`, `POST` y sus acciones. */
+export interface TraspasoDetalle {
+  traspaso: TraspasoResumen;
+  zonaHoraria: string;
+  partidas: PartidaTraspaso[];
+  totales: { importe: Importe; sinCosto: number };
+}
+
+/** `PolizaTraspasoSrDto`. */
+export interface PolizaTraspasoSr {
+  polizaId: string;
+  folio: string;
+  tipo: 'traspaso_salida' | 'traspaso_entrada';
+  sucursalId: string;
+  sucursal: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+  fecha: string;
+  cancelada: boolean;
+  partidas: number;
+}
+
+/** `TraspasoSrDto`: un documento de traspaso de SR (sus pólizas de salida y entrada). */
+export interface TraspasoSr {
+  referencia: string | null;
+  polizas: PolizaTraspasoSr[];
+  traspasosPanel: Array<{ id: string; folio: number }>;
+}
+
+/** `TraspasosSrDto`: `GET /inventario/traspasos/sr`. */
+export interface TraspasosSr {
+  traspasos: TraspasoSr[];
+  truncado: boolean;
+  hayPolizas: boolean;
+  sucursales: SucursalTraspaso[];
 }

@@ -12,6 +12,7 @@ import { EscrituraConteos } from './escritura-conteos';
 import { EscrituraExistencias, IngestaExistencias } from './escritura-existencias';
 import { IngestaMovimientos } from './escritura-movimientos';
 import { EscrituraReportes } from './escritura-reportes';
+import { EscrituraTraspasos } from './escritura-traspasos';
 import { EscrituraSucursal } from './escritura-sucursal';
 import {
   COLUMNAS_INTOCABLES,
@@ -252,6 +253,14 @@ export class ScopedPrismaService {
    */
   conteos(scope: EmpresaScope): EscrituraConteos {
     return new EscrituraConteos(this.#prisma, scope);
+  }
+
+  /**
+   * Traspasos del panel (F2-124): enviar, recibir, cancelar y conciliar contra SR, con el scope
+   * recibido y bajo el candado de traspasos de la empresa. Dato NUESTRO: nunca se escribe a SR.
+   */
+  traspasos(scope: EmpresaScope): EscrituraTraspasos {
+    return new EscrituraTraspasos(this.#prisma, scope);
   }
 
   /**

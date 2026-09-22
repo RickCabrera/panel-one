@@ -37,7 +37,7 @@ export function Sidebar({ abierto, onNavegar }: { abierto: boolean; onNavegar: (
   return (
     <aside
       id="menu-principal"
-      className={`fixed inset-y-0 left-0 z-30 w-64 max-w-[80vw] overflow-y-auto border-r border-linea bg-superficie transition-transform md:sticky md:top-0 md:z-auto md:h-screen md:w-16 md:max-w-none md:shrink-0 md:translate-x-0 md:[scrollbar-width:none] lg:w-64 lg:[scrollbar-width:auto] ${
+      className={`print:hidden fixed inset-y-0 left-0 z-30 w-64 max-w-[80vw] overflow-y-auto border-r border-linea bg-superficie transition-transform md:sticky md:top-0 md:z-auto md:h-screen md:w-16 md:max-w-none md:shrink-0 md:translate-x-0 md:[scrollbar-width:none] lg:w-64 lg:[scrollbar-width:auto] ${
         abierto ? 'translate-x-0' : '-translate-x-full max-md:invisible'
       }`}
     >

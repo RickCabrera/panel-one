@@ -20,7 +20,10 @@ export type AccionAuditada =
   | 'existencia_limites.editar'
   | 'conteo.crear'
   | 'conteo.cerrar'
-  | 'conteo.cancelar';
+  | 'conteo.cancelar'
+  | 'traspaso.enviar'
+  | 'traspaso.recibir'
+  | 'traspaso.cancelar';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
@@ -33,7 +36,8 @@ export interface EventoAuditoria {
     | 'producto'
     | 'area'
     | 'existencia'
-    | 'conteo';
+    | 'conteo'
+    | 'traspaso';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */
