@@ -1006,6 +1006,12 @@ llevar el cursor — ese estado vive en el SQLite del agente. Lo que `docs/esque
 cubra se resuelve con la opción más conservadora, se marca con
 `# DECISION PROVISIONAL (nocturno):`, se anota en ese documento como supuesto y se sigue.
 
+> **Lo que dejó F2-145 (precio).** `RegistroProductoDto.precio` ya existe en el contrato.
+> **Omitirlo lo guarda NULO, también en una página incremental**: el lector manda SIEMPRE el
+> precio que lee de SR, o una incremental borra precios del panel. Texto decimal (nunca número
+> JSON), regla de DINERO. Ver `docs/esquema-sr.md` §6 (supuestos: un precio por producto y
+> sucursal, IVA desconocido, el ticket usa el mismo nombre que el catálogo) y §13.
+
 **Listo cuando:** `dotnet test` cubre la lectura contra **fixtures** (no contra una base viva)
 para cada catálogo, incluyendo un catálogo vacío y uno con nombres con acentos, comillas y
 `NULL`; correr la sincronización dos veces seguidas sin cambios en el POS **no encola nada** la

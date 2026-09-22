@@ -4766,3 +4766,122 @@ pase. Gate del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos
 primer plan: el revisor bloqueó justo por separarlos. Y nunca hacer mutaciones con `sed` sobre un
 archivo sin respaldo: `git checkout` no restaura un archivo que todavía no está en git (me pasó;
 lo arreglé a mano).
+
+
+## 2026-09-22 11:50 — F2-145 · Productos y orquestador de menú
+**Estado:** CERRADA si el PR se mergea. Carriles /api + /web (+ docs). Revisor, gate del plan:
+APROBADO CON OBSERVACIONES al primer pase (0 bloqueos, 13 observaciones, todas resueltas). Gate
+del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos).
+
+**Qué quedó hecho.**
+- **Precio por sucursal** en el espejo: migración `20260922111926_productos_precio`
+  (`productos.precio NUMERIC(12,2) NULL`) y `RegistroProductoDto.precio` en `POST /ingesta/catalogos`.
+  - Regla de DINERO, normalizado a 2 decimales ANTES del hash (`precioNormalizado` en
+    `src/ingesta/catalogos.ts`): "89", "89.0000" y "89.00" dan el mismo hash, y "-0.001" da "0.00".
+  - Si no cabe en NUMERIC(12,2), rechaza sólo ese registro.
+- **`GET /catalogos/menu`**: los productos ACTIVOS cruzados entre sucursales, por categoría, con
+  `discrepancia`, `precioMin` y `precioMax`, una columna por sucursal y `sincronizadoAt` por sucursal.
+  Tope de 5000 filas (`truncado`). La parte pura está en `src/catalogos/menu.ts#agruparMenu`.
+- **`GET /catalogos/sin-catalogo`**: lo vendido en el periodo cuyo nombre no está en el catálogo de
+  SU sucursal.
+  - Las ventas salen del helper de agregados (`AgregadosVentasService.consulta`) y el cruce se hace
+    en código.
+  - Sólo se cruzan las sucursales con sincronización COMPLETA; las demás salen en
+    `sucursalesSinCatalogo`.
+  - Tope de 500 renglones. Usa su propio DTO, sin `alturaAl`.
+- `precio` también aparece en `GET /catalogos/productos` y en su detalle.
+- **Web:**
+  - `/productos`: tabla con precio y estado, ficha, formulario de metadata para admins, y la
+    tarjeta "Sincronización del catálogo" con el botón "Pedir sincronización". Es la vista que
+    F2-230 dejó pendiente.
+  - `/menu`: el orquestador, con discrepancias con texto (no sólo color), filtro "sólo precios
+    distintos" y la tarjeta "Vendidos sin estar en el catálogo" con el periodo global.
+  - Las dos entradas del menú lateral ya navegan.
+- **Seed:** `registrosDe('productos')` manda el precio de SU sucursal desde `p.precios` del universo.
+  En la base de desarrollo: P009 89/95 y P021 55/60 (Centro/Norte).
+- OpenAPI: 2 rutas nuevas más `precio`. `docs/esquema-sr.md` §6 y §13. Nota nueva en la ficha de
+  F2-240 del backlog.
+
+**Decisiones que tomé y por qué.**
+- ❓ **DECISIÓN ABIERTA PARA RICARDO (sigue abierta): la metadata propia quedó POR SUCURSAL**, como la
+  dejó F2-230. Es lo conservador: no se migra ni se duplica nada. Está marcada `DECISION PROVISIONAL
+  (nocturno)` en `catalogos.service.ts#menu`. El menú lleva el `productoId` de cada sucursal y la
+  ficha edita la metadata de ESA sucursal. Si Ricardo decide "foto, descripción y etiquetas por
+  empresa", hay que hacer una tabla nueva y migrar los datos.
+- `DECISION PROVISIONAL (nocturno)` en `menu.ts#llaveProducto`: **el mismo producto se reconoce por
+  su CLAVE visible** (trim, mayúsculas); sin clave, por el nombre normalizado. Cada producto dice con
+  qué criterio se cruzó, y se marcan `gruposDistintos` y `duplicadoEnSucursal`.
+- `DECISION PROVISIONAL (nocturno)` en `menu.ts#vendidosSinCatalogo`: **el cruce de lo vendido es
+  por NOMBRE**, sin distinguir mayúsculas ni espacios; los acentos sí cuentan. Un producto
+  renombrado dentro del periodo sale "sin catálogo" con su nombre viejo, y la vista lo avisa.
+- Supuestos en `schema.prisma` y §6: un precio por producto y sucursal, y no se sabe si trae IVA.
+  El panel lo muestra "como lo reporta el POS".
+- **La discrepancia compara sólo filas vigentes con precio.** Una fila con `activoPos=false` o sin
+  precio se muestra y no la dispara. El menú lee sólo `activo=true`.
+- **Ruta `/menu`, no `/productos/menu`**: `entradaActiva` del menú lateral usa `startsWith` y
+  marcaría activas las dos.
+- **CONTRATO que F2-240 tiene que cumplir: omitir `precio` lo guarda NULO, también en una página
+  incremental.** El agente manda SIEMPRE el precio que lee. Está en la ficha de F2-240 y en §13.
+- **Reescritura única por el hash:** el contenido de producto ahora incluye la llave `precio`, así
+  que cada fila de antes de F2-145 cambia de hash y la primera sincronización tras el deploy la
+  reescribe una vez (mueve `updated_at`). Lo fija `menu.e2e.spec.ts`. Hoy no afecta a nadie: no hay
+  agentes leyendo catálogos.
+
+**Trampas que encontré.**
+- **Una sincronización completa con el MISMO `capturadoAt` que una página anterior no da de baja lo
+  que esa página creó**: `desactivarNoVistas` exige `vistoAt < capturadoAt`. Es el comportamiento
+  correcto de F2-230, pero mi primer e2e lo esperaba al revés. En los tests, usa un instante
+  posterior.
+- `prisma migrate dev` volvió a dar EPERM con el DLL del motor. Los tipos sí se generaron
+  (`precio: Decimal | null` en `node_modules/.prisma/client/index.d.ts`).
+- Los `node -e` con reemplazos multilínea fallan porque los `.ts` de /api tienen CRLF. Usa Edit.
+- `eslint` del web (`react-refresh/only-export-components`) no deja exportar funciones sueltas
+  desde una página. Por eso los textos quedaron en `paginas/productos/textos.ts`.
+- **El rojo de `prisma/esquema.spec.ts` ("argon2id verificable") es PREEXISTENTE** y sólo falla en
+  local (FK de la suscripción de reportes del seed; ver la entrada de F2-230). En CI la base llega
+  vacía.
+- `.wt-main/` sigue en la raíz, sin trackear (de F2-230). **ACCIÓN PARA RICARDO: borrarla.** Agrega
+  siempre por ruta.
+
+**Qué quedó abierto.**
+- La metadata por empresa o por sucursal (arriba).
+- **O4 del revisor:** si el menú se trunca en 5000 filas, el corte es por `sucursalId` y puede dejar
+  fuera una sucursal entera. Sus discrepancias desaparecen en silencio, detrás del aviso genérico de
+  "cifras incompletas". Mejora futura: cortar por sucursal o nombrar lo que quedó fuera.
+- **O5 del revisor:** la lectura de nombres del espejo en `vendidosSinCatalogo` no tiene tope. Un
+  catálogo por empresa es acotado.
+- Con el seed, "vendidos sin catálogo" sale VACÍO, porque todo lo vendido está en el catálogo. La
+  vista lo dice. No toqué el generador de ventas: movería las cifras de todas las pruebas del seed.
+  La detección está probada con cuentas escritas a mano en `menu.e2e.spec.ts`.
+- Sin export CSV (no lo pedía la ficha). El menú digital público sigue fuera de alcance.
+
+**Tests.**
+- **Nuevos:**
+  - `src/catalogos/menu.spec.ts` (17 puros). Discrepancia: decimal exacto, nulo, baja, una
+    sucursal, tres sucursales. Cruce por clave o nombre, duplicado, grupos distintos, orden de
+    categorías. Sin catálogo: por sucursal, catálogo parcial, variantes sumadas en Decimal, texto
+    de la variante con más importe.
+  - `src/catalogos/menu.e2e.spec.ts` (24). Precio ×3 idempotente, rechazo por overflow, reescritura
+    única por hash viejo. Sin catálogo: normalizado, catálogo parcial aparte, cruce contra el
+    catálogo PROPIO, empresa B, cancelada, 23:30 local dentro y 00:30 fuera, 404, 400 con
+    `alturaAl`. **AC discrepancia**, una sola sucursal, 404 del menú. **AC metadata**: sobrevive a
+    nombre + precio y a desaparecer/reaparecer (misma fila). Omitir el precio lo guarda nulo.
+  - `ingesta/catalogos.spec.ts` (+10, precio).
+  - `prisma/seed-catalogos.spec.ts` (+1): precio por sucursal y el menú marca exactamente P009 y
+    P021. **OJO: este test prueba la PERSISTENCIA, no la detección**; el seed usa la misma fórmula
+    `precioEn`. La detección se prueba con valores escritos a mano en los dos archivos de arriba.
+  - `openapi.spec` (+1).
+  - Web: `paginas/Menu.test.tsx` (13, menú y Productos) y `paginas/productos/textos.test.ts` (3).
+- **Adaptados, no aflojados:**
+  - `ingesta/catalogos.spec.ts`: el contenido lleva `precio: null`; el caso "campo desconocido" usa
+    `costo`.
+  - `openapi.spec`: 2 rutas nuevas.
+  - `layout/menu.test.ts` y `Sidebar.test.tsx`: el ejemplo de pendiente pasó a Meseros/F2-231.
+- **Números:**
+  - /api: lint y typecheck limpios, `prisma validate` OK, jest 1264/1265 con 0 skips (el rojo es el
+    preexistente de arriba).
+  - /web: build y lint limpios, vitest 875/875.
+
+**Qué haría distinto.** Decidir desde el plan qué nombre representa a un grupo de variantes. Lo
+dejé en "el primero alfabético", el e2e lo destapó como mala elección y lo cambié a "el de más
+importe".
