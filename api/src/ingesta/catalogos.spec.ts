@@ -35,6 +35,75 @@ describe('normalizarRegistro()', () => {
       nombre: 'Café "de olla" con piloncillo — ñandú',
       activoPos: null,
       grupoOrigenSrId: null,
+      precio: null,
+    });
+  });
+
+  describe('precio (F2-145)', () => {
+    it.each([
+      ['89', '89.00'],
+      ['89.0000', '89.00'],
+      ['0.125', '0.13'],
+      ['-0.125', '-0.13'],
+      ['-0.001', '0.00'],
+      ['-0', '0.00'],
+    ])('"%s" se guarda como "%s"', async (entrada, guardado) => {
+      const r = await valido('productos', { origenSrId: 'P1', nombre: 'a', precio: entrada });
+      expect(r.contenido.precio).toBe(guardado);
+    });
+
+    it('la misma cifra escrita distinto da el mismo hash; otra cifra, otro hash', async () => {
+      const a = await valido('productos', { origenSrId: 'P1', nombre: 'a', precio: '89' });
+      const b = await valido('productos', { origenSrId: 'P1', nombre: 'a', precio: '89.0000' });
+      const c = await valido('productos', { origenSrId: 'P1', nombre: 'a', precio: '95.00' });
+      const cero = await valido('productos', { origenSrId: 'P1', nombre: 'a', precio: '0' });
+      const menosCero = await valido('productos', {
+        origenSrId: 'P1',
+        nombre: 'a',
+        precio: '-0.001',
+      });
+      expect(a.hash).toBe(b.hash);
+      expect(c.hash).not.toBe(a.hash);
+      expect(menosCero.hash).toBe(cero.hash);
+    });
+
+    it('un precio que al redondear no cabe en NUMERIC(12,2) rechaza el registro sin el valor', async () => {
+      const r = await normalizarRegistro(
+        'productos',
+        { origenSrId: 'P1', nombre: 'a', precio: '9999999999.9999' },
+        2,
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.rechazo).toEqual({
+          indice: 2,
+          origenSrId: 'P1',
+          motivo: 'registros.2.precio: no cabe en NUMERIC(12,2) al redondear',
+          reintentable: false,
+        });
+      }
+    });
+
+    it.each([
+      ['número JSON', 89],
+      ['texto no decimal', '89,50'],
+      ['5 decimales', '1.00001'],
+    ])('rechaza un precio %s', async (_n, precio) => {
+      const r = await normalizarRegistro('productos', { origenSrId: 'P1', nombre: 'a', precio }, 0);
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.rechazo.motivo).toContain('registros.0.precio');
+        expect(r.rechazo.motivo).not.toContain(String(precio));
+      }
+    });
+
+    it('el precio sólo existe en productos', async () => {
+      const r = await normalizarRegistro(
+        'meseros',
+        { origenSrId: 'M1', nombre: 'a', precio: '1' },
+        0,
+      );
+      expect(r.ok).toBe(false);
     });
   });
 
@@ -61,7 +130,7 @@ describe('normalizarRegistro()', () => {
     ['nombre vacío', { origenSrId: 'P1', nombre: '' }],
     ['nombre de 201', { origenSrId: 'P1', nombre: 'x'.repeat(201) }],
     ['origen de 65', { origenSrId: 'x'.repeat(65), nombre: 'a' }],
-    ['campo desconocido', { origenSrId: 'P1', nombre: 'a', precio: '10.00' }],
+    ['campo desconocido', { origenSrId: 'P1', nombre: 'a', costo: '10.00' }],
     ['activoPos no booleano', { origenSrId: 'P1', nombre: 'a', activoPos: 'si' }],
     ['no es objeto', 'P1'],
   ])('rechaza %s con reintentable=false', async (_n, plano) => {

@@ -576,7 +576,40 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
 |---|---|---|---|
 | | | | |
 
-**Productos vendidos que no están en catálogo:** _(pendiente — si pasa, y cómo se ven)_
+**Productos vendidos que no están en catálogo:** no se ha visto en SR si pasa ni cómo se ven
+(artículos abiertos, "precio libre", productos borrados). Lo que el panel supone hoy (F2-145,
+`GET /catalogos/sin-catalogo`, `api/src/catalogos/menu.ts#vendidosSinCatalogo`):
+
+- `DECISION PROVISIONAL (nocturno)` — **el cruce es por NOMBRE**, sin distinguir mayúsculas ni
+  espacios de más (los acentos sí cuentan), contra el espejo de productos de **la misma sucursal**
+  en cualquier estado. El contrato de cheques no trae id de producto.
+- ⚠️ **SUPUESTO — el ticket usa el mismo nombre que el catálogo.** Si SR imprime un nombre corto en
+  la partida y guarda uno largo en el catálogo, TODO saldría "sin catálogo" (por eso la lista tiene
+  tope de 500 renglones con `truncado`). Es lo primero que hay que mirar en F2-192.
+- ⚠️ **Un producto renombrado en el POS dentro del periodo sale con su nombre viejo** como "sin
+  catálogo": el espejo sólo guarda el nombre actual. La vista lo avisa.
+- Una sucursal **sin sincronización completa** del catálogo de productos no se cruza (sale en
+  `sucursalesSinCatalogo`): contra un catálogo parcial todo parecería "sin catálogo".
+- Las variantes de escritura del mismo nombre se juntan en un renglón (`variantes`), con el texto de
+  la de más importe. El importe es Σ `partidas.total`, antes del descuento de la cuenta.
+
+**El precio por sucursal (F2-145).** Viaja en `RegistroProductoDto.precio` y se guarda en
+`productos.precio NUMERIC(12,2)`, nulo = "el POS no lo reporta".
+
+- ⚠️ **SUPUESTO — SR tiene UN precio por producto y sucursal.** Si maneja listas de precios (por
+  horario, por área, por canal), el contrato cambia en la tarea que lo descubra.
+- ⚠️ **SUPUESTO — no se sabe si el precio de SR incluye IVA.** Se guarda y se muestra tal como llega;
+  la vista lo dice. El seed maestro lo genera "con IVA", pero eso es regla del generador, no evidencia
+  de SR.
+- `DECISION PROVISIONAL (nocturno)` — **"el mismo producto" en dos sucursales se reconoce por su
+  CLAVE visible** (sin espacios, sin distinguir mayúsculas); sin clave, por el nombre normalizado
+  (`api/src/catalogos/menu.ts#llaveProducto`). No se ha visto si las sucursales de una cadena
+  comparten claves en SR: claves distintas para el mismo platillo no se cruzan, y la misma clave para
+  cosas distintas sí. El menú dice con qué criterio cruzó cada producto, marca la clave repetida en
+  una misma sucursal (`duplicadoEnSucursal`) y el producto que está en grupos distintos según la
+  sucursal (`gruposDistintos`; va en el grupo de la primera sucursal por nombre).
+- **La discrepancia** compara sólo filas vigentes (`activo` y `activoPos !== false`) con precio no
+  nulo, en decimal exacto. Una fila sin precio o dada de baja se muestra y no la dispara.
 
 **Lo que el top de productos (F1-032) supone:** ⚠️ **SUPUESTO — el nombre del producto es
 estable.** El contrato de ingesta no trae un id de producto de SR, así que el top agrupa por
@@ -622,10 +655,13 @@ visto en SR: la tabla de productos de §6 sigue `_(pendiente)_`. Lo lee F2-240 y
 - ⚠️ **SUPUESTO — SR marca la baja de un producto con algún estado** (suspendido, inactivo). El
   contrato lo lleva en `activoPos` (nulable = "no lo reporta"), distinto de desaparecer de la
   lectura (`activo`). No se sabe qué columna es.
-- **El precio NO viaja todavía**: es de F2-145 (precios por sucursal), que amplía el contrato.
+- **El precio ya viaja** (F2-145): ver "El precio por sucursal" arriba y §13.
 - ❓ **DECISIÓN ABIERTA PARA RICARDO — la metadata propia es por sucursal** (`productos_metadata`
   cuelga del producto espejo de ESA sucursal). Mínimo/máximo tiene sentido por sucursal; foto,
-  descripción y etiquetas del menú quizá deberían ser por empresa. Ver la nota en la ficha de F2-145.
+  descripción y etiquetas del menú quizá deberían ser por empresa. **F2-145 la dejó por sucursal**
+  (la opción conservadora: sin migrar ni duplicar nada; `DECISION PROVISIONAL (nocturno)` en
+  `catalogos.service.ts#menu`): el orquestador lleva el `productoId` de cada sucursal y la ficha la
+  edita por sucursal. Sigue abierta.
 
 ---
 
@@ -959,6 +995,16 @@ que cumplir al leer SR:
   motivo SIN el valor). Un `origenSrId` repetido en la página se rechaza en todas sus apariciones.
 - **Errores:** 409 = no cuadra (reintentar tras completar); 503 = transitorio o candado del catálogo
   ocupado (reintentar igual); 500 = determinista (**no** reintentar igual).
+- **`precio` del producto (F2-145):** texto decimal con la regla de DINERO de `/ingesta/eventos`
+  (hasta 10 enteros y 4 decimales; se redondea a 2 mitad lejos de cero ANTES del hash, así que "89",
+  "89.0000" y "89.00" son el mismo contenido, y "-0.001" es "0.00"). Uno que no cabe en NUMERIC(12,2)
+  rechaza sólo ese registro. **Omitirlo lo guarda nulo, también en una página incremental**: el
+  agente (F2-240) manda SIEMPRE el precio que lee, o una incremental borra precios.
+- **Cambio de hash por la llave nueva `precio` (F2-145):** el contenido de un producto ahora incluye
+  `precio`, así que cada fila guardada antes de F2-145 tiene un hash distinto y **la primera
+  sincronización tras el deploy la reescribe una vez** (mueve su `updated_at`); el siguiente reenvío
+  ya no cambia nada (lo fija `menu.e2e.spec.ts`). Sin instalaciones leyendo catálogos todavía, no
+  afecta a nadie.
 - **Forzado manual:** `GET /ingesta/catalogos/solicitud` → `pendiente=true` mientras algún catálogo
   de los seis no haya **recibido** un cierre (reloj del API) después de la solicitud. Un cierre
   tomado antes pero recibido después la da por atendida (desfase de relojes aceptado).

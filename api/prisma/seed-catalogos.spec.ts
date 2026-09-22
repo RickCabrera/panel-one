@@ -1,6 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
+import { CatalogosService } from '../src/catalogos/catalogos.service';
+import type { Auditoria } from '../src/comun/auditoria';
+import type { PrismaService } from '../src/prisma/prisma.service';
+import { ScopedPrismaService } from '../src/scope/scoped-prisma.service';
+import type { AgregadosVentasService } from '../src/ventas/agregados-ventas.service';
 import { crearFixtures, FX, limpiarFixtures } from '../test/fixtures-auth';
 import { registrosDe, sembrarCatalogos, sincronizacionDelSeed } from './seed-catalogos';
 import { generarVentas, universoDe, type OpcionesVentas } from './seed-ventas';
@@ -113,6 +118,33 @@ describe('sembrarCatalogos() (F2-230)', () => {
     expect(
       productos.every((p) => p.grupoOrigenSrId !== null && grupos.has(p.grupoOrigenSrId)),
     ).toBe(true);
+  });
+
+  // F2-145. OJO: esto prueba que el seed PERSISTE los precios del universo (la misma fórmula
+  // `precioEn` con que se generaron) y que el menú real los lee; la DETECCIÓN se prueba con
+  // valores escritos a mano en `src/catalogos/menu.spec.ts` y `menu.e2e.spec.ts`.
+  it('cada producto lleva el precio de SU sucursal, y el menú señala P009 y P021', async () => {
+    for (const s of OP.sucursales) {
+      const filas = await prisma.producto.findMany({ where: { sucursalId: s.id } });
+      for (const f of filas) {
+        const u = universo.productos.find((p) => p.clave === f.origenSrId)!;
+        expect(f.precio?.toFixed(2)).toBe(u.precios.find((x) => x.sucursalId === s.id)!.precio);
+      }
+    }
+    const servicio = new CatalogosService(
+      new ScopedPrismaService(prisma as unknown as PrismaService),
+      { ahora: () => RELOJ.getTime() },
+      {} as Auditoria,
+      {} as AgregadosVentasService,
+    );
+    const menu = await servicio.menu({ tipo: 'empresa', empresaId: FX.empresaA }, FX.empresaA);
+    const senalados = menu.categorias
+      .flatMap((c) => c.productos)
+      .filter((p) => p.discrepancia)
+      .map((p) => p.clave)
+      .sort();
+    expect(senalados).toEqual(['P009', 'P021']);
+    expect(menu.discrepancias).toBe(2);
   });
 
   it('dos corridas con el mismo reloj dejan exactamente la misma foto', async () => {

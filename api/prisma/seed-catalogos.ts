@@ -11,8 +11,8 @@ import type { Universo } from './seed-maestro';
 
 /**
  * Persiste los catálogos del seed maestro (F2-201) en las tablas espejo de F2-230:
- * **grupos, productos, meseros y clientes** (el reparto del backlog; áreas y canales los
- * siembra F2-233).
+ * **grupos, productos (con su precio por sucursal, F2-145), meseros y clientes** (el reparto
+ * del backlog; áreas y canales los siembra F2-233).
  *
  * No escribe directo: hace, por cada sucursal y catálogo, una sincronización COMPLETA
  * (páginas + cierre) por el MISMO servicio de la ingesta del agente
@@ -50,6 +50,9 @@ export function registrosDe(u: Universo, sucursalId: string, catalogo: CatalogoS
         clave: p.clave,
         nombre: p.nombre,
         grupoOrigenSrId: p.grupo,
+        // F2-145: el precio de ESTA sucursal, del universo (P009 y P021 difieren entre la
+        // sucursal par y la impar a propósito).
+        precio: p.precios.find((x) => x.sucursalId === sucursalId)?.precio ?? null,
         activoPos: p.activo,
       }));
     case 'meseros':
