@@ -855,7 +855,7 @@ de un ticket cancelado deja claro qué se canceló y cuándo; y combinar tres fi
 responde en menos de un segundo con 90 días de seed cargados.
 
 ### F2-223 · Monitor de mesas: paridad fina
-`[ ]` **Bloque C** · /web + /api
+`[x]` **Bloque C** · /web + /api
 
 El monitor ya tiene lo esencial (KPIs de mesas abiertas, en curso, sin imprimir, semáforo,
 detalle de consumo). Falta el pulido que lo vuelve la pantalla que se deja abierta todo el día:
