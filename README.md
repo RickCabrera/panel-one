@@ -262,18 +262,20 @@ Encender un carril es parte del entregable de la tarea que lo habilita.
 - **`npm audit` ya no queda en cero: 3 avisos altos que son uno solo, y se quedan.** Es
   `deepmerge-ts <8` (GHSA-ggr8-5vv4-36mx, recursión sin tope al fusionar objetos
   cíclicos), por `prisma@6.19.3 → @prisma/config@6.19.3 → deepmerge-ts@7.1.5`, con la
-  versión **fijada exacta** por Prisma. Todas las `@prisma/config` 6.x, y la `latest`
-  (7.1.5 también), la fijan igual. `npm audit fix --force` "lo arregla" bajando `prisma` a
+  versión **fijada exacta** por Prisma. Todas las `@prisma/config` 6.x la fijan igual, y
+  **también la 7.x**: `@prisma/config@7.10.0` (la `latest` al 21/09/2026) fija
+  `deepmerge-ts` en `7.1.5`. Sólo la línea de desarrollo 8 (`8.1.0-dev.7`) pasa a `8.0.2`. `npm audit fix --force` "lo arregla" bajando `prisma` a
   6.12.0, que rompe. Un `overrides` a `8.0.2` (global o con alcance `@prisma/config`, con
   rango o exacto) **no funciona con npm 11.17**: o no lo aplica, o saca `deepmerge-ts` del
   lock y entonces `prisma` truena con `ERR_MODULE_NOT_FOUND`. El riesgo real es bajo: sólo
   la usa la CLI de Prisma para fusionar **su propia config**, en desarrollo; nada de
-  entrada de usuarios y nada en la API en marcha. Se cierra al subir a Prisma 7 (F2-200,
-  detalle en `docs/nocturno-log.md`).
+  entrada de usuarios y nada en la API en marcha. **Subir a Prisma 7 no lo cierra**: se
+  cierra cuando una versión estable de Prisma suba el pin (hoy, sólo la 8 en desarrollo).
+  Detalle y salida de `npm view` en `docs/nocturno-log.md`, entrada F2-200.
 - **`package.json#prisma` (el `seed`) sigue ahí, aunque Prisma avise que se depreca en
   Prisma 7.** Migrarlo a `prisma.config.ts` **no es directo**: con un archivo de config,
-  Prisma 6 **deja de cargar `api/.env`** (`prisma validate` falla en `getConfig`), y hoy la
-  `migrate`, `db seed` y el propio `seed` dependen de esa carga (ver *Quién lee
+  Prisma 6 **deja de cargar `api/.env`** (`prisma validate` falla en `getConfig`), y hoy
+  `migrate` y `db seed` dependen de esa carga (ver *Quién lee
   `api/.env`*, arriba). Se hace junto con la subida a Prisma 7, con una carga explícita
   del `.env` en el `prisma.config.ts`.
 - **El `postinstall` de `/api` (`prisma generate`) y el cliente vacío.** El
@@ -281,7 +283,7 @@ Encender un carril es parte del entregable de la tarea que lo habilita.
   busca ahí `prisma/schema.prisma`, no lo encuentra (vive en `api/prisma/`) y deja un
   cliente **vacío** (`PrismaClient: any`). No es que npm bloquee los scripts: en npm
   11.17 `allowScripts` sólo avisa, y los scripts corren. Por eso el arreglo es el
-  `postinstall` del workspace y no tocar `allowScripts`. Ojo con un futuro
+  `postinstall` del workspace y no depender de `allowScripts`. Ojo con un futuro
   `npm ci --omit=dev` (un Dockerfile de producción, por ejemplo): `prisma` es
   devDependency y ese `postinstall` fallaría; ahí el cliente se genera en la etapa de
   build, con las devDependencies puestas.

@@ -2749,3 +2749,104 @@ a main, y eso es el hook haciendo su trabajo, no una contradicción.
 Antes de construir, lee en backlog.md "Las cuatro reglas de la RONDA 2". Si tomas una
 F2-1xx, tu "Listo cuando" es el de la tabla "Cierre nocturno de las tareas heredadas",
 no el original.
+
+## 2026-09-21 18:45 — F2-200 · Instalación limpia sin fricción
+**Estado:** CERRADA (PR en esta rama, se mergea al terminar el CI)
+
+**Qué quedó hecho.**
+- `api/package.json`: `postinstall: prisma generate`, `seed` (= `prisma db seed && npm run
+  seed:ventas && npm run seed:mesas`) y `setup:env` (`api/scripts/setup-env.ts`: copia
+  `.env.example` → `.env` si no existe; si existe, no lo toca y avisa).
+- **`api/src/config/cargar-env.ts` (`cargarEnvLocal`)**, llamado en la primera línea de
+  `api/src/main.ts` y al inicio de `main()` de los tres seeds. No estaba en el plan; ver abajo.
+- `allowScripts` en el `package.json` raíz (generado con `npm approve-scripts` /
+  `npm deny-scripts`): aprueba prisma, @prisma/client, @prisma/engines, @parcel/watcher,
+  unrs-resolver fijados a su versión; niega @scarf/scarf (telemetría).
+- Tests: `api/scripts/instalacion.spec.ts` (contrato de `package.json`: postinstall, orden
+  del seed, setup:env), `api/scripts/setup-env.spec.ts`, `api/src/config/cargar-env.spec.ts`.
+  `jest.config.js` y `tsconfig.json` incluyen `scripts/` (el build no: `tsconfig.build.json`
+  sólo compila `src/`, `dist/main.js` no se mueve).
+- README "Levantar todo en local" reescrito para PowerShell 5.1 (uno por línea, sin `&&`,
+  `Set-ExecutionPolicy -Scope Process Bypass -Force`, alternativa `npm.cmd`). Es la **fuente
+  única** de la secuencia; `0-INSTALACION.md` tiene la nota de PowerShell en requisitos y una
+  sección 8 con el resumen y el enlace.
+- `docs/verificacion-arranque.md`: corrida real en clon limpio con PowerShell 5.1, salida
+  incluida, desviaciones listadas, secretos tapados. Incluye la corrida fallida y el test de
+  contrato en rojo.
+
+**Checks.** /api: lint limpio, typecheck limpio, jest 32 suites / 685 verdes, 0 skips. /web
+(cambió el `package.json` raíz): build limpio, lint limpio, bundle 210.9 kB gzip, vitest
+329/329 en tres corridas seguidas. **Una primera corrida de vitest dio 1 fallo** mientras la
+suite de /api corría en paralelo en la misma máquina; no toqué /web y no pude reproducirlo.
+Posible test sensible a carga/tiempo: si vuelve a salir, identificar cuál (no lo vi).
+
+**Decisiones que tomé y por qué.**
+- **El backlog se equivocaba en la causa del punto 1.** npm 11.17 NO bloquea los scripts de
+  instalación: su propia doc (`npm-approve-scripts.md`) dice que `allowScripts` es consultivo
+  "in the current release". El cliente quedaba vacío porque el `postinstall` de
+  `@prisma/client` corre con cwd en la **raíz** del monorepo, busca `prisma/schema.prisma`
+  ahí, no lo encuentra (vive en `api/prisma/`) y genera el stub (`PrismaClient: any`, 0
+  `Decimal`; el bueno tiene 313). El arreglo es el `postinstall` del workspace. `allowScripts`
+  se agregó sólo para apagar el aviso y prevenir el día que npm bloquee de verdad. **No
+  "arregles" `allowScripts` pensando que era la causa.**
+- **`cargarEnvLocal` (desviación del plan, aceptada por el revisor).** La corrida real
+  mostró que la API no leía `api/.env` en runtime (`npm run dev` → "JWT_ACCESS_SECRET es
+  obligatorio" con el `.env` recién creado) y que `seed:ventas`/`seed:mesas` tampoco
+  ("Environment variable not found: DATABASE_URL"). El log ya lo decía desde F1-0xx ("El api
+  no carga `.env` solo"); las sesiones anteriores exportaban variables a mano. El cliente de
+  Prisma **no** vuelca el `.env` a `process.env` ni resuelve `DATABASE_URL` desde él; sólo la
+  CLI (`migrate`, `db seed`) lo carga. Implementación: `util.parseEnv` + asignar sólo lo que
+  no existe en el entorno (misma regla que `node --env-file`). No uso `process.loadEnvFile`
+  porque jest aísla `process.env` y el test no veía el efecto. En los seeds se carga antes
+  del chequeo `NODE_ENV=production`, para que un `NODE_ENV` del `.env` cuente.
+  **Riesgo anotado:** un contenedor de producción al que le copien un `api/.env` rellenaría
+  las variables que falten. Cuando llegue el compose de producción (F1-002), que no se copie
+  `api/.env` a la imagen.
+- **`npm audit`: las 3 altas se quedan.** Son una sola: `deepmerge-ts <8`
+  (GHSA-ggr8-5vv4-36mx) por `prisma@6.19.3 → @prisma/config@6.19.3 → deepmerge-ts@7.1.5`.
+  Evidencia (`npm view`, 21/09/2026):
+  ```
+  npm view @prisma/config@6 dependencies.deepmerge-ts
+    ... @prisma/config@6.17.1 '7.1.5' · 6.18.0 '7.1.5' · 6.19.0..6.19.3 '7.1.5'
+  npm view @prisma/config@latest version dependencies.deepmerge-ts
+    version = '7.10.0'   dependencies.deepmerge-ts = '7.1.5'
+  npm view @prisma/config@8.1.0-dev.7 dependencies.deepmerge-ts
+    8.0.2
+  ```
+  O sea: **ni Prisma 7 lo cierra**; sólo la 8 (en desarrollo). `npm audit fix --force` baja
+  prisma a 6.12.0 (rompe). `overrides` a `deepmerge-ts@8.0.2` (global, con alcance
+  `@prisma/config`, rango y exacto; con y sin borrar la entrada del lock): npm 11.17 o no lo
+  aplica, o **saca la dependencia del lock** y `prisma` truena con `ERR_MODULE_NOT_FOUND`.
+  Riesgo bajo: sólo la CLI de Prisma la usa para fusionar su propia config.
+- **`prisma.config.ts`: no se migró.** Con archivo de config, Prisma 6 deja de cargar
+  `api/.env` y `prisma validate` falla en `getConfig` (probado). Se hace con la subida de
+  Prisma, con carga explícita del `.env` en ese archivo.
+- La guía usa `npx prisma migrate deploy` (no interactivo); `migrate dev` queda para quien
+  crea migraciones. El `seed` agrupado **no** migra: son pasos distintos a propósito.
+- Web: sin script `setup:env` propio (fuera de alcance); la guía usa una línea
+  `if (-not (Test-Path ...)) { Copy-Item ... }` que no pisa un `.env.local` existente, y es
+  opcional (los valores por defecto sirven).
+
+**Trampas que encontré.**
+- **Una variable de entorno tapa el bug del `.env`.** Mi primera verificación exportaba
+  `DATABASE_URL` hacia una base limpia y el seed "pasaba". La buena edita el `.env` del clon
+  para que sea la única fuente. Si verificas arranque, no exportes variables.
+- En esta máquina **ya corre otra API de desarrollo en el 3000** (y un vite): usé `PORT=3100`.
+- El heredoc de bash del harness se come las `\` en scripts de Python con rutas de Windows:
+  escribe el script a un archivo con Write.
+- La salida de `powershell.exe` capturada desde bash sale en la página de códigos de la
+  consola: pon `[Console]::OutputEncoding = UTF8` al inicio del script.
+- `npx prettier --check package.json` avisa en main también (fines de línea del working
+  copy); no es nuestro.
+- No hay hallazgo de SoftRestaurant: `docs/esquema-sr.md` no se tocó.
+
+**Qué quedó abierto.**
+- El error `npm.ps1 ... deshabilitada` no se pudo reproducir (el proceso ya venía en
+  Bypass); la guía lo cubre por documentación.
+- `npm ci --omit=dev` fallaría en el `postinstall` (prisma es devDependency): anotado en el
+  README para cuando exista el Dockerfile de producción.
+- `deepmerge-ts`: revisar cuando Prisma estable suba el pin.
+- El vitest que falló una vez bajo carga (arriba).
+
+**Qué haría distinto.** Correr la verificación sin variables de entorno desde el principio:
+me habría ahorrado una vuelta.
