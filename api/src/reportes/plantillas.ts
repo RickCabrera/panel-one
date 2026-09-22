@@ -36,6 +36,7 @@ const NOMBRE_ALERTA: Record<TipoAlerta, string> = {
   mesa_abierta: 'Mesa abierta mucho tiempo',
   cuenta_sin_imprimir: 'Cuenta sin imprimir',
   caida_venta: 'Caída de venta',
+  bajo_minimo: 'Artículo bajo mínimo',
 };
 
 export const SIN_VENTAS = 'Sin ventas registradas';

@@ -5392,3 +5392,138 @@ bloqueos, O1–O10). Gate del entregable: APROBADO CON OBSERVACIONES al primer p
 **Qué haría distinto.** Leer qué hace `--shadow-database-url` antes de pasarle una base con datos.
 Y escribir primero la nota de F2-240 sobre el forzado: el cambio de "seis" a "once" parece un
 detalle y es un cambio de contrato para el agente.
+
+## 2026-09-22 18:40 — F2-121 · Existencias y valuación
+**Estado:** CERRADA si el PR se mergea. **PENDIENTE DE VALIDACIÓN REAL**: el cuadre contra SR es
+F2-193, y todavía no hay lector del agente (F2-241). Carriles /api + /web, más docs y backlog.
+
+**Revisor.**
+- Gate del plan: 1 BLOQUEO. La validación todo-o-nada de la foto rompía la idempotencia de la
+  ingesta: un solo registro malo congelaba el almacén para siempre. Corregido; el 2.º pase dio
+  APROBADO CON OBSERVACIONES.
+- Gate del entregable: APROBADO CON OBSERVACIONES al primer pase, 0 bloqueos.
+
+**Qué quedó hecho.**
+- **Ingesta `POST /ingesta/existencias`** (API key del agente). Cada petición es la FOTO COMPLETA de
+  UN almacén: `{ almacenOrigenSrId, capturadoAt, registros: [{ insumoOrigenSrId, cantidad, costoPromedio }] }`.
+  - Migración `20260922180000_existencias`, con CHECKs a mano:
+    - `existencias`: estado actual, único por sucursal+almacén+insumo.
+    - `lecturas_existencias`: la última foto aplicada de cada almacén.
+    - `limites_existencia`: mínimo y máximo DEL PANEL, nunca se escriben a SR.
+    - El enum `tipo_alerta` agrega `bajo_minimo`.
+  - La parte pura está en `api/src/ingesta/existencias.ts` (`normalizarFoto`, `decidirFoto`,
+    `valorDe`).
+  - La escritura está en `api/src/scope/escritura-existencias.ts`:
+    - `IngestaExistencias`: clavada a la sucursal de la key, con advisory lock por sucursal+almacén.
+    - `EscrituraExistencias`: los límites, con scope.
+  - Qué hace con cada foto:
+    - Crea lo nuevo, actualiza lo que cambió y deja igual lo demás. Lo que ya no viene se BORRA.
+    - Una foto más vieja que la última aplicada responde `aplicado:false` y no escribe nada.
+    - Con el mismo `capturadoAt` gana la que llega después.
+    - Un reenvío idéntico no mueve nada, ni `recibida_at`.
+  - Rechazo POR REGISTRO:
+    - Un rechazado con insumo identificable conserva su fila.
+    - Si algún rechazo no trae insumo identificable, la foto no borra ausentes
+      (`ausentesConservados`).
+    - Un insumo repetido se rechaza en todas sus apariciones.
+    - Un valor que no cabe en NUMERIC(12,2) se rechaza; nunca da 500.
+- **Panel:** módulo nuevo `api/src/inventario/`.
+  - `GET /inventario/existencias` devuelve KPIs, filas con los nombres de los catálogos espejo de SU
+    sucursal, almacenes con su lectura y la marca "atrasada", y sucursales con `almacenesLeidos`.
+  - `PUT /inventario/existencias/limites` es sólo para admin_global y admin_empresa. Todo lo que está
+    fuera de alcance da el mismo 404. Se puede editar un artículo "sin lectura" si ya tiene límite.
+- **Alerta `bajo_minimo`** en el centro de alertas. El umbral es un % del mínimo, 100 por defecto.
+  - `alertas.service.ts#existenciasPorSucursal` y `observar.ts#existenciasObservadas` arman lo que
+    se evalúa.
+  - En `evaluador.ts`, las llaves "sin lectura" no se cierran (`noEvaluables`).
+- **Seed:** `api/prisma/seed-existencias.ts`, llamado desde `seed-ventas.ts`.
+  - Manda una foto por almacén por la ingesta real, y los límites del universo con
+    `skipDuplicates`.
+  - La base de desarrollo queda con 88 existencias en 4 almacenes y 88 límites. Los FORZADOS del
+    universo salen bajo mínimo y sin existencia.
+- **Web:** `/existencias` (`web/src/paginas/Existencias.tsx` y `paginas/existencias/{reglas,consultas}.ts`).
+  - KPIs de valor estimado, atención requerida y sin existencia; estos dos últimos también filtran
+    la tabla.
+  - Filtro por almacén (acota la consulta a su sucursal) y búsqueda.
+  - Tabla con el semáforo en palabras y editor de mínimo y máximo en línea para admin.
+  - Estados vacíos: sin lectura, lectura atrasada, sucursal sin lectura y artículo sin lectura.
+  - Las horas van en la zona de la sucursal.
+  - La entrada Existencias del menú ya navega. Los textos de la alerta están en `alertas/textos.ts`.
+- **Docs:** `esquema-sr.md` §10 (el contrato y cada SUPUESTO) y §13. En el backlog, un "Y además (de
+  F2-121)" en F2-241 (obligaciones del lector) y en F2-193 (qué mirar al cuadrar).
+
+**Decisiones que tomé y por qué.** Todas son `DECISION PROVISIONAL (nocturno)` y están en esquema-sr §10.
+- El costo promedio se redondea a 2 decimales antes de valuar (`ingesta/existencias.ts`), por la
+  regla de dinero de §13. Si SR valúa a 4 decimales habrá centavos de diferencia; lo mide F2-193.
+- Una existencia negativa cuenta como "sin existencia" y su valor negativo SUMA al total
+  (`inventario/existencias.ts#kpisDe`). Es un supuesto sobre cómo suma SR; lo comprueba F2-193.
+- Una foto vacía (0 registros) vacía el almacén, igual que `total=0` en catálogos. El riesgo es un
+  agente que se trague un error; quedó como obligación del lector en F2-241.
+- Topes: 5000 registros por foto (`dto/existencias.dto.ts`) y 50 000 filas por consulta del panel.
+- Una lectura es "atrasada" si se recibió hace más de 90 min (3 × 30).
+- Una alerta cuyo artículo pasa a "sin lectura" se queda ABIERTA sin plazo; lo conservador es no
+  cerrarla en silencio. F2-193 decide si se cierra pasadas X horas.
+- La regla `bajo_minimo`: porcentaje del mínimo, de 1 a 100, 100 por defecto, severidad advertencia.
+- La existencia es estado, no catálogo: lo ausente se borra y la historia es de F2-122. Por eso los
+  límites viven en su propia tabla y sobreviven al borrado.
+- Almacén e insumo no tienen FK a sus catálogos (el orden de llegada no está garantizado), como §9.
+
+**Trampas que encontré.**
+- En Windows, los heredocs por Bash fallan con "unexpected EOF" aunque vayan entre comillas. Para
+  archivos usa la herramienta Write.
+- `npx prettier --write` con globs (`src/alertas/*.ts`) reformatea archivos AJENOS; los revertí con
+  `git checkout`. Pásale sólo tus archivos.
+- Los decoradores del agente agregan un 429 a las respuestas del OpenAPI.
+- `seed-alertas.spec` exige que el historial sintético cubra TODOS los `TipoAlerta`, así que agregar
+  un tipo lo rompe.
+  - Lo adapté: el historial no incluye `bajo_minimo`, porque lo abre la evaluación.
+  - `detalleDe` en `seed-alertas.ts` lanza un error si alguien agrega `bajo_minimo` a `TIPOS` sin
+    su detalle.
+- La migración se hizo como en F2-120:
+  - `migrate diff --from-schema-datasource ... --script`, más los CHECKs a mano, más `migrate deploy`.
+  - Deriva: `--from-schema-datasource/--to-schema-datamodel --exit-code`.
+  - NUNCA uses como shadow una base con datos.
+- **Rojo local preexistente:** `prisma/esquema.spec.ts` (argon2id, FK al borrar el admin).
+  - También falla con mis cambios en stash; el revisor lo atribuye al estado de la base local.
+  - Si el CI lo pinta rojo, no es de F2-121, pero hay que diagnosticarlo, no saltarlo.
+- `.wt-main/` sigue en la raíz. ACCIÓN PARA RICARDO: borrarla. Mientras tanto, agregar por ruta,
+  nunca `git add -A`.
+
+**Qué quedó abierto.**
+- El lector de existencias del agente es de F2-241. Hoy la cadena sólo se ha probado con el seed y
+  con fotos armadas a mano en los e2e. El cuadre contra un reporte real de SR es de F2-193.
+- No hay CSV de existencias (la ficha no lo pide) ni kardex (es de F2-122).
+
+**Tests.**
+- **Nuevos en api:**
+  - `ingesta/existencias.spec.ts`: redondeo, rechazos sin el valor, plan de cambios.
+  - `ingesta/existencias.e2e.spec.ts`:
+    - La misma foto ×3 idéntica, mismo capturadoAt, foto obsoleta, borrado de ausentes.
+    - 1 inválido entre N, rechazo sin id, tenant dentro de un registro, overflow, repetidos, foto
+      vacía.
+    - Aislamiento entre A1, A2 y B1; sobre inválido = 400; sin key = 401.
+  - `inventario/existencias.spec.ts`: estado del semáforo y KPIs.
+  - `inventario/existencias.e2e.spec.ts`:
+    - Literales escritos a mano: total de A1 110.79 y de la empresa 115.79.
+    - Un artículo bajo mínimo sale en atención requerida; la alerta abre y cierra.
+    - Un artículo sin lectura sigue visible y su alerta sigue abierta; los límites sobreviven a una
+      foto nueva.
+    - 404 uniforme y 403 para el visor.
+  - `evaluador.spec` (+6), `reglas.spec` (+1) y `openapi.spec` (+1).
+  - `prisma/seed-existencias.spec.ts`: fila por fila, Σ valor, FORZADOS, idempotencia, no pisa
+    límites editados.
+- **Nuevos en web:** `Existencias.test.tsx` (8), `existencias/reglas.test.ts` (7) y
+  `textos.test.ts` (+1).
+- **Adaptados, no aflojados:**
+  - `menu.test` y `Sidebar.test`: la pendiente de ejemplo pasa a Conteos (F2-123).
+  - `alertas.e2e`: ahora son 5 reglas.
+  - `seed-alertas.spec`, `scope.helper.spec` y `scoped-prisma.service.spec`.
+- **Mutaciones a mano:** ROUND_HALF_EVEN en `valorDe` → 3 rojos; quitar `noEvaluables` → 1 rojo.
+- **Números:**
+  - /api: lint y typecheck limpios, `prisma validate` OK, sin deriva.
+  - jest completo 1439/1441, 0 skips. Los dos rojos: `prisma/esquema.spec` (preexistente) y
+    `seed-alertas.spec` (ya adaptado; pasa 5/5 suelto).
+  - /web: build y lint limpios, vitest 946/946.
+
+**Qué haría distinto.** Pensar la semántica de "foto" junto con la regla de idempotencia desde el
+principio. El todo-o-nada parecía lo prudente y era lo contrario: congela el almacén para siempre.

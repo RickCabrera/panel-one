@@ -11,7 +11,7 @@ import { definicion, REGLAS, reglasEfectivas, SNAPSHOT_VIVO_S } from './reglas';
 const REGLAS_WEB = join(__dirname, '..', '..', '..', 'web', 'src', 'paginas', 'mesas', 'reglas.ts');
 
 describe('reglas del centro de alertas', () => {
-  it('cubre los cuatro tipos, cada uno una vez, con su default dentro del rango', () => {
+  it('cubre todos los tipos, cada uno una vez, con su default dentro del rango', () => {
     expect(REGLAS.map((r) => r.tipo).sort()).toEqual(Object.values(TipoAlerta).sort());
     for (const r of REGLAS) {
       expect(r.porDefecto).toBeGreaterThanOrEqual(r.minimo);
@@ -23,6 +23,16 @@ describe('reglas del centro de alertas', () => {
     expect(definicion(TipoAlerta.sucursal_sin_reporte).porDefecto).toBe(10);
     expect(definicion(TipoAlerta.mesa_abierta).porDefecto).toBe(60);
     expect(definicion(TipoAlerta.cuenta_sin_imprimir).porDefecto).toBe(30);
+  });
+
+  it('bajo mínimo (F2-121): % del mínimo, 100 por defecto, advertencia', () => {
+    expect(definicion(TipoAlerta.bajo_minimo)).toMatchObject({
+      unidad: 'porcentaje',
+      minimo: 1,
+      maximo: 100,
+      porDefecto: 100,
+      severidad: 'advertencia',
+    });
   });
 
   it('reglasEfectivas: lo guardado gana; sin fila, el default activo', () => {

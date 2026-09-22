@@ -32,6 +32,33 @@ export interface VentaObservada {
   cuentasBase: number;
 }
 
+/** Un artículo con mínimo en su almacén, leído de la última foto de existencias (F2-121). */
+export interface ArticuloObservado {
+  /** `JSON.stringify([almacenOrigenSrId, insumoOrigenSrId])`: la llave de su alerta. */
+  llave: string;
+  almacen: string;
+  insumo: string;
+  /** Nombre del catálogo de insumos de su sucursal; null si no está. */
+  nombre: string | null;
+  /** Cantidades como texto decimal (NUMERIC(12,3)), nunca float. */
+  cantidad: string;
+  minimo: string;
+}
+
+export interface ExistenciasObservadas {
+  articulos: ArticuloObservado[];
+  /**
+   * Llaves con mínimo guardado que ya no vienen en la foto de su almacén: no se sabe su
+   * existencia, así que su alerta ni se abre ni se cierra (no se cierra en silencio).
+   */
+  sinLectura: string[];
+}
+
+/** La llave de la alerta de bajo mínimo de un artículo en su almacén. */
+export function llaveArticulo(almacen: string, insumo: string): string {
+  return JSON.stringify([almacen, insumo]);
+}
+
 export interface SucursalObservada {
   sucursalId: string;
   /** Segundos desde el último reporte (reloj del servidor); null = nunca ha reportado. */
@@ -42,6 +69,8 @@ export interface SucursalObservada {
   cuentas: CuentaObservada[];
   /** Null si no se pudo leer. */
   venta: VentaObservada | null;
+  /** Null = la sucursal nunca ha mandado existencias: bajo mínimo no se evalúa. */
+  existencias: ExistenciasObservadas | null;
 }
 
 export interface Observacion {
@@ -152,7 +181,40 @@ function condiciones(
             },
           ];
     }
+
+    case TipoAlerta.bajo_minimo: {
+      if (s.existencias === null) return null;
+      return s.existencias.articulos
+        .filter((a) => estaBajoMinimo(a.cantidad, a.minimo, umbral))
+        .map((a) => ({
+          llave: a.llave,
+          detalle: {
+            almacen: a.almacen,
+            insumo: a.insumo,
+            nombre: a.nombre,
+            cantidad: a.cantidad,
+            minimo: a.minimo,
+          },
+        }));
+    }
   }
+}
+
+/** Llaves de un tipo que no se pueden juzgar ahora: su alerta abierta se deja como está. */
+function noEvaluables(tipo: TipoAlerta, s: SucursalObservada): ReadonlySet<string> {
+  if (tipo === TipoAlerta.bajo_minimo && s.existencias !== null) {
+    return new Set(s.existencias.sinLectura);
+  }
+  return new Set();
+}
+
+/**
+ * ¿La existencia está por debajo del `umbralPct` % de su mínimo? Estrictamente menor: en el
+ * mínimo exacto (con 100 %) no hay alerta. Todo en Decimal.
+ */
+export function estaBajoMinimo(cantidad: string, minimo: string, umbralPct: number): boolean {
+  const limite = new Prisma.Decimal(minimo).mul(umbralPct).div(cien);
+  return new Prisma.Decimal(cantidad).lt(limite);
 }
 
 export function evaluar(obs: Observacion, estado: EstadoBajoCandado): Cambios {
@@ -201,8 +263,11 @@ export function evaluar(obs: Observacion, estado: EstadoBajoCandado): Cambios {
       const conds = condiciones(r.tipo, r.umbral, s, umbralSinReporte);
       if (conds === null) continue;
       const llaves = new Set(conds.map((c) => c.llave));
+      const intocables = noEvaluables(r.tipo, s);
       for (const a of abiertas) {
-        if (!llaves.has(a.llave)) cerrar(a, MotivoCierreAlerta.condicion);
+        if (!llaves.has(a.llave) && !intocables.has(a.llave)) {
+          cerrar(a, MotivoCierreAlerta.condicion);
+        }
       }
       const yaAbiertas = new Set(abiertas.filter((a) => !cerradas.has(a.id)).map((a) => a.llave));
       for (const c of conds) {

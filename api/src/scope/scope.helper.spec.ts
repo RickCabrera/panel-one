@@ -65,6 +65,10 @@ describe('whereEmpresa / whereScoped', () => {
       Insumo: 'empresaId',
       AlmacenCatalogo: 'empresaId',
       ProveedorCatalogo: 'empresaId',
+      // F2-121: existencias, su lectura y los límites propios.
+      Existencia: 'empresaId',
+      LecturaExistencias: 'empresaId',
+      LimiteExistencia: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });

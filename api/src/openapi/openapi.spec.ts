@@ -162,10 +162,19 @@ describe('Contrato OpenAPI', () => {
     const mapeo = paths['/catalogos/areas/mapeo']?.get;
     expect(nombres(mapeo)).toEqual(['empresaId', 'sucursalId']);
     const asignar = paths['/catalogos/areas/{id}/canal']?.put;
-    expect(Object.keys(asignar?.responses ?? {}).sort()).toEqual(['200', '400', '401', '403', '404']);
+    expect(Object.keys(asignar?.responses ?? {}).sort()).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
     const esquemas = doc.components?.schemas as Record<
       string,
-      { properties?: Record<string, { $ref?: string; allOf?: unknown[]; enum?: string[] }>; enum?: string[] }
+      {
+        properties?: Record<string, { $ref?: string; allOf?: unknown[]; enum?: string[] }>;
+        enum?: string[];
+      }
     >;
     expect(Object.keys(esquemas.DatosChequeDto.properties ?? {})).toContain('areaOrigenSrId');
     expect(Object.keys(esquemas.VentaPorAreaDto.properties ?? {})).toEqual([
@@ -177,8 +186,16 @@ describe('Contrato OpenAPI', () => {
       'sinCanal',
       'catalogo',
     ]);
-    expect(esquemas.CanalNegocio.enum).toEqual(['comedor', 'mostrador', 'domicilio', 'plataformas']);
-    expect(Object.keys(esquemas.AsignarCanalAreaDto.properties ?? {})).toEqual(['empresaId', 'canal']);
+    expect(esquemas.CanalNegocio.enum).toEqual([
+      'comedor',
+      'mostrador',
+      'domicilio',
+      'plataformas',
+    ]);
+    expect(Object.keys(esquemas.AsignarCanalAreaDto.properties ?? {})).toEqual([
+      'empresaId',
+      'canal',
+    ]);
   });
 
   it('F2-120: el contrato de catálogos incluye los cinco de inventario y el registro del insumo', async () => {
@@ -211,6 +228,61 @@ describe('Contrato OpenAPI', () => {
     expect(Object.keys(esquemas.FilaInsumoDto.properties ?? {})).toEqual(
       expect.arrayContaining(['grupoOrigenSrId', 'grupo', 'unidadOrigenSrId', 'unidad']),
     );
+  });
+
+  it('F2-121: contrato de existencias (foto por almacén), vista y límites; bajo_minimo', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const codigos = (op: { responses?: object } | undefined) =>
+      Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/ingesta/existencias']?.post)).toEqual([
+      '200',
+      '400',
+      '401',
+      '429',
+      '500',
+      '503',
+    ]);
+    expect(codigos(paths['/inventario/existencias']?.get)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/inventario/existencias/limites']?.put)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
+    const esquemas = doc.components?.schemas as Record<
+      string,
+      { properties?: Record<string, unknown>; enum?: string[] }
+    >;
+    expect(Object.keys(esquemas.FotoExistenciasDto.properties ?? {})).toEqual([
+      'almacenOrigenSrId',
+      'capturadoAt',
+      'registros',
+    ]);
+    expect(Object.keys(esquemas.RegistroExistenciaDto.properties ?? {})).toEqual([
+      'insumoOrigenSrId',
+      'cantidad',
+      'costoPromedio',
+    ]);
+    expect(Object.keys(esquemas.ResultadoExistenciasDto.properties ?? {})).toEqual(
+      expect.arrayContaining([
+        'aplicado',
+        'borrados',
+        'conservados',
+        'ausentesConservados',
+        'rechazados',
+      ]),
+    );
+    expect(esquemas.EstadoExistencia.enum).toEqual([
+      'sin_existencia',
+      'bajo_minimo',
+      'sobre_maximo',
+      'ok',
+      'sin_limites',
+      'sin_lectura',
+    ]);
+    expect(esquemas.TipoAlerta?.enum ?? []).toContain('bajo_minimo');
   });
 
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
@@ -260,6 +332,10 @@ describe('Contrato OpenAPI', () => {
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',
         '/ingesta/eventos',
+        // F2-121: existencias (ingesta del agente y vista del panel).
+        '/ingesta/existencias',
+        '/inventario/existencias',
+        '/inventario/existencias/limites',
         '/mesas/abiertas',
         '/sucursales',
         '/sucursales/{id}',

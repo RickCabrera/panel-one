@@ -89,6 +89,10 @@ model Sucursal {
   insumos             Insumo[]
   almacenesCatalogo   AlmacenCatalogo[]
   proveedoresCatalogo ProveedorCatalogo[]
+  // F2-121: existencias por almacén y lo propio del panel sobre ellas.
+  existencias         Existencia[]
+  lecturasExistencias LecturaExistencias[]
+  limitesExistencia   LimiteExistencia[]
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -422,6 +426,8 @@ enum TipoAlerta {
   mesa_abierta
   cuenta_sin_imprimir
   caida_venta
+  // F2-121: un artículo por debajo de su mínimo en su almacén.
+  bajo_minimo
 
   @@map("tipo_alerta")
 }
@@ -1021,4 +1027,70 @@ model ProveedorCatalogo {
   @@index([empresaId])
   @@index([sucursalId, sincronizacionId])
   @@map("proveedores_catalogo")
+}
+
+// F2-121. Existencia ACTUAL de un insumo en un almacén de la sucursal: la última foto que el
+// agente mandó de ese almacén (`POST /ingesta/existencias`). Es estado, no catálogo: lo que
+// sale de la foto se BORRA (la historia es de los movimientos, F2-122). Almacén e insumo por
+// su `origen_sr_id` en TEXTO y sin FK (el orden de llegada de los catálogos no está
+// garantizado, como el grupo del insumo). esquema-sr.md §10.
+// Cantidad NUMERIC(12,3) (puede ser negativa: SR podría permitirlo); costo promedio y valor
+// son dinero NUMERIC(12,2); `valor` = round(cantidad × costo, 2) lo calcula el API.
+model Existencia {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @map("empresa_id") @db.Uuid
+  sucursalId        String   @map("sucursal_id") @db.Uuid
+  almacenOrigenSrId String   @map("almacen_origen_sr_id")
+  insumoOrigenSrId  String   @map("insumo_origen_sr_id")
+  cantidad          Decimal  @db.Decimal(12, 3)
+  costoPromedio     Decimal  @map("costo_promedio") @db.Decimal(12, 2)
+  valor             Decimal  @db.Decimal(12, 2)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "existencias_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, almacenOrigenSrId, insumoOrigenSrId], map: "existencias_sucursal_almacen_insumo_key")
+  @@index([empresaId])
+  @@map("existencias")
+}
+
+// F2-121. La última foto APLICADA de cada almacén: su `capturado_at` (reloj del agente)
+// decide qué foto es obsoleta; `recibida_at` (reloj del API) dice si la lectura va atrasada.
+model LecturaExistencias {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @map("empresa_id") @db.Uuid
+  sucursalId        String   @map("sucursal_id") @db.Uuid
+  almacenOrigenSrId String   @map("almacen_origen_sr_id")
+  capturadoAt       DateTime @map("capturado_at") @db.Timestamptz(3)
+  recibidaAt        DateTime @map("recibida_at") @db.Timestamptz(3)
+  filas             Int
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "lecturas_existencias_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, almacenOrigenSrId], map: "lecturas_existencias_sucursal_almacen_key")
+  @@index([empresaId])
+  @@map("lecturas_existencias")
+}
+
+// F2-121. Mínimo y máximo de un insumo en un almacén: son NUESTROS (se editan en el panel y
+// NUNCA se escriben a SR). Viven aparte: la ingesta no los toca y sobreviven a que el artículo
+// salga de la foto. CHECKs a mano: >= 0, mínimo <= máximo, al menos uno no nulo.
+model LimiteExistencia {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @map("empresa_id") @db.Uuid
+  sucursalId        String   @map("sucursal_id") @db.Uuid
+  almacenOrigenSrId String   @map("almacen_origen_sr_id")
+  insumoOrigenSrId  String   @map("insumo_origen_sr_id")
+  // No es dinero: existencias (unidades, kg) como `cantidad`.
+  minimo            Decimal? @db.Decimal(12, 3)
+  maximo            Decimal? @db.Decimal(12, 3)
+  actualizadoPor    String   @map("actualizado_por") @db.Uuid
+  updatedAt         DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "limites_existencia_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, almacenOrigenSrId, insumoOrigenSrId], map: "limites_existencia_sucursal_almacen_insumo_key")
+  @@index([empresaId])
+  @@map("limites_existencia")
 }

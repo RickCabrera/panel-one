@@ -16,7 +16,8 @@ export type AccionAuditada =
   | 'suscripcion_reporte.editar'
   | 'producto_metadata.editar'
   | 'area_canal.asignar'
-  | 'sucursal.forzar_sincronizacion';
+  | 'sucursal.forzar_sincronizacion'
+  | 'existencia_limites.editar';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
@@ -27,7 +28,8 @@ export interface EventoAuditoria {
     | 'regla_alerta'
     | 'suscripcion_reporte'
     | 'producto'
-    | 'area';
+    | 'area'
+    | 'existencia';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

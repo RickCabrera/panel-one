@@ -385,7 +385,12 @@ export interface VentaPorMesa {
 
 /** Centro de alertas (F2-224): `GET /alertas/*` y `PUT /alertas/reglas/:tipo`. */
 export type TipoAlerta =
-  'sucursal_sin_reporte' | 'mesa_abierta' | 'cuenta_sin_imprimir' | 'caida_venta';
+  | 'sucursal_sin_reporte'
+  | 'mesa_abierta'
+  | 'cuenta_sin_imprimir'
+  | 'caida_venta'
+  // F2-121: un artículo por debajo de su mínimo en su almacén.
+  | 'bajo_minimo';
 export type SeveridadAlerta = 'critica' | 'advertencia';
 export type MotivoCierreAlerta =
   'condicion' | 'regla_apagada' | 'sucursal_inactiva' | 'empresa_inactiva';
@@ -820,4 +825,63 @@ export interface MapeoAreas {
   sucursales: Array<{ sucursalId: string; sucursal: string; ultimaCompletaAt: string | null }>;
   areas: FilaMapeoArea[];
   truncado: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Existencias (F2-121): `GET /inventario/existencias` y `PUT /inventario/existencias/limites`
+// ---------------------------------------------------------------------------
+
+/** `EstadoExistencia` del API: el semáforo de cada artículo. */
+export type EstadoExistencia =
+  'sin_existencia' | 'bajo_minimo' | 'sobre_maximo' | 'ok' | 'sin_limites' | 'sin_lectura';
+
+/** Cantidades (NUMERIC(12,3)) y dinero como TEXTO decimal. Nulo = sin lectura. */
+export interface FilaExistencia {
+  sucursalId: string;
+  sucursal: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  clave: string | null;
+  unidad: string | null;
+  cantidad: string | null;
+  costoPromedio: string | null;
+  valor: string | null;
+  minimo: string | null;
+  maximo: string | null;
+  estado: EstadoExistencia;
+}
+
+export interface KpisExistencias {
+  articulos: number;
+  valor: string;
+  atencion: number;
+  sinExistencia: number;
+  sobreMaximo: number;
+  sinLectura: number;
+}
+
+export interface AlmacenExistencias {
+  sucursalId: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+  /** Reloj del agente, ISO UTC. Nulo = nunca se ha leído. */
+  capturadoAt: string | null;
+  recibidaAt: string | null;
+  atrasada: boolean;
+}
+
+export interface SucursalExistencias {
+  sucursalId: string;
+  sucursal: string;
+  zonaHoraria: string;
+  almacenesLeidos: number;
+}
+
+export interface Existencias {
+  kpis: KpisExistencias;
+  filas: FilaExistencia[];
+  almacenes: AlmacenExistencias[];
+  sucursales: SucursalExistencias[];
 }

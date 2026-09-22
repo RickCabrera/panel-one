@@ -888,7 +888,56 @@ ese registro solo.
 > promedio, movimientos con referencia a póliza, explosión de insumos por producto,
 > compras.
 
-_(pendiente — no se toca hasta que F1-091 cierre)_
+**Tablas de SR: sin mapear.** Movimientos, recetas y compras siguen pendientes (F2-122, F2-125,
+F2-126; el lector es F2-241 y lo valida F2-193). Lo que sigue **no es un hallazgo**: es el contrato
+de existencias que el panel ya acepta (F2-121) y los supuestos con que se construyó.
+
+### Existencias (F2-121): `POST /ingesta/existencias`
+
+Lo define `api/src/ingesta/dto/existencias.dto.ts` y lo publica `api/openapi.json`. Una petición =
+la **foto completa de UN almacén** de la sucursal de la API key:
+`{ almacenOrigenSrId, capturadoAt, registros: [{ insumoOrigenSrId, cantidad, costoPromedio }] }`.
+Se guarda en `existencias` (estado actual por sucursal, almacén e insumo), `lecturas_existencias`
+(la última foto aplicada de cada almacén) y, aparte, `limites_existencia` (mínimo y máximo, que son
+del panel y **nunca se escriben a SR**).
+
+- ⚠️ **SUPUESTO — SR guarda existencia y costo promedio POR ALMACÉN.** Si el costo promedio es por
+  insumo (no por almacén), el lector manda el mismo costo en cada almacén y nada cambia aquí.
+- ⚠️ **SUPUESTO — la foto trae TODAS las filas del almacén, también las que están en 0 o negativas.**
+  Lo que ya estaba y no viene **se borra** (es estado, no catálogo; la historia es de los
+  movimientos, F2-122). Si SR omite las filas en cero, un artículo agotado desaparecería del panel
+  en vez de salir "sin existencia": el lector (F2-241) tiene que mandarlas. Un artículo con mínimo
+  o máximo que sale de la foto se muestra "sin lectura" (no se oculta) y su alerta de bajo mínimo
+  ni se abre ni se cierra.
+- ⚠️ **SUPUESTO — la cantidad puede ser negativa** (el POS podría permitir vender sin existencia).
+  Se guarda tal cual y cuenta como "sin existencia"; su valor (negativo) SÍ suma al valor total.
+  Si el reporte de inventario de SR no suma negativos, F2-193 lo ve al cuadrar contra el piloto.
+- `DECISION PROVISIONAL (nocturno)` — **el costo promedio se redondea a 2 decimales** (mitad lejos
+  de cero, la regla de dinero de §13) y `valor = round(cantidad × costo, 2)` lo calcula el API. Si
+  SR valúa con el costo a 4 decimales, el total puede diferir por centavos de redondeo: F2-193 lo
+  mide.
+- `DECISION PROVISIONAL (nocturno)` — **un registro inválido se rechaza solo**, como en catálogos: si
+  su insumo es identificable, su fila se queda como estaba (ni se actualiza ni se borra); si algún
+  rechazo **no** trae insumo identificable, esa foto **no borra ningún ausente**
+  (`ausentesConservados=true`). Un insumo repetido rechaza todas sus apariciones. Un valor que no
+  cabe en NUMERIC(12,2) rechaza ese registro. El sobre (almacén, fecha, arreglo) es todo o nada: 400.
+- **Orden:** una foto con `capturadoAt` anterior a la última aplicada de ese almacén no escribe nada
+  (`aplicado=false`); con el MISMO `capturadoAt` gana la que llega después (bajo el candado del
+  almacén). Reenviar la misma foto no cambia nada (ni `recibida_at`).
+- `DECISION PROVISIONAL (nocturno)` — **0 registros = el almacén quedó vacío** (se borran sus filas),
+  igual que `total = 0` en catálogos. Riesgo: un agente que se trague un error de lectura y mande
+  cero vacía el almacén en el panel hasta la siguiente foto.
+- `DECISION PROVISIONAL (nocturno)` — **tope de 5000 registros por foto.** Un almacén con más insumos
+  no cabe en una petición: si pasa en una instalación real, es cambio de contrato (paginar).
+- **Almacén e insumo sin FK**, por su `origenSrId` en texto (como §9): la foto puede llegar antes que
+  el catálogo. En el panel sale "sin catálogo" hasta que llegue.
+- **Frecuencia:** la ficha pide leer cada 30 min (lo decide el agente, F2-241). El panel marca
+  "atrasada" una lectura **recibida** hace más de 90 min (`DECISION PROVISIONAL`, 3 × 30 min).
+- **Alerta `bajo_minimo`** (centro de alertas): se abre cuando la existencia queda por debajo del
+  umbral % de su mínimo (100 % por defecto; en el mínimo exacto no). Una sucursal que nunca mandó
+  existencias no se evalúa. Una alerta de un artículo que pasó a "sin lectura" **se queda abierta**
+  hasta que vuelva a leerse o se borre su mínimo (opción conservadora; F2-193 decide si se cierra
+  tras cierto tiempo).
 
 ---
 
@@ -1162,6 +1211,13 @@ que cumplir al leer SR:
   da de baja todo lo que haya) y **no debe ciclarse** resincronizando mientras siga pendiente;
   atiende cada `solicitadaAt` una vez (lo recuerda en su SQLite). Un cierre
   tomado antes pero recibido después la da por atendida (desfase de relojes aceptado).
+
+### Contrato de existencias (F2-121): `POST /ingesta/existencias`
+
+Foto completa de un almacén por petición; todos sus supuestos y decisiones están en §10. Lo que
+F2-241 tiene que cumplir: mandar TODAS las filas del almacén (también en 0 y negativas), el costo
+promedio en texto con la regla de dinero, y una foto por almacén; no mandar fotos de más de 5000
+registros; y no reportar un almacén vacío si la lectura falló.
 
 ### Campo nuevo del contrato de eventos (F2-233): `datos.areaOrigenSrId` del cheque
 

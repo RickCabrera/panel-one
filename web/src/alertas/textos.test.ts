@@ -56,6 +56,30 @@ describe('describirAlerta', () => {
   });
 });
 
+describe('bajo mínimo (F2-121)', () => {
+  it('cantidades de texto sin ceros de más; lo que falta dice "sin dato"', () => {
+    expect(
+      describirAlerta({
+        ...base,
+        tipo: 'bajo_minimo',
+        llave: '["A1-GEN","I040"]',
+        detalle: {
+          almacen: 'A1-GEN',
+          insumo: 'I040',
+          nombre: 'Tomate',
+          cantidad: '2.500',
+          minimo: '6.000',
+        },
+      }),
+    ).toBe(
+      'Tomate (almacén A1-GEN, Centro): existencia 2.5 contra un mínimo de 6 al abrir la alerta.',
+    );
+    expect(describirAlerta({ ...base, tipo: 'bajo_minimo', detalle: { cantidad: 3 } })).toBe(
+      'Artículo sin dato (Centro): existencia sin dato contra un mínimo de sin dato al abrir la alerta.',
+    );
+  });
+});
+
 describe('textos auxiliares', () => {
   it('duración', () => {
     const t = Date.parse('2026-09-22T19:00:00Z');

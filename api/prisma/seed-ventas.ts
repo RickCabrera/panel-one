@@ -26,6 +26,7 @@ import {
   type Canal,
 } from './seed-maestro/catalogos';
 import { sembrarCatalogos } from './seed-catalogos';
+import { sembrarExistencias } from './seed-existencias';
 import { generarUniverso, resumenPorModulo } from './seed-maestro';
 
 // Se re-exportan: los specs y los consumidores los importaban de aquí.
@@ -511,6 +512,18 @@ async function main(): Promise<void> {
           .map(([c, n]) => `${c} ${n}`)
           .join(', ') +
         '.',
+    );
+    // Existencias (F2-121): una foto por almacén por la misma ingesta del agente, y los límites
+    // demo (sin pisar los que se editaron en el panel).
+    const existencias = await sembrarExistencias(prisma, {
+      empresaId: op.empresaId,
+      sucursales,
+      universo,
+      capturadoAt: ahora,
+    });
+    console.log(
+      `Existencias sembradas (F2-121): ${existencias.existencias} en ${existencias.almacenes} ` +
+        `almacenes; ${existencias.limites} límites nuevos.`,
     );
     // El resto del universo todavía no tiene tabla: se genera (y se valida en los
     // specs) para que la tarea que la cree lo persista desde aquí.
