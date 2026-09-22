@@ -69,6 +69,10 @@ export const LLAVE_EMPRESA = {
   // `EscrituraTraspasos` (con el scope del usuario, o el de la empresa al conciliar).
   Traspaso: 'empresaId',
   PartidaTraspaso: 'empresaId',
+  // F2-125. Recetas y sus renglones: las escribe SÓLO `IngestaRecetas` (clavada a la sucursal
+  // del agente). El panel sólo las lee.
+  Receta: 'empresaId',
+  RenglonReceta: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;
@@ -95,12 +99,15 @@ export const COLUMNAS_INTOCABLES: readonly string[] = [
   'conteoId',
   // F2-124: un renglón no se mueve a otro traspaso.
   'traspasoId',
+  // F2-125: un renglón no se mueve a otra receta.
+  'recetaId',
   'empresa',
   'sucursal',
   'cheque',
   'poliza',
   'conteo',
   'traspaso',
+  'receta',
 ];
 
 /** El filtro de tenant de un modelo: `{}` para admin_global, la empresa para los demás. */

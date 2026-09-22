@@ -5880,3 +5880,117 @@ linter del compilador de React la iba a exigir igual, y se prueba mucho más fá
 
 **Qué haría distinto.** Leer `escritura-movimientos.ts#reemplazar` ANTES de diseñar el espejo: el
 borrado y recreación de movimientos decidía todo el modelo y me costó un bloqueo del plan.
+
+## 2026-09-23 01:30 — F2-125 · Recetas y consumo teórico
+**Estado:** CERRADA si el PR se mergea. **PENDIENTE DE VALIDACIÓN REAL**: los 3 insumos de control
+con el piloto y la decisión abierta "¿SR descuenta por receta al vender?" van en F2-193; el lector
+de recetas es F2-241. Carriles /api + /web (+ docs). Revisor, gate del plan: BLOQUEADO 1 vez,
+aprobado en el 2.º pase.
+
+**Qué quedó hecho.**
+- **Modelo** (migración `20260923010000_recetas`, CHECKs a mano): `recetas` (cabecera por sucursal +
+  `producto_origen_sr_id`, `renglones`, `hash`, `leida_at`, `recibida_at`) y `renglones_receta`
+  (cantidad NUMERIC(12,4) ≥ 0, FK compuesta a la receta de la MISMA sucursal y empresa, CASCADE).
+  Registrados en `LLAVE_EMPRESA` y `COLUMNAS_INTOCABLES` (`recetaId`, `receta`) y en la limpieza de
+  fixtures.
+- **Ingesta** `POST /ingesta/recetas` (agente): `ingesta/dto/recetas.dto.ts`, `ingesta/recetas.ts`
+  (puro: validar, ORDENAR renglones, hash, decidir), `ingesta/recetas-ingesta.{service,controller}.ts`,
+  escritura sólo por `ScopedPrismaService.recetasDeSucursal(agente)` → `scope/escritura-recetas.ts`
+  (candado `recetas:<sucursal>`). Calcado de `/ingesta/movimientos` (F2-122): mismas reglas de lote,
+  rechazo por receta, `leidoAt`/obsoletas/avanzar lectura.
+- **Panel** `GET /inventario/recetas` y `GET /inventario/consumo-teorico`
+  (`inventario/recetas.{ts,service,controller}.ts`, `inventario/dto/recetas.dto.ts`;
+  `InventarioModule` importa `VentasModule` por `AgregadosVentasService`). Lo vendido sale de la CTE
+  `partidas_ventas` del helper de agregados; el real, de `groupBy` del cliente con scope (nada de SQL
+  crudo propio).
+- **Seed** `api/prisma/seed-recetas.ts` (desde `seed-ventas.ts`, tras catálogos) por el MISMO
+  servicio de ingesta: las 25 recetas del universo en cada sucursal, P020 sin cabecera y P021 con
+  `renglones: []` (los dos caminos de "sin receta").
+- **Web** `/recetas` (`paginas/Recetas.tsx`, `paginas/recetas/{consultas,reglas}.ts`): tarjeta
+  "Consumo teórico contra real" (ranking con columnas consumo/merma/ajuste/real/variación/%/importe,
+  sentido en texto, avisos por sucursal, "Cómo se calcula"), "Vendido sin receta que explotar" y
+  "Recetas por producto" (búsqueda local, detalle al abrir, costo, % del precio, sin receta aparte).
+  Menú `inventario.recetas` ya navega; tipos a mano en `api/tipos.ts`.
+- **Docs**: `esquema-sr.md` §10 "Recetas (F2-125)" (todas las DECISION/SUPUESTO), §13 "Contrato de
+  recetas", nota de desechables en el aviso del seed maestro; backlog "Y además (de F2-125)" en
+  F2-241 y F2-193. OpenAPI regenerado.
+
+**Decisiones que tomé y por qué.** Todas en esquema-sr §10 "Recetas".
+- Contrato = LOTE (como pólizas), no foto: una receta ausente NO se borra; la que SR ya no tenga se
+  manda vacía. Renglones ORDENADOS (insumo, cantidad como Decimal) antes del hash: el lector no tiene
+  que ordenar y otro orden no reescribe.
+- Cantidad NUMERIC(12,4) (una pizca no cabe en 3); más decimales = rechazo, no redondeo.
+- Cruce partida → producto POR NOMBRE normalizado (`menu.ts#normalizarNombre`), espejo en cualquier
+  estado; mismo nombre en 2 productos (aunque uno de baja) = `ambiguo`. Sin catálogo de productos
+  sincronizado o sin recetas → la sucursal no se calcula (`calculada=false`), no se reporta todo
+  como "sin catálogo".
+- Real = consumo + merma + ajuste (salidas en positivo; ajuste a favor RESTA). Sin pólizas = real
+  NULO. El supuesto "¿SR explota la receta al vender?" (lo que marcó el revisor como B2) está en §10
+  con sus dos escenarios y como decisión abierta en F2-193; por eso el desglose va en columnas.
+- Costo = Σ importe / Σ cantidad de las SALIDAS (cantidad < 0) de esos tipos en el rango; si no hay,
+  la foto de existencias (Σ valor / Σ cantidad con cantidad > 0); si no, nulo. Redondeado a 2 antes
+  de multiplicar.
+- No se materializa consumo diario: se calcula al vuelo por rango (tope 366 días, `validarRango` de
+  movimientos). F2-126/F2-127 pueden reusar `RecetasService.consumoTeorico`.
+- `GET /inventario/recetas` lista TODOS los productos del espejo con marca `vigente`, más las recetas
+  de productos que el espejo no tiene (`enCatalogo=false`).
+
+**Trampas que encontré.**
+- `npx prisma format` REFORMATEA modelos ajenos (alinea columnas en todo el archivo). No lo uses: edita
+  el schema a mano y valida con `prisma validate`. Tuve que revertir y volver a aplicar.
+- Igual que antes: la migración se genera con `prisma migrate diff --from-schema-datasource ...
+  --to-schema-datamodel ... --script -o prisma/migrations/<timestamp mayor>/migration.sql`, CHECKs a
+  mano, luego `migrate dev`. No leas `.env`.
+- Heredocs con comillas en bash fallan: usa Write para archivos y `python archivo.py` para ediciones.
+  Python NO puede escribir en `/tmp` (Windows): usa el scratchpad.
+- La merma del generador es aleatoria: con el reloj fijo del spec, una semana de A1 no tiene NINGUNA
+  merma. El spec del seed usa dos semanas para ejercer los tres tipos.
+- `.wt-main/` sigue en la raíz sin rastrear. ACCIÓN PARA RICARDO: borrarla. Agregar por ruta, nunca
+  `git add -A`.
+
+**Qué quedó abierto.**
+- F2-193: validar 3 insumos de control con el piloto y decidir la métrica si SR explota recetas.
+- F2-241: el lector de recetas (obligaciones en su "Y además").
+- Unidades de receta con factor, subrecetas, modificadores que consumen: supuestos sin validar.
+- No hay alerta de "variación alta" en el centro de alertas: la ficha no la pedía.
+- Una sucursal no calculable (sin catálogo de productos o sin recetas) no muestra filas de real
+  aunque tenga pólizas; la vista lo dice ("tampoco su consumo real").
+- Las lecturas del panel (groupBy de movimientos, findMany de insumos y existencias) no fijan
+  `statement_timeout` propio (sólo la de ventas). Igual que `movimientos.service.ts`; el tope de 366
+  días lo acota. Revisar cuando haya volumen real.
+- Tarea aparte sugerida: arreglar el test inestable de `reportes.e2e.spec.ts` (ver Tests). Si el CI
+  lo pega, re-correr no cuenta como intento de arreglo.
+- Revisor, gate del entregable: APROBADO en el 1.er pase.
+
+**Tests.**
+- api: `ingesta/recetas.spec.ts` (13, puro), `inventario/recetas.spec.ts` (12, puro, literales a
+  mano), `ingesta/recetas.e2e.spec.ts` (11: 401, orden canónico, ×3 idéntico también reordenado,
+  avanzar lectura, reemplazo con menos renglones, obsoleta, vacía, rechazo por receta sin el valor,
+  sobre 400 ×6, aislamiento A1/A2/B1, FK compuesta y CHECK con SQL crudo),
+  `inventario/recetas.e2e.spec.ts` (9: los 3 insumos de control calculados A MANO en el comentario
+  del archivo, cheque cancelado y de otro día fuera, corte 23:30 local, póliza cancelada/compra/
+  traspaso/otro día fuera, aparte sin_receta/sin_catalogo/ambiguo, A2 sin recetas no calculada, B1
+  sin pólizas = real nulo, periodo vacío, 404 ×3, 400 ×3, 401, lista de recetas con costo
+  incompleto y % del precio), `prisma/seed-recetas.spec.ts` (6: conteos, idempotencia ×2, TODAS las
+  filas de dos semanas de A1 y de A2 contra el cálculo a mano desde el universo crudo, 3 insumos de
+  control I003/I030/I041 con teórico > 0 y variación ≠ 0, mermas y ajustes en el rango, desechables
+  sin teórico, P020/P021 aparte), `openapi.spec` (+1 y rutas).
+- Adaptados, no aflojados: `scope.helper.spec` y `scoped-prisma.service.spec` (modelos nuevos);
+  web `menu.test` (Recetas ya navega a `/recetas` en vez de "pendiente F2-125") y `Sidebar.test`
+  (la pendiente de ejemplo pasa de Recetas/F2-125 a Compras/F2-126).
+- web: `recetas/reglas.test.ts` (8), `Recetas.test.tsx` (8).
+- Mutaciones a mano: quitar `cancelada: false` del real → e2e rojo; ignorar el tipo de póliza →
+  e2e rojo.
+- Números: /api lint, typecheck, `prisma validate` limpios, `migrate diff` sin deriva. Jest completo:
+  1628/1630 (94 suites). Rojos: (a) el preexistente `prisma/esquema.spec.ts` (argon2id del admin: FK
+  al borrar el usuario en la base local de dev), igual que F2-120…F2-124 — NO es verde; (b)
+  `src/reportes/reportes.e2e.spec.ts` "un token alterado…: 404", INESTABLE y ajeno a esta tarea
+  (archivo no tocado; re-corrido: 1 rojo, 1 verde). Causa: la firma del token son 32 bytes en 43
+  caracteres base64url; el último carácter sólo lleva 4 bits útiles y cambiar 'A'↔'B' sólo toca bits
+  de relleno, así que a veces el token "alterado" decodifica igual y sigue siendo válido (200). ACCIÓN
+  PARA RICARDO / tarea aparte: alterar un carácter del MEDIO de la firma (o un bit de un byte ya
+  decodificado). No se tocó aquí (una tarea por corrida). Si el CI lo pega, re-correr. /web build, lint,
+  check:bundle (281.5 kB gzip) limpios; vitest 1027/1027.
+
+**Qué haría distinto.** Pensar desde el principio qué significa "consumo real" si el POS ya explota
+recetas: el revisor lo marcó en el plan y era la pregunta de fondo de la tarea.

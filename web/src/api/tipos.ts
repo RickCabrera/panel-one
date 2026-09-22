@@ -1227,3 +1227,102 @@ export interface TraspasosSr {
   hayPolizas: boolean;
   sucursales: SucursalTraspaso[];
 }
+
+// ---------------------------------------------------------------------------
+// F2-125 · Recetas y consumo teórico
+// ---------------------------------------------------------------------------
+
+/** `SucursalRecetasDto`. */
+export interface SucursalRecetas {
+  sucursalId: string;
+  sucursal: string;
+  /** 0 = el agente nunca mandó recetas de esta sucursal. */
+  recetasRecibidas: number;
+  /** false = el catálogo de productos nunca cerró una sincronización completa. */
+  catalogoProductos: boolean;
+}
+
+/** `RenglonRecetaVistaDto`. */
+export interface RenglonRecetaVista {
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  unidad: string | null;
+  /** 4 decimales, por UNA unidad vendida. */
+  cantidad: string;
+  costo: Importe | null;
+  importe: Importe | null;
+}
+
+/** `ProductoRecetaDto`. */
+export interface ProductoReceta {
+  sucursalId: string;
+  productoOrigenSrId: string;
+  clave: string | null;
+  /** Nulo = receta de un producto que el espejo no tiene. */
+  nombre: string | null;
+  vigente: boolean;
+  enCatalogo: boolean;
+  precio: Importe | null;
+  conReceta: boolean;
+  renglones: RenglonRecetaVista[];
+  costo: Importe | null;
+  costoIncompleto: boolean;
+  /** 1 decimal. */
+  porcentajePrecio: string | null;
+}
+
+/** `RecetasDto`: `GET /inventario/recetas`. */
+export interface Recetas {
+  sucursales: SucursalRecetas[];
+  productos: ProductoReceta[];
+  total: number;
+  truncado: boolean;
+}
+
+/** `SucursalConsumoDto`. */
+export interface SucursalConsumo extends SucursalRecetas {
+  /** 0 = nunca mandó pólizas: el real es nulo. */
+  polizasRecibidas: number;
+  calculada: boolean;
+  productosExplotados: number;
+}
+
+/** `FilaConsumoDto`. Cantidades a 3 decimales; `porcentaje` a 1. */
+export interface FilaConsumo {
+  sucursalId: string;
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  unidad: string | null;
+  teorico: string;
+  real: string | null;
+  consumo: string | null;
+  merma: string | null;
+  ajuste: string | null;
+  variacion: string | null;
+  porcentaje: string | null;
+  sinTeorico: boolean;
+  costo: Importe | null;
+  importeTeorico: Importe | null;
+  importeVariacion: Importe | null;
+}
+
+export type MotivoAparte = 'sin_receta' | 'sin_catalogo' | 'ambiguo';
+
+/** `VendidoAparteDto`. */
+export interface VendidoAparte {
+  sucursalId: string;
+  sucursal: string;
+  producto: string;
+  motivo: MotivoAparte;
+  productoOrigenSrId: string | null;
+  partidas: number;
+  cantidad: string;
+  importe: Importe;
+}
+
+/** `ConsumoTeoricoDto`: `GET /inventario/consumo-teorico`. */
+export interface ConsumoTeorico {
+  sucursales: SucursalConsumo[];
+  filas: FilaConsumo[];
+  aparte: VendidoAparte[];
+}

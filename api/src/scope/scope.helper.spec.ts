@@ -77,6 +77,9 @@ describe('whereEmpresa / whereScoped', () => {
       // F2-124: traspasos del panel y sus renglones (dato propio).
       Traspaso: 'empresaId',
       PartidaTraspaso: 'empresaId',
+      // F2-125: recetas leídas de SR y sus renglones.
+      Receta: 'empresaId',
+      RenglonReceta: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });

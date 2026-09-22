@@ -856,6 +856,87 @@
         ]
       }
     },
+    "/ingesta/recetas": {
+      "post": {
+        "description": "Upsert por (sucursal de la API key, `productoOrigenSrId`). Idempotente: el mismo lote tres veces (también con los renglones en otro orden) deja exactamente los mismos datos. Una receta que cambió REEMPLAZA sus renglones. Una receta guardada con una lectura más nueva que `leidoAt` no se toca (`obsoletas`). Cada receta se valida aparte: una inválida, o con algún renglón inválido, va a `rechazadas` sin tocar lo guardado. Nunca se borra una receta: la que SR ya no tenga se manda con `renglones: []`. Registra el contacto del agente.",
+        "operationId": "RecetasIngestaController_recibir",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoteRecetasDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoRecetasDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sobre inválido: `leidoAt` sin zona o más de 5 min en el futuro, `recetas` vacío, no arreglo, con más de 500 o con no-objetos, más de 5000 renglones en total, o un campo de más en el sobre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          },
+          "500": {
+            "description": "Falla determinista: no se guardó nada y reenviar lo mismo va a fallar igual. No reintentar en bucle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Falla transitoria (base, o el candado lo tiene otro lote de la misma sucursal). No se guardó nada: reenviar igual más tarde.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "Recibe un lote de recetas del POS, cada una con todos sus renglones.",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
     "/ventas/resumen": {
       "get": {
         "description": "Cache de 15 s por usuario-alcance y filtro.",
@@ -7797,6 +7878,184 @@
           "inventario"
         ]
       }
+    },
+    "/inventario/recetas": {
+      "get": {
+        "description": "Las recetas que el agente mandó (`POST /ingesta/recetas`) cruzadas con el espejo de productos e insumos: renglones con nombre, unidad, costo de la última foto de existencias e importe; costo de la receta y % sobre el precio. Productos sin receta y recetas de productos que el espejo no tiene, marcados. `sucursales[].recetasRecibidas = 0` = el agente nunca mandó recetas de esa sucursal.",
+        "operationId": "RecetasController_lista",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecetasDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recetas de SoftRestaurant por producto, con su costo (F2-125).",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/consumo-teorico": {
+      "get": {
+        "description": "Teórico = Σ cantidad vendida × receta, cruzando la partida con el producto POR NOMBRE en su sucursal (cheques no cancelados cerrados en el rango, en la zona de cada sucursal). Real = salidas por pólizas NO canceladas de consumo, merma y ajuste en el rango, con el desglose. Ranking por importe de la variación. Lo vendido sin receta, sin catálogo o con nombre ambiguo va aparte y no detiene el cálculo. Una sucursal sin catálogo de productos o sin recetas no se calcula (`calculada=false`); sin pólizas, el real es nulo (no cero).",
+        "operationId": "RecetasController_consumoTeorico",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumoTeoricoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Consumo teórico (ventas × receta) contra el real (pólizas), por insumo (F2-125).",
+        "tags": [
+          "inventario"
+        ]
+      }
     }
   },
   "info": {
@@ -9237,6 +9496,141 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RechazoPolizaDto"
+            }
+          }
+        },
+        "required": [
+          "recibidas",
+          "creadas",
+          "actualizadas",
+          "sinCambios",
+          "obsoletas",
+          "rechazadas"
+        ]
+      },
+      "RenglonRecetaDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string",
+            "example": "I001",
+            "description": "El `origenSrId` del insumo en el catálogo `insumos` de esta sucursal (1–64). Sin FK: el catálogo puede llegar después. Puede repetirse dentro de la receta (el cálculo los suma)."
+          },
+          "cantidad": {
+            "type": "string",
+            "pattern": "^\\d{1,8}(\\.\\d{1,4})?$",
+            "example": "0.1500",
+            "description": "Cuánto del insumo consume UNA unidad vendida del producto, en la UNIDAD DEL INSUMO del catálogo. Texto decimal NUMERIC(12,4): hasta 8 enteros y 4 decimales, sin signo. No se redondea: más decimales rechazan la receta. Puede ser 0."
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "cantidad"
+        ]
+      },
+      "RecetaDto": {
+        "type": "object",
+        "properties": {
+          "productoOrigenSrId": {
+            "type": "string",
+            "example": "P001",
+            "description": "El `origenSrId` del producto en el catálogo `productos` de esta sucursal (1–64). Llave de la idempotencia junto con la sucursal de la API key. Sin FK. Repetido dentro del lote = se rechazan todas sus apariciones."
+          },
+          "renglones": {
+            "description": "TODOS los renglones de la receta. El orden no importa (el API los ordena por insumo y cantidad). Reenviarla con otros renglones los REEMPLAZA. Vacío = SR dice que el producto ya no tiene receta (se muestra \"sin receta\"). Un renglón inválido rechaza la receta entera.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RenglonRecetaDto"
+            }
+          }
+        },
+        "required": [
+          "productoOrigenSrId",
+          "renglones"
+        ]
+      },
+      "LoteRecetasDto": {
+        "type": "object",
+        "properties": {
+          "leidoAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-22T15:30:00.000Z",
+            "description": "El instante en que se LEYÓ el lote en el POS (reloj del agente), ISO-8601 con zona. Una receta guardada con una lectura más nueva no se toca (`obsoletas`). Con el MISMO instante, gana el que llega después. Más de 5 min en el futuro = 400."
+          },
+          "recetas": {
+            "minItems": 1,
+            "maxItems": 500,
+            "description": "1 a 500 recetas, con 5000 renglones a lo más EN TOTAL (si no, 400). El lote NO es una foto: una receta que no viene NO se borra (el lector manda vacía la que SR ya no tenga).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecetaDto"
+            }
+          }
+        },
+        "required": [
+          "leidoAt",
+          "recetas"
+        ]
+      },
+      "RechazoRecetaDto": {
+        "type": "object",
+        "properties": {
+          "indice": {
+            "type": "number",
+            "example": 3,
+            "description": "Posición de la receta en el lote (desde 0)."
+          },
+          "productoOrigenSrId": {
+            "type": "string",
+            "nullable": true,
+            "description": "El `productoOrigenSrId` si era válido; nulo si no."
+          },
+          "motivo": {
+            "type": "string",
+            "example": "recetas.3.renglones.1.cantidad: cantidad debe ser una cantidad de receta en texto",
+            "description": "Ruta y regla. NUNCA repite el valor."
+          },
+          "reintentable": {
+            "type": "boolean",
+            "description": "Siempre false: reenviarla igual va a fallar igual."
+          }
+        },
+        "required": [
+          "indice",
+          "productoOrigenSrId",
+          "motivo",
+          "reintentable"
+        ]
+      },
+      "ResultadoRecetasDto": {
+        "type": "object",
+        "properties": {
+          "recibidas": {
+            "type": "number",
+            "description": "Recetas en el lote."
+          },
+          "creadas": {
+            "type": "number",
+            "description": "Recetas nuevas."
+          },
+          "actualizadas": {
+            "type": "number",
+            "description": "Recetas que cambiaron: sus renglones se reescribieron."
+          },
+          "sinCambios": {
+            "type": "number",
+            "description": "Recetas iguales a lo guardado: no se tocaron."
+          },
+          "obsoletas": {
+            "type": "number",
+            "description": "Recetas cuya versión guardada se leyó DESPUÉS de este lote: no se tocaron (no es error)."
+          },
+          "rechazadas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RechazoRecetaDto"
             }
           }
         },
@@ -14797,6 +15191,393 @@
         },
         "required": [
           "empresaId"
+        ]
+      },
+      "SucursalRecetasDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "recetasRecibidas": {
+            "type": "number",
+            "description": "Recetas que el agente ha mandado de esta sucursal (con o sin renglones). 0 = el lector (F2-241) nunca mandó recetas: no hay teórico."
+          },
+          "catalogoProductos": {
+            "type": "boolean",
+            "description": "false = el catálogo de productos de esta sucursal nunca cerró una sincronización completa: lo vendido no se puede cruzar con recetas (no se reporta todo como \"sin catálogo\")."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "recetasRecibidas",
+          "catalogoProductos"
+        ]
+      },
+      "RenglonRecetaVistaDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del insumo en el espejo de SU sucursal; nulo si no está (p. ej. un elaborado)."
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre de la unidad del insumo."
+          },
+          "cantidad": {
+            "type": "string",
+            "example": "0.1500",
+            "description": "Por UNA unidad vendida, en la unidad del insumo."
+          },
+          "costo": {
+            "type": "string",
+            "nullable": true,
+            "example": "85.40",
+            "description": "Costo por unidad del insumo en la sucursal, sin IVA: promedio ponderado de la última foto de existencias (almacenes con cantidad > 0). Nulo = sin existencia leída."
+          },
+          "importe": {
+            "type": "string",
+            "nullable": true,
+            "description": "round(cantidad × costo, 2); nulo sin costo."
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "insumo",
+          "unidad",
+          "cantidad",
+          "costo",
+          "importe"
+        ]
+      },
+      "ProductoRecetaDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productoOrigenSrId": {
+            "type": "string"
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombre": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = hay receta pero el producto no está en el espejo de productos."
+          },
+          "vigente": {
+            "type": "boolean",
+            "description": "true = el producto está en el espejo, vigente (lo vio la última sincronización y el POS no lo reporta de baja). false = de baja, o no está en el espejo."
+          },
+          "enCatalogo": {
+            "type": "boolean",
+            "description": "false = receta de un producto que el espejo no tiene."
+          },
+          "precio": {
+            "type": "string",
+            "nullable": true,
+            "description": "Precio de venta en esa sucursal tal como lo reporta el POS (puede traer IVA, §6)."
+          },
+          "conReceta": {
+            "type": "boolean",
+            "description": "false = sin receta: SR no la mandó, o la mandó vacía. Un producto sin receta no truena el consumo teórico: sale aparte."
+          },
+          "renglones": {
+            "description": "Ordenados por insumo y cantidad.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RenglonRecetaVistaDto"
+            }
+          },
+          "costo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Σ importes de los renglones con costo (sin IVA). Nulo sin receta."
+          },
+          "costoIncompleto": {
+            "type": "boolean",
+            "description": "true = algún renglón no tiene costo: `costo` se queda corto."
+          },
+          "porcentajePrecio": {
+            "type": "string",
+            "nullable": true,
+            "description": "costo / precio × 100 a 1 decimal. OJO: costo SIN IVA contra un precio que puede traerlo. Nulo sin receta, sin precio o con costo incompleto."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "productoOrigenSrId",
+          "clave",
+          "nombre",
+          "vigente",
+          "enCatalogo",
+          "precio",
+          "conReceta",
+          "renglones",
+          "costo",
+          "costoIncompleto",
+          "porcentajePrecio"
+        ]
+      },
+      "RecetasDto": {
+        "type": "object",
+        "properties": {
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalRecetasDto"
+            }
+          },
+          "productos": {
+            "description": "Todos los productos del espejo (vigentes y de baja, con la marca `vigente`) con su receta o sin ella, más las recetas de productos que el espejo no tiene. Orden: sucursal, con receta primero, nombre.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductoRecetaDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Filas totales antes del tope."
+          },
+          "truncado": {
+            "type": "boolean",
+            "description": "true = se cortó en el tope (5000)."
+          }
+        },
+        "required": [
+          "sucursales",
+          "productos",
+          "total",
+          "truncado"
+        ]
+      },
+      "SucursalConsumoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "recetasRecibidas": {
+            "type": "number",
+            "description": "Recetas que el agente ha mandado de esta sucursal (con o sin renglones). 0 = el lector (F2-241) nunca mandó recetas: no hay teórico."
+          },
+          "catalogoProductos": {
+            "type": "boolean",
+            "description": "false = el catálogo de productos de esta sucursal nunca cerró una sincronización completa: lo vendido no se puede cruzar con recetas (no se reporta todo como \"sin catálogo\")."
+          },
+          "polizasRecibidas": {
+            "type": "number",
+            "description": "Pólizas de inventario recibidas alguna vez. 0 = no hay real (nulo)."
+          },
+          "calculada": {
+            "type": "boolean",
+            "description": "true = hay catálogo de productos y recetas: lo vendido se explotó. false = no se calculó nada de esta sucursal (ver `catalogoProductos` y `recetasRecibidas`)."
+          },
+          "productosExplotados": {
+            "type": "number",
+            "description": "Productos vendidos en el periodo que se explotaron con su receta."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "recetasRecibidas",
+          "catalogoProductos",
+          "polizasRecibidas",
+          "calculada",
+          "productosExplotados"
+        ]
+      },
+      "FilaConsumoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = no está en el espejo."
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true
+          },
+          "teorico": {
+            "type": "string",
+            "example": "12.345",
+            "description": "Σ vendido × receta, a 3 decimales (mitad lejos de cero)."
+          },
+          "real": {
+            "type": "string",
+            "nullable": true,
+            "description": "consumo + merma + ajuste (salidas en positivo). Nulo = la sucursal nunca mandó pólizas."
+          },
+          "consumo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Salidas por pólizas de consumo."
+          },
+          "merma": {
+            "type": "string",
+            "nullable": true,
+            "description": "Salidas por pólizas de merma."
+          },
+          "ajuste": {
+            "type": "string",
+            "nullable": true,
+            "description": "Salidas por ajustes; negativo = el ajuste fue a favor (resta al real)."
+          },
+          "variacion": {
+            "type": "string",
+            "nullable": true,
+            "description": "real − teórico. Positivo = salió más de lo que explican las ventas (faltante)."
+          },
+          "porcentaje": {
+            "type": "string",
+            "nullable": true,
+            "description": "variación / teórico × 100 a 1 decimal. Nulo con teórico 0 o sin real."
+          },
+          "sinTeorico": {
+            "type": "boolean",
+            "description": "Teórico 0 con salidas reales: ningún producto vendido lo explica (p. ej. desechables)."
+          },
+          "costo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Costo por unidad (sin IVA): el de las salidas del periodo; si no hubo, el de la última foto de existencias; nulo si ninguno."
+          },
+          "importeTeorico": {
+            "type": "string",
+            "nullable": true,
+            "description": "round(teórico × costo, 2)."
+          },
+          "importeVariacion": {
+            "type": "string",
+            "nullable": true,
+            "description": "round(variación × costo, 2)."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "insumoOrigenSrId",
+          "insumo",
+          "unidad",
+          "teorico",
+          "real",
+          "consumo",
+          "merma",
+          "ajuste",
+          "variacion",
+          "porcentaje",
+          "sinTeorico",
+          "costo",
+          "importeTeorico",
+          "importeVariacion"
+        ]
+      },
+      "VendidoAparteDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "producto": {
+            "type": "string",
+            "description": "Texto vendido (la escritura de más importe si hubo varias)."
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "sin_receta",
+              "sin_catalogo",
+              "ambiguo"
+            ],
+            "description": "`sin_receta` = el producto no tiene receta (o vacía); `sin_catalogo` = el nombre vendido no está en el espejo de productos; `ambiguo` = varios productos de la sucursal se llaman igual."
+          },
+          "productoOrigenSrId": {
+            "type": "string",
+            "nullable": true
+          },
+          "partidas": {
+            "type": "number"
+          },
+          "cantidad": {
+            "type": "string",
+            "example": "12.000"
+          },
+          "importe": {
+            "type": "string",
+            "example": "1250.00",
+            "description": "Σ partidas.total (antes del descuento)."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "producto",
+          "motivo",
+          "productoOrigenSrId",
+          "partidas",
+          "cantidad",
+          "importe"
+        ]
+      },
+      "ConsumoTeoricoDto": {
+        "type": "object",
+        "properties": {
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalConsumoDto"
+            }
+          },
+          "filas": {
+            "description": "Una fila por (sucursal, insumo) con teórico o salidas en el periodo, en orden de ranking: importe de variación desc (sin importe al final), |%| desc.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaConsumoDto"
+            }
+          },
+          "aparte": {
+            "description": "Lo vendido que no se pudo explotar. No detiene el cálculo del resto.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VendidoAparteDto"
+            }
+          }
+        },
+        "required": [
+          "sucursales",
+          "filas",
+          "aparte"
         ]
       }
     }

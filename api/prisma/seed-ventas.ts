@@ -29,6 +29,7 @@ import { sembrarCatalogos } from './seed-catalogos';
 import { sembrarConteos } from './seed-conteos';
 import { sembrarExistencias } from './seed-existencias';
 import { sembrarMovimientos } from './seed-movimientos';
+import { sembrarRecetas } from './seed-recetas';
 import { sembrarTraspasos } from './seed-traspasos';
 import { generarUniverso, resumenPorModulo } from './seed-maestro';
 
@@ -515,6 +516,18 @@ async function main(): Promise<void> {
           .map(([c, n]) => `${c} ${n}`)
           .join(', ') +
         '.',
+    );
+    // Recetas (F2-125): por la misma ingesta del agente. P020 sin cabecera y P021 vacía: los dos
+    // caminos de "sin receta" que el consumo teórico lista aparte.
+    const recetas = await sembrarRecetas(prisma, {
+      empresaId: op.empresaId,
+      sucursales,
+      universo,
+      ahora,
+    });
+    console.log(
+      `Recetas sembradas (F2-125): ${recetas.recetas} con ${recetas.renglones} renglones ` +
+        `(${recetas.creadas} nuevas, ${recetas.actualizadas} cambiadas).`,
     );
     // Pólizas y movimientos (F2-122): por la misma ingesta del agente, en lotes. Sus saldos son
     // exactamente la foto de existencias de abajo: el kardex la reproduce.

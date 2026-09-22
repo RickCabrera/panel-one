@@ -237,7 +237,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'inventario.recetas',
         texto: 'Recetas',
         icono: ChefHat,
-        pendiente: construye('F2-125'),
+        destino: { ruta: '/recetas' },
       },
       {
         id: 'inventario.proyecciones',
