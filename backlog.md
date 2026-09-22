@@ -1831,7 +1831,7 @@ rango, almacén; detalle de póliza con partidas. Kardex por artículo (saldo co
 inicial + movimientos; sin huecos ni dobles.
 
 ### F2-123 · Conteos físicos
-`[ ]` Módulo de conteo desde la web (pensado para tablet/celular en el almacén): crear conteo
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-193 (celular real con bloqueo y sin red, corte del teórico contra SR y ajuste en SR que regresa como póliza `ajuste`; §10 de esquema-sr). Módulo de conteo desde la web (pensado para tablet/celular en el almacén): crear conteo
 por almacén (todos los artículos o por grupo), captura de cantidades con búsqueda rápida,
 guardado parcial, cierre con reporte de diferencias vs teórico (unidades y $) y export CSV.
 Los ajustes **NO se escriben a SR** (regla de solo lectura): el reporte es el insumo para que
