@@ -716,6 +716,10 @@ una instalación real (F2-192):
 - **Tiempo de mesa por mesero** = cierre − apertura de SUS cuentas (misma regla que Análisis por
   mesa: una duración negativa no entra al promedio). Si SR reabre cuentas y conserva la apertura
   original, el tiempo incluye la reapertura: no verificado.
+- ❓ **Pendiente de ver en una instalación real:** un cheque con el mesero **sólo en espacios**
+  hoy llega como texto (no nulo), se normaliza a vacío y sale como fila "No está en el catálogo"
+  (o "Catálogo sin sincronizar") con el nombre en blanco, no como "Sin mesero". Si SR lo hace,
+  la ingesta debería guardarlo como nulo.
 - **Promedio de la sucursal** (la comparación de la ficha): venta, cuentas, comensales y propina,
   por mesero con al menos una cuenta (sin "Sin mesero"); ticket y minutos, de TODA la sucursal
   (con las cuentas sin mesero).
