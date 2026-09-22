@@ -691,7 +691,7 @@ las 23:30); el seed genera datos para cada módulo de la Ronda 2 y un test por m
 verifica contando filas; y el tiempo total del seed queda bajo los 60 s en una máquina normal.
 
 ### F2-202 · Adaptadores externos e interruptor de modo demo
-`[ ]` **Bloque A** · /api
+`[x]` **Bloque A** · /api
 
 Cimiento de la regla 1 de la Ronda 2. Sin esto, todo el bloque F (facturación) y F2-141
 (correo) se SALTAN por falta de credenciales.
