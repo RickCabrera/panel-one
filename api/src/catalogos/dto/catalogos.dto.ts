@@ -549,3 +549,236 @@ export class VendidosSinCatalogoDto {
   })
   sucursalesSinCatalogo!: SucursalSinCatalogoDto[];
 }
+
+// ---------------------------------------------------------------------------
+// Meseros (F2-231)
+// ---------------------------------------------------------------------------
+
+export const CRUCES_MESERO = [
+  'catalogo',
+  'sin-catalogo',
+  'ambiguo',
+  'sin-sincronizar',
+  'catalogo-incompleto',
+  'sin-mesero',
+] as const;
+
+const DINERO_TXT = { type: String, example: '1234.50', description: 'Texto a 2 decimales.' };
+const DINERO_NULO = { ...DINERO_TXT, nullable: true };
+
+/** El periodo de Meseros: el mismo de `sin-catalogo` (sin `alturaAl`). */
+export class RendimientoMeserosQueryDto extends SinCatalogoQueryDto {}
+
+export class MeseroLigadoDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  clave!: string | null;
+
+  @ApiProperty({ description: 'Nombre en el espejo del POS.' })
+  nombre!: string;
+
+  @ApiProperty({ description: 'false = ya no aparece en la última sincronización completa.' })
+  activo!: boolean;
+
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description: 'Estado en el POS: false = dado de baja; null = el POS no lo reporta.',
+  })
+  activoPos!: boolean | null;
+
+  @ApiProperty({ format: 'date-time', description: 'Última sincronización que lo vio (UTC).' })
+  vistoAt!: string;
+}
+
+export class MeseroSinVentasDto extends MeseroLigadoDto {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+}
+
+class ImporteConteoDto {
+  @ApiProperty(DINERO_TXT)
+  monto!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+}
+
+class CanceladosConteoDto {
+  @ApiProperty({ description: 'Cuentas canceladas: NO suman a la venta.' })
+  cuentas!: number;
+
+  @ApiProperty({ ...DINERO_TXT, description: 'Σ total de las canceladas, tal como llegó.' })
+  monto!: string;
+}
+
+export class FilaRendimientoMeseroDto {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Nombre del espejo si se ligó; si no, el texto del POS. Null = "Sin mesero".',
+  })
+  mesero!: string | null;
+
+  @ApiProperty({
+    type: [String],
+    description:
+      'Textos del POS sumados en esta fila. Más de uno cuando difieren sólo en espacios o ' +
+      'mayúsculas y ligan con el mismo mesero del espejo.',
+  })
+  textosPos!: string[];
+
+  @ApiProperty({
+    enum: CRUCES_MESERO,
+    description:
+      'Cómo se ligó con el espejo por (sucursal, nombre normalizado): `ambiguo` = el espejo trae ' +
+      'ese nombre más de una vez; `sin-sincronizar` = la sucursal no ha mandado su catálogo; ' +
+      '`catalogo-incompleto` = la lectura del espejo se truncó.',
+  })
+  cruce!: (typeof CRUCES_MESERO)[number];
+
+  @ApiProperty({ type: MeseroLigadoDto, nullable: true })
+  catalogo!: MeseroLigadoDto | null;
+
+  @ApiProperty({ ...DINERO_TXT, description: 'Σ total de sus cuentas no canceladas.' })
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+
+  @ApiProperty(DINERO_NULO)
+  ticketPromedio!: string | null;
+
+  @ApiProperty()
+  comensales!: number;
+
+  @ApiProperty()
+  cuentasConComensales!: number;
+
+  @ApiProperty(DINERO_TXT)
+  propina!: string;
+
+  @ApiProperty({
+    type: ImporteConteoDto,
+    description: 'Descuentos: importe y cuentas con descuento.',
+  })
+  descuentos!: ImporteConteoDto;
+
+  @ApiProperty({ type: CanceladosConteoDto })
+  cancelados!: CanceladosConteoDto;
+
+  @ApiProperty({ type: String, nullable: true, example: '48.5' })
+  minutosPromedio!: string | null;
+
+  @ApiProperty()
+  cuentasConDuracion!: number;
+
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'Posición por venta en SU sucursal (empate = misma posición). Null = "Sin mesero" o sólo ' +
+      'cancelaciones.',
+  })
+  posicion!: number | null;
+}
+
+export class PromedioSucursalDto {
+  @ApiProperty({ ...DINERO_NULO, description: 'Σ venta de los meseros del ranking / n.' })
+  ventaPorMesero!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Σ cuentas del ranking / n, 1 decimal.',
+  })
+  cuentasPorMesero!: string | null;
+
+  @ApiProperty(DINERO_NULO)
+  propinaPorMesero!: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: '1 decimal.' })
+  comensalesPorMesero!: string | null;
+
+  @ApiProperty({
+    ...DINERO_NULO,
+    description: 'Venta de la sucursal / TODAS sus cuentas (también las sin mesero).',
+  })
+  ticketPromedio!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Minutos de TODA la sucursal: Σ segundos / Σ cuentas con duración.',
+  })
+  minutosPromedio!: string | null;
+}
+
+export class SucursalRendimientoDto {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({ description: 'Tiene una sincronización completa del catálogo de meseros.' })
+  catalogoSincronizado!: boolean;
+
+  @ApiProperty({ description: 'n: meseros con nombre y al menos una cuenta en el periodo.' })
+  meserosEnRanking!: number;
+
+  @ApiProperty(DINERO_TXT)
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+
+  @ApiProperty({ type: PromedioSucursalDto })
+  promedio!: PromedioSucursalDto;
+}
+
+export class RendimientoMeserosDto {
+  @ApiProperty({ ...DINERO_TXT, description: 'Σ venta de `filas` = /ventas/resumen del filtro.' })
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+
+  @ApiProperty({ type: ImporteConteoDto })
+  descuentos!: ImporteConteoDto;
+
+  @ApiProperty({ type: CanceladosConteoDto })
+  cancelados!: CanceladosConteoDto;
+
+  @ApiProperty({
+    description: 'true = el espejo pasó de 2000 filas: el cruce y `sinVentas` están incompletos.',
+  })
+  catalogoTruncado!: boolean;
+
+  @ApiProperty({ type: [SucursalRendimientoDto], description: 'Por nombre.' })
+  sucursales!: SucursalRendimientoDto[];
+
+  @ApiProperty({
+    type: [FilaRendimientoMeseroDto],
+    description:
+      'Por sucursal; dentro, por posición, luego los de sólo cancelaciones y "Sin mesero" al final.',
+  })
+  filas!: FilaRendimientoMeseroDto[];
+
+  @ApiProperty({
+    type: [MeseroSinVentasDto],
+    description: 'Meseros del espejo (de baja o no) sin cuentas ni cancelaciones en el periodo.',
+  })
+  sinVentas!: MeseroSinVentasDto[];
+}

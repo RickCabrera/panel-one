@@ -26,6 +26,8 @@ function mesero(p: Partial<VentaMesero> & Pick<VentaMesero, 'mesero'>): VentaMes
     propina: '0.00',
     descuentos: { monto: '0.00', cuentas: 0 },
     cancelados: { cuentas: 0, monto: '0.00' },
+    minutosPromedio: null,
+    cuentasConDuracion: 0,
     ...p,
   };
 }

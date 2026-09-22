@@ -75,6 +75,8 @@ function mesero(
     propina: '10.00',
     descuentos: { monto: '5.00', cuentas: 1 },
     cancelados,
+    minutosPromedio: null,
+    cuentasConDuracion: 0,
   };
 }
 

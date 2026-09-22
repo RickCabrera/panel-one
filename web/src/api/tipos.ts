@@ -323,6 +323,9 @@ export interface VentaMesero {
   descuentos: { monto: Importe; cuentas: number };
   /** No suman a la venta. */
   cancelados: { cuentas: number; monto: Importe };
+  /** F2-231: minutos promedio de sus cuentas, 1 decimal; null sin duraciones válidas. */
+  minutosPromedio: string | null;
+  cuentasConDuracion: number;
 }
 
 /** `VentaPorProductoDto` de `GET /ventas/por-producto`. */
@@ -597,4 +600,88 @@ export interface VendidosSinCatalogo {
   total: number;
   truncado: boolean;
   sucursalesSinCatalogo: { sucursalId: string; sucursal: string }[];
+}
+
+// ---------------------------------------------------------------------------
+// Meseros (F2-231): `GET /catalogos/meseros/rendimiento`
+// ---------------------------------------------------------------------------
+
+/** Cómo se ligó la fila de venta con el espejo de meseros del POS. */
+export type CruceMesero =
+  | 'catalogo'
+  | 'sin-catalogo'
+  | 'ambiguo'
+  | 'sin-sincronizar'
+  | 'catalogo-incompleto'
+  | 'sin-mesero';
+
+export interface MeseroLigado {
+  id: string;
+  clave: string | null;
+  nombre: string;
+  /** false = ya no aparece en la última sincronización completa. */
+  activo: boolean;
+  /** false = dado de baja en el POS; null = el POS no lo reporta. */
+  activoPos: boolean | null;
+  vistoAt: string;
+}
+
+export interface FilaRendimientoMesero {
+  sucursalId: string;
+  sucursal: string;
+  /** Null = "Sin mesero". */
+  mesero: string | null;
+  textosPos: string[];
+  cruce: CruceMesero;
+  catalogo: MeseroLigado | null;
+  venta: Importe;
+  cuentas: number;
+  ticketPromedio: Importe | null;
+  comensales: number;
+  cuentasConComensales: number;
+  propina: Importe;
+  descuentos: { monto: Importe; cuentas: number };
+  cancelados: { cuentas: number; monto: Importe };
+  minutosPromedio: string | null;
+  cuentasConDuracion: number;
+  /** En SU sucursal, por venta; empate = misma posición. Null = fuera del ranking. */
+  posicion: number | null;
+}
+
+export interface PromedioSucursal {
+  ventaPorMesero: Importe | null;
+  cuentasPorMesero: string | null;
+  propinaPorMesero: Importe | null;
+  comensalesPorMesero: string | null;
+  /** De TODA la sucursal (también las cuentas sin mesero). */
+  ticketPromedio: Importe | null;
+  /** De TODA la sucursal. */
+  minutosPromedio: string | null;
+}
+
+export interface SucursalRendimiento {
+  sucursalId: string;
+  sucursal: string;
+  catalogoSincronizado: boolean;
+  meserosEnRanking: number;
+  venta: Importe;
+  cuentas: number;
+  promedio: PromedioSucursal;
+}
+
+export interface MeseroSinVentas extends MeseroLigado {
+  sucursalId: string;
+  sucursal: string;
+}
+
+export interface RendimientoMeseros {
+  /** Σ venta de `filas` = venta del periodo. */
+  venta: Importe;
+  cuentas: number;
+  descuentos: { monto: Importe; cuentas: number };
+  cancelados: { cuentas: number; monto: Importe };
+  catalogoTruncado: boolean;
+  sucursales: SucursalRendimiento[];
+  filas: FilaRendimientoMesero[];
+  sinVentas: MeseroSinVentas[];
 }

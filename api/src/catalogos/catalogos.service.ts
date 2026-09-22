@@ -9,6 +9,7 @@ import type { EmpresaScope } from '../scope/empresa-scope';
 import { encontradoOr404 } from '../scope/scope.helper';
 import { ScopedPrismaService, type DatosScoped } from '../scope/scoped-prisma.service';
 import { AgregadosVentasService } from '../ventas/agregados-ventas.service';
+import { AnalisisService } from '../ventas/analisis.service';
 import {
   agruparMenu,
   MAX_FILAS_MENU,
@@ -16,6 +17,7 @@ import {
   normalizarNombre,
   vendidosSinCatalogo,
 } from './menu';
+import { MAX_CATALOGO_MESEROS, rendimientoMeseros, type RendimientoMeseros } from './meseros';
 import type {
   DetalleProductoDto,
   MenuDto,
@@ -132,6 +134,7 @@ export class CatalogosService {
     private readonly reloj: Reloj,
     private readonly auditoria: Auditoria,
     private readonly agregados: AgregadosVentasService,
+    private readonly analisis: AnalisisService,
   ) {}
 
   async listar(
@@ -490,6 +493,64 @@ export class CatalogosService {
         .filter((s) => !conCatalogo.has(s.id))
         .map((s) => ({ sucursalId: s.id, sucursal: s.nombre })),
     };
+  }
+
+  /**
+   * Meseros (F2-231): el rendimiento del periodo por mesero, ligado con el espejo de meseros.
+   * Las cifras son las de Análisis (`porMeseroConSegundos`, por el helper de agregados: empresa
+   * o sucursal fuera del scope = 404 ANTES de leer nada más); el espejo, las sucursales y su
+   * sincronización se leen por `datos.para(scope)` con la empresa (y la sucursal) del filtro.
+   */
+  async rendimientoMeseros(
+    scope: EmpresaScope,
+    filtro: { empresaId: string; sucursalId?: string; desde: string; hasta: string },
+  ): Promise<RendimientoMeseros> {
+    const ventas = await this.analisis.porMeseroConSegundos(scope, filtro);
+    const datos = this.datos.para(scope);
+    const deLaSucursal = filtro.sucursalId ? { sucursalId: filtro.sucursalId } : {};
+    const [sucursales, sincronizadas, catalogo] = await Promise.all([
+      datos.sucursal.findMany({
+        where: {
+          empresaId: filtro.empresaId,
+          ...(filtro.sucursalId ? { id: filtro.sucursalId } : {}),
+        },
+        select: { id: true, nombre: true },
+      }),
+      datos.sincronizacionCatalogo.findMany({
+        where: {
+          empresaId: filtro.empresaId,
+          catalogo: 'meseros',
+          ...deLaSucursal,
+        },
+        select: { sucursalId: true },
+      }),
+      // Todos los estados: un mesero dado de baja sigue siendo quien atendió en su periodo.
+      datos.meseroCatalogo.findMany({
+        where: { empresaId: filtro.empresaId, ...deLaSucursal },
+        select: {
+          id: true,
+          sucursalId: true,
+          clave: true,
+          nombre: true,
+          activo: true,
+          activoPos: true,
+          vistoAt: true,
+        },
+        orderBy: [{ sucursalId: 'asc' }, { nombre: 'asc' }, { id: 'asc' }],
+        take: MAX_CATALOGO_MESEROS + 1,
+      }),
+    ]);
+    const sincronizado = new Set(sincronizadas.map((s) => s.sucursalId));
+    return rendimientoMeseros({
+      ventas,
+      catalogo: catalogo.slice(0, MAX_CATALOGO_MESEROS),
+      catalogoTruncado: catalogo.length > MAX_CATALOGO_MESEROS,
+      sucursales: sucursales.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        sincronizado: sincronizado.has(s.id),
+      })),
+    });
   }
 
   /** Resuelve el nombre del grupo de cada producto en SU sucursal (sin FK: por texto). */

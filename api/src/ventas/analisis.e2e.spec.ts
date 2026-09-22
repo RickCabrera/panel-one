@@ -282,6 +282,9 @@ describe('Análisis: desgloses por mesero, producto, hora × día y mesa (e2e, F
         propina: '20.00',
         descuentos: { monto: '10.00', cuentas: 1 },
         cancelados: { cuentas: 1, monto: '70.00' },
+        // F2-231: C1 60 min + C2 90 min → 75.0; el cancelado C4 no entra.
+        minutosPromedio: '75.0',
+        cuentasConDuracion: 2,
       },
       {
         // La misma "Ana" en otra sucursal es OTRA fila: no se sabe si es la misma persona.
@@ -296,6 +299,8 @@ describe('Análisis: desgloses por mesero, producto, hora × día y mesa (e2e, F
         propina: '30.00',
         descuentos: { monto: '0.00', cuentas: 0 },
         cancelados: sinMonto,
+        minutosPromedio: '60.0',
+        cuentasConDuracion: 1,
       },
       {
         sucursalId: FX.sucursalA1,
@@ -309,6 +314,9 @@ describe('Análisis: desgloses por mesero, producto, hora × día y mesa (e2e, F
         propina: '0.00',
         descuentos: { monto: '0.00', cuentas: 0 },
         cancelados: sinMonto,
+        // C3: abre y cierra en el mismo minuto, 0 min, y SÍ cuenta.
+        minutosPromedio: '0.0',
+        cuentasConDuracion: 1,
       },
       {
         sucursalId: FX.sucursalA1,
@@ -323,6 +331,9 @@ describe('Análisis: desgloses por mesero, producto, hora × día y mesa (e2e, F
         descuentos: { monto: '4.00', cuentas: 1 },
         // C5 no tiene cierre: se ubica por su apertura y cuenta igual.
         cancelados: { cuentas: 1, monto: '30.00' },
+        // C6 trae el cierre antes de la apertura: no entra al promedio.
+        minutosPromedio: null,
+        cuentasConDuracion: 0,
       },
     ]);
   });

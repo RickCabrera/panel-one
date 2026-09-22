@@ -91,7 +91,8 @@ describe('las seis secciones de la ficha', () => {
     // F2-145 construyó Productos y el orquestador de menú: ya navegan.
     expect(porId('catalogos.productos').destino).toEqual({ ruta: '/productos' });
     expect(porId('catalogos.orquestador').destino).toEqual({ ruta: '/menu' });
-    expect(tarea('catalogos.meseros')).toBe('F2-231');
+    // F2-231 construyó Meseros: ya navega.
+    expect(porId('catalogos.meseros').destino).toEqual({ ruta: '/meseros' });
     expect(tarea('catalogos.clientes')).toBe('F2-232');
     expect(tarea('inventario.existencias')).toBe('F2-121');
     expect(tarea('inventario.conteos')).toBe('F2-123');

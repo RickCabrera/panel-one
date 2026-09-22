@@ -193,7 +193,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'catalogos.meseros',
         texto: 'Meseros',
         icono: UserRound,
-        pendiente: construye('F2-231'),
+        destino: { ruta: '/meseros' },
       },
       {
         id: 'catalogos.clientes',

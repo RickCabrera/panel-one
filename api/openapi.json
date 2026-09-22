@@ -4457,6 +4457,105 @@
         ]
       }
     },
+    "/catalogos/meseros/rendimiento": {
+      "get": {
+        "description": "Las cifras son las de /ventas/por-mesero (mismo filtro, días LOCALES de cada sucursal): Σ venta de `filas` = /ventas/resumen. Cancelaciones y descuentos van aparte, como conteo e importe; la venta no los incluye. El cheque sólo trae el TEXTO del mesero: se liga con el espejo por (sucursal, nombre sin espacios de más ni mayúsculas), y dos textos que ligan con el mismo mesero salen en una fila. Un mesero dado de baja sale en los periodos en que atendió. Ranking y promedio, por sucursal. Sin cache.",
+        "operationId": "CatalogosController_rendimientoMeseros",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa (con una sola no hay precios que comparar). Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal, inclusivo (YYYY-MM-DD). El corte es el de /ventas/*: cada cuenta cae en el día de SU zona horaria.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal, inclusivo (YYYY-MM-DD). El corte es el de /ventas/*: cada cuenta cae en el día de SU zona horaria.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RendimientoMeserosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Meseros (F2-231): rendimiento del periodo por mesero, ligado con el espejo.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
     "/catalogos/productos/{id}": {
       "get": {
         "operationId": "CatalogosController_producto",
@@ -6176,6 +6275,16 @@
           },
           "cancelados": {
             "$ref": "#/components/schemas/CanceladosMeseroDto"
+          },
+          "minutosPromedio": {
+            "type": "string",
+            "nullable": true,
+            "example": "52.5",
+            "description": "F2-231: minutos promedio de sus cuentas (cierre − apertura), 1 decimal. Una duración negativa no entra. Null sin duraciones válidas."
+          },
+          "cuentasConDuracion": {
+            "type": "number",
+            "description": "F2-231: cuentas que entran a `minutosPromedio`."
           }
         },
         "required": [
@@ -6189,7 +6298,9 @@
           "cuentasConComensales",
           "propina",
           "descuentos",
-          "cancelados"
+          "cancelados",
+          "minutosPromedio",
+          "cuentasConDuracion"
         ]
       },
       "ProductoAnalisisDto": {
@@ -7965,6 +8076,381 @@
           "total",
           "truncado",
           "sucursalesSinCatalogo"
+        ]
+      },
+      "ImporteConteoDto": {
+        "type": "object",
+        "properties": {
+          "monto": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Texto a 2 decimales."
+          },
+          "cuentas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "monto",
+          "cuentas"
+        ]
+      },
+      "CanceladosConteoDto": {
+        "type": "object",
+        "properties": {
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas canceladas: NO suman a la venta."
+          },
+          "monto": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de las canceladas, tal como llegó."
+          }
+        },
+        "required": [
+          "cuentas",
+          "monto"
+        ]
+      },
+      "PromedioSucursalDto": {
+        "type": "object",
+        "properties": {
+          "ventaPorMesero": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ venta de los meseros del ranking / n.",
+            "nullable": true
+          },
+          "cuentasPorMesero": {
+            "type": "string",
+            "nullable": true,
+            "description": "Σ cuentas del ranking / n, 1 decimal."
+          },
+          "propinaPorMesero": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Texto a 2 decimales.",
+            "nullable": true
+          },
+          "comensalesPorMesero": {
+            "type": "string",
+            "nullable": true,
+            "description": "1 decimal."
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Venta de la sucursal / TODAS sus cuentas (también las sin mesero).",
+            "nullable": true
+          },
+          "minutosPromedio": {
+            "type": "string",
+            "nullable": true,
+            "description": "Minutos de TODA la sucursal: Σ segundos / Σ cuentas con duración."
+          }
+        },
+        "required": [
+          "ventaPorMesero",
+          "cuentasPorMesero",
+          "propinaPorMesero",
+          "comensalesPorMesero",
+          "ticketPromedio",
+          "minutosPromedio"
+        ]
+      },
+      "SucursalRendimientoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "catalogoSincronizado": {
+            "type": "boolean",
+            "description": "Tiene una sincronización completa del catálogo de meseros."
+          },
+          "meserosEnRanking": {
+            "type": "number",
+            "description": "n: meseros con nombre y al menos una cuenta en el periodo."
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Texto a 2 decimales."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "promedio": {
+            "$ref": "#/components/schemas/PromedioSucursalDto"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "catalogoSincronizado",
+          "meserosEnRanking",
+          "venta",
+          "cuentas",
+          "promedio"
+        ]
+      },
+      "MeseroLigadoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre en el espejo del POS."
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "false = ya no aparece en la última sincronización completa."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Estado en el POS: false = dado de baja; null = el POS no lo reporta."
+          },
+          "vistoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Última sincronización que lo vio (UTC)."
+          }
+        },
+        "required": [
+          "id",
+          "clave",
+          "nombre",
+          "activo",
+          "activoPos",
+          "vistoAt"
+        ]
+      },
+      "FilaRendimientoMeseroDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "mesero": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del espejo si se ligó; si no, el texto del POS. Null = \"Sin mesero\"."
+          },
+          "textosPos": {
+            "description": "Textos del POS sumados en esta fila. Más de uno cuando difieren sólo en espacios o mayúsculas y ligan con el mismo mesero del espejo.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cruce": {
+            "type": "string",
+            "enum": [
+              "catalogo",
+              "sin-catalogo",
+              "ambiguo",
+              "sin-sincronizar",
+              "catalogo-incompleto",
+              "sin-mesero"
+            ],
+            "description": "Cómo se ligó con el espejo por (sucursal, nombre normalizado): `ambiguo` = el espejo trae ese nombre más de una vez; `sin-sincronizar` = la sucursal no ha mandado su catálogo; `catalogo-incompleto` = la lectura del espejo se truncó."
+          },
+          "catalogo": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MeseroLigadoDto"
+              }
+            ]
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de sus cuentas no canceladas."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Texto a 2 decimales.",
+            "nullable": true
+          },
+          "comensales": {
+            "type": "number"
+          },
+          "cuentasConComensales": {
+            "type": "number"
+          },
+          "propina": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Texto a 2 decimales."
+          },
+          "descuentos": {
+            "description": "Descuentos: importe y cuentas con descuento.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImporteConteoDto"
+              }
+            ]
+          },
+          "cancelados": {
+            "$ref": "#/components/schemas/CanceladosConteoDto"
+          },
+          "minutosPromedio": {
+            "type": "string",
+            "nullable": true,
+            "example": "48.5"
+          },
+          "cuentasConDuracion": {
+            "type": "number"
+          },
+          "posicion": {
+            "type": "number",
+            "nullable": true,
+            "description": "Posición por venta en SU sucursal (empate = misma posición). Null = \"Sin mesero\" o sólo cancelaciones."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "mesero",
+          "textosPos",
+          "cruce",
+          "catalogo",
+          "venta",
+          "cuentas",
+          "ticketPromedio",
+          "comensales",
+          "cuentasConComensales",
+          "propina",
+          "descuentos",
+          "cancelados",
+          "minutosPromedio",
+          "cuentasConDuracion",
+          "posicion"
+        ]
+      },
+      "MeseroSinVentasDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombre": {
+            "type": "string",
+            "description": "Nombre en el espejo del POS."
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "false = ya no aparece en la última sincronización completa."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Estado en el POS: false = dado de baja; null = el POS no lo reporta."
+          },
+          "vistoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Última sincronización que lo vio (UTC)."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "clave",
+          "nombre",
+          "activo",
+          "activoPos",
+          "vistoAt",
+          "sucursalId",
+          "sucursal"
+        ]
+      },
+      "RendimientoMeserosDto": {
+        "type": "object",
+        "properties": {
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ venta de `filas` = /ventas/resumen del filtro."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "descuentos": {
+            "$ref": "#/components/schemas/ImporteConteoDto"
+          },
+          "cancelados": {
+            "$ref": "#/components/schemas/CanceladosConteoDto"
+          },
+          "catalogoTruncado": {
+            "type": "boolean",
+            "description": "true = el espejo pasó de 2000 filas: el cruce y `sinVentas` están incompletos."
+          },
+          "sucursales": {
+            "description": "Por nombre.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalRendimientoDto"
+            }
+          },
+          "filas": {
+            "description": "Por sucursal; dentro, por posición, luego los de sólo cancelaciones y \"Sin mesero\" al final.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaRendimientoMeseroDto"
+            }
+          },
+          "sinVentas": {
+            "description": "Meseros del espejo (de baja o no) sin cuentas ni cancelaciones en el periodo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeseroSinVentasDto"
+            }
+          }
+        },
+        "required": [
+          "venta",
+          "cuentas",
+          "descuentos",
+          "cancelados",
+          "catalogoTruncado",
+          "sucursales",
+          "filas",
+          "sinVentas"
         ]
       },
       "MetadataProductoDto": {
