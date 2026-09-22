@@ -786,7 +786,7 @@ sesión; con "sistema" seleccionado, cambiar el tema del sistema operativo se re
 recargar; y ningún color queda escrito a mano fuera de los tokens (regla de lint).
 
 ### F2-212 · Cabecera de operación en vivo y rango libre global
-`[ ]` **Bloque B** · /web
+`[x]` **Bloque B** · /web
 
 Unificar en la cabecera lo que hoy está repartido: indicador de **operación en vivo** (punto
 verde con la hora de la última lectura y cuántas sucursales están reportando), selector de
