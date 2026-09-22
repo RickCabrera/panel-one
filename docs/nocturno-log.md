@@ -4463,3 +4463,173 @@ código.
 **Qué haría distinto.** Pensar el ORDEN de las observaciones desde el plan, no sólo la
 exclusión mutua: un candado sobre la escritura no ordena lo que se leyó antes de tomarlo. La
 marca de agua (u observar bajo el candado) debió estar en el primer diseño.
+
+## 2026-09-22 04:10 — F2-141 · Reportes programados por correo
+**Estado:** CERRADA si el PR se mergea. Se marca `[x]` con
+`**PENDIENTE DE VALIDACIÓN REAL:** ver F2-191` (regla del "Cierre nocturno de las tareas
+heredadas": el AC que mandó fue el nocturno, contra el correo FALSO y con reloj falso).
+
+Revisor, gate del plan: APROBADO CON OBSERVACIONES (10 observaciones, ninguna bloqueo; todas
+atendidas, ver abajo). Gate del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos); las observaciones van en "Qué quedó abierto".
+
+Carriles /api + /web. OpenAPI actualizado (4 rutas nuevas). `docs/esquema-sr.md`: sin cambios:
+la tarea no lee SoftRestaurant (todo sale de Postgres propio con los servicios del panel) y no
+hubo ningún hallazgo del POS. Las dos DECISION PROVISIONAL de abajo son de producto, no del POS.
+
+**Qué quedó hecho.**
+- **Modelo** (migración `20260922093537_reportes_programados`):
+  - `suscripciones_reporte`: una fila por (usuario, empresa) con `diario` y `semanal`.
+    admin_global elige empresa; los demás sólo la suya (se verifica con el scope AL GUARDAR y
+    AL ENVIAR). FK simple a usuarios (admin_global tiene `empresa_id` NULL).
+  - `envios_reporte`: bitácora Y candado de idempotencia. Único
+    `(suscripcion_id, tipo, periodo)`; FK compuesta `(suscripcion_id, empresa_id)`. Estados
+    `enviando | enviado | fallido | descartado`. CHECKs a mano: `intentos >= 1`, `periodo`
+    AAAA-MM-DD, `enviado ⇔ enviado_at`.
+- **Escrituras** por el helper de scope: `ScopedPrismaService.reportes(scope)` →
+  `src/scope/escritura-reportes.ts` (guardar suscripción, reclamar, reintentar, marcar
+  enviado/fallido). La baja pública usa `para(global).suscripcionReporte.updateMany` DESPUÉS
+  de verificar el token.
+- **Contenido** (`src/reportes/reportes.service.ts#armar`): llama a `AgregadosVentasService`
+  (`resumen`, `comparativoSucursales`, `topProductos` limite 5, `porDia`) con el SCOPE DEL
+  DESTINATARIO y el mismo filtro que el panel. No se recalcula ninguna venta. El semanal
+  compara con Decimal (`contenido.ts#comparar`).
+  - Diario (periodo = ayer): total, por sucursal, top 5 por importe, alertas abiertas ahora
+    y abiertas en las últimas 24 h (conteo por tipo).
+  - Semanal (lunes; periodo = el lunes de la semana pasada, lun..dom): contra la semana
+    anterior, por sucursal y por día.
+  - Estados vacíos: sucursal sin cuentas = "Sin ventas registradas" (nunca "$0.00");
+    comparación sin cuentas en algún lado = "—" (ni −100 % ni +∞); empresa sin ventas lo dice.
+- **Plantillas** (`plantillas.ts`, puras): HTML con tablas y estilos en línea + texto plano.
+  Todo texto de datos se escapa (`formato.ts#escaparHtml`). Dinero formateado sobre el TEXTO
+  decimal (`formatoPesos`), sin float. Enlace al panel
+  (`/resumen?empresa=…&periodo=rango&desde=…&hasta=…`) y enlace de baja por tipo.
+- **Programador** (`programador.ts`): `REPORTES_INTERVALO_S` (60 por defecto, 0 apaga,
+  apagado en `NODE_ENV=test`), sin ticks solapados. Cada vuelta: suscripciones activas con
+  usuario y empresa activos → lo que toca en la zona de su empresa → reclamar → mandar por
+  `PUERTO_CORREO` (con `opciones.empresaId`).
+  - Un `fallido` se reintenta en la siguiente vuelta del MISMO día hasta 3 intentos; luego
+    `descartado`.
+  - Un envío que se queda en `enviando` (proceso muerto a media llamada) NO se reintenta
+    nunca: preferimos perder un correo a mandarlo dos veces.
+  - Días perdidos (API caída todo el día) no se recuperan.
+- **Baja sin sesión:** token `<suscripcionId>.<HMAC>` (`baja.ts`); la llave se deriva de
+  `JWT_ACCESS_SECRET` con etiqueta propia (`config.ts`). `POST /reportes/baja` `@Public` con
+  throttler nuevo `baja-reportes` (10/min por IP). Token malo = 404. Idempotente.
+- **Endpoints:** `GET/PUT /cuenta/reportes`, `GET /cuenta/reportes/vista-previa` (arma el
+  correo de hoy sin mandar ni escribir), `POST /reportes/baja`. Cualquier rol (es su propio
+  correo). Empresa ajena = 404 igual a inexistente. Auditoría `suscripcion_reporte.editar`.
+- **Web:**
+  - Mi cuenta → sección "Reportes por correo" (`paginas/cuenta/ReportesCorreo.tsx`): dos
+    casillas con borrador encima de lo guardado; hora y zona en palabras; últimos envíos con
+    estado en palabras; "Ver un ejemplo" en un `iframe sandbox=""`.
+  - Página PÚBLICA `/reportes/baja?t=…&tipo=…` (`paginas/BajaReportes.tsx`), fuera de
+    `RutaProtegida`. Pide CONFIRMAR con un botón: los escáneres de correo abren los enlaces,
+    así que el GET no da de baja. Pone `meta referrer=no-referrer`.
+- **Seed:** `seed:reportes` (quinto en `npm run seed`) suscribe a `admin@monitor.local` al
+  diario y al semanal de Restaurante Demo. Sólo crea: no pisa lo que se cambie después.
+- `.env.example` y README documentan `REPORTES_INTERVALO_S` y `PANEL_URL`.
+
+**Decisiones que tomé y por qué.** Las dos con `// DECISION PROVISIONAL (nocturno):` en
+`api/src/reportes/calendario.ts`:
+- **Hora fija 07:00 en la zona de la empresa, no configurable por usuario** (`HORA_ENVIO`).
+  - La ficha pide "antes de las 9:00 local"; a las 7 quedan dos horas para reintentos.
+  - En cualquier zona de México, a las 7 el día anterior ya cerró en todas las sucursales.
+  - Si Ricardo quiere hora por usuario: es una columna en `suscripciones_reporte` y un
+    `select` en Mi cuenta.
+- **"Zona de la empresa" = la que comparten más sucursales activas** (`zonaDeEmpresa`).
+  - Empate → alfabética. Sin sucursales → `America/Mexico_City`.
+  - `empresas` no tiene zona propia, y agregarla con su edición en Administración era más
+    superficie de la que pedía la ficha.
+  - Las CIFRAS no dependen de esto: cada sucursal corta "ayer" en SU zona, como el panel.
+    La zona de la empresa sólo decide la hora y qué fecha es "ayer".
+- **Un envío por (suscripción, tipo, periodo), reclamado ANTES de mandar** (`createMany
+  skipDuplicates` + único en base). Dos réplicas o dos vueltas simultáneas → un solo correo
+  (hay test con `Promise.all`).
+- **La suscripción de alguien que ya no ve la empresa** (cambió de empresa, o una fila
+  vieja) genera cada día UN envío `descartado`, sin correo y sin reintento. Se prefirió eso
+  a borrar o apagar la suscripción sola: queda visible por qué no llega.
+- **Baja por POST con confirmación**, no por GET: los escáneres de correo (Outlook, Gmail)
+  abren los enlaces y darían de baja a la gente.
+- **El token de baja no caduca**, así que un correo viejo también sirve para darse de baja.
+  Se invalida si se rota `JWT_ACCESS_SECRET` (la llave se deriva de él).
+- **La alerta "últimas 24 h"** es por `abierta_at >= ahora − 24 h`, no por el día local de
+  ayer. Es más simple, y sin SQL crudo fuera del helper.
+
+**Trampas que encontré.**
+- **A las 23:59 CDMX ya pasaron las 7:00 en Tijuana.** Una vuelta a esa hora SÍ manda lo de
+  una empresa en Tijuana. El primer borrador del e2e daba por hecho que "no sale nada más
+  ese día" y falló por eso. El orden de las vueltas en el test importa.
+- **`prisma migrate dev` volvió a fallar con EPERM al reemplazar el DLL del motor** (hay un
+  `nest start --watch` corriendo). Los tipos sí se generan. Borra
+  `node_modules/.prisma/client/query_engine-windows.dll.node.tmp*` en la RAÍZ del monorepo
+  (no en `api/`).
+- **`limpiarFixtures` tiene que borrar `correos_enviados` de las empresas de prueba.**
+  Ahora el correo falso guarda `empresa_id` real y la FK es Restrict. También borra
+  suscripciones y envíos ANTES que los usuarios.
+- **Un heredoc de bash con JSX adentro (`{' '}`) murió por la comilla.** Para archivos .tsx
+  usa Write.
+- El lint del web tiene dos reglas que muerden: `react-refresh/only-export-components` (los
+  textos van en `cuenta/textos.ts`) y `react-hooks/set-state-in-effect` (el formulario usa
+  un "borrador" encima del dato guardado, no un `useEffect` que copie). También
+  `tema/sin-colores` prohíbe `bg-white`.
+
+**Qué quedó abierto.**
+- **ACCIÓN PARA RICARDO antes del próximo deploy:** con `NODE_ENV=production`, la API NO
+  ARRANCA sin `PANEL_URL` (https). Hay que agregarla al `.env` del servidor. Es la base de
+  los enlaces del correo.
+- F2-191 (Diurna) recorre el AC original con Brevo real: que llegue antes de las 9:00 a una
+  bandeja real y sin caer en spam. El `List-Unsubscribe` (RFC 8058) NO se manda porque
+  `PuertoCorreo` no tiene cabeceras. Si Brevo/Gmail lo exigen para no marcar spam, se agrega
+  al puerto y a `peticionBrevo` en F2-191.
+- Avisar de una alerta por correo al momento (lo que F2-224 dejó abierto) NO entró. El
+  diario sólo resume. Encaja en F2-146 (push) o en una tarea propia.
+- Un envío que se queda en `enviando` para siempre (el proceso murió a media llamada) se ve
+  en "Últimos envíos" y ya. No hay barrido. Si molesta, un barrido que lo pase a
+  `descartado` después de X min.
+- **`envios_reporte` crece sin límite con una suscripción huérfana** (observación del revisor).
+  Hay un `descartado` por día para siempre, y además llena los "últimos 10 envíos". Hay dos
+  salidas: apagar la suscripción al descartar por 404, o purgar los descartados viejos.
+  Tarea pequeña; puede entrar en F2-250.
+- **`reportes.e2e.spec.ts` es una línea de tiempo encadenada:** comparte estado, el reloj
+  avanza y los envíos se acumulan de un día al siguiente. Un `it` aislado (`-t`) o
+  reordenado se rompe. Córrelo completo.
+- **La baja pública es la ÚNICA escritura del módulo fuera de `EscrituraReportes`**:
+  `para(global).updateMany` por id. Sólo es segura porque el HMAC se verifica ANTES. Quien la
+  toque tiene que mantener ese orden.
+- No se verificó la sección en Chrome ni a 390 px. Va para F2-250, con las demás vistas de
+  la Ronda 2.
+
+**Tests.**
+- **API, nuevos:**
+  - `reportes/calendario.spec.ts`: zona, hora local CDMX vs Tijuana con horario de verano,
+    lunes, 06:59/07:00.
+  - `reportes/plantillas.spec.ts`: formato sin float, escape, "Sin ventas", "—", enlaces,
+    semanal con signo.
+  - `reportes/baja.spec.ts`: token y config.
+  - `reportes/reportes.e2e.spec.ts`, con Postgres real, reloj fijo y correo falso a un
+    temporal:
+    - 06:59 no manda y 07:00 sí; Tijuana a las 14:00Z;
+    - no duplica; dos vueltas concurrentes;
+    - cifras del diario y del semanal contra `/ventas/*` por HTTP y a mano;
+    - vista previa = el correo que salió;
+    - fallido → reintento → enviado; tres fallos → descartado;
+    - destinatario sin acceso → descartado sin correo; usuario inactivo no recibe;
+    - baja sin Authorization, idempotente, token alterado 404, 429;
+    - 404/400/401 de las rutas de cuenta.
+  - `prisma/seed-reportes.spec.ts`.
+- **API, adaptados** (no aflojados): `openapi.spec` (rutas nuevas y un test propio),
+  `scope.helper.spec`, `scoped-prisma.service.spec`, `instalacion.spec` (cinco seeds) y
+  `test/fixtures-auth.ts` (limpieza).
+- **Web, nuevos:** `paginas/ReportesCorreo.test.tsx` (9 tests: sección de Mi cuenta y la baja
+  pública sin sesión, sin POST al cargar y sin Authorization).
+- **Números:**
+  - API: lint y typecheck limpios; jest **1132/1132 (58 suites)** (0 skips).
+  - Web: build y lint limpios; vitest **859/859 (58 archivos, 0 skips)**.
+- **En vivo** (API de la rama en :3099 con el seed): vista previa del diario del 21-sep de
+  Restaurante Demo con venta $11,610.50 en 13 cuentas y top 5. La baja del semanal por POST
+  sin sesión respondió `{diario:true, semanal:false}` y el token alterado dio 404. Después
+  se restauró la suscripción del seed.
+
+**Qué haría distinto.** Escribir la línea de tiempo del e2e (qué reloj, qué zona y qué
+suscripciones) en papel ANTES de escribir los `it`. Con varias zonas y días, el orden de las
+vueltas es parte del test.
