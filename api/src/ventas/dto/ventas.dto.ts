@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 import {
   IsIn,
   IsInt,
+  IsISO8601,
   IsOptional,
   IsString,
   IsUUID,
@@ -14,6 +15,7 @@ import {
   MinLength,
 } from 'class-validator';
 
+import { ISO_CON_ZONA } from '../../ingesta/normalizar';
 import { MAX_DIAS_RANGO } from '../../scope/consulta-ventas';
 import {
   LIMITE_TOP_DEFAULT,
@@ -113,6 +115,25 @@ export class TicketsQueryDto extends FiltroVentasQueryDto {
   @MinLength(1)
   @MaxLength(LARGO_MAX_FOLIO)
   folio?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    pattern: ISO_CON_ZONA.source,
+    example: '2026-09-21T19:42:10.123Z',
+    description:
+      'Corte por RECEPCIÓN (F2-203): sólo cuentan los tickets que ya habían llegado a la base ' +
+      'en ese instante; lo que llegue después no entra. Sin él, no se filtra por recepción. ' +
+      'ISO-8601 con zona obligatoria (sin zona, 400). Para bajar un filtro completo por páginas, ' +
+      'pide una primera sin él y manda en TODAS (la 1 incluida) el `corte` que devolvió: así un ' +
+      'cheque que llega a media descarga no mueve el total. ' +
+      'Un ticket ya recibido que cambia (se cancela, cambia de fecha) SÍ puede moverlo.',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(ISO_CON_ZONA, { message: '$property debe ser ISO-8601 con zona (Z u offset ±hh:mm)' })
+  @IsISO8601({ strict: true, strictSeparator: true })
+  corte?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -405,4 +426,14 @@ export class PaginaTicketsDto implements PaginaTickets {
 
   @ApiProperty()
   porPagina!: number;
+
+  @ApiProperty({
+    format: 'date-time',
+    example: '2026-09-21T19:41:40.123Z',
+    description:
+      'Con `corte` pedido, ese mismo (y la página quedó filtrada por él). Sin él, uno SUGERIDO: ' +
+      '"ahora − 30 s" del reloj de la base; esta página no se filtró. Mándalo tal cual en todas ' +
+      'las páginas de una descarga.',
+  })
+  corte!: string;
 }

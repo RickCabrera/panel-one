@@ -121,3 +121,65 @@ describe('Regla de lint: el cliente crudo de Prisma no se importa fuera de la al
     );
   });
 });
+
+// F2-203: las puertas traseras que la regla de imports no veía (log de F1-011).
+// `@typescript-eslint/no-require-imports` (del preset) ya marca cualquier
+// `require`, pero se apaga con un `eslint-disable` y no dice nada de `import()`:
+// la regla propia es la que cierra el paso y la que estos casos ejercitan.
+const REGLAS_SCOPE = ['no-restricted-imports', 'no-restricted-syntax'];
+const deScope = (mensajes: string[]) => mensajes.filter((m) => REGLAS_SCOPE.includes(m));
+
+describe('Regla de lint: tampoco por require, import = require, import() ni subrutas', () => {
+  const fuera = 'src/ventas/ventas.service.ts';
+
+  it.each([
+    ['require de @prisma/client', "const c = require('@prisma/client');\nexport const x = c;\n"],
+    [
+      'require de una subruta',
+      "const c = require('@prisma/client/default');\nexport const x = c;\n",
+    ],
+    ['require de .prisma/client', "const c = require('.prisma/client');\nexport const x = c;\n"],
+    [
+      'require de node_modules/.prisma/client/index',
+      "const c = require('../../node_modules/.prisma/client/index');\nexport const x = c;\n",
+    ],
+    [
+      'require de prisma.service',
+      "const s = require('../prisma/prisma.service');\nexport const x = s;\n",
+    ],
+    ['import = require', "import p = require('@prisma/client');\nexport const x = p;\n"],
+    ['import() dinámico', "export const x = import('@prisma/client');\n"],
+    ['import() de prisma.service', "export const x = import('../prisma/prisma.service');\n"],
+  ])('prohíbe %s', (_nombre, codigo) => {
+    expect(lint(fuera, codigo)).toContain('no-restricted-syntax');
+  });
+
+  it.each([
+    [
+      'import de subruta',
+      "import { PrismaClient } from '@prisma/client/default';\nexport const x = PrismaClient;\n",
+    ],
+    [
+      'import de .prisma/client',
+      "import { PrismaClient } from '.prisma/client';\nexport const x = PrismaClient;\n",
+    ],
+  ])('prohíbe %s', (_nombre, codigo) => {
+    expect(lint(fuera, codigo)).toContain('no-restricted-imports');
+  });
+
+  it.each([
+    ['require de otro módulo', "const c = require('node:crypto');\nexport const x = c;\n"],
+    ['import() de otro módulo', "export const x = import('./otro');\n"],
+    [
+      'un módulo que sólo se parece',
+      "const c = require('@prisma/clientela');\nexport const x = c;\n",
+    ],
+  ])('la regla de scope deja %s', (_nombre, codigo) => {
+    expect(deScope(lint(fuera, codigo))).toEqual([]);
+  });
+
+  it('en la allowlist la regla de scope no aplica (src/prisma/**)', () => {
+    const codigo = "const c = require('@prisma/client');\nexport const x = c;\n";
+    expect(deScope(lint('src/prisma/prisma.service.ts', codigo))).toEqual([]);
+  });
+});

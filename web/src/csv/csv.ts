@@ -26,15 +26,23 @@ export function campo(valor: string): string {
   return /[",\r\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor;
 }
 
+// `\s` de JS incluye espacio, tab, CR, LF, U+00A0 y U+FEFF.
+const PARECE_FORMULA = /^\s*[=+\-@|\t\r\n]/;
+
 /**
  * Texto que viene de SR (mesero, mesa, folio, producto, sucursal...). Si empieza
  * como una fórmula, Excel la ejecuta al abrir el archivo (inyección CSV): se le
  * antepone `'` para que quede como texto. Sólo a los textos: los importes los
  * escribimos nosotros ya validados.
+ *
+ * Qué cuenta como "empieza como fórmula" (F2-203): el primer carácter es
+ * `= + - @ | tab CR LF`, o lo es el primero que no es blanco (Excel y LibreOffice
+ * ignoran los espacios iniciales, también el de no separación, al decidir si una
+ * celda es fórmula). `|` es el arranque de un enlace DDE.
  */
 export function texto(valor: string | null): string {
   if (valor === null) return '';
-  return campo(/^[=+\-@\t\r]/.test(valor) ? `'${valor}` : valor);
+  return campo(PARECE_FORMULA.test(valor) ? `'${valor}` : valor);
 }
 
 /** Excel no acepta una cadena de más de 255 caracteres dentro de una fórmula. */

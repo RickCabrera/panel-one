@@ -38,6 +38,8 @@ function lista(n: number): Ticket[] {
   );
 }
 
+const CORTE_SUGERIDO = '2026-09-20T17:59:30.000Z';
+
 /** Pagina y filtra por folio y sucursal como la API real. */
 function tickets(todos: Ticket[]): Manejador {
   return (l: Llamada) => {
@@ -53,6 +55,7 @@ function tickets(todos: Ticket[]): Manejador {
       total: filtrados.length,
       pagina,
       porPagina,
+      corte: l.query.get('corte') ?? CORTE_SUGERIDO,
     };
     return json(200, cuerpo);
   };

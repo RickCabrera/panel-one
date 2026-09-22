@@ -9,6 +9,12 @@ import tseslint from 'typescript-eslint';
 // type-aware son útiles y se pueden encender en F1-092 (hardening), pero atarlas
 // al lint desde la primera tarea es lo que suele dejar el carril rojo por razones
 // que no son el código.
+
+// Los módulos que traen el cliente crudo, como regex de esquery (F2-203): la raíz
+// y las subrutas de `@prisma/client`, el `.prisma/client` generado y `prisma.service`.
+const MODULOS_PRISMA =
+  '/^@prisma\\u002Fclient($|\\u002F)|(^|\\u002F)\\.prisma\\u002Fclient|(^|\\u002F)prisma\\.service$/';
+
 export default tseslint.config(
   { ignores: ['dist/**', 'coverage/**', 'node_modules/**'] },
   eslint.configs.recommended,
@@ -68,7 +74,31 @@ export default tseslint.config(
               regex: '(^|/)prisma\\.service$',
               message: 'Lee datos con ScopedPrismaService.para(scope), no con PrismaService.',
             },
+            // F2-203: las subrutas traen el mismo cliente crudo por otra puerta.
+            {
+              regex: '^@prisma/client/|(^|/)\\.prisma/client',
+              message: 'Lee datos con ScopedPrismaService.para(scope), no con el cliente crudo.',
+            },
           ],
+        },
+      ],
+      // F2-203: `no-restricted-imports` sólo ve `import ... from`. Estas tres formas
+      // (`require()`, `import x = require()` e `import()` dinámico) cargaban el
+      // cliente crudo sin que la regla de arriba lo notara. En ellas no se pueden
+      // separar tipos de valores: se prohíben enteras para esos módulos.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: `CallExpression[callee.name='require'][arguments.0.value=${MODULOS_PRISMA}]`,
+          message: 'Lee datos con ScopedPrismaService.para(scope), no con el cliente crudo.',
+        },
+        {
+          selector: `TSExternalModuleReference[expression.value=${MODULOS_PRISMA}]`,
+          message: 'Lee datos con ScopedPrismaService.para(scope), no con el cliente crudo.',
+        },
+        {
+          selector: `ImportExpression[source.value=${MODULOS_PRISMA}]`,
+          message: 'Lee datos con ScopedPrismaService.para(scope), no con el cliente crudo.',
         },
       ],
     },

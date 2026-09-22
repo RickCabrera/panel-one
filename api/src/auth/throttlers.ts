@@ -1,4 +1,6 @@
-import type { ThrottlerOptions } from '@nestjs/throttler';
+import { SkipThrottle, type ThrottlerOptions } from '@nestjs/throttler';
+
+import { THROTTLER_AGENTE } from '../agentes/throttle-agente';
 
 /**
  * Throttlers por IP de las rutas de usuario. Todos se registran en el mismo
@@ -8,7 +10,9 @@ import type { ThrottlerOptions } from '@nestjs/throttler';
  * `@AutenticacionAgente()`).
  */
 export const THROTTLER_LOGIN = 'login';
+export const THROTTLER_LOGIN_HORA = 'login-hora';
 export const THROTTLER_REFRESH = 'refresh';
+export const THROTTLER_RESET = 'reset';
 
 /** `POST /auth/login` y `POST /cuenta/password`: 5 intentos por minuto por IP. */
 export const OPCIONES_THROTTLER_LOGIN: ThrottlerOptions = {
@@ -28,3 +32,48 @@ export const OPCIONES_THROTTLER_REFRESH: ThrottlerOptions = {
   ttl: 60_000,
   limit: 30,
 };
+
+/**
+ * `POST /auth/login` y `POST /cuenta/password`, ADEMÁS del de 5/min (F2-203): 30
+ * por hora por IP. Con sólo el de minuto, alguien paciente probaba 7 200
+ * contraseñas al día desde una IP. Cuenta todo intento (también los buenos: la
+ * librería no distingue fallos), así que una oficina detrás de una misma IP tiene
+ * 30 inicios de sesión por hora entre todos; con sesiones de 7 días eso sobra.
+ */
+export const OPCIONES_THROTTLER_LOGIN_HORA: ThrottlerOptions = {
+  name: THROTTLER_LOGIN_HORA,
+  ttl: 3_600_000,
+  limit: 30,
+};
+
+/**
+ * `POST /usuarios/:id/password` (F2-203): 10 por minuto por IP. Es ruta de
+ * admin autenticado, pero un token de admin robado no debe poder restablecer
+ * contraseñas en ráfaga.
+ */
+export const OPCIONES_THROTTLER_RESET: ThrottlerOptions = {
+  name: THROTTLER_RESET,
+  ttl: 60_000,
+  limit: 10,
+};
+
+/** Todos los throttlers registrados en `AuthModule`. Uno nuevo va aquí. */
+export const THROTTLERS = [
+  THROTTLER_LOGIN,
+  THROTTLER_LOGIN_HORA,
+  THROTTLER_REFRESH,
+  THROTTLER_RESET,
+  THROTTLER_AGENTE,
+] as const;
+export type NombreThrottler = (typeof THROTTLERS)[number];
+
+/**
+ * `@SkipThrottle` de todos los cubos MENOS los de la ruta. En v6 un `ThrottlerGuard`
+ * aplica todos los registrados: con esto, un cubo nuevo queda saltado solo en las
+ * rutas que no lo nombran, en vez de depender de acordarse de tocarlas todas.
+ */
+export function SoloThrottlers(...propios: NombreThrottler[]) {
+  return SkipThrottle(
+    Object.fromEntries(THROTTLERS.filter((t) => !propios.includes(t)).map((t) => [t, true])),
+  );
+}

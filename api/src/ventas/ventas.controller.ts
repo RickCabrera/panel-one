@@ -187,6 +187,7 @@ export class VentasController {
       pagina: q.pagina ?? 1,
       porPagina: q.porPagina ?? POR_PAGINA_DEFAULT,
       folio: q.folio,
+      corte: q.corte,
     });
   }
 }
