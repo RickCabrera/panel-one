@@ -13,7 +13,10 @@
     "test": "jest --runInBand",
     "openapi": "ts-node src/openapi/generar.ts",
     "seed:ventas": "ts-node prisma/seed-ventas.ts",
-    "seed:mesas": "ts-node prisma/seed-mesas.ts"
+    "seed:mesas": "ts-node prisma/seed-mesas.ts",
+    "postinstall": "prisma generate",
+    "setup:env": "ts-node scripts/setup-env.ts",
+    "seed": "prisma db seed && npm run seed:ventas && npm run seed:mesas"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.5",

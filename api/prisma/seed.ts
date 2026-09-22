@@ -2,6 +2,7 @@ import { hash } from '@node-rs/argon2';
 import { Prisma, PrismaClient, RolUsuario } from '@prisma/client';
 
 import { ARGON2_OPCIONES } from '../src/auth/argon2';
+import { cargarEnvLocal } from '../src/config/cargar-env';
 
 /**
  * Seed de DESARROLLO: 1 admin global, 1 empresa demo con 2 sucursales. Datos
@@ -77,6 +78,9 @@ export async function sembrar(
 }
 
 async function main(): Promise<void> {
+  // api/.env: `npm run seed:*` corre fuera de la CLI de Prisma y nadie más lo carga
+  // (F2-200). Antes del chequeo de producción, para que un NODE_ENV del .env cuente.
+  cargarEnvLocal();
   if (process.env.NODE_ENV === 'production') {
     throw new Error('El seed es de desarrollo y se niega a correr con NODE_ENV=production.');
   }

@@ -1,3 +1,8 @@
+// Primero que todo: vuelca api/.env a process.env antes de que se lea una sola
+// variable (F2-200). Lo que ya esté en el entorno gana.
+import { cargarEnvLocal } from './config/cargar-env';
+cargarEnvLocal();
+
 import 'reflect-metadata';
 
 import { NestFactory } from '@nestjs/core';

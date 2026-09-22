@@ -60,6 +60,11 @@ un único `package-lock.json`. El CI cuenta con eso.
 
 ## Levantar todo en local
 
+Los comandos de esta sección están escritos para **PowerShell 5.1** (el que trae
+Windows) y se copian **tal cual, uno por línea**. No usan `&&`: PowerShell 5.1 no lo
+acepta como separador. La corrida real de esta misma secuencia en un clon limpio, con su
+salida, está en [`docs/verificacion-arranque.md`](docs/verificacion-arranque.md).
+
 ### Requisitos
 
 | Herramienta | Versión | Para qué |
@@ -68,11 +73,24 @@ un único `package-lock.json`. El CI cuenta con eso.
 | .NET SDK | 8.x | `/agent` |
 | Docker | cualquiera reciente | el Postgres de `/infra` |
 
+> **Si PowerShell dice `npm.ps1 ... la ejecución de scripts está deshabilitada`**, es la
+> política de ejecución de Windows, no el repo. Dos salidas, elige una:
+>
+> - Una vez por consola (sólo afecta a esa ventana, no cambia nada del sistema):
+>
+>   ```powershell
+>   Set-ExecutionPolicy -Scope Process Bypass -Force
+>   ```
+>
+> - O escribe `npm.cmd` y `npx.cmd` en lugar de `npm` y `npx` en cada comando de abajo.
+>   Hacen lo mismo y no pasan por la política.
+
 ### 1 · Postgres
 
-```bash
+```powershell
 cd infra
 docker compose up -d
+cd ..
 ```
 
 Levanta un `postgres:16` **vacío** en el puerto 5432, con usuario/contraseña/base
@@ -83,34 +101,70 @@ El esquema lo crea Prisma en el paso 3.
 en el 5432 con un rol `monitor`/`monitor` que tenga `CREATEDB` (`prisma migrate dev` crea
 y borra una *shadow database*) y una base `monitor` de su propiedad.
 
-Para tirarlo y borrar los datos: `docker compose down -v`.
+Para tirarlo y borrar los datos: `docker compose down -v` (desde `infra`).
 
 ### 2 · Dependencias de Node
 
 Desde la **raíz** del repo (instala `/api` y `/web` de una vez):
 
-```bash
-npm install
+```powershell
+npm ci
 ```
+
+Eso **también genera el cliente de Prisma**: `api/package.json` tiene un `postinstall`
+que corre `prisma generate` (F2-200). No hace falta correrlo a mano. Si alguna vez ves
+`Namespace 'Prisma' has no exported member 'Decimal'` (y cien errores más), el cliente
+quedó vacío: corre `npm run postinstall` en `/api` y averigua quién quitó el script (un
+test de contrato, `api/scripts/instalacion.spec.ts`, falla si falta).
+
+npm 11 imprime `npm warn allow-scripts` si un paquete con scripts de instalación no está
+en el campo `allowScripts` del `package.json` raíz. **Hoy ese aviso no bloquea nada**, y
+no era la causa del cliente vacío (ver *Notas de dependencias*). El campo ya aprueba los
+que hacen falta; si subes de versión uno de ellos, vuelve a aprobarlo con
+`npm approve-scripts <paquete>` desde la raíz.
 
 ### 3 · API
 
-```bash
-cp api/.env.example api/.env   # ajusta DATABASE_URL si cambiaste algo en infra/.env
+```powershell
 cd api
-npx prisma migrate dev         # aplica las migraciones y genera el cliente
-npx prisma db seed             # 1 admin global, 1 empresa demo, 2 sucursales (idempotente)
-npm run seed:ventas            # 500 cheques sintéticos, 2 sucursales × 30 días hasta hoy (idempotente)
-cd ..
-npm run dev:api                # o: npm run dev --workspace @monitor/api
+npm run setup:env
+npx prisma migrate deploy
+npm run seed
+npm run dev
 ```
 
+Qué hace cada uno:
+
+- **`npm run setup:env`** copia `api/.env.example` a `api/.env` si no existe. Si ya
+  existe **no lo toca** y lo avisa. Ajusta `DATABASE_URL` si cambiaste algo en
+  `infra/.env`.
+- **`npx prisma migrate deploy`** aplica las migraciones a la base (no pregunta nada).
+  Quien crea migraciones nuevas usa `npx prisma migrate dev`.
+- **`npm run seed`** corre los tres seeds en su orden: `prisma db seed` (1 admin global,
+  1 empresa demo, 2 sucursales), `seed:ventas` (500 cheques sintéticos, 2 sucursales ×
+  30 días hasta hoy) y `seed:mesas` (mesas abiertas del Monitor, "en vivo" durante
+  90 s: para volver a verlas vivas, `npm run seed:mesas` otra vez). Los tres son
+  idempotentes: correrlos otra vez no duplica nada.
+- **`npm run dev`** levanta la API en `http://localhost:3000` y se queda corriendo. Desde
+  la raíz, `npm run dev:api` hace lo mismo.
+
 El seed crea `admin@monitor.local` con la contraseña de `SEED_ADMIN_PASSWORD` (o la de
-desarrollo por defecto, con aviso en consola). Correrlo otra vez no cambia nada.
+desarrollo por defecto, con aviso en consola).
 
 La API no arranca sin `JWT_ACCESS_SECRET` y `JWT_REFRESH_SECRET` (al menos 32 caracteres
 y distintos entre sí). `api/.env.example` trae unos de relleno para local y el comando
 para generar los tuyos. Si tu `api/.env` es anterior a F1-011, agrégaselos.
+
+> **Quién lee `api/.env`.** Dos lectores distintos: la **CLI de Prisma** lo carga sola
+> para sus comandos (`migrate`, `db seed`); la **API** y los **seeds sueltos**
+> (`seed:ventas`, `seed:mesas`) lo cargan con `cargarEnvLocal`
+> (`api/src/config/cargar-env.ts`, F2-200), en la primera línea de `main.ts` y de cada
+> seed. Antes de F2-200 ninguno de ellos lo leía: el cliente de Prisma ni lo vuelca a
+> `process.env` ni resuelve `DATABASE_URL` desde él. `npm run dev` moría con
+> `JWT_ACCESS_SECRET es obligatorio` y `npm run seed:ventas` con `Environment variable
+> not found: DATABASE_URL`, aunque el archivo existiera.
+> En los dos casos, una variable que ya exista en el entorno **gana** sobre la del
+> archivo: así se cambia `PORT` o `DATABASE_URL` para una corrida sin editar `.env`.
 
 Los tests de `/api` (`npm test`) corren en serie contra el Postgres de `DATABASE_URL`: en
 local es tu base de desarrollo, a la que sólo le escriben el seed (idempotente) y fixtures
@@ -120,14 +174,17 @@ base, fallan; no se saltan.
 El contrato de la API es `api/openapi.json`. Si cambias un endpoint o un DTO, corre
 `npm run openapi` en `/api` y commitea el resultado: un test falla si no coincide.
 
-Queda escuchando en `http://localhost:3000`.
-
 ### 4 · Panel web
 
-```bash
-cp web/.env.example web/.env.local
-npm run dev:web                # o: npm run dev --workspace @monitor/web
+En **otra** consola (la del paso 3 se queda con la API), desde la raíz del repo:
+
+```powershell
+if (-not (Test-Path web\.env.local)) { Copy-Item web\.env.example web\.env.local }
+npm run dev:web
 ```
+
+La primera línea es opcional (los valores por defecto ya sirven en local) y no pisa un
+`web\.env.local` que ya tengas.
 
 Queda en `http://localhost:5173`, con la API del paso 3 corriendo detrás. Entra con el
 admin global del seed.
@@ -155,7 +212,7 @@ El color de acento se configura con `VITE_COLOR_ACENTO` (hex); ver `web/.env.exa
 
 ### 5 · Agente
 
-```bash
+```powershell
 cd agent
 dotnet build --configuration Release
 ```
@@ -199,9 +256,43 @@ Encender un carril es parte del entregable de la tarea que lo habilita.
 - **`overrides.multer` en el `package.json` raíz.** `@nestjs/platform-express@11` fija
   `multer@2.2.0`, que tiene cuatro avisos de severidad alta (DoS por nombres de campo,
   fuga de descriptores en subidas abortadas, bypass del límite de tamaño). El override
-  lo sube a `2.4.0`, que los corrige sin cambiar la API. `npm audit` queda en cero.
+  lo sube a `2.4.0`, que los corrige sin cambiar la API.
   `npm ls multer` marca *invalid* porque el pin de Nest dice 2.2.0: es el ruido esperado
   de un override, no un problema. Se quita cuando `/api` pase a Nest 12.
+- **`npm audit` ya no queda en cero: 3 avisos altos que son uno solo, y se quedan.** Es
+  `deepmerge-ts <8` (GHSA-ggr8-5vv4-36mx, recursión sin tope al fusionar objetos
+  cíclicos), por `prisma@6.19.3 → @prisma/config@6.19.3 → deepmerge-ts@7.1.5`, con la
+  versión **fijada exacta** por Prisma. Todas las `@prisma/config` 6.x la fijan igual, y
+  **también la 7.x**: `@prisma/config@7.10.0` (la `latest` al 21/09/2026) fija
+  `deepmerge-ts` en `7.1.5`. Sólo la línea de desarrollo 8 (`8.1.0-dev.7`) pasa a `8.0.2`. `npm audit fix --force` "lo arregla" bajando `prisma` a
+  6.12.0, que rompe. Un `overrides` a `8.0.2` (global o con alcance `@prisma/config`, con
+  rango o exacto) **no funciona con npm 11.17**: o no lo aplica, o saca `deepmerge-ts` del
+  lock y entonces `prisma` truena con `ERR_MODULE_NOT_FOUND`. El riesgo real es bajo: sólo
+  la usa la CLI de Prisma para fusionar **su propia config**, en desarrollo; nada de
+  entrada de usuarios y nada en la API en marcha. **Subir a Prisma 7 no lo cierra**: se
+  cierra cuando una versión estable de Prisma suba el pin (hoy, sólo la 8 en desarrollo).
+  Detalle y salida de `npm view` en `docs/nocturno-log.md`, entrada F2-200.
+- **`package.json#prisma` (el `seed`) sigue ahí, aunque Prisma avise que se depreca en
+  Prisma 7.** Migrarlo a `prisma.config.ts` **no es directo**: con un archivo de config,
+  Prisma 6 **deja de cargar `api/.env`** (`prisma validate` falla en `getConfig`), y hoy
+  `migrate` y `db seed` dependen de esa carga (ver *Quién lee
+  `api/.env`*, arriba). Se hace junto con la subida a Prisma 7, con una carga explícita
+  del `.env` en el `prisma.config.ts`.
+- **El `postinstall` de `/api` (`prisma generate`) y el cliente vacío.** El
+  `postinstall` propio de `@prisma/client` corre con el cwd en la **raíz** del monorepo,
+  busca ahí `prisma/schema.prisma`, no lo encuentra (vive en `api/prisma/`) y deja un
+  cliente **vacío** (`PrismaClient: any`). No es que npm bloquee los scripts: en npm
+  11.17 `allowScripts` sólo avisa, y los scripts corren. Por eso el arreglo es el
+  `postinstall` del workspace y no depender de `allowScripts`. Ojo con un futuro
+  `npm ci --omit=dev` (un Dockerfile de producción, por ejemplo): `prisma` es
+  devDependency y ese `postinstall` fallaría; ahí el cliente se genera en la etapa de
+  build, con las devDependencies puestas.
+- **`allowScripts` en el `package.json` raíz.** Aprueba, fijados a su versión, los
+  scripts de instalación de `prisma`, `@prisma/client`, `@prisma/engines`,
+  `@parcel/watcher` y `unrs-resolver`, y niega el de `@scarf/scarf` (telemetría de
+  swagger-ui). Hoy sólo apaga el aviso; está para cuando npm empiece a bloquear los no
+  revisados. Al subir de versión uno de ellos, `npm approve-scripts <paquete>` desde la
+  raíz reescribe su entrada. npm 10 (el del CI con Node 22) ignora el campo.
 
 ## Cómo se trabaja en este repo
 

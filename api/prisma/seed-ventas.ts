@@ -1,5 +1,6 @@
 import { FormaPago, Prisma, PrismaClient } from '@prisma/client';
 
+import { cargarEnvLocal } from '../src/config/cargar-env';
 import { SEED_IDS } from './seed';
 
 /**
@@ -429,6 +430,9 @@ export function hoyEn(zona: string, ahora = new Date()): string {
 }
 
 async function main(): Promise<void> {
+  // api/.env: `npm run seed:*` corre fuera de la CLI de Prisma y nadie más lo carga
+  // (F2-200). Antes del chequeo de producción, para que un NODE_ENV del .env cuente.
+  cargarEnvLocal();
   if (process.env.NODE_ENV === 'production') {
     throw new Error(
       'El seed de ventas es de desarrollo y se niega a correr con NODE_ENV=production.',

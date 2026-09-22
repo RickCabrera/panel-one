@@ -24,6 +24,18 @@ una forma poco obvia.
 Opcional pero recomendado: **Docker Desktop**, para levantar el Postgres de `/infra` en
 local desde F1-001.
 
+> **Todos los comandos de esta guía se pegan en PowerShell 5.1, uno por línea.** Si al
+> primer `npm` o `npx` sale `npm.ps1 ... la ejecución de scripts está deshabilitada`, es
+> la política de ejecución de Windows. Corre una vez en esa consola:
+>
+> ```powershell
+> Set-ExecutionPolicy -Scope Process Bypass -Force
+> ```
+>
+> Sólo vale para esa ventana. La alternativa, sin tocar la política, es escribir `npm.cmd`
+> y `npx.cmd` en lugar de `npm` y `npx`. Y en PowerShell 5.1 **no uses `&&`** para encadenar
+> comandos: no lo acepta.
+
 > El propio `scripts/nocturno-v2.ps1` revisa `claude` y `gh auth` antes de arrancar y se
 > detiene con un mensaje claro si falta alguno. Esa comprobación existe porque sin ella una
 > herramienta ausente se paga 14 veces: el loop lee "no hubo commits" como límite de tokens
@@ -305,3 +317,34 @@ no cierre, F1-022 y F1-023 no se pueden escribir de verdad, el agente no lee nad
 todo lo que el proyecto "sabe" del POS son supuestos marcados como tales en
 `docs/esquema-sr.md`. Las 22 tareas de la cola avanzan sin ella — por eso están en ese orden
 — pero la fase no cierra sin ella.
+
+---
+
+## 8 · Clon nuevo: del `git clone` al panel con datos
+
+Esto es para cualquier máquina que clona el repo **ya creado** (la de un desarrollador
+nuevo, una máquina de pruebas, la tuya después de formatear), no para montar el kit. La
+secuencia completa, con cada comando en su línea y sin `&&`, vive en **un solo lugar**:
+[`README.md` → *Levantar todo en local*](README.md#levantar-todo-en-local). En resumen:
+
+```powershell
+git clone <url-del-repo> panel-one
+cd panel-one
+npm ci
+cd api
+npm run setup:env
+npx prisma migrate deploy
+npm run seed
+npm run dev
+```
+
+Con el Postgres de `/infra` arriba (paso 1 del README), eso deja la API en
+`http://localhost:3000` con la empresa demo, sus dos sucursales, 30 días de ventas y mesas
+abiertas. `npm ci` **ya genera el cliente de Prisma** (no hace falta `prisma generate` a
+mano) y `npm run setup:env` crea `api/.env` sin pisar uno que ya exista.
+
+Después de clonar, **instala el hook** como en el paso 3 de esta guía: la guardia de `main`
+no viaja con el clon.
+
+La corrida real de esta secuencia en un clon limpio, con su salida, está en
+[`docs/verificacion-arranque.md`](docs/verificacion-arranque.md).
