@@ -14,6 +14,7 @@ import { Login } from './paginas/Login';
 import { Mesas } from './paginas/Mesas';
 import { NoEncontrada } from './paginas/NoEncontrada';
 import { Reportes } from './paginas/Reportes';
+import { Resumen } from './paginas/Resumen';
 import { Tickets } from './paginas/Tickets';
 import { MarcaDemo } from './sistema/MarcaDemo';
 import { ProveedorTema } from './tema/ProveedorTema';
@@ -50,6 +51,7 @@ export function Rutas() {
         }
       >
         <Route index element={<Inicio />} />
+        <Route path="resumen" element={<Resumen />} />
         <Route path="mesas" element={<Mesas />} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="reportes" element={<Reportes />} />

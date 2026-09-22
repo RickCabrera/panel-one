@@ -4,6 +4,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { crearFixtures, FX, limpiarFixtures } from '../../test/fixtures-auth';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
+  ConsultaVentas,
   CTES_VENTAS,
   guardiaCuerpo,
   MAX_DIAS_RANGO,
@@ -103,6 +104,65 @@ describe('validarFiltro()', () => {
   it(`acepta exactamente ${MAX_DIAS_RANGO} días y un solo día`, () => {
     expect(() => validarFiltro({ ...ok, desde: '2024-01-01', hasta: '2024-12-31' })).not.toThrow();
     expect(() => validarFiltro({ ...ok, desde: '2026-11-05', hasta: '2026-11-05' })).not.toThrow();
+  });
+});
+
+describe('alturaAl (F2-220)', () => {
+  const ok: FiltroVentas = { empresaId: FX.empresaA, desde: '2026-11-01', hasta: '2026-11-30' };
+  const A: EmpresaScope = { tipo: 'empresa', empresaId: FX.empresaA };
+
+  /** El SQL completo que mandaría el helper, sin ejecutarlo. */
+  async function sqlDe(filtro: FiltroVentas): Promise<Prisma.Sql> {
+    let capturado: Prisma.Sql | undefined;
+    const consulta = new ConsultaVentas(
+      (armado) => {
+        capturado = armado;
+        return Promise.resolve([]);
+      },
+      A,
+      filtro,
+    );
+    await consulta.consultar(sql('SELECT 1 FROM ventas'));
+    return capturado!;
+  }
+
+  it.each([
+    ['UTC con Z', '2026-11-15T20:30:00Z'],
+    ['con milisegundos', '2026-11-15T20:30:00.000Z'],
+    ['con offset', '2026-11-15T14:30:00-06:00'],
+    ['offset +14', '2026-11-15T14:30:00+14:00'],
+  ])('acepta un instante con zona: %s', (_caso, alturaAl) => {
+    expect(() => validarFiltro({ ...ok, alturaAl })).not.toThrow();
+  });
+
+  it.each([
+    ['sin zona', '2026-11-15T20:30:00'],
+    ['sólo la hora', '14:30'],
+    ['sólo el día', '2026-11-15'],
+    ['día que no existe (la regex sí lo acepta)', '2026-02-30T12:00:00Z'],
+    ['hora 24', '2026-11-15T24:00:00Z'],
+    ['minuto 60', '2026-11-15T20:60:00Z'],
+    ['offset imposible', '2026-11-15T20:30:00+15:00'],
+    ['basura', 'ayer'],
+    ['vacío', ''],
+  ])('rechaza con 400: %s', (_caso, alturaAl) => {
+    expect(() => validarFiltro({ ...ok, alturaAl })).toThrow(BadRequestException);
+  });
+
+  it('sin alturaAl, el SQL es byte a byte el de antes de F2-220', async () => {
+    const armado = await sqlDe(ok);
+    expect(armado.sql).toMatchSnapshot();
+    expect(armado.values).toMatchSnapshot();
+  });
+
+  it('con alturaAl, el instante viaja como parámetro y sólo cambia el fin del último día', async () => {
+    const alturaAl = '2026-11-15T20:30:00Z';
+    const sin = await sqlDe(ok);
+    const con = await sqlDe({ ...ok, alturaAl });
+    expect(con.sql).not.toContain(alturaAl);
+    expect(con.values).toContain(alturaAl);
+    expect(con.sql).toContain('::timestamptz AT TIME ZONE s.zona_horaria)::time)::timestamp');
+    expect(sin.sql).not.toContain('::timestamptz AT TIME ZONE s.zona_horaria)::time');
   });
 });
 

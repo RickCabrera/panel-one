@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { pedir } from '../../api/cliente';
+import { llaveConAltura, mantenerSiSoloCambiaLaAltura } from '../../consultas/altura';
 import type { ProductoTop, VentaDia, VentaSucursal } from '../../api/tipos';
 import type { Rango } from '../../filtros/periodo';
-import type { Filtro } from '../inicio/consultas';
+import { AUTO_REFRESCO_MS, type Filtro } from '../inicio/consultas';
 
 export type OrdenTop = 'importe' | 'cantidad';
 /** Los límites que ofrece la vista. La API acepta de 1 a 50. */
@@ -27,9 +28,17 @@ export function useReporte<E extends keyof Endpoints>(
   filtro: Filtro | null,
   rango: Rango | null,
   extra: Record<string, string | number> = {},
+  /** Corte "a la misma altura" (F2-220). Sin él, la llave es la de siempre. */
+  alturaAl?: string,
+  /**
+   * Refresco solo cada `AUTO_REFRESCO_MS`, como el Panel. Reportes no lo usa (es un reporte);
+   * el Resumen sí, cuando el periodo incluye hoy: si no, su base avanza cada minuto y la cifra
+   * actual se quedaría congelada, y el Δ saldría falso (F2-220).
+   */
+  autoRefresco = false,
 ) {
-  return useQuery({
-    queryKey: [
+  const queryKey = llaveConAltura(
+    [
       'ventas',
       endpoint,
       filtro?.empresaId,
@@ -38,6 +47,10 @@ export function useReporte<E extends keyof Endpoints>(
       rango?.hasta,
       extra,
     ],
+    alturaAl,
+  );
+  return useQuery({
+    queryKey,
     queryFn: ({ signal }) =>
       pedir<Endpoints[E]>(`/ventas/${endpoint}`, {
         query: {
@@ -46,9 +59,13 @@ export function useReporte<E extends keyof Endpoints>(
           desde: rango?.desde,
           hasta: rango?.hasta,
           ...extra,
+          alturaAl,
         },
         signal,
       }),
     enabled: filtro !== null && rango !== null,
+    refetchInterval: autoRefresco ? AUTO_REFRESCO_MS : false,
+    placeholderData: (anterior, previa) =>
+      mantenerSiSoloCambiaLaAltura(anterior, previa?.queryKey, queryKey, alturaAl),
   });
 }
