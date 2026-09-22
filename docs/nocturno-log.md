@@ -5752,6 +5752,9 @@ contra el corte de SR y el ajuste en SR regresando como póliza `ajuste` son de 
 - Mutaciones: quitar la escritura del borrador a localStorage → 3 rojos. Quitar SÓLO el candado del
   conteo → verde (lo atrapa el `count === 1`); quitar SÓLO el `count` → verde (lo atrapa el candado);
   quitar LOS DOS → rojo el e2e "captura bloqueada por un cierre en curso". Cada defensa basta sola.
+  Al test aleatorio de captura + cierre se le quitó A PROPÓSITO la aserción `capturadoAt <=
+  cerradoAt`: no probaba nada (el `ahora` se toma antes de la transacción). La cubren el test
+  determinista y "cada 200 dejó su valor, cada 409 nada". Revisor, 2.º pase: APROBADO.
 - Números: /api lint, typecheck, `prisma validate` limpios, sin deriva; jest 1531/1532, 0 skips (el
   rojo es el preexistente). /web build, lint, check:bundle (272.8 kB) limpios; vitest 993/993.
   Esas cifras de suite completa son de ANTES de las correcciones del revisor; después se corrieron
