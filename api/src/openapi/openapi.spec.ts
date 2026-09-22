@@ -48,12 +48,65 @@ describe('Contrato OpenAPI', () => {
     expect(paths['/cuenta/reportes']?.get?.security).toEqual([{ bearer: [] }]);
   });
 
+  it('catálogos espejo (F2-230): agente con API key y reintentos claros; panel con 404 y roles', async () => {
+    const { paths } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/ingesta/catalogos']?.post)).toEqual([
+      '200',
+      '400',
+      '401',
+      '429',
+      '500',
+      '503',
+    ]);
+    expect(codigos(paths['/ingesta/catalogos/cierre']?.post)).toEqual([
+      '200',
+      '400',
+      '401',
+      '409',
+      '429',
+      '500',
+      '503',
+    ]);
+    expect(codigos(paths['/ingesta/catalogos/solicitud']?.get)).toEqual(['200', '401', '429']);
+    expect(paths['/ingesta/catalogos']?.post?.security).toEqual([{ agente: [] }]);
+    expect(paths['/ingesta/catalogos']?.post?.description).toContain('no intercala');
+    for (const c of ['grupos', 'productos', 'meseros', 'clientes', 'areas', 'canales']) {
+      expect(codigos(paths[`/catalogos/${c}`]?.get)).toEqual(['200', '400', '401', '404']);
+    }
+    expect(codigos(paths['/catalogos/productos/{id}/metadata']?.put)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
+    expect(codigos(paths['/catalogos/sincronizacion/forzar']?.post)).toEqual([
+      '202',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
+    expect(JSON.stringify(paths['/catalogos/productos'])).toContain('PaginaProductosDto');
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
       [
         '/agente/yo',
         '/agentes/estado',
+        '/catalogos/areas',
+        '/catalogos/canales',
+        '/catalogos/clientes',
+        '/catalogos/grupos',
+        '/catalogos/meseros',
+        '/catalogos/productos',
+        '/catalogos/productos/{id}',
+        '/catalogos/productos/{id}/metadata',
+        '/catalogos/sincronizacion',
+        '/catalogos/sincronizacion/forzar',
         '/alertas/abiertas',
         '/alertas/historial',
         '/alertas/reglas',
@@ -68,6 +121,9 @@ describe('Contrato OpenAPI', () => {
         '/reportes/baja',
         '/empresas',
         '/empresas/{id}',
+        '/ingesta/catalogos',
+        '/ingesta/catalogos/cierre',
+        '/ingesta/catalogos/solicitud',
         '/ingesta/eventos',
         '/mesas/abiertas',
         '/sucursales',

@@ -32,6 +32,17 @@ export const LLAVE_EMPRESA = {
   // `updateMany` con el id de un token firmado ya verificado.
   SuscripcionReporte: 'empresaId',
   EnvioReporte: 'empresaId',
+  // F2-230. Catálogos espejo: los escribe SÓLO `IngestaCatalogos` (clavada a la sucursal
+  // del agente); la metadata y la solicitud, `EscrituraCatalogos` (con scope).
+  GrupoProducto: 'empresaId',
+  Producto: 'empresaId',
+  MeseroCatalogo: 'empresaId',
+  ClienteCatalogo: 'empresaId',
+  AreaCatalogo: 'empresaId',
+  CanalVentaCatalogo: 'empresaId',
+  ProductoMetadata: 'empresaId',
+  SincronizacionCatalogo: 'empresaId',
+  SolicitudSincronizacion: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

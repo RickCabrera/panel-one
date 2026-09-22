@@ -481,6 +481,219 @@
         ]
       }
     },
+    "/ingesta/catalogos": {
+      "post": {
+        "description": "Idempotente: la misma página tres veces deja exactamente los mismos datos (ni ids, ni `updatedAt`, ni `vistoAt` cambian). Llave: (sucursal de la API key, `origenSrId`). Cada registro se valida aparte: uno inválido va a `rechazados` y los demás se guardan; si su fila ya existía se marca vista sin tocar su contenido. Un registro traído por una sincronización más nueva, o una página anterior a la última sincronización completa aplicada, sale en `obsoletos` y no revierte nada. Las páginas de una sincronización COMPLETA terminan con `POST /ingesta/catalogos/cierre`; sin cierre es incremental y no da de baja nada. El agente no intercala dos sincronizaciones del mismo catálogo. Registra el contacto del agente, como `/ingesta/eventos`.",
+        "operationId": "CatalogosIngestaController_pagina",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaginaCatalogoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoPaginaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sobre inválido: catálogo desconocido, `sincronizacionId` no es uuid, fecha sin zona o más de 5 min en el futuro, `registros` vacío, con más de 1000 o con no-objetos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          },
+          "500": {
+            "description": "Falla determinista: no se guardó nada y reenviar lo mismo va a fallar igual. No reintentar en bucle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Falla transitoria (base, o el candado del catálogo lo tiene otra página o cierre de la misma sucursal). No se guardó nada: reenviar igual más tarde.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "Recibe una página de un catálogo del POS (grupos, productos, meseros, clientes, áreas, canales).",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
+    "/ingesta/catalogos/cierre": {
+      "post": {
+        "description": "Marca `activo=false` (nunca borra; `vistoAt` se queda) a las filas del catálogo que no vio esta sincronización ni una más nueva. Antes cuadra: filas vistas por este `sincronizacionId` + `rechazados` >= `total`; si no, 409 y no se da de baja nada (faltan páginas). `total = 0` da de baja todo el catálogo (el POS no tiene ninguno). Idempotente: reenviar el último cierre aplicado no escribe; uno más viejo que el último aplicado responde `aplicado=false`.",
+        "operationId": "CatalogosIngestaController_cierre",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CierreCatalogoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCierreDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, fecha en el futuro, o `rechazados` mayor que `total`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No cuadra: faltan páginas de esta sincronización. Reintentar tras reenviarlas; si nunca cuadra (p. ej. se intercaló otra sincronización), abrir una nueva.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          },
+          "500": {
+            "description": "Falla determinista: no se guardó nada y reenviar lo mismo va a fallar igual. No reintentar en bucle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Falla transitoria (base, o el candado del catálogo lo tiene otra página o cierre de la misma sucursal). No se guardó nada: reenviar igual más tarde.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "Cierra una sincronización COMPLETA: da de baja lo que el POS ya no tiene.",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
+    "/ingesta/catalogos/solicitud": {
+      "get": {
+        "description": "`pendiente=true` mientras algún catálogo de los seis no haya recibido un cierre después de la solicitud (hora de recepción del API). Un catálogo que el POS no usa se cierra con `total=0`. Registra el contacto del agente.",
+        "operationId": "CatalogosIngestaController_solicitud",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolicitudAgenteDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "¿Pidió un admin sincronizar todos los catálogos de esta sucursal?",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
     "/ventas/resumen": {
       "get": {
         "description": "Cache de 15 s por usuario-alcance y filtro.",
@@ -3369,6 +3582,1014 @@
           "reportes"
         ]
       }
+    },
+    "/catalogos/grupos": {
+      "get": {
+        "description": "Espejo de lo que el agente leyó del POS de cada sucursal (F2-230), 50 por página, por nombre. Nada se borra: lo que desapareció del POS sale con `activo=false` y su último `vistoAt`.",
+        "operationId": "CatalogosController_grupos",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "description": "`activos`: los que vio la última sincronización completa. `inactivos`: los que desaparecieron del POS (nunca se borran).",
+            "schema": {
+              "default": "todos",
+              "type": "string",
+              "enum": [
+                "activos",
+                "inactivos",
+                "todos"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Busca en nombre, clave y origenSrId (sin distinguir mayúsculas).",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "description": "Página de 50.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaCatalogoLecturaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Grupos de productos del POS.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/productos": {
+      "get": {
+        "description": "Espejo de lo que el agente leyó del POS de cada sucursal (F2-230), 50 por página, por nombre. Nada se borra: lo que desapareció del POS sale con `activo=false` y su último `vistoAt`.",
+        "operationId": "CatalogosController_productos",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "description": "`activos`: los que vio la última sincronización completa. `inactivos`: los que desaparecieron del POS (nunca se borran).",
+            "schema": {
+              "default": "todos",
+              "type": "string",
+              "enum": [
+                "activos",
+                "inactivos",
+                "todos"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Busca en nombre, clave y origenSrId (sin distinguir mayúsculas).",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "description": "Página de 50.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaProductosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Productos del POS, con el nombre de su grupo en la misma sucursal.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/meseros": {
+      "get": {
+        "description": "Espejo de lo que el agente leyó del POS de cada sucursal (F2-230), 50 por página, por nombre. Nada se borra: lo que desapareció del POS sale con `activo=false` y su último `vistoAt`.",
+        "operationId": "CatalogosController_meseros",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "description": "`activos`: los que vio la última sincronización completa. `inactivos`: los que desaparecieron del POS (nunca se borran).",
+            "schema": {
+              "default": "todos",
+              "type": "string",
+              "enum": [
+                "activos",
+                "inactivos",
+                "todos"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Busca en nombre, clave y origenSrId (sin distinguir mayúsculas).",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "description": "Página de 50.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaCatalogoLecturaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Meseros del POS.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/clientes": {
+      "get": {
+        "description": "Espejo de lo que el agente leyó del POS de cada sucursal (F2-230), 50 por página, por nombre. Nada se borra: lo que desapareció del POS sale con `activo=false` y su último `vistoAt`. Vacío si la instalación no usa clientes.",
+        "operationId": "CatalogosController_clientes",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "description": "`activos`: los que vio la última sincronización completa. `inactivos`: los que desaparecieron del POS (nunca se borran).",
+            "schema": {
+              "default": "todos",
+              "type": "string",
+              "enum": [
+                "activos",
+                "inactivos",
+                "todos"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Busca en nombre, clave y origenSrId (sin distinguir mayúsculas).",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "description": "Página de 50.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaClientesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clientes registrados en el POS (datos personales).",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/areas": {
+      "get": {
+        "description": "Espejo de lo que el agente leyó del POS de cada sucursal (F2-230), 50 por página, por nombre. Nada se borra: lo que desapareció del POS sale con `activo=false` y su último `vistoAt`.",
+        "operationId": "CatalogosController_areas",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "description": "`activos`: los que vio la última sincronización completa. `inactivos`: los que desaparecieron del POS (nunca se borran).",
+            "schema": {
+              "default": "todos",
+              "type": "string",
+              "enum": [
+                "activos",
+                "inactivos",
+                "todos"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Busca en nombre, clave y origenSrId (sin distinguir mayúsculas).",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "description": "Página de 50.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaCatalogoLecturaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Áreas del POS (comedor, terraza, barra…).",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/canales": {
+      "get": {
+        "description": "Espejo de lo que el agente leyó del POS de cada sucursal (F2-230), 50 por página, por nombre. Nada se borra: lo que desapareció del POS sale con `activo=false` y su último `vistoAt`. El mapeo área → canal de negocio es nuestro y es otra tarea (F2-233).",
+        "operationId": "CatalogosController_canales",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "description": "`activos`: los que vio la última sincronización completa. `inactivos`: los que desaparecieron del POS (nunca se borran).",
+            "schema": {
+              "default": "todos",
+              "type": "string",
+              "enum": [
+                "activos",
+                "inactivos",
+                "todos"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Busca en nombre, clave y origenSrId (sin distinguir mayúsculas).",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "description": "Página de 50.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaCatalogoLecturaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Canales o tipos de servicio del POS.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/productos/{id}": {
+      "get": {
+        "operationId": "CatalogosController_producto",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetalleProductoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Un producto con su metadata propia.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/productos/{id}/metadata": {
+      "put": {
+        "description": "Es nuestra, no del POS: vive aparte y ninguna sincronización la toca. Reemplazo completo. Responde el producto con su metadata.",
+        "operationId": "CatalogosController_guardarMetadata",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardarMetadataDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetalleProductoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reemplaza la metadata propia de un producto (foto, descripción, etiquetas, mín/máx).",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/sincronizacion": {
+      "get": {
+        "operationId": "CatalogosController_sincronizacion",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SincronizacionSucursalDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Estado de sincronización de los seis catálogos de cada sucursal de la empresa.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/sincronizacion/forzar": {
+      "post": {
+        "description": "El agente la lee en `GET /ingesta/catalogos/solicitud` y la hace en su siguiente ciclo. Responde el estado de esa sucursal con la solicitud pendiente.",
+        "operationId": "CatalogosController_forzar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForzarSincronizacionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SincronizacionSucursalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Pide al agente de la sucursal una sincronización completa ya.",
+        "tags": [
+          "catalogos"
+        ]
+      }
     }
   },
   "info": {
@@ -4063,6 +5284,347 @@
         "required": [
           "procesados",
           "rechazados"
+        ]
+      },
+      "RegistroCatalogoDto": {
+        "type": "object",
+        "properties": {
+          "origenSrId": {
+            "type": "string",
+            "example": "P001",
+            "description": "Llave ESTABLE del registro dentro del POS de esta sucursal (1–64). Única por sucursal y catálogo: la idempotencia va por aquí. Repetida dentro de una página = se rechazan todas sus apariciones."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true,
+            "example": "P001",
+            "description": "La clave VISIBLE (la que ve el usuario del POS). Puede ser distinta de `origenSrId`."
+          },
+          "nombre": {
+            "type": "string",
+            "example": "Chilaquiles verdes",
+            "description": "1–200 caracteres."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Estado propio del POS (false = dado de baja o suspendido en SR). Ausente o nulo = el POS no lo reporta. Distinto de desaparecer de una sincronización completa."
+          }
+        },
+        "required": [
+          "origenSrId",
+          "nombre"
+        ]
+      },
+      "RegistroProductoDto": {
+        "type": "object",
+        "properties": {
+          "origenSrId": {
+            "type": "string",
+            "example": "P001",
+            "description": "Llave ESTABLE del registro dentro del POS de esta sucursal (1–64). Única por sucursal y catálogo: la idempotencia va por aquí. Repetida dentro de una página = se rechazan todas sus apariciones."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true,
+            "example": "P001",
+            "description": "La clave VISIBLE (la que ve el usuario del POS). Puede ser distinta de `origenSrId`."
+          },
+          "nombre": {
+            "type": "string",
+            "example": "Chilaquiles verdes",
+            "description": "1–200 caracteres."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Estado propio del POS (false = dado de baja o suspendido en SR). Ausente o nulo = el POS no lo reporta. Distinto de desaparecer de una sincronización completa."
+          },
+          "grupoOrigenSrId": {
+            "type": "string",
+            "nullable": true,
+            "example": "G01",
+            "description": "El `origenSrId` de su grupo. Sin FK: el grupo puede llegar después."
+          }
+        },
+        "required": [
+          "origenSrId",
+          "nombre"
+        ]
+      },
+      "RegistroClienteDto": {
+        "type": "object",
+        "properties": {
+          "origenSrId": {
+            "type": "string",
+            "example": "P001",
+            "description": "Llave ESTABLE del registro dentro del POS de esta sucursal (1–64). Única por sucursal y catálogo: la idempotencia va por aquí. Repetida dentro de una página = se rechazan todas sus apariciones."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true,
+            "example": "P001",
+            "description": "La clave VISIBLE (la que ve el usuario del POS). Puede ser distinta de `origenSrId`."
+          },
+          "nombre": {
+            "type": "string",
+            "example": "Chilaquiles verdes",
+            "description": "1–200 caracteres."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Estado propio del POS (false = dado de baja o suspendido en SR). Ausente o nulo = el POS no lo reporta. Distinto de desaparecer de una sincronización completa."
+          },
+          "telefono": {
+            "type": "string",
+            "nullable": true,
+            "description": "Dato personal. Hasta 40."
+          },
+          "correo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Dato personal, tal como lo guarda el POS (no se valida el formato). Hasta 200."
+          },
+          "rfc": {
+            "type": "string",
+            "nullable": true,
+            "description": "Dato personal, tal como lo guarda el POS (no se valida el formato). Hasta 13."
+          }
+        },
+        "required": [
+          "origenSrId",
+          "nombre"
+        ]
+      },
+      "CatalogoSr": {
+        "type": "string",
+        "enum": [
+          "grupos",
+          "productos",
+          "meseros",
+          "clientes",
+          "areas",
+          "canales"
+        ]
+      },
+      "PaginaCatalogoDto": {
+        "type": "object",
+        "properties": {
+          "catalogo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CatalogoSr"
+              }
+            ]
+          },
+          "sincronizacionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Id de la sincronización, generado por el agente. Todas sus páginas y su cierre lo repiten. Una sincronización sin cierre es INCREMENTAL: actualiza lo que trae y no da de baja nada. El agente NO intercala dos sincronizaciones del mismo catálogo (una incremental espera al cierre de la completa en curso): si lo hace, el cierre de la completa puede no cuadrar nunca."
+          },
+          "capturadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-22T03:00:00.000Z",
+            "description": "El instante en que EMPEZÓ la lectura de este catálogo en el POS (reloj del agente), ISO-8601 con zona. TODAS las páginas de una sincronización y su cierre llevan el MISMO valor. Más de 5 min en el futuro respecto al reloj del API = 400."
+          },
+          "registros": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RegistroCatalogoDto"
+                },
+                {
+                  "$ref": "#/components/schemas/RegistroProductoDto"
+                },
+                {
+                  "$ref": "#/components/schemas/RegistroClienteDto"
+                }
+              ]
+            },
+            "description": "`RegistroProductoDto` para productos, `RegistroClienteDto` para clientes y `RegistroCatalogoDto` para grupos, meseros, áreas y canales. Cada registro se valida aparte: uno inválido se rechaza solo y los demás se guardan."
+          }
+        },
+        "required": [
+          "catalogo",
+          "sincronizacionId",
+          "capturadoAt",
+          "registros"
+        ]
+      },
+      "RechazoRegistroDto": {
+        "type": "object",
+        "properties": {
+          "indice": {
+            "type": "number",
+            "example": 3,
+            "description": "Posición del registro en la página (desde 0)."
+          },
+          "origenSrId": {
+            "type": "string",
+            "nullable": true,
+            "description": "El `origenSrId` si era válido; nulo si no."
+          },
+          "motivo": {
+            "type": "string",
+            "example": "registros.3.nombre: nombre must be longer than or equal to 1 characters",
+            "description": "Ruta y regla. NUNCA repite el valor (los clientes traen datos personales)."
+          },
+          "reintentable": {
+            "type": "boolean",
+            "description": "Siempre false: reenviarlo igual va a fallar igual."
+          }
+        },
+        "required": [
+          "indice",
+          "origenSrId",
+          "motivo",
+          "reintentable"
+        ]
+      },
+      "ResultadoPaginaDto": {
+        "type": "object",
+        "properties": {
+          "catalogo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CatalogoSr"
+              }
+            ]
+          },
+          "recibidos": {
+            "type": "number",
+            "description": "Registros en la página."
+          },
+          "creados": {
+            "type": "number",
+            "description": "Filas nuevas."
+          },
+          "actualizados": {
+            "type": "number",
+            "description": "Filas cuyo contenido cambió o que se reactivaron."
+          },
+          "sinCambios": {
+            "type": "number",
+            "description": "Filas con el mismo contenido (a lo más se movió su `vistoAt`; no su `updatedAt`)."
+          },
+          "obsoletos": {
+            "type": "number",
+            "description": "Registros ignorados porque una sincronización más nueva ya los trajo (o ya cerró). Un número alto seguido suele ser el reloj del agente corrido hacia atrás."
+          },
+          "vistos": {
+            "type": "number",
+            "description": "Registros rechazados cuya fila ya existía: se marcan vistos (no se dan de baja por un dato malo) sin tocar su contenido."
+          },
+          "rechazadosSinFila": {
+            "type": "number",
+            "description": "Rechazados que no quedaron en ninguna fila. El agente los suma y los manda en el `rechazados` del cierre."
+          },
+          "rechazados": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RechazoRegistroDto"
+            }
+          }
+        },
+        "required": [
+          "catalogo",
+          "recibidos",
+          "creados",
+          "actualizados",
+          "sinCambios",
+          "obsoletos",
+          "vistos",
+          "rechazadosSinFila",
+          "rechazados"
+        ]
+      },
+      "CierreCatalogoDto": {
+        "type": "object",
+        "properties": {
+          "catalogo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CatalogoSr"
+              }
+            ]
+          },
+          "sincronizacionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Id de la sincronización, generado por el agente. Todas sus páginas y su cierre lo repiten. Una sincronización sin cierre es INCREMENTAL: actualiza lo que trae y no da de baja nada. El agente NO intercala dos sincronizaciones del mismo catálogo (una incremental espera al cierre de la completa en curso): si lo hace, el cierre de la completa puede no cuadrar nunca."
+          },
+          "capturadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-22T03:00:00.000Z",
+            "description": "El instante en que EMPEZÓ la lectura de este catálogo en el POS (reloj del agente), ISO-8601 con zona. TODAS las páginas de una sincronización y su cierre llevan el MISMO valor. Más de 5 min en el futuro respecto al reloj del API = 400."
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000000,
+            "description": "Cuántos registros leyó el agente en el POS en esta sincronización completa. 0 = el catálogo está vacío en el POS y se da de baja todo lo que había."
+          },
+          "rechazados": {
+            "type": "number",
+            "minimum": 0,
+            "description": "La suma de `rechazadosSinFila` de las respuestas de sus páginas: los registros que el API rechazó y no quedaron en ninguna fila. Mayor que `total` = 400."
+          }
+        },
+        "required": [
+          "catalogo",
+          "sincronizacionId",
+          "capturadoAt",
+          "total",
+          "rechazados"
+        ]
+      },
+      "ResultadoCierreDto": {
+        "type": "object",
+        "properties": {
+          "aplicado": {
+            "type": "boolean",
+            "description": "false = el cierre es más viejo que la última sincronización completa aplicada y se ignoró. Un reenvío del último cierre aplicado responde true sin escribir."
+          },
+          "desactivados": {
+            "type": "number",
+            "description": "Filas que este cierre dio de baja (`activo=false`)."
+          },
+          "activos": {
+            "type": "number",
+            "description": "Filas activas del catálogo en la sucursal después del cierre."
+          }
+        },
+        "required": [
+          "aplicado",
+          "desactivados",
+          "activos"
+        ]
+      },
+      "SolicitudAgenteDto": {
+        "type": "object",
+        "properties": {
+          "solicitadaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cuándo pidió un admin sincronizar todo (reloj del API, UTC). Nulo = nunca."
+          },
+          "pendiente": {
+            "type": "boolean",
+            "description": "true = hay una solicitud y algún catálogo no ha RECIBIDO un cierre después de ella. Se compara con la hora de recepción del cierre (reloj del API): un cierre tomado antes de la solicitud pero recibido después la da por atendida."
+          }
+        },
+        "required": [
+          "solicitadaAt",
+          "pendiente"
         ]
       },
       "DescuentosDto": {
@@ -5625,6 +7187,589 @@
         "required": [
           "diario",
           "semanal"
+        ]
+      },
+      "FilaCatalogoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string",
+            "description": "Nombre de la sucursal."
+          },
+          "origenSrId": {
+            "type": "string",
+            "description": "Llave del registro en el POS de esa sucursal."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true,
+            "description": "Clave visible en el POS."
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Lo vio la última sincronización completa. false = desapareció del POS."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Estado propio del POS (false = baja en SR). Nulo = el POS no lo reporta."
+          },
+          "vistoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Última vez que el agente lo mandó (UTC)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Último cambio de contenido o de `activo` (UTC)."
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "sucursal",
+          "origenSrId",
+          "clave",
+          "nombre",
+          "activo",
+          "activoPos",
+          "vistoAt",
+          "updatedAt"
+        ]
+      },
+      "PaginaCatalogoLecturaDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number",
+            "example": 50
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaCatalogoDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "pagina",
+          "porPagina",
+          "filas"
+        ]
+      },
+      "FilaProductoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string",
+            "description": "Nombre de la sucursal."
+          },
+          "origenSrId": {
+            "type": "string",
+            "description": "Llave del registro en el POS de esa sucursal."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true,
+            "description": "Clave visible en el POS."
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Lo vio la última sincronización completa. false = desapareció del POS."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Estado propio del POS (false = baja en SR). Nulo = el POS no lo reporta."
+          },
+          "vistoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Última vez que el agente lo mandó (UTC)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Último cambio de contenido o de `activo` (UTC)."
+          },
+          "grupoOrigenSrId": {
+            "type": "string",
+            "nullable": true
+          },
+          "grupo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del grupo en la misma sucursal; nulo si no hay grupo o aún no llegó."
+          },
+          "tieneMetadata": {
+            "type": "boolean",
+            "description": "Tiene metadata propia (foto, descripción, etiquetas, mín/máx)."
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "sucursal",
+          "origenSrId",
+          "clave",
+          "nombre",
+          "activo",
+          "activoPos",
+          "vistoAt",
+          "updatedAt",
+          "grupoOrigenSrId",
+          "grupo",
+          "tieneMetadata"
+        ]
+      },
+      "PaginaProductosDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number",
+            "example": 50
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaProductoDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "pagina",
+          "porPagina",
+          "filas"
+        ]
+      },
+      "FilaClienteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string",
+            "description": "Nombre de la sucursal."
+          },
+          "origenSrId": {
+            "type": "string",
+            "description": "Llave del registro en el POS de esa sucursal."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true,
+            "description": "Clave visible en el POS."
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Lo vio la última sincronización completa. false = desapareció del POS."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Estado propio del POS (false = baja en SR). Nulo = el POS no lo reporta."
+          },
+          "vistoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Última vez que el agente lo mandó (UTC)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Último cambio de contenido o de `activo` (UTC)."
+          },
+          "telefono": {
+            "type": "string",
+            "nullable": true,
+            "description": "Dato personal."
+          },
+          "correo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Dato personal."
+          },
+          "rfc": {
+            "type": "string",
+            "nullable": true,
+            "description": "Dato personal."
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "sucursal",
+          "origenSrId",
+          "clave",
+          "nombre",
+          "activo",
+          "activoPos",
+          "vistoAt",
+          "updatedAt",
+          "telefono",
+          "correo",
+          "rfc"
+        ]
+      },
+      "PaginaClientesDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number",
+            "example": 50
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaClienteDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "pagina",
+          "porPagina",
+          "filas"
+        ]
+      },
+      "MetadataProductoDto": {
+        "type": "object",
+        "properties": {
+          "descripcion": {
+            "type": "string",
+            "nullable": true
+          },
+          "fotoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "etiquetas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "minimo": {
+            "type": "string",
+            "nullable": true,
+            "example": "2.500",
+            "description": "Texto decimal."
+          },
+          "maximo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Texto decimal."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "descripcion",
+          "fotoUrl",
+          "etiquetas",
+          "minimo",
+          "maximo",
+          "updatedAt"
+        ]
+      },
+      "DetalleProductoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string",
+            "description": "Nombre de la sucursal."
+          },
+          "origenSrId": {
+            "type": "string",
+            "description": "Llave del registro en el POS de esa sucursal."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true,
+            "description": "Clave visible en el POS."
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Lo vio la última sincronización completa. false = desapareció del POS."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Estado propio del POS (false = baja en SR). Nulo = el POS no lo reporta."
+          },
+          "vistoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Última vez que el agente lo mandó (UTC)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Último cambio de contenido o de `activo` (UTC)."
+          },
+          "grupoOrigenSrId": {
+            "type": "string",
+            "nullable": true
+          },
+          "grupo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del grupo en la misma sucursal; nulo si no hay grupo o aún no llegó."
+          },
+          "tieneMetadata": {
+            "type": "boolean",
+            "description": "Tiene metadata propia (foto, descripción, etiquetas, mín/máx)."
+          },
+          "metadata": {
+            "nullable": true,
+            "description": "Metadata PROPIA (nuestra, no del POS). Vive aparte: ninguna sincronización la toca. Es por sucursal (cuelga del producto espejo de ESA sucursal).",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MetadataProductoDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "sucursal",
+          "origenSrId",
+          "clave",
+          "nombre",
+          "activo",
+          "activoPos",
+          "vistoAt",
+          "updatedAt",
+          "grupoOrigenSrId",
+          "grupo",
+          "tieneMetadata",
+          "metadata"
+        ]
+      },
+      "GuardarMetadataDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Fuera del alcance del usuario = 404."
+          },
+          "descripcion": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "fotoUrl": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "URL https."
+          },
+          "etiquetas": {
+            "maxItems": 20,
+            "description": "Hasta 20, de 1 a 40 caracteres.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "minimo": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^\\d{1,9}(\\.\\d{1,3})?$",
+            "example": "2.5",
+            "description": "Existencia mínima, texto decimal sin signo (hasta 3 decimales)."
+          },
+          "maximo": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^\\d{1,9}(\\.\\d{1,3})?$",
+            "description": "Existencia máxima. Menor que el mínimo = 400."
+          }
+        },
+        "required": [
+          "empresaId",
+          "descripcion",
+          "fotoUrl",
+          "etiquetas",
+          "minimo",
+          "maximo"
+        ]
+      },
+      "EstadoCatalogoDto": {
+        "type": "object",
+        "properties": {
+          "catalogo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CatalogoSr"
+              }
+            ]
+          },
+          "ultimaCompletaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Inicio de la última sincronización COMPLETA aplicada (reloj del agente, UTC). Nulo = nunca."
+          },
+          "recibidaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cuándo recibió el API ese cierre (UTC)."
+          },
+          "total": {
+            "type": "number",
+            "nullable": true
+          },
+          "rechazados": {
+            "type": "number",
+            "nullable": true
+          },
+          "desactivados": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "catalogo",
+          "ultimaCompletaAt",
+          "recibidaAt",
+          "total",
+          "rechazados",
+          "desactivados"
+        ]
+      },
+      "SolicitudPanelDto": {
+        "type": "object",
+        "properties": {
+          "solicitadaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "pendiente": {
+            "type": "boolean",
+            "description": "Algún catálogo no ha recibido un cierre después de la solicitud (el agente aún no termina)."
+          }
+        },
+        "required": [
+          "solicitadaAt",
+          "pendiente"
+        ]
+      },
+      "SincronizacionSucursalDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "catalogos": {
+            "description": "Siempre los seis, en orden fijo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EstadoCatalogoDto"
+            }
+          },
+          "solicitud": {
+            "$ref": "#/components/schemas/SolicitudPanelDto"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "catalogos",
+          "solicitud"
+        ]
+      },
+      "ForzarSincronizacionDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Fuera del alcance del usuario = 404."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Una sucursal de esa empresa. Si no, 404."
+          }
+        },
+        "required": [
+          "empresaId",
+          "sucursalId"
         ]
       }
     }

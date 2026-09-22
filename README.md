@@ -142,7 +142,8 @@ Qué hace cada uno:
   Quien crea migraciones nuevas usa `npx prisma migrate dev`.
 - **`npm run seed`** corre los cinco seeds en su orden: `prisma db seed` (1 admin global,
   1 empresa demo, 2 sucursales), `seed:ventas` (500 cheques sintéticos, 2 sucursales ×
-  30 días hasta hoy), `seed:mesas` (mesas abiertas del Monitor, "en vivo" durante
+  30 días hasta hoy, y los catálogos espejo de F2-230 —grupos, productos, meseros y
+  clientes— por la misma ingesta que usa el agente), `seed:mesas` (mesas abiertas del Monitor, "en vivo" durante
   90 s: para volver a verlas vivas, `npm run seed:mesas` otra vez) y `seed:alertas`
   (14 días de historial CERRADO del centro de alertas, F2-224; las abiertas las abre la
   propia API al arrancar y luego cada `ALERTAS_INTERVALO_S`, 60 s por defecto) y

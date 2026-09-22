@@ -47,6 +47,16 @@ describe('whereEmpresa / whereScoped', () => {
       // F2-141: reportes programados.
       SuscripcionReporte: 'empresaId',
       EnvioReporte: 'empresaId',
+      // F2-230: catálogos espejo.
+      GrupoProducto: 'empresaId',
+      Producto: 'empresaId',
+      MeseroCatalogo: 'empresaId',
+      ClienteCatalogo: 'empresaId',
+      AreaCatalogo: 'empresaId',
+      CanalVentaCatalogo: 'empresaId',
+      ProductoMetadata: 'empresaId',
+      SincronizacionCatalogo: 'empresaId',
+      SolicitudSincronizacion: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });

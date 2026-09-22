@@ -73,6 +73,16 @@ model Sucursal {
   mesaSnapshots  MesaSnapshot[]
   alertas        Alerta[]
 
+  // Catálogos espejo (F2-230).
+  gruposProducto           GrupoProducto[]
+  productos                Producto[]
+  meserosCatalogo          MeseroCatalogo[]
+  clientesCatalogo         ClienteCatalogo[]
+  areasCatalogo            AreaCatalogo[]
+  canalesVentaCatalogo     CanalVentaCatalogo[]
+  sincronizacionesCatalogo SincronizacionCatalogo[]
+  solicitudSincronizacion  SolicitudSincronizacion?
+
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
   // la empresa real de la sucursal.
@@ -553,4 +563,255 @@ model EnvioReporte {
   @@unique([suscripcionId, tipo, periodo], map: "envios_reporte_suscripcion_id_tipo_periodo_key")
   @@index([empresaId])
   @@map("envios_reporte")
+}
+
+// ---------------------------------------------------------------------------
+// Catálogos espejo (F2-230): lo que vive en SoftRestaurant (grupos, productos,
+// meseros, clientes, áreas, canales), tal como lo manda el agente por
+// `POST /ingesta/catalogos`. Espejo POR SUCURSAL: cada sucursal es su propia
+// base del POS y un `origen_sr_id` sólo significa algo dentro de ella.
+//
+// - Se escriben SÓLO desde la ingesta (`IngestaCatalogos`, helper de scope). Nada
+//   de aquí vuelve al POS.
+// - Nunca se borra una fila: desaparecer de una sincronización completa la deja
+//   `activo = false` con su último `visto_at`.
+// - `updated_at` NO es `@updatedAt`: lo pone el helper sólo cuando cambia el
+//   contenido (`hash`) o `activo`. Mover `visto_at` no lo toca, así que reenviar
+//   el mismo lote deja el mismo `updated_at`.
+// - `visto_at` es el `capturadoAt` de la página que trajo la fila (reloj del
+//   AGENTE, acotado a no más de 5 min en el futuro por la ingesta).
+// - `activo_pos`: el estado propio del POS (baja/suspendido) si SR lo reporta;
+//   NULL = no lo reporta. Es distinto de `activo` (sigue existiendo en el POS).
+// - CHECKs a mano en la migración `..._catalogos_espejo`: `origen_sr_id` y
+//   `nombre` no vacíos, `hash` de 64 hex.
+// ---------------------------------------------------------------------------
+
+enum CatalogoSr {
+  grupos
+  productos
+  meseros
+  clientes
+  areas
+  canales
+
+  @@map("catalogo_sr")
+}
+
+model GrupoProducto {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "grupos_producto_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "grupos_producto_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  // El conteo y la baja del cierre van por (sucursal, sincronización).
+  @@index([sucursalId, sincronizacionId])
+  @@map("grupos_producto")
+}
+
+model Producto {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  // DECISION PROVISIONAL (nocturno): el grupo va por TEXTO (su `origen_sr_id`),
+  // sin FK: el orden en que llegan los catálogos no está garantizado y un
+  // producto con un grupo que aún no llegó (o que SR ya no tiene) no se rechaza.
+  // La lectura resuelve el nombre por (sucursal, origen). esquema-sr.md §6.
+  grupoOrigenSrId  String?  @map("grupo_origen_sr_id")
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal          @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "productos_sucursal_empresa_fkey")
+  metadata ProductoMetadata?
+
+  @@unique([sucursalId, origenSrId], map: "productos_sucursal_id_origen_sr_id_key")
+  // Destino de la FK compuesta de `productos_metadata`.
+  @@unique([id, empresaId], map: "productos_id_empresa_id_key")
+  @@index([empresaId])
+  // El conteo y la baja del cierre van por (sucursal, sincronización).
+  @@index([sucursalId, sincronizacionId])
+  @@map("productos")
+}
+
+model MeseroCatalogo {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "meseros_catalogo_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "meseros_catalogo_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  // El conteo y la baja del cierre van por (sucursal, sincronización).
+  @@index([sucursalId, sincronizacionId])
+  @@map("meseros_catalogo")
+}
+
+// Datos personales: nunca en logs ni en la auditoría (F2-232).
+model ClienteCatalogo {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  telefono         String?
+  correo           String?
+  rfc              String?
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "clientes_catalogo_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "clientes_catalogo_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  // El conteo y la baja del cierre van por (sucursal, sincronización).
+  @@index([sucursalId, sincronizacionId])
+  @@map("clientes_catalogo")
+}
+
+model AreaCatalogo {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "areas_catalogo_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "areas_catalogo_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  // El conteo y la baja del cierre van por (sucursal, sincronización).
+  @@index([sucursalId, sincronizacionId])
+  @@map("areas_catalogo")
+}
+
+// DECISION PROVISIONAL (nocturno): se supone que SR tiene algún catálogo de
+// canal o tipo de servicio (comedor/mostrador/domicilio). No se ha visto
+// (esquema-sr.md §8). El mapeo área → canal de NEGOCIO es nuestro y es F2-233.
+model CanalVentaCatalogo {
+  id               String   @id @default(uuid()) @db.Uuid
+  empresaId        String   @map("empresa_id") @db.Uuid
+  sucursalId       String   @map("sucursal_id") @db.Uuid
+  origenSrId       String   @map("origen_sr_id")
+  clave            String?
+  nombre           String
+  activoPos        Boolean? @map("activo_pos")
+  hash             String   @db.Char(64)
+  activo           Boolean  @default(true)
+  vistoAt          DateTime @map("visto_at") @db.Timestamptz(3)
+  sincronizacionId String   @map("sincronizacion_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "canales_venta_catalogo_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, origenSrId], map: "canales_venta_catalogo_sucursal_id_origen_sr_id_key")
+  @@index([empresaId])
+  // El conteo y la baja del cierre van por (sucursal, sincronización).
+  @@index([sucursalId, sincronizacionId])
+  @@map("canales_venta_catalogo")
+}
+
+// Metadata PROPIA de un producto (F2-230): es nuestra, no del POS, y por eso vive
+// aparte: una sincronización nunca la toca, y la fila espejo de la que cuelga
+// nunca se borra. CHECKs a mano en la migración: mínimo y máximo >= 0,
+// mínimo <= máximo y a lo más 20 etiquetas.
+model ProductoMetadata {
+  productoId     String   @id @map("producto_id") @db.Uuid
+  empresaId      String   @map("empresa_id") @db.Uuid
+  descripcion    String?
+  fotoUrl        String?  @map("foto_url")
+  etiquetas      String[] @default([])
+  // No es dinero: existencias (unidades, kg) como `cheque_partidas.cantidad`.
+  minimo         Decimal? @db.Decimal(12, 3)
+  maximo         Decimal? @db.Decimal(12, 3)
+  actualizadoPor String   @map("actualizado_por") @db.Uuid
+  updatedAt      DateTime @map("updated_at") @db.Timestamptz(3)
+
+  producto Producto @relation(fields: [productoId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "productos_metadata_producto_empresa_fkey")
+
+  @@unique([productoId, empresaId], map: "productos_metadata_producto_id_empresa_id_key")
+  @@index([empresaId])
+  @@map("productos_metadata")
+}
+
+// La última sincronización COMPLETA aplicada de cada catálogo de una sucursal
+// (el último `POST /ingesta/catalogos/cierre` aceptado). `ultima_completa_at` es
+// el `capturadoAt` del agente; `recibida_at`, el reloj del servidor.
+model SincronizacionCatalogo {
+  sucursalId       String     @map("sucursal_id") @db.Uuid
+  catalogo         CatalogoSr
+  empresaId        String     @map("empresa_id") @db.Uuid
+  sincronizacionId String     @map("sincronizacion_id") @db.Uuid
+  ultimaCompletaAt DateTime   @map("ultima_completa_at") @db.Timestamptz(3)
+  total            Int
+  rechazados       Int
+  desactivados     Int
+  recibidaAt       DateTime   @map("recibida_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "sincronizaciones_catalogo_sucursal_empresa_fkey")
+
+  @@id([sucursalId, catalogo])
+  @@index([empresaId])
+  @@map("sincronizaciones_catalogo")
+}
+
+// El forzado manual (F2-230): un admin pide "sincroniza todo ya" y el agente lo
+// lee en `GET /ingesta/catalogos/solicitud`. Una fila por sucursal: pedirlo otra
+// vez sólo mueve `solicitada_at`.
+model SolicitudSincronizacion {
+  sucursalId    String   @id @map("sucursal_id") @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  solicitadaAt  DateTime @map("solicitada_at") @db.Timestamptz(3)
+  solicitadaPor String   @map("solicitada_por") @db.Uuid
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "solicitudes_sincronizacion_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, empresaId], map: "solicitudes_sincronizacion_sucursal_id_empresa_id_key")
+  @@index([empresaId])
+  @@map("solicitudes_sincronizacion")
 }

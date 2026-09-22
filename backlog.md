@@ -1833,6 +1833,14 @@ ediciones son metadata nuestra (foto, descripción, etiquetas) para uso futuro (
 **Listo cuando:** discrepancia de precio del mismo producto entre 2 sucursales del piloto
 aparece señalada; metadata sobrevive re-sync del catálogo.
 
+> **Lo que dejó F2-230.** El espejo de productos, su ingesta y la metadata propia ya existen
+> (`productos`, `productos_metadata`, `GET /catalogos/productos`, `PUT /catalogos/productos/{id}/metadata`).
+> El **precio no viaja todavía**: esta tarea lo agrega al contrato de `POST /ingesta/catalogos`.
+> ❓ **Decisión abierta para Ricardo:** la metadata quedó **por sucursal** (cuelga del producto
+> espejo de cada sucursal); foto, descripción y etiquetas del menú quizá deban ser por empresa y
+> mín/máx por sucursal. Decidir antes de construir el orquestador. El botón "sincronizar ahora" de
+> Administración (`POST /catalogos/sincronizacion/forzar`) tampoco tiene vista todavía.
+
 ### F2-146 · PWA con notificaciones
 `[ ]` Convertir la SPA en PWA instalable (manifest, service worker, offline shell para el
 layout) con push notifications (web-push, VAPID): alertas configurables por usuario — mesa >
