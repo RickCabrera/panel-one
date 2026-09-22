@@ -289,3 +289,9 @@ export interface PaginaTickets {
   pagina: number;
   porPagina: number;
 }
+
+/** `GET /sistema` (F2-202): lo que la SPA necesita saber del servidor antes del login. */
+export interface Sistema {
+  /** `MODO_DEMO=1` en la API: los datos son de ejemplo. */
+  modoDemo: boolean;
+}

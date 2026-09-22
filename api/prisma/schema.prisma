@@ -43,6 +43,7 @@ model Empresa {
   sucursales         Sucursal[]
   usuarios           Usuario[]
   formasPagoCatalogo FormaPagoCatalogo[]
+  correosEnviados    CorreoEnviado[]
 
   @@map("empresas")
 }
@@ -344,4 +345,28 @@ model FormaPagoCatalogo {
   // Empieza por empresa_id: también es el índice por empresa de esta tabla.
   @@unique([empresaId, formaRaw], map: "formas_pago_catalogo_empresa_id_forma_raw_key")
   @@map("formas_pago_catalogo")
+}
+
+// Bandeja del correo FALSO (F2-202, `CORREO_IMPL=falso`): cada `enviar()` deja aquí
+// una fila (y un .json en disco) para que los tests y el modo demo vean qué salió.
+// La implementación real (Brevo) NO escribe aquí; la tabla de reintentos de la
+// entrega real es de F2-105.
+//
+// `empresa_id` es NULL cuando el correo no es de una empresa (p. ej. un aviso al admin
+// global). Ningún endpoint expone esta tabla, y quien la lea en el futuro lo hace con
+// el helper de scope por `empresa_id`, como cualquier otra. Adjuntos: sólo metadatos
+// (nombre, tipo, bytes, sha256); el contenido vive en el directorio del correo falso.
+model CorreoEnviado {
+  id           String   @id @default(uuid()) @db.Uuid
+  empresaId    String?  @map("empresa_id") @db.Uuid
+  destinatario String
+  plantilla    String
+  asunto       String
+  adjuntos     Json
+  enviadoAt    DateTime @map("enviado_at") @db.Timestamptz(3)
+
+  empresa Empresa? @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+
+  @@index([empresaId])
+  @@map("correos_enviados")
 }

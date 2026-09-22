@@ -1,0 +1,107 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`Contrato Facturama (F2-202) cancelar con motivo 02 y con motivo 01 + sustituto 1`] = `
+[
+  {
+    "metodo": "DELETE",
+    "url": "https://apisandbox.facturama.mx/api-lite/cfdis/fcm-123?type=issuedLite&motive=02",
+  },
+  {
+    "metodo": "DELETE",
+    "url": "https://apisandbox.facturama.mx/api-lite/cfdis/fcm-123?type=issuedLite&motive=01&uuidReplacement=0A2B4C6D-1111-4222-8333-944455566677",
+  },
+]
+`;
+
+exports[`Contrato Facturama (F2-202) consultar estado 1`] = `
+[
+  {
+    "metodo": "GET",
+    "url": "https://apisandbox.facturama.mx/api-lite/cfdis/fcm-123",
+  },
+]
+`;
+
+exports[`Contrato Facturama (F2-202) emitir: el cuerpo del POST y las descargas de XML y PDF 1`] = `
+[
+  {
+    "cuerpo": {
+      "CfdiType": "I",
+      "Currency": "MXN",
+      "Date": "2026-09-21T20:15:30",
+      "ExpeditionPlace": "06700",
+      "Exportation": "01",
+      "Folio": "1024",
+      "Issuer": {
+        "FiscalRegime": "601",
+        "Name": "ESCUELA KEMPER URGATE",
+        "Rfc": "EKU9003173C9",
+      },
+      "Items": [
+        {
+          "Description": "Tacos al pastor (orden)",
+          "IdentificationNumber": "P001",
+          "ProductCode": "90101500",
+          "Quantity": 2,
+          "Subtotal": 172.42,
+          "TaxObject": "02",
+          "Taxes": [
+            {
+              "Base": 172.42,
+              "IsRetention": false,
+              "Name": "IVA",
+              "Rate": 0.16,
+              "Total": 27.59,
+            },
+          ],
+          "Total": 200.01,
+          "Unit": "Servicio",
+          "UnitCode": "E48",
+          "UnitPrice": 86.21,
+        },
+        {
+          "Description": "Refresco",
+          "IdentificationNumber": "P020",
+          "ProductCode": "90101500",
+          "Quantity": 1,
+          "Subtotal": 30.17,
+          "TaxObject": "02",
+          "Taxes": [
+            {
+              "Base": 30.17,
+              "IsRetention": false,
+              "Name": "IVA",
+              "Rate": 0.16,
+              "Total": 4.83,
+            },
+          ],
+          "Total": 35,
+          "Unit": "Pieza",
+          "UnitCode": "H87",
+          "UnitPrice": 30.17,
+        },
+      ],
+      "PaymentForm": "04",
+      "PaymentMethod": "PUE",
+      "Receiver": {
+        "CfdiUse": "G03",
+        "FiscalRegime": "612",
+        "Name": "Cliente "de prueba" & <Hijos>",
+        "Rfc": "XOJI740919U48",
+        "TaxZipCode": "76028",
+      },
+      "Serie": "A",
+    },
+    "metodo": "POST",
+    "url": "https://apisandbox.facturama.mx/api-lite/3/cfdis",
+  },
+  {
+    "metodo": "GET",
+    "url": "https://apisandbox.facturama.mx/cfdi/xml/issuedLite/fcm-123",
+  },
+  {
+    "metodo": "GET",
+    "url": "https://apisandbox.facturama.mx/cfdi/pdf/issuedLite/fcm-123",
+  },
+]
+`;

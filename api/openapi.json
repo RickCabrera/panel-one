@@ -2079,6 +2079,29 @@
           "administracion"
         ]
       }
+    },
+    "/sistema": {
+      "get": {
+        "description": "Pública (sin token): la marca de \"Datos de ejemplo\" tiene que verse también en el login. No expone nada de ninguna empresa.",
+        "operationId": "SistemaController_sistema",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SistemaDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Configuración pública del servidor que la interfaz necesita antes del login.",
+        "tags": [
+          "sistema"
+        ]
+      }
     }
   },
   "info": {
@@ -3578,6 +3601,19 @@
         },
         "required": [
           "password"
+        ]
+      },
+      "SistemaDto": {
+        "type": "object",
+        "properties": {
+          "modoDemo": {
+            "type": "boolean",
+            "description": "`true` con `MODO_DEMO=1`: los datos son de ejemplo y la interfaz lo marca en todas las vistas y en el título de la pestaña.",
+            "example": false
+          }
+        },
+        "required": [
+          "modoDemo"
         ]
       }
     }

@@ -75,6 +75,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'cheque',
       'chequePago',
       'chequePartida',
+      // F2-202: bandeja del correo falso, filtrada por empresa_id como las demás.
+      'correoEnviado',
       'empresa',
       'formaPagoCatalogo',
       'mesaSnapshot',

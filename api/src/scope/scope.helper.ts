@@ -21,6 +21,9 @@ export const LLAVE_EMPRESA = {
   FormaPagoCatalogo: 'empresaId',
   // F1-093. Nunca se lee con scope: sólo AuthService, por `sid` y usuario.
   SesionUsuario: 'empresaId',
+  // F2-202. Bandeja del correo falso: hoy sólo la escribe `CorreoFalso` (INSERT) y
+  // no la lee nadie; quien la lea lo hará con scope por esta columna.
+  CorreoEnviado: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;
