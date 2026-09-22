@@ -13,6 +13,9 @@ import { Analisis } from './paginas/Analisis';
 import { BajaReportes } from './paginas/BajaReportes';
 import { Comparativos } from './paginas/Comparativos';
 import { Cuenta } from './paginas/Cuenta';
+import { AyudaConteos } from './paginas/AyudaConteos';
+import { ConteoCaptura } from './paginas/ConteoCaptura';
+import { Conteos } from './paginas/Conteos';
 import { Existencias } from './paginas/Existencias';
 import { Areas } from './paginas/Areas';
 import { Clientes } from './paginas/Clientes';
@@ -89,6 +92,9 @@ export function Rutas() {
         <Route path="areas" element={<Areas />} />
         <Route path="existencias" element={<Existencias />} />
         <Route path="movimientos" element={<Movimientos />} />
+        <Route path="conteos" element={<Conteos />} />
+        <Route path="conteos/ayuda" element={<AyudaConteos />} />
+        <Route path="conteos/:id" element={<ConteoCaptura />} />
         <Route path="cuenta" element={<Cuenta />} />
         <Route
           path="admin"

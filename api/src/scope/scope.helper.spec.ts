@@ -71,6 +71,9 @@ describe('whereEmpresa / whereScoped', () => {
       LimiteExistencia: 'empresaId',
       PolizaInventario: 'empresaId',
       MovimientoInventario: 'empresaId',
+      // F2-123: conteos físicos y sus renglones (dato propio).
+      ConteoFisico: 'empresaId',
+      PartidaConteo: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });

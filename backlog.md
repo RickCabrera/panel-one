@@ -1459,6 +1459,15 @@ Recorre el AC original de F2-121, F2-122, F2-125, F2-126 y F2-127 con datos del 
 > con el seed (conserva lo que simuló): el kardex contra el saldo real del piloto es de aquí. Todo en
 > `docs/esquema-sr.md` §10.
 
+> **Y además (de F2-123).** Los conteos físicos se cerraron contra el seed y jsdom; aquí va lo que
+> sólo se ve en un almacén real: (1) capturar un conteo de ≥ 50 artículos en un **celular real**
+> bloqueando la pantalla y cortando la red a media captura (el borrador local debe reaparecer y
+> reenviarse); (2) confirmar que el teórico congelado AL CREAR es el corte con el que SR compararía
+> (si SR congela al cerrar, cambia la regla); (3) registrar en SR el ajuste que sale del reporte y
+> confirmar que el lector (F2-241) lo trae como póliza `ajuste` y la foto siguiente lo refleja;
+> escribir en la ayuda (`web/src/paginas/AyudaConteos.tsx`) el menú exacto de SR, que hoy está en
+> genérico. Todo en `docs/esquema-sr.md` §10 ("Conteos físicos").
+
 **Listo cuando:** el valor de inventario cuadra contra el reporte de SR del mismo corte; el
 kardex de un artículo reproduce su saldo real; la variación teórico contra real de tres
 insumos de control coincide con lo que el encargado mide a mano; y el estado de resultados del

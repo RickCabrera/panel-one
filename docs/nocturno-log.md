@@ -5660,3 +5660,106 @@ backlog.
 
 **Qué haría distinto.** Escribir el test de "sembrar otro día" antes que el seed: el problema de los
 folios renumerados no se ve con un solo reloj, y fue el revisor quien lo vio.
+
+## 2026-09-22 20:30 — F2-123 · Conteos físicos
+**Estado:** CERRADA si el PR se mergea. **PENDIENTE DE VALIDACIÓN REAL**: celular real, teórico
+contra el corte de SR y el ajuste en SR regresando como póliza `ajuste` son de F2-193 (nota "Y además
+(de F2-123)" en esa Diurna). Carriles /api + /web, más docs y backlog. `/agent` NO se toca.
+
+**Revisor.**
+- Gate del plan: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos). Trece observaciones, todas
+  dentro (candado por conteo, índice por empresa en partidas, crear en una transacción, folios del
+  seed por nota, borrador rechazado sin bucle, prueba "no escribe a SR", marcas de DECISION,
+  activo=true, grupo sin lo de la foto, CHECK teórico/costo, 3 decimales = 400, llave del borrador
+  por usuario, spec del seed con aritmética independiente).
+- Gate del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos). Resueltas en la rama:
+  (1) el test de concurrencia no probaba el candado: ahora es determinista (otra conexión toma el
+  candado del conteo y lo cierra sin confirmar; la captura espera, y al soltarse da 409 sin escribir
+  nada); (2) `capturar` exige `count === 1` en el `updateMany` final (segunda defensa, como
+  `#terminar`); (3) este log va en la rama; (4) el seed reconoce los suyos por nota Y
+  `creado_por = ACTOR_SEED_CONTEOS` (un usuario que copie la nota no pierde su conteo, test); (5) el
+  borrador trata 403 como rechazado y 401 con mensaje de sesión vencida (tests); (7) comprobado que
+  `openapi.json` no cambia ningún esquema ni ruta existente (sólo 16 esquemas nuevos; el diff de
+  borrados es del algoritmo, con `--histogram` son 0). (6) NO hecho: no hay e2e de un lote de 500
+  renglones. `capturar` hace una sentencia por renglón (salta los iguales) dentro de
+  `statement_timeout` 5 s por sentencia y 30 s por transacción; 500 updates por PK caben de sobra,
+  pero no está medido. Si una sucursal real se queja de 503/timeout al capturar, empezar por aquí.
+
+**Qué quedó hecho.**
+- **Modelo** (migración `20260922220000_conteos_fisicos`, CHECKs a mano): enum `estado_conteo`
+  (`en_captura`, `cerrado`, `cancelado`), `conteos_fisicos` (folio por sucursal = máximo + 1, almacén,
+  grupo opcional, nota, `teorico_capturado_at`, marcas de cierre/cancelación con CHECK de estado) y
+  `partidas_conteo` (teórico y costo congelados de la foto, `contado` nulo = sin contar; FK compuesta
+  al conteo con sucursal y empresa, como movimientos).
+- **Escritura** sólo por `ScopedPrismaService.conteos(scope)` → `api/src/scope/escritura-conteos.ts`
+  (crear, capturar, cerrar, cancelar). Todo con `whereScoped`, timeouts de F2-121 y
+  `pg_advisory_xact_lock` por conteo (capturar/cerrar/cancelar) y por sucursal (folio).
+- **API** `api/src/inventario/conteos.{controller,service}.ts`, parte pura `conteos.ts`:
+  `GET /inventario/conteos`, `POST /inventario/conteos`, `GET /inventario/conteos/:id`,
+  `PUT /inventario/conteos/:id/partidas` (lote 1–500, todo o nada, idempotente), `POST …/cerrar`,
+  `POST …/cancelar`. Admin escribe, visor sólo lee (403). Fuera de alcance = 404 uniforme.
+  Auditoría `conteo.crear|cerrar|cancelar`.
+- **Seed** `api/prisma/seed-conteos.ts` (llamado desde `seed-ventas.ts` DESPUÉS de existencias): por
+  sucursal uno cerrado en `-GEN` y uno en captura en `-BAR`, por el mismo `EscrituraConteos`.
+  Siempre trae un sobrante, un faltante (o sobrante si el teórico es 0) y un sin contar.
+- **Web**: `/conteos` (`paginas/Conteos.tsx`: lista, alta, estados vacíos), `/conteos/:id`
+  (`paginas/ConteoCaptura.tsx`: captura mobile-first con búsqueda, "sólo sin contar", avance; cierre
+  con confirmación en página; reporte con KPIs, diferencias, apartados y CSV), `/conteos/ayuda`
+  (`paginas/AyudaConteos.tsx`). Menú "Conteos físicos" ya navega. Lógica en `paginas/conteos/`:
+  `borrador.ts` (localStorage), `captura.ts` (clase `CapturaConteo`, sin React), `consultas.ts`
+  (hook), `reglas.ts`, `csv.ts`.
+- **Docs**: `esquema-sr.md` §10 "Conteos físicos" (todas las DECISION/SUPUESTO) y la nota de §9 sobre
+  unidades fraccionables; backlog: "Y además (de F2-123)" en F2-193.
+
+**Decisiones que tomé y por qué.** Todas en esquema-sr §10.
+- Teórico CONGELADO al crear (`escritura-conteos.ts#crear`): como se congela un inventario físico.
+- Almacén sin lectura = 409 (no hay contra qué comparar); "teórico atrasado" si la foto tenía > 90 min
+  al crear (`conteos.service.ts#resumen`): sólo avisa.
+- Sin contar ≠ 0 y sin teórico ≠ 0: se reportan aparte. Totales = Σ de importes ya redondeados por
+  renglón (así cuadran con lo que se ve).
+- Último en llegar gana por renglón; el borrador local puede pisar a otro dispositivo (documentado).
+- Captura "ciega": el teórico NO se muestra mientras se captura, sólo en el reporte.
+- La ayuda describe el ajuste en SR en genérico: el menú real de SR no está mapeado.
+
+**Trampas que encontré.**
+- `npx prisma format` reformatea bloques AJENOS del schema; lo revertí y agregué a mano. No lo uses.
+- El lint del web usa las reglas del compilador de React (`react-hooks/refs`, `immutability`): no deja
+  mutar refs en render ni reasignar un ref pasado a hook. Por eso el envío vive en una clase
+  (`captura.ts`) instanciada con `useState(() => new …)` y el componente se monta con `key` por
+  conteo.
+- Tras confirmar un lote, sacar el valor del borrador ANTES de que la caché de React Query lo tenga
+  hace parpadear el renglón vacío: `alGuardar` parcha la caché del detalle primero.
+- Un seed con PRNG puede no dar ninguna diferencia en un almacén chico: se fuerzan dos renglones.
+- `scoped-prisma.service.spec` lista todos los modelos: agregar modelos lo rompe (adaptado).
+- `.wt-main/` sigue en la raíz. ACCIÓN PARA RICARDO: borrarla. Agregar por ruta, nunca `git add -A`.
+- Rojo local preexistente: `prisma/esquema.spec.ts` (argon2id del admin), igual que F2-120/121/122.
+
+**Qué quedó abierto.**
+- F2-193: celular real con bloqueo y sin red; corte del teórico contra SR; ajuste en SR → póliza
+  `ajuste`; menú exacto de SR en la ayuda.
+- Sin enlace desde Existencias a un conteo ni "reabrir" un conteo cerrado (la ficha no los pide).
+
+**Tests.**
+- api: `inventario/conteos.spec.ts` (11, pura), `inventario/conteos.e2e.spec.ts` (21: teórico
+  congelado, por grupo, 409/404, literales a mano −75.00/+24.99/−50.01, ×3 idéntico, todo o nada,
+  ≥ 50 artículos, cierre/cancelación, candado determinista + concurrencia, 404 uniforme, 401, espejo de SR intacto y la key
+  del agente 401 en las 6 rutas), `prisma/seed-conteos.spec.ts` (5), `openapi.spec` (+1).
+- web: `conteos/captura.test.ts` (14), `conteos/reglas.test.ts` (8), `Conteos.test.tsx` (5),
+  `ConteoCaptura.test.tsx` (8: 50 renglones, AC de bloqueo sin red → remonta → vuelve la red,
+  visibilitychange, 409 sin bucle, inválido, visor, cierre, reporte).
+- Adaptados, no aflojados: `menu.test`, `Sidebar.test` (la pendiente de ejemplo pasa a Traspasos),
+  `scope.helper.spec`, `scoped-prisma.service.spec`.
+- Mutaciones: quitar la escritura del borrador a localStorage → 3 rojos. Quitar SÓLO el candado del
+  conteo → verde (lo atrapa el `count === 1`); quitar SÓLO el `count` → verde (lo atrapa el candado);
+  quitar LOS DOS → rojo el e2e "captura bloqueada por un cierre en curso". Cada defensa basta sola.
+  Al test aleatorio de captura + cierre se le quitó A PROPÓSITO la aserción `capturadoAt <=
+  cerradoAt`: no probaba nada (el `ahora` se toma antes de la transacción). La cubren el test
+  determinista y "cada 200 dejó su valor, cada 409 nada". Revisor, 2.º pase: APROBADO.
+- Números: /api lint, typecheck, `prisma validate` limpios, sin deriva; jest 1531/1532, 0 skips (el
+  rojo es el preexistente). /web build, lint, check:bundle (272.8 kB) limpios; vitest 993/993.
+  Esas cifras de suite completa son de ANTES de las correcciones del revisor; después se corrieron
+  lint y typecheck de los dos carriles y las suites tocadas (`conteos.e2e` 21/21, `seed-conteos`
+  5/5, `conteos/*` + `ConteoCaptura` del web 35/35). El CI corre todo.
+
+**Qué haría distinto.** Empezar el web por la clase de envío pura en vez de un hook con refs: el
+linter del compilador de React la iba a exigir igual, y se prueba mucho más fácil.

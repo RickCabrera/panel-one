@@ -123,6 +123,9 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   // Pólizas y movimientos (F2-122): las partidas cuelgan de la póliza.
   await prisma.movimientoInventario.deleteMany(deEstas);
   await prisma.polizaInventario.deleteMany(deEstas);
+  // Conteos físicos (F2-123): los renglones cuelgan del conteo.
+  await prisma.partidaConteo.deleteMany(deEstas);
+  await prisma.conteoFisico.deleteMany(deEstas);
   await prisma.sincronizacionCatalogo.deleteMany(deEstas);
   await prisma.solicitudSincronizacion.deleteMany(deEstas);
   await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });

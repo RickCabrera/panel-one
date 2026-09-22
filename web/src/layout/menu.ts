@@ -231,7 +231,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'inventario.conteos',
         texto: 'Conteos físicos',
         icono: ClipboardList,
-        pendiente: construye('F2-123'),
+        destino: { ruta: '/conteos' },
       },
       {
         id: 'inventario.recetas',

@@ -95,6 +95,9 @@ model Sucursal {
   limitesExistencia   LimiteExistencia[]
   polizasInventario     PolizaInventario[]
   movimientosInventario MovimientoInventario[]
+  // F2-123: conteos físicos, dato NUESTRO (nunca se escribe a SR).
+  conteosFisicos        ConteoFisico[]
+  partidasConteo        PartidaConteo[]
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -1174,4 +1177,74 @@ model MovimientoInventario {
   // La línea de tiempo sin almacén: sucursal + rango, ordenada por fecha.
   @@index([sucursalId, fecha], map: "movimientos_inventario_linea_tiempo_idx")
   @@map("movimientos_inventario")
+}
+
+// F2-123. Estado de un conteo físico. Sólo `en_captura` admite captura; cerrar y cancelar son
+// finales.
+enum EstadoConteo {
+  en_captura
+  cerrado
+  cancelado
+
+  @@map("estado_conteo")
+}
+
+// F2-123. Un conteo físico de UN almacén (todos sus artículos o los de un grupo). Es dato
+// NUESTRO: se captura en el panel y NUNCA se escribe a SoftRestaurant; el reporte de
+// diferencias es lo que el encargado lleva a SR para ajustar ahí. Lo escribe SÓLO
+// `EscrituraConteos` (con el scope del usuario). `teorico_capturado_at` = el corte de la foto de
+// existencias (F2-121) que se congeló en sus partidas al crearlo. CHECKs a mano: folio > 0 y
+// estado ⇔ sus marcas de cierre/cancelación.
+model ConteoFisico {
+  id                 String       @id @default(uuid()) @db.Uuid
+  empresaId          String       @map("empresa_id") @db.Uuid
+  sucursalId         String       @map("sucursal_id") @db.Uuid
+  folio              Int
+  almacenOrigenSrId  String       @map("almacen_origen_sr_id")
+  // Nulo = todos los artículos del almacén.
+  grupoOrigenSrId    String?      @map("grupo_origen_sr_id")
+  nota               String?
+  estado             EstadoConteo @default(en_captura)
+  teoricoCapturadoAt DateTime     @map("teorico_capturado_at") @db.Timestamptz(3)
+  creadoPor          String       @map("creado_por") @db.Uuid
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  cerradoPor         String?      @map("cerrado_por") @db.Uuid
+  cerradoAt          DateTime?    @map("cerrado_at") @db.Timestamptz(3)
+  canceladoPor       String?      @map("cancelado_por") @db.Uuid
+  canceladoAt        DateTime?    @map("cancelado_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal        @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "conteos_fisicos_sucursal_empresa_fkey")
+  partidas PartidaConteo[]
+
+  @@unique([sucursalId, folio], map: "conteos_fisicos_sucursal_folio_key")
+  @@unique([id, sucursalId, empresaId], map: "conteos_fisicos_id_sucursal_empresa_key")
+  @@index([empresaId])
+  @@index([sucursalId, estado])
+  @@map("conteos_fisicos")
+}
+
+// F2-123. Un renglón de un conteo: UN insumo. `teorico` y `costo_promedio` son la foto de
+// existencias congelada al crear el conteo (nulos los dos = el artículo no venía en la foto:
+// "sin teórico", NUNCA un 0 inventado). `contado` nulo = sin contar (tampoco es 0). La FK
+// compuesta impide que un renglón cuelgue de un conteo de otra sucursal o empresa. CHECKs a
+// mano: contado >= 0, costo >= 0, teórico y costo nulos a la vez.
+model PartidaConteo {
+  id               String    @id @default(uuid()) @db.Uuid
+  empresaId        String    @map("empresa_id") @db.Uuid
+  sucursalId       String    @map("sucursal_id") @db.Uuid
+  conteoId         String    @map("conteo_id") @db.Uuid
+  insumoOrigenSrId String    @map("insumo_origen_sr_id")
+  teorico          Decimal?  @db.Decimal(12, 3)
+  costoPromedio    Decimal?  @map("costo_promedio") @db.Decimal(12, 2)
+  contado          Decimal?  @db.Decimal(12, 3)
+  capturadoPor     String?   @map("capturado_por") @db.Uuid
+  capturadoAt      DateTime? @map("capturado_at") @db.Timestamptz(3)
+
+  sucursal Sucursal     @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "partidas_conteo_sucursal_empresa_fkey")
+  conteo   ConteoFisico @relation(fields: [conteoId, sucursalId, empresaId], references: [id, sucursalId, empresaId], onDelete: Cascade, map: "partidas_conteo_conteo_fkey")
+
+  @@unique([conteoId, insumoOrigenSrId], map: "partidas_conteo_conteo_insumo_key")
+  @@index([empresaId])
+  @@map("partidas_conteo")
 }

@@ -26,6 +26,7 @@ import {
   type Canal,
 } from './seed-maestro/catalogos';
 import { sembrarCatalogos } from './seed-catalogos';
+import { sembrarConteos } from './seed-conteos';
 import { sembrarExistencias } from './seed-existencias';
 import { sembrarMovimientos } from './seed-movimientos';
 import { generarUniverso, resumenPorModulo } from './seed-maestro';
@@ -537,6 +538,18 @@ async function main(): Promise<void> {
     console.log(
       `Existencias sembradas (F2-121): ${existencias.existencias} en ${existencias.almacenes} ` +
         `almacenes; ${existencias.limites} límites nuevos.`,
+    );
+    // Conteos físicos (F2-123): dato propio, sobre la foto de existencias de arriba. Uno cerrado
+    // y uno en captura por sucursal; nunca toca los conteos de un usuario.
+    const conteos = await sembrarConteos(prisma, {
+      empresaId: op.empresaId,
+      sucursales,
+      universo,
+      ahora,
+    });
+    console.log(
+      `Conteos físicos sembrados (F2-123): ${conteos.creados} creados, ` +
+        `${conteos.conservados} sin cambios, ${conteos.borrados} de otra foto rehechos.`,
     );
     // El resto del universo todavía no tiene tabla: se genera (y se valida en los
     // specs) para que la tarea que la cree lo persista desde aquí.
