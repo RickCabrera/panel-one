@@ -1013,3 +1013,104 @@ export interface Kardex {
   /** Nulo = sin movimientos recibidos o sin existencia leída: no hay con qué comparar. */
   cuadra: boolean | null;
 }
+
+// --- Conteos físicos (F2-123) ----------------------------------------------------
+
+/** `EstadoConteo`. */
+export type EstadoConteo = 'en_captura' | 'cerrado' | 'cancelado';
+
+/** `EstadoRenglonConteo`. */
+export type EstadoRenglonConteo = 'con_diferencia' | 'cuadra' | 'sin_contar' | 'sin_teorico';
+
+/** `ConteoResumenDto`. */
+export interface ConteoResumen {
+  id: string;
+  folio: number;
+  sucursalId: string;
+  sucursal: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+  /** Nulo = todos los artículos. */
+  grupoOrigenSrId: string | null;
+  grupo: string | null;
+  nota: string | null;
+  estado: EstadoConteo;
+  /** Corte de la foto de existencias congelada como teórico. */
+  teoricoCapturadoAt: string;
+  teoricoAtrasado: boolean;
+  creadoAt: string;
+  cerradoAt: string | null;
+  canceladoAt: string | null;
+  articulos: number;
+  contados: number;
+}
+
+/** `AlmacenConteoDto`. */
+export interface AlmacenConteo {
+  sucursalId: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+  /** Nulo = sin lectura: no se puede contar. */
+  capturadoAt: string | null;
+  atrasada: boolean;
+}
+
+/** `GrupoConteoDto`. */
+export interface GrupoConteo {
+  sucursalId: string;
+  grupoOrigenSrId: string;
+  grupo: string;
+}
+
+/** `ConteosDto`: respuesta de `GET /inventario/conteos`. */
+export interface Conteos {
+  conteos: ConteoResumen[];
+  total: number;
+  almacenes: AlmacenConteo[];
+  grupos: GrupoConteo[];
+  sucursales: Array<{ sucursalId: string; sucursal: string; zonaHoraria: string }>;
+}
+
+/** `PartidaConteoDto`. */
+export interface PartidaConteo {
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  clave: string | null;
+  unidad: string | null;
+  grupo: string | null;
+  /** Nulo = no venía en la foto (sin teórico, no 0). */
+  teorico: string | null;
+  costoPromedio: Importe | null;
+  /** Nulo = sin contar (no 0). */
+  contado: string | null;
+  estado: EstadoRenglonConteo;
+  diferencia: string | null;
+  importe: Importe | null;
+  capturadoAt: string | null;
+}
+
+/** `TotalesConteoDto`. */
+export interface TotalesConteo {
+  articulos: number;
+  contados: number;
+  sinContar: number;
+  sinTeorico: number;
+  conDiferencia: number;
+  sinValuar: number;
+  faltante: Importe;
+  sobrante: Importe;
+  neto: Importe;
+}
+
+/** `ConteoDetalleDto`: `GET /inventario/conteos/{id}`, `POST …/cerrar` y `…/cancelar`. */
+export interface ConteoDetalle {
+  conteo: ConteoResumen;
+  zonaHoraria: string;
+  partidas: PartidaConteo[];
+  totales: TotalesConteo;
+}
+
+/** `CapturaRespuestaDto`: `PUT /inventario/conteos/{id}/partidas`. */
+export interface CapturaRespuesta {
+  guardadas: Array<{ insumoOrigenSrId: string; contado: string | null }>;
+}

@@ -873,8 +873,10 @@ ese registro solo.
 - ⚠️ **Sin modelar: presentaciones** (empaques de compra, p. ej. "caja con 24") **y
   productos-receta.** El seed no los genera y no se sabe cómo los guarda SR. Las recetas son de
   F2-125; las presentaciones las busca F2-241 y, si existen, piden su propio espejo y contrato.
-- ⚠️ **SUPUESTO — la unidad no dice si es fraccionable** (el seed sí lo sabe, SR no se sabe). Si el
-  conteo físico (F2-123) lo necesita, sale de SR cuando se vea o se vuelve metadata propia.
+- ⚠️ **SUPUESTO — la unidad no dice si es fraccionable** (el seed sí lo sabe, SR no se sabe). El
+  conteo físico (F2-123) no lo necesitó: acepta hasta 3 decimales en cualquier unidad (lo mismo que
+  NUMERIC(12,3)). Si hace falta impedir fracciones de una pieza, sale de SR cuando se vea o se vuelve
+  metadata propia.
 - **Forzado manual:** desde F2-120 una solicitud de sincronización sigue pendiente hasta que
   cierran los **once** catálogos. Un agente que sólo lea los seis de F2-230 la deja pendiente
   hasta que tenga los lectores de F2-241, y no debe ciclarse ni cerrar con `total = 0` para
@@ -1001,6 +1003,51 @@ El panel las muestra en `/movimientos` (línea de tiempo, detalle de póliza y k
 - **Qué prueba el seed y qué no.** Con el seed, el kardex de cada artículo reproduce su existencia
   (`prisma/seed-movimientos.spec.ts`): eso prueba que la ingesta y el kardex **conservan** lo que
   simuló el seed maestro. No prueba que SR registre así sus movimientos: el cuadre real es de F2-193.
+
+### Conteos físicos (F2-123): dato PROPIO, nunca se escribe a SR
+
+Un conteo físico **no se lee de SoftRestaurant ni se escribe en él**: se crea y se captura en el
+panel (`/inventario/conteos*`, tablas `conteos_fisicos` y `partidas_conteo`), y su reporte de
+diferencias es lo que el encargado lleva a SR para registrar ahí el ajuste **a mano**. El agente no
+tiene ninguna ruta de conteos (su API key sólo alcanza `/agente/yo` y `POST /ingesta/*`; lo fija
+`openapi.spec.ts` y el e2e lo prueba con 401), y la guardia existente del agente
+(`ConsultasEmbebidasTests`: ninguna consulta embebida escribe) sigue siendo la prueba del lado
+`/agent` de que nada escribe en la base del POS: **F2-123 no toca `/agent`**. El e2e
+`inventario/conteos.e2e.spec.ts` además afirma que crear, capturar, cerrar y cancelar dejan
+idénticas las tablas espejo de SR (existencias, lecturas, pólizas, movimientos, catálogos).
+
+- ⚠️ **SUPUESTO / `DECISION PROVISIONAL (nocturno)` — el teórico se CONGELA al crear el conteo**:
+  es la última foto de existencias del almacén (cantidad y costo promedio por artículo) y su
+  `capturado_at`, copiados a las partidas. Una foto posterior no lo mueve. Es como se congela un
+  inventario físico; si SR compara su propio conteo contra otro corte (p. ej. al cerrarlo), F2-193
+  lo ve contra el piloto. `scope/escritura-conteos.ts#crear`.
+- `DECISION PROVISIONAL (nocturno)` — **almacén sin ninguna lectura de existencias = 409**: no se crea
+  un conteo que no puede dar diferencias. Almacén que no es de la sucursal (ni en su catálogo ni en
+  sus lecturas) o grupo ajeno = 404.
+- `DECISION PROVISIONAL (nocturno)` — **"teórico atrasado"**: la foto congelada tenía más de 90 min al
+  crear el conteo (la misma regla de "lectura atrasada" de F2-121, aquí contra el corte de la foto).
+  Sólo avisa; no impide contar.
+- ⚠️ **SUPUESTO — artículos del conteo** = insumos **activos** del catálogo de la sucursal ∪ los que
+  vienen en la foto del almacén (el catálogo no dice qué insumo vive en qué almacén, §9). Uno del
+  catálogo que no viene en la foto va **"sin teórico"** (nulo, nunca 0). En un conteo **por grupo**,
+  un artículo que sólo está en la foto (sin catálogo) no tiene grupo conocido y queda fuera.
+- `DECISION PROVISIONAL (nocturno)` — **sin contar ≠ 0**: un renglón vacío al cerrar se reporta aparte;
+  quien quiere 0 lo captura. Cerrar con renglones sin contar se permite.
+- **Diferencia e importe:** `contado − teórico`; importe = `round(diferencia × costo promedio, 2)`
+  mitad lejos de cero (la misma `valorDe` de F2-121), **por renglón**; los totales (faltante,
+  sobrante, neto) son la Σ de los renglones ya redondeados, así cuadran aritméticamente con lo que se
+  ve. Un teórico negativo (existencia negativa en SR) se compara tal cual.
+- `DECISION PROVISIONAL (nocturno)` — **último en llegar gana, por renglón**. Un conteo lo captura
+  normalmente un dispositivo; dos a la vez se pisan. El web guarda lo capturado primero en un
+  borrador local (llave usuario + empresa + conteo) y lo reenvía al volver: un borrador viejo
+  reenviado puede pisar un valor más nuevo que otro dispositivo capturó en el mismo renglón.
+- **Candado:** capturar, cerrar y cancelar toman el mismo `pg_advisory_xact_lock` del conteo y leen
+  el estado con él puesto: nada se escribe después de un cierre (e2e de concurrencia).
+- ⚠️ **SUPUESTO NO VALIDADO — el ajuste en SR regresa como póliza `ajuste`.** El proceso asume que,
+  cuando el encargado registra en SR el ajuste que sale del reporte, el lector (F2-241) lo manda como
+  una póliza de tipo `ajuste` (F2-122) y la siguiente foto de existencias ya lo refleja. **Cómo se
+  llama ese menú en SR y qué documento genera no está mapeado**: la ayuda del panel
+  (`web/src/paginas/AyudaConteos.tsx`) lo describe en genérico. F2-193 lo verifica en el piloto.
 
 ---
 

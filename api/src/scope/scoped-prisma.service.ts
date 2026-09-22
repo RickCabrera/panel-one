@@ -8,6 +8,7 @@ import { ConsultaVentas, type FiltroVentas } from './consulta-ventas';
 import { EscrituraAdmin } from './escritura-admin';
 import { EscrituraAlertas } from './escritura-alertas';
 import { EscrituraCatalogos, IngestaCatalogos } from './escritura-catalogos';
+import { EscrituraConteos } from './escritura-conteos';
 import { EscrituraExistencias, IngestaExistencias } from './escritura-existencias';
 import { IngestaMovimientos } from './escritura-movimientos';
 import { EscrituraReportes } from './escritura-reportes';
@@ -243,6 +244,14 @@ export class ScopedPrismaService {
    */
   movimientosDeSucursal(agente: AgenteAutenticado): IngestaMovimientos {
     return new IngestaMovimientos(this.#prisma, agente);
+  }
+
+  /**
+   * Conteos físicos (F2-123): crear, capturar, cerrar y cancelar, con el scope del usuario y bajo
+   * el candado de cada conteo. Es dato NUESTRO: nunca se escribe a SoftRestaurant.
+   */
+  conteos(scope: EmpresaScope): EscrituraConteos {
+    return new EscrituraConteos(this.#prisma, scope);
   }
 
   /**

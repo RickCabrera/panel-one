@@ -358,6 +358,71 @@ describe('Contrato OpenAPI', () => {
     );
   });
 
+  it('F2-123: contrato de conteos físicos, y el agente no alcanza ninguna de sus rutas', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const codigos = (op: { responses?: object } | undefined) =>
+      Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/inventario/conteos']?.get)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/inventario/conteos']?.post)).toEqual([
+      '201',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+      '503',
+    ]);
+    expect(codigos(paths['/inventario/conteos/{id}']?.get)).toEqual(['200', '400', '401', '404']);
+    for (const op of [
+      paths['/inventario/conteos/{id}/partidas']?.put,
+      paths['/inventario/conteos/{id}/cerrar']?.post,
+      paths['/inventario/conteos/{id}/cancelar']?.post,
+    ]) {
+      expect(codigos(op)).toEqual(['200', '400', '401', '403', '404', '409', '503']);
+    }
+    // El agente (API key `agente`) sólo tiene `/agente/yo` y las `/ingesta/*`: ninguna ruta de
+    // conteos, así que nada de un conteo le puede llegar como orden de escribir en SR.
+    const conKeyDeAgente = Object.entries(paths).flatMap(([ruta, ops]) =>
+      Object.values(ops as Record<string, { security?: Array<Record<string, unknown>> }>).some(
+        (op) => (op.security ?? []).some((s) => 'agente' in s),
+      )
+        ? [ruta]
+        : [],
+    );
+    expect(conKeyDeAgente.length).toBeGreaterThan(0);
+    for (const ruta of conKeyDeAgente) {
+      expect([ruta, ruta === '/agente/yo' || ruta.startsWith('/ingesta/')]).toEqual([ruta, true]);
+    }
+    expect(conKeyDeAgente.some((r) => r.includes('conteo'))).toBe(false);
+    const esquemas = doc.components?.schemas as Record<
+      string,
+      { properties?: Record<string, unknown>; enum?: string[] }
+    >;
+    expect(esquemas.EstadoConteo.enum).toEqual(['en_captura', 'cerrado', 'cancelado']);
+    expect(esquemas.EstadoRenglonConteo.enum).toEqual([
+      'con_diferencia',
+      'cuadra',
+      'sin_contar',
+      'sin_teorico',
+    ]);
+    expect(Object.keys(esquemas.CapturaConteoDto.properties ?? {})).toEqual([
+      'insumoOrigenSrId',
+      'contado',
+    ]);
+    expect(Object.keys(esquemas.TotalesConteoDto.properties ?? {})).toEqual([
+      'articulos',
+      'contados',
+      'sinContar',
+      'sinTeorico',
+      'conDiferencia',
+      'sinValuar',
+      'faltante',
+      'sobrante',
+      'neto',
+    ]);
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
@@ -414,6 +479,12 @@ describe('Contrato OpenAPI', () => {
         '/inventario/movimientos',
         '/inventario/polizas/{id}',
         '/inventario/kardex',
+        // F2-123: conteos físicos (dato propio del panel).
+        '/inventario/conteos',
+        '/inventario/conteos/{id}',
+        '/inventario/conteos/{id}/partidas',
+        '/inventario/conteos/{id}/cerrar',
+        '/inventario/conteos/{id}/cancelar',
         '/mesas/abiertas',
         '/sucursales',
         '/sucursales/{id}',

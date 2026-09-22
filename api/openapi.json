@@ -6656,6 +6656,586 @@
           "inventario"
         ]
       }
+    },
+    "/inventario/conteos": {
+      "get": {
+        "description": "Con su avance (contados de artículos), y lo necesario para crear uno: los almacenes (con la lectura de existencias que servirá de teórico; sin lectura no se puede contar) y los grupos de insumos. Un conteo es dato del panel: NUNCA se escribe a SoftRestaurant.",
+        "operationId": "ConteosController_listar",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/EstadoConteo"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, el almacén o el grupo no son de esa sucursal, o el conteo no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Conteos físicos de la empresa (F2-123), los más recientes primero.",
+        "tags": [
+          "inventario"
+        ]
+      },
+      "post": {
+        "description": "El teórico se CONGELA al crear: la última foto de existencias del almacén (cantidad y costo promedio) y su corte. Una foto posterior no lo cambia. Un artículo del catálogo que no viene en la foto va \"sin teórico\", nunca 0. Almacén sin ninguna lectura = 409.",
+        "operationId": "ConteosController_crear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearConteoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, el almacén o el grupo no son de esa sucursal, o el conteo no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El almacén no tiene lectura de existencias.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Otra operación tiene el conteo; reintentar.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Crea un conteo de un almacén (todos sus artículos o los de un grupo).",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/conteos/{id}": {
+      "get": {
+        "description": "Diferencia = contado − teórico; importe = round(diferencia × costo, 2) por renglón, y los totales son la Σ de esos importes. Sin contar y sin teórico van aparte, nunca como 0. En captura el reporte es preliminar.",
+        "operationId": "ConteosController_detalle",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "La empresa del conteo. Otra = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, el almacén o el grupo no son de esa sucursal, o el conteo no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Un conteo con sus renglones y el reporte de diferencias contra el teórico.",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/conteos/{id}/partidas": {
+      "put": {
+        "description": "Poner el mismo valor otra vez no cambia nada. Nulo = borrar lo capturado. Un artículo que no es del conteo, o repetido en el lote, = 400 sin guardar nada. El último en llegar gana.",
+        "operationId": "ConteosController_capturar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CapturarConteoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapturaRespuestaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, el almacén o el grupo no son de esa sucursal, o el conteo no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El conteo ya no está en captura (cerrado o cancelado).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Otra operación tiene el conteo; reintentar.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Guarda lo contado de un lote de renglones (todo o nada, idempotente).",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/conteos/{id}/cerrar": {
+      "post": {
+        "description": "Lo que quede sin contar se reporta aparte (no se asume 0). NO ajusta nada en SR: el reporte es para que el encargado registre el ajuste allá.",
+        "operationId": "ConteosController_cerrar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConteoEmpresaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, el almacén o el grupo no son de esa sucursal, o el conteo no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El conteo ya no está en captura (cerrado o cancelado).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Otra operación tiene el conteo; reintentar.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cierra el conteo: ya no admite captura y su reporte queda final.",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/conteos/{id}/cancelar": {
+      "post": {
+        "operationId": "ConteosController_cancelar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConteoEmpresaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConteoDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, el almacén o el grupo no son de esa sucursal, o el conteo no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El conteo ya no está en captura (cerrado o cancelado).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Otra operación tiene el conteo; reintentar.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancela un conteo en captura (queda visible, sin reporte final).",
+        "tags": [
+          "inventario"
+        ]
+      }
     }
   },
   "info": {
@@ -12578,6 +13158,517 @@
           "saldoAlCorte",
           "diferencia",
           "cuadra"
+        ]
+      },
+      "EstadoConteo": {
+        "type": "string",
+        "enum": [
+          "en_captura",
+          "cerrado",
+          "cancelado"
+        ]
+      },
+      "ConteoResumenDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "folio": {
+            "type": "number",
+            "description": "Consecutivo por sucursal."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo; nulo si no está."
+          },
+          "grupoOrigenSrId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = todos los artículos."
+          },
+          "grupo": {
+            "type": "string",
+            "nullable": true
+          },
+          "nota": {
+            "type": "string",
+            "nullable": true
+          },
+          "estado": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoConteo"
+              }
+            ]
+          },
+          "teoricoCapturadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "El corte de la foto de existencias congelada como teórico (reloj del agente)."
+          },
+          "teoricoAtrasado": {
+            "type": "boolean",
+            "description": "La foto tenía más de 90 min cuando se creó el conteo: el teórico puede no reflejar lo último que pasó en el almacén."
+          },
+          "creadoAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cerradoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "canceladoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "articulos": {
+            "type": "number"
+          },
+          "contados": {
+            "type": "number",
+            "description": "Renglones con algo capturado."
+          }
+        },
+        "required": [
+          "id",
+          "folio",
+          "sucursalId",
+          "sucursal",
+          "almacenOrigenSrId",
+          "almacen",
+          "grupoOrigenSrId",
+          "grupo",
+          "nota",
+          "estado",
+          "teoricoCapturadoAt",
+          "teoricoAtrasado",
+          "creadoAt",
+          "cerradoAt",
+          "canceladoAt",
+          "articulos",
+          "contados"
+        ]
+      },
+      "AlmacenConteoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true
+          },
+          "capturadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Corte de la última foto de existencias. Nulo = sin lectura: no se puede contar."
+          },
+          "atrasada": {
+            "type": "boolean",
+            "description": "La última foto se recibió hace más de 90 min."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "almacenOrigenSrId",
+          "almacen",
+          "capturadoAt",
+          "atrasada"
+        ]
+      },
+      "GrupoConteoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "grupoOrigenSrId": {
+            "type": "string"
+          },
+          "grupo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "grupoOrigenSrId",
+          "grupo"
+        ]
+      },
+      "SucursalConteosDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "zonaHoraria"
+        ]
+      },
+      "ConteosDto": {
+        "type": "object",
+        "properties": {
+          "conteos": {
+            "description": "Los más recientes primero (hasta 200).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConteoResumenDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Cuántos conteos hay en el filtro (puede ser más que `conteos`)."
+          },
+          "almacenes": {
+            "description": "Almacenes activos del catálogo y los que tienen lectura, para crear un conteo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlmacenConteoDto"
+            }
+          },
+          "grupos": {
+            "description": "Grupos de insumos activos por sucursal.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrupoConteoDto"
+            }
+          },
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalConteosDto"
+            }
+          }
+        },
+        "required": [
+          "conteos",
+          "total",
+          "almacenes",
+          "grupos",
+          "sucursales"
+        ]
+      },
+      "CrearConteoDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La sucursal del almacén. De otra empresa = 404."
+          },
+          "almacenOrigenSrId": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "El `origenSrId` de un almacén de esa sucursal."
+          },
+          "grupoOrigenSrId": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Sólo los artículos de este grupo de insumos. Sin él, todos los del almacén."
+          },
+          "nota": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Nota libre (quién cuenta, turno...)."
+          }
+        },
+        "required": [
+          "empresaId",
+          "sucursalId",
+          "almacenOrigenSrId"
+        ]
+      },
+      "EstadoRenglonConteo": {
+        "type": "string",
+        "enum": [
+          "con_diferencia",
+          "cuadra",
+          "sin_contar",
+          "sin_teorico"
+        ]
+      },
+      "PartidaConteoDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo; nulo si no está."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true
+          },
+          "grupo": {
+            "type": "string",
+            "nullable": true
+          },
+          "teorico": {
+            "type": "string",
+            "nullable": true,
+            "example": "12.500",
+            "description": "Existencia congelada al crear. Nulo = no venía en la foto (sin teórico, no 0)."
+          },
+          "costoPromedio": {
+            "type": "string",
+            "nullable": true,
+            "example": "30.00"
+          },
+          "contado": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = sin contar (no es 0)."
+          },
+          "estado": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoRenglonConteo"
+              }
+            ]
+          },
+          "diferencia": {
+            "type": "string",
+            "nullable": true,
+            "example": "-2.500",
+            "description": "contado − teórico. Nulo si falta alguno."
+          },
+          "importe": {
+            "type": "string",
+            "nullable": true,
+            "example": "-75.00",
+            "description": "round(diferencia × costo, 2). Nulo si falta alguno o no cabe en NUMERIC(12,2)."
+          },
+          "capturadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "insumo",
+          "clave",
+          "unidad",
+          "grupo",
+          "teorico",
+          "costoPromedio",
+          "contado",
+          "estado",
+          "diferencia",
+          "importe",
+          "capturadoAt"
+        ]
+      },
+      "TotalesConteoDto": {
+        "type": "object",
+        "properties": {
+          "articulos": {
+            "type": "number"
+          },
+          "contados": {
+            "type": "number",
+            "description": "Con algo capturado (incluye los sin teórico)."
+          },
+          "sinContar": {
+            "type": "number"
+          },
+          "sinTeorico": {
+            "type": "number"
+          },
+          "conDiferencia": {
+            "type": "number"
+          },
+          "sinValuar": {
+            "type": "number",
+            "description": "Con diferencia cuyo importe no cabe en NUMERIC(12,2)."
+          },
+          "faltante": {
+            "type": "string",
+            "example": "-75.00",
+            "description": "Σ de los importes negativos de los renglones."
+          },
+          "sobrante": {
+            "type": "string",
+            "example": "24.99",
+            "description": "Σ de los importes positivos de los renglones."
+          },
+          "neto": {
+            "type": "string",
+            "example": "-50.01",
+            "description": "faltante + sobrante."
+          }
+        },
+        "required": [
+          "articulos",
+          "contados",
+          "sinContar",
+          "sinTeorico",
+          "conDiferencia",
+          "sinValuar",
+          "faltante",
+          "sobrante",
+          "neto"
+        ]
+      },
+      "ConteoDetalleDto": {
+        "type": "object",
+        "properties": {
+          "conteo": {
+            "$ref": "#/components/schemas/ConteoResumenDto"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona de la sucursal del conteo."
+          },
+          "partidas": {
+            "description": "Por nombre del insumo. La diferencia se calcula siempre (en captura es preliminar).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartidaConteoDto"
+            }
+          },
+          "totales": {
+            "$ref": "#/components/schemas/TotalesConteoDto"
+          }
+        },
+        "required": [
+          "conteo",
+          "zonaHoraria",
+          "partidas",
+          "totales"
+        ]
+      },
+      "CapturaConteoDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "contado": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^\\d{1,9}(\\.\\d{1,3})?$",
+            "example": "12.5",
+            "description": "Lo contado en la unidad del insumo: texto decimal sin signo, hasta 3 decimales (más = 400, nunca se redondea). Nulo = borrar lo capturado (vuelve a \"sin contar\")."
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "contado"
+        ]
+      },
+      "CapturarConteoDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "partidas": {
+            "minItems": 1,
+            "maxItems": 500,
+            "description": "Todo o nada: un artículo que no es del conteo = 400 sin guardar nada.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapturaConteoDto"
+            }
+          }
+        },
+        "required": [
+          "empresaId",
+          "partidas"
+        ]
+      },
+      "CapturaGuardadaDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "contado": {
+            "type": "string",
+            "nullable": true,
+            "example": "12.500"
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "contado"
+        ]
+      },
+      "CapturaRespuestaDto": {
+        "type": "object",
+        "properties": {
+          "guardadas": {
+            "description": "Lo que quedó guardado de cada renglón del lote, ya normalizado a 3 decimales.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapturaGuardadaDto"
+            }
+          }
+        },
+        "required": [
+          "guardadas"
+        ]
+      },
+      "ConteoEmpresaDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La empresa del conteo. Otra = 404."
+          }
+        },
+        "required": [
+          "empresaId"
         ]
       }
     }

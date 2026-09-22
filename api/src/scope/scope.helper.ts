@@ -61,6 +61,10 @@ export const LLAVE_EMPRESA = {
   // sucursal del agente). El panel sólo las lee.
   PolizaInventario: 'empresaId',
   MovimientoInventario: 'empresaId',
+  // F2-123. Conteos físicos y sus renglones: dato NUESTRO, los escribe SÓLO
+  // `EscrituraConteos` (con el scope del usuario). Nunca se escriben a SR.
+  ConteoFisico: 'empresaId',
+  PartidaConteo: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;
@@ -83,10 +87,13 @@ export const COLUMNAS_INTOCABLES: readonly string[] = [
   'chequeId',
   // F2-122: una partida no se mueve a otra póliza.
   'polizaId',
+  // F2-123: un renglón no se mueve a otro conteo.
+  'conteoId',
   'empresa',
   'sucursal',
   'cheque',
   'poliza',
+  'conteo',
 ];
 
 /** El filtro de tenant de un modelo: `{}` para admin_global, la empresa para los demás. */
