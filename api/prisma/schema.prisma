@@ -40,13 +40,14 @@ model Empresa {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sucursales         Sucursal[]
-  usuarios           Usuario[]
-  formasPagoCatalogo FormaPagoCatalogo[]
-  correosEnviados    CorreoEnviado[]
-  alertas            Alerta[]
-  reglasAlerta       ReglaAlerta[]
-  alertaEvaluacion   AlertaEvaluacion?
+  sucursales           Sucursal[]
+  usuarios             Usuario[]
+  formasPagoCatalogo   FormaPagoCatalogo[]
+  correosEnviados      CorreoEnviado[]
+  alertas              Alerta[]
+  reglasAlerta         ReglaAlerta[]
+  alertaEvaluacion     AlertaEvaluacion?
+  suscripcionesReporte SuscripcionReporte[]
 
   @@map("empresas")
 }
@@ -103,8 +104,9 @@ model Usuario {
 
   // Sesiones de login (F1-093). La segunda relación es la FK compuesta que
   // impide que `sesiones_usuario.empresa_id` diverja de la del usuario.
-  sesiones        SesionUsuario[]
-  sesionesEmpresa SesionUsuario[] @relation("SesionUsuarioEmpresa")
+  sesiones             SesionUsuario[]
+  sesionesEmpresa      SesionUsuario[]      @relation("SesionUsuarioEmpresa")
+  suscripcionesReporte SuscripcionReporte[]
 
   // Redundante con el PK, pero Prisma lo exige para la FK compuesta de
   // `sesiones_usuario` (usuario_id, empresa_id).
@@ -473,4 +475,82 @@ model AlertaEvaluacion {
   empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
 
   @@map("alertas_evaluacion")
+}
+
+// ---------------------------------------------------------------------------
+// Reportes programados por correo (F2-141). Postgres propio: nada se lee ni se
+// escribe en SoftRestaurant. Las escrituras van por `EscrituraReportes` (helper
+// de scope); la baja pública, por `para(sistema).suscripcionReporte.updateMany`
+// DESPUÉS de verificar el token firmado.
+// ---------------------------------------------------------------------------
+
+enum TipoReporte {
+  diario
+  semanal
+
+  @@map("tipo_reporte")
+}
+
+enum EstadoEnvioReporte {
+  // Reclamado por una vuelta del programador; el correo está saliendo. Uno que se
+  // queda aquí (proceso muerto a media llamada) NO se reintenta: preferimos perder
+  // un correo a mandarlo dos veces.
+  enviando
+  enviado
+  // Falló el puerto; se reintenta en la siguiente vuelta hasta 3 intentos, el mismo día.
+  fallido
+  // No se reintenta nunca: el destinatario ya no puede ver la empresa, o se agotaron
+  // los intentos.
+  descartado
+
+  @@map("estado_envio_reporte")
+}
+
+// Qué reportes quiere un usuario de una empresa. Una fila por (usuario, empresa):
+// admin_global elige la empresa; los demás roles, sólo la suya (se verifica con el
+// scope al guardar Y al enviar). FK simple a usuarios: admin_global tiene
+// empresa_id NULL y la compuesta no aplicaría.
+model SuscripcionReporte {
+  id        String   @id @default(uuid()) @db.Uuid
+  usuarioId String   @map("usuario_id") @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  diario    Boolean  @default(false)
+  semanal   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  usuario Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  empresa Empresa        @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  envios  EnvioReporte[]
+
+  @@unique([usuarioId, empresaId], map: "suscripciones_reporte_usuario_id_empresa_id_key")
+  // Destino de la FK compuesta de `envios_reporte`.
+  @@unique([id, empresaId], map: "suscripciones_reporte_id_empresa_id_key")
+  @@index([empresaId])
+  @@map("suscripciones_reporte")
+}
+
+// Bitácora y candado de idempotencia de cada envío: el único (suscripción, tipo,
+// periodo) hace que otra vuelta u otra réplica no manden el mismo reporte dos veces.
+// CHECKs a mano en la migración `..._reportes_programados`: `intentos >= 1` y
+// `periodo` con forma AAAA-MM-DD.
+model EnvioReporte {
+  id            String             @id @default(uuid()) @db.Uuid
+  suscripcionId String             @map("suscripcion_id") @db.Uuid
+  empresaId     String             @map("empresa_id") @db.Uuid
+  tipo          TipoReporte
+  // Diario: el día reportado. Semanal: el lunes de la semana reportada.
+  periodo       String
+  estado        EstadoEnvioReporte
+  intentos      Int
+  correoId      String?            @map("correo_id")
+  error         String?
+  creadoAt      DateTime           @map("creado_at") @db.Timestamptz(3)
+  enviadoAt     DateTime?          @map("enviado_at") @db.Timestamptz(3)
+
+  suscripcion SuscripcionReporte @relation(fields: [suscripcionId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "envios_reporte_suscripcion_empresa_fkey")
+
+  @@unique([suscripcionId, tipo, periodo], map: "envios_reporte_suscripcion_id_tipo_periodo_key")
+  @@index([empresaId])
+  @@map("envios_reporte")
 }

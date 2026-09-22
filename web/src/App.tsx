@@ -10,6 +10,7 @@ import { Layout } from './layout/Layout';
 import { Administracion } from './paginas/Administracion';
 import { Alertas } from './paginas/Alertas';
 import { Analisis } from './paginas/Analisis';
+import { BajaReportes } from './paginas/BajaReportes';
 import { Comparativos } from './paginas/Comparativos';
 import { Cuenta } from './paginas/Cuenta';
 import { Inicio } from './paginas/Inicio';
@@ -47,6 +48,8 @@ export function Rutas() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* F2-141: la baja desde el correo es PÚBLICA (sin sesión): fuera de RutaProtegida. */}
+      <Route path="/reportes/baja" element={<BajaReportes />} />
       {/* F2-223: la vista de pared va FUERA de Layout (sin menú ni cabecera). */}
       <Route
         path="/mesas/pared"

@@ -32,6 +32,22 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(paths['/alertas/abiertas'])).toContain('AlertaDto');
   });
 
+  it('reportes por correo (F2-141): baja pública con límite, el resto con token y 404', async () => {
+    const { paths } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/cuenta/reportes']?.get)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/cuenta/reportes']?.put)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths['/cuenta/reportes/vista-previa']?.get)).toEqual([
+      '200',
+      '400',
+      '401',
+      '404',
+    ]);
+    expect(codigos(paths['/reportes/baja']?.post)).toEqual(['200', '400', '404', '429']);
+    expect(paths['/reportes/baja']?.post?.security).toBeUndefined();
+    expect(paths['/cuenta/reportes']?.get?.security).toEqual([{ bearer: [] }]);
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
@@ -47,6 +63,9 @@ describe('Contrato OpenAPI', () => {
         '/auth/me',
         '/auth/refresh',
         '/cuenta/password',
+        '/cuenta/reportes',
+        '/cuenta/reportes/vista-previa',
+        '/reportes/baja',
         '/empresas',
         '/empresas/{id}',
         '/ingesta/eventos',

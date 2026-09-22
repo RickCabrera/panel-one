@@ -420,3 +420,45 @@ export interface ReglaAlerta {
   maximo: number;
   valorPorDefecto: number;
 }
+
+/** Reportes por correo (F2-141): `GET/PUT /cuenta/reportes`, vista previa y baja pública. */
+export type TipoReporte = 'diario' | 'semanal';
+export type EstadoEnvioReporte = 'enviando' | 'enviado' | 'fallido' | 'descartado';
+
+export interface EnvioReporte {
+  tipo: TipoReporte;
+  /** Diario: el día reportado. Semanal: el lunes de la semana reportada. */
+  periodo: string;
+  estado: EstadoEnvioReporte;
+  intentos: number;
+  creadoAt: string;
+  enviadoAt: string | null;
+}
+
+export interface SuscripcionReporte {
+  empresaId: string;
+  diario: boolean;
+  semanal: boolean;
+  zonaHoraria: string;
+  horaEnvio: number;
+  ultimosEnvios: EnvioReporte[];
+}
+
+export interface GuardarSuscripcionReporte {
+  empresaId: string;
+  diario: boolean;
+  semanal: boolean;
+}
+
+export interface VistaPreviaReporte {
+  tipo: TipoReporte;
+  periodo: string;
+  asunto: string;
+  html: string;
+  texto: string;
+}
+
+export interface BajaReportes {
+  diario: boolean;
+  semanal: boolean;
+}

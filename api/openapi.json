@@ -3101,6 +3101,274 @@
           "alertas"
         ]
       }
+    },
+    "/cuenta/reportes": {
+      "get": {
+        "description": "Sin suscripción guardada, los dos en false. Incluye la zona y la hora de envío y los últimos 10 envíos.",
+        "operationId": "CuentaReportesController_obtener",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuscripcionReporteDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qué reportes por correo tiene activos el usuario para esa empresa.",
+        "tags": [
+          "cuenta"
+        ]
+      },
+      "put": {
+        "description": "El diario sale todos los días a las 07:00 de la zona de la empresa con la venta de ayer; el semanal, los lunes a la misma hora con la semana anterior.",
+        "operationId": "CuentaReportesController_guardar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardarSuscripcionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuscripcionReporteDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Activa o apaga el resumen diario y el semanal del usuario para esa empresa.",
+        "tags": [
+          "cuenta"
+        ]
+      }
+    },
+    "/cuenta/reportes/vista-previa": {
+      "get": {
+        "description": "Mismas cifras que el panel para el mismo periodo (ayer, o la semana pasada). No manda nada ni escribe nada.",
+        "operationId": "CuentaReportesController_vistaPrevia",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "tipo",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/TipoReporte"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "El correo que tocaría hoy, ya armado, para revisarlo sin esperar a las 7.",
+        "tags": [
+          "cuenta"
+        ]
+      }
+    },
+    "/reportes/baja": {
+      "post": {
+        "description": "Pública. Es POST a propósito: los escáneres de correo abren los enlaces (GET) y no deben dar a nadie de baja; la página del panel pide confirmar. Idempotente.",
+        "operationId": "BajaReportesController_baja",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BajaReportesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cómo quedó la suscripción.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BajaReportesRespuestaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token inválido, alterado o de una suscripción que ya no existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 10 intentos por minuto desde la misma IP."
+          }
+        },
+        "summary": "Deja de recibir un reporte (o los dos) con el token del enlace del correo.",
+        "tags": [
+          "reportes"
+        ]
+      }
     }
   },
   "info": {
@@ -5163,6 +5431,200 @@
           "empresaId",
           "activa",
           "umbral"
+        ]
+      },
+      "TipoReporte": {
+        "type": "string",
+        "enum": [
+          "diario",
+          "semanal"
+        ]
+      },
+      "EstadoEnvioReporte": {
+        "type": "string",
+        "enum": [
+          "enviando",
+          "enviado",
+          "fallido",
+          "descartado"
+        ],
+        "description": "`enviando` (en curso, o se perdió a media llamada: no se reintenta), `enviado`, `fallido` (se reintenta hasta 3 veces ese mismo día) o `descartado` (ya no se reintenta)."
+      },
+      "EnvioReporteDto": {
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TipoReporte"
+              }
+            ]
+          },
+          "periodo": {
+            "type": "string",
+            "description": "Diario: el día reportado. Semanal: el lunes de la semana reportada.",
+            "example": "2026-09-21"
+          },
+          "estado": {
+            "description": "`enviando` (en curso, o se perdió a media llamada: no se reintenta), `enviado`, `fallido` (se reintenta hasta 3 veces ese mismo día) o `descartado` (ya no se reintenta).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoEnvioReporte"
+              }
+            ]
+          },
+          "intentos": {
+            "type": "number"
+          },
+          "creadoAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "enviadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "tipo",
+          "periodo",
+          "estado",
+          "intentos",
+          "creadoAt",
+          "enviadoAt"
+        ]
+      },
+      "SuscripcionReporteDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "diario": {
+            "type": "boolean"
+          },
+          "semanal": {
+            "type": "boolean"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "description": "Zona de la empresa (la que comparten más sucursales activas): decide la hora de envío y qué día es \"ayer\". Cada sucursal corta su venta en SU zona, como el panel.",
+            "example": "America/Mexico_City"
+          },
+          "horaEnvio": {
+            "type": "number",
+            "description": "Hora local de envío en esa zona (0–23).",
+            "example": 7
+          },
+          "ultimosEnvios": {
+            "description": "Los 10 más recientes.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvioReporteDto"
+            }
+          }
+        },
+        "required": [
+          "empresaId",
+          "diario",
+          "semanal",
+          "zonaHoraria",
+          "horaEnvio",
+          "ultimosEnvios"
+        ]
+      },
+      "GuardarSuscripcionDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Fuera del alcance del usuario = 404."
+          },
+          "diario": {
+            "type": "boolean",
+            "description": "Resumen diario: la venta de ayer, top 5 y alertas."
+          },
+          "semanal": {
+            "type": "boolean",
+            "description": "Resumen semanal (los lunes): comparativo y tendencia."
+          }
+        },
+        "required": [
+          "empresaId",
+          "diario",
+          "semanal"
+        ]
+      },
+      "VistaPreviaDto": {
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TipoReporte"
+              }
+            ]
+          },
+          "periodo": {
+            "type": "string",
+            "example": "2026-09-21"
+          },
+          "asunto": {
+            "type": "string"
+          },
+          "html": {
+            "type": "string",
+            "description": "HTML completo del correo. Mostrarlo en un iframe con sandbox."
+          },
+          "texto": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tipo",
+          "periodo",
+          "asunto",
+          "html",
+          "texto"
+        ]
+      },
+      "BajaReportesDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "El token del enlace del correo (`t`).",
+            "maxLength": 200
+          },
+          "tipo": {
+            "description": "Sólo ese reporte. Sin él, los dos.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TipoReporte"
+              }
+            ]
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "BajaReportesRespuestaDto": {
+        "type": "object",
+        "properties": {
+          "diario": {
+            "type": "boolean"
+          },
+          "semanal": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "diario",
+          "semanal"
         ]
       }
     }

@@ -44,6 +44,9 @@ describe('whereEmpresa / whereScoped', () => {
       Alerta: 'empresaId',
       ReglaAlerta: 'empresaId',
       AlertaEvaluacion: 'empresaId',
+      // F2-141: reportes programados.
+      SuscripcionReporte: 'empresaId',
+      EnvioReporte: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });

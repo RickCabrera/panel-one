@@ -12,11 +12,12 @@ export type AccionAuditada =
   | 'usuario.editar'
   | 'usuario.reset_password'
   | 'usuario.cambiar_password'
-  | 'regla_alerta.editar';
+  | 'regla_alerta.editar'
+  | 'suscripcion_reporte.editar';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
-  recurso: 'empresa' | 'sucursal' | 'usuario' | 'regla_alerta';
+  recurso: 'empresa' | 'sucursal' | 'usuario' | 'regla_alerta' | 'suscripcion_reporte';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

@@ -71,6 +71,15 @@ export const USUARIOS = {
 
 export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   const empresas = [FX.empresaA, FX.empresaB, FX.empresaC];
+  // Reportes programados (F2-141): cuelgan del usuario y de la empresa, así que van antes
+  // que los dos. Envíos primero (FK a la suscripción).
+  const suscripciones = {
+    where: {
+      OR: [{ empresaId: { in: empresas } }, { usuario: { email: { endsWith: DOMINIO } } }],
+    },
+  };
+  await prisma.envioReporte.deleteMany({ where: { suscripcion: suscripciones.where } });
+  await prisma.suscripcionReporte.deleteMany(suscripciones);
   await prisma.usuario.deleteMany({ where: { email: { endsWith: DOMINIO } } });
   // Ventas de prueba (F1-030) colgadas de estas sucursales: las FK son Restrict,
   // así que se borran de las hojas hacia arriba antes que las sucursales.
@@ -89,6 +98,8 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   await prisma.alerta.deleteMany(deEstas);
   await prisma.reglaAlerta.deleteMany(deEstas);
   await prisma.alertaEvaluacion.deleteMany(deEstas);
+  // La bandeja del correo falso (F2-202) guarda la empresa de cada correo (F2-141 manda).
+  await prisma.correoEnviado.deleteMany(deEstas);
   await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });
   await prisma.empresa.deleteMany({ where: { id: { in: empresas } } });
 }
