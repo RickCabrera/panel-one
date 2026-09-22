@@ -3453,3 +3453,114 @@ del texto: el `not-sr-only` rompiendo el `truncate` no lo ve jsdom.
 **Qué haría distinto.** Escribir primero los tests de la aritmética de color (contraste, ΔE) y
 después la paleta. El bug de Lab hizo fallar los 45 casos de distinción a la vez, y por un
 momento pareció que la paleta era mala.
+
+## 2026-09-21 23:05 — F2-212 · Cabecera de operación en vivo y rango libre global
+**Estado:** CERRADA si el PR se mergea. Revisor: plan APROBADO CON OBSERVACIONES (0 bloqueos,
+9 observaciones, todas atendidas); entregable APROBADO CON OBSERVACIONES (0 bloqueos, 5
+observaciones, anotadas aquí). Sólo /web: sin API, sin OpenAPI, sin hallazgos de SoftRestaurant
+(no se tocó `docs/esquema-sr.md`).
+
+**Qué quedó hecho.**
+- **Un solo selector de periodo, en la cabecera.** `SelectorPeriodo` se movió de
+  `paginas/inicio/` a `filtros/`. Lo pinta `Topbar` (`PeriodoGlobal`) en una fila propia, y sólo
+  en las vistas de `VISTAS_CON_PERIODO` (`filtros/vista.ts`): `/`, `/tickets`, `/reportes`.
+  Inicio, Tickets y Reportes ya no lo pintan. Leen el periodo con `usePeriodo()`
+  (`filtros/usePeriodo.ts`: `{ periodo, rango, hoy, zona, cambiarPeriodo }`), el mismo cálculo
+  que usa la cabecera.
+- **Lo que viaja entre vistas: `queryVista()`** (`filtros/vista.ts`). Lleva empresa,
+  sucursal, periodo, desde y hasta. **No** lleva `pagina`, `folio` ni `tab`. Lo usan los
+  enlaces del menú, el badge de agentes y "Mi cuenta". **`queryAlcance` se borró**: no quedaba
+  ningún uso.
+- **`escribirPeriodo` ahora borra `pagina`.** Con el selector en la cabecera, la vista no se
+  entera del cambio para reiniciar su paginación. Tickets ya no lo hace a mano.
+  `PARAM_PAGINA` se importa de `filtros/tickets.ts`. Hoy no hay ciclo porque `tickets.ts` no
+  importa nada. Si algún día importa de `periodo.ts`, mueve la constante a un módulo neutral.
+- **Rango invertido:** no se autocorrige, se explica con la alerta de siempre. `rangoDe` da
+  `null` y ninguna vista consulta. Nuevo: `max={hasta}` en Desde y `min={desde}` en Hasta, así
+  el calendario nativo ya no ofrece fechas que lo inviertan.
+- **Indicador de operación en vivo** (`layout/OperacionEnVivo.tsx`, lógica pura en
+  `layout/operacion.ts`), en todas las vistas y para todos los roles:
+  - Datos: `useMonitorMesas(filtro)` + `armarMonitor`, las mismas reglas del Monitor. Reporta
+    = conectada (≤ 90 s). La hora es `kpis.ultimaLectura` (regla F1-094: la más vieja de las
+    que reportan), la misma del KPI "Última lectura" del Monitor.
+  - Estados: "Consultando sucursales…", "Sin sucursales", "Sin lectura reciente" + "0 de M"
+    (o "No se pudo consultar" si la API falló sin responder nunca), "En vivo · hh:mm" o
+    "En vivo (con demora) · hh:mm" (60–90 s) + "N de M sucursales reportando".
+  - Sin ninguna que reporte **nunca** hay hora.
+  - El conteo es del ALCANCE: con una sucursal elegida es "1 de 1" / "0 de 1", aunque otras
+    reporten.
+  - Punto decorativo (`aria-hidden`), con tokens existentes `semaforo-ok|alerta|sin-dato`.
+    `<div>` con `aria-label`, **sin `role=status` ni live region** a propósito: con el
+    polling de 20 s anunciaría la hora cada vez.
+  - `useConReloj` sobre el estado codificado en JSON: sólo re-renderiza si cambia algo visible.
+
+**Decisiones que tomé y por qué.**
+- El Monitor de mesas **no** lleva selector de periodo (es en vivo), pero el periodo se queda
+  en la URL y reaparece al volver a Inicio. Lo mismo Administración y Mi cuenta.
+- Explicar en vez de intercambiar las fechas de un rango invertido: quien teclea día por día
+  pasa por fechas intermedias invertidas, y voltearlas en silencio lo sorprendería. La ficha
+  acepta cualquiera de las dos.
+
+**REGLA PARA LAS TAREAS SIGUIENTES.**
+- **Una vista nueva que filtre por periodo** (Resumen F2-220, Comparativos F2-140, Análisis
+  F2-221...):
+  - se agrega a `VISTAS_CON_PERIODO` en `filtros/vista.ts` y a su test (`vista.test.ts` fija
+    la lista exacta);
+  - lee el periodo con `usePeriodo()`;
+  - **no pinta su propio selector**: `Cabecera.test.tsx` exige que haya exactamente uno.
+- Un parámetro de URL que deba viajar entre vistas va a `PARAMS_VISTA`. Uno propio de una vista
+  (filtros de Tickets de F2-222, por ejemplo) **no**.
+- `escribirPeriodo` ya reinicia la página: no lo repitas en la vista.
+
+**Tests.**
+- Nuevos:
+  - `filtros/vista.test.ts`;
+  - `layout/operacion.test.ts` (estados, más vieja de las conectadas, desconectada no cuenta,
+    demora, se apaga con el tiempo);
+  - `layout/Cabecera.test.tsx`, contra `Rutas` reales:
+    - AC1: Inicio→Tickets, Tickets→Reportes con rango y sucursal, paso por Mesas, Mi cuenta,
+      reinicio de página;
+    - AC2: URL en frío con QueryClient nuevo, idéntica tras normalizar; sin empresa, conserva
+      el periodo; un solo selector y sólo en las tres vistas;
+    - AC3: fresca, demora, ninguna, sucursal elegida vieja, API caída, apagado con el tiempo;
+    - AC4: teclear invertido, min/max, deep-link invertido en las tres vistas: cero
+      `/ventas/*`.
+  - Un caso más en `periodo.test.ts` (borra `pagina`).
+- Ningún test existente cambió, se borró ni quedó en skip.
+- Web: lint limpio, build limpio, **vitest 630/630** (38 archivos, 0 skips), bundle
+  **219.8 → 220.6 kB gzip**.
+
+**Verificación visual.** En Chrome, con un arnés temporal (`web/arnes-212.html` +
+`src/arnes212.tsx`, fetch falso, sin contraseñas); **ya está borrado**.
+- A 390 px (iframe del mismo origen):
+  - `scrollWidth == clientWidth` en `/tickets` con rango invertido (alerta visible), en `/`
+    con lecturas caídas ("Sin lectura reciente") y en `/mesas` (sin selector).
+  - Cero elementos de la cabecera fuera del ancho.
+  - La cabecera mide ~310 px de alto con el rango abierto: tres filas (indicador + usuario,
+    alcance, periodo). Es alta pero no tapa nada. Si estorba, F2-250 puede compactarla.
+- **No se probó contra un agente real que se desconecte.** El apagado con el tiempo está
+  probado con reloj simulado, no en vivo.
+
+**Trampas.**
+- En los tests de la cabecera no esperes `venta-total`: con venta 0 la tarjeta pinta su estado
+  vacío y ese testid no existe. Espera el grupo "Periodo" o el menú. `getByRole('banner')`
+  antes de que resuelva la sesión truena: espera `menu()` primero.
+- `useMonitorMesas` (`paginas/mesas/consultas.ts`) y `useMesasAbiertas`
+  (`paginas/inicio/consultas.ts`) comparten la queryKey `['mesas','abiertas',…]` con la misma
+  config. **Trampa pendiente:** si alguien cambia una sin la otra, React Query mezcla dos
+  configuraciones en una caché. Vale unificarlas en una sola función (F2-223 o F2-250).
+- Relojes: el Monitor usa `useAhora` y la cabecera `useConReloj`, dos pulsos de 5 s sin
+  sincronizar. Justo en el umbral de 90 s pueden discrepar hasta 5 s sobre "conectada". La hora
+  que muestran es la misma porque sale del mismo `recibidoAt`.
+
+**Qué quedó abierto.**
+- **Carga nueva sobre el api:** `/mesas/abiertas` se pide cada 20 s en TODAS las vistas y
+  roles, también en Administración y Mi cuenta. El POS no se toca: es el API leyendo su
+  Postgres. El scoping por rol ya está probado (`api/src/ventas/lectura.e2e.spec.ts`).
+  - En Inicio y Mesas no hay petición extra (misma queryKey).
+  - Si la carga importa, la salida es un endpoint ligero de estado o el WebSocket de F2-142.
+- Con las empresas en error, el indicador se queda en "Consultando sucursales…" (no hay
+  filtro). El selector de alcance ya muestra el error.
+
+**Qué haría distinto.** Montar primero el helper de test con los estados vacíos en mente: dos
+tests fallaron por esperar una cifra que la vista, con venta 0, correctamente no pinta.

@@ -5,13 +5,6 @@ import { ErrorApi } from '../api/cliente';
 import type { Sucursal } from '../api/tipos';
 import { useAlcance } from '../filtros/alcance';
 import {
-  escribirPeriodo,
-  leerPeriodo,
-  rangoDe,
-  zonaDelPanel,
-  type Periodo,
-} from '../filtros/periodo';
-import {
   escribirFolio,
   escribirPagina,
   leerFolio,
@@ -20,9 +13,8 @@ import {
   paginasDe,
   PARAM_PAGINA,
 } from '../filtros/tickets';
-import { useHoy } from '../filtros/useHoy';
+import { usePeriodo } from '../filtros/usePeriodo';
 import type { Filtro } from './inicio/consultas';
-import { SelectorPeriodo } from './inicio/SelectorPeriodo';
 import { Esqueleto, Vacio } from './inicio/Tarjeta';
 import { parametrosDe, POR_PAGINA, useTickets, type ParametrosTickets } from './tickets/consultas';
 import { ErrorCsv, nombreArchivo, ticketsACsv } from './tickets/csv';
@@ -160,13 +152,11 @@ function BuscadorFolio({ folio, onBuscar }: { folio: string; onBuscar: (folio: s
 export function Tickets() {
   const { empresa, sucursal, sucursalId, sucursales } = useAlcance();
   const [parametros, setParametros] = useSearchParams();
-  const periodo = leerPeriodo(parametros);
   const folio = leerFolio(parametros);
   const pagina = leerPagina(parametros);
-
-  const zona = zonaDelPanel(sucursal, sucursales.data);
-  const hoy = useHoy(zona);
-  const rango = rangoDe(periodo, hoy);
+  // El selector de periodo está en la cabecera (F2-212), y cambiarlo ya vuelve a la
+  // página 1 (`escribirPeriodo`).
+  const { rango } = usePeriodo();
 
   // La misma condición que el dashboard: alcance validado y zona conocida.
   const filtro: Filtro | null =
@@ -186,11 +176,6 @@ export function Tickets() {
   );
   const { estado: exportacion, exportar, cancelar } = useExportar(porId);
 
-  const cambiarPeriodo = useCallback(
-    (nuevo: Periodo) =>
-      setParametros((previos) => escribirPagina(escribirPeriodo(previos, nuevo), 1)),
-    [setParametros],
-  );
   const buscar = useCallback(
     (texto: string) => setParametros((previos) => escribirFolio(previos, texto)),
     [setParametros],
@@ -207,8 +192,7 @@ export function Tickets() {
 
   return (
     <Vista titulo="Tickets">
-      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <SelectorPeriodo periodo={periodo} rangoActual={rango} onCambiar={cambiarPeriodo} />
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-end">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <BuscadorFolio key={folio} folio={folio} onBuscar={buscar} />
           {exportando ? (

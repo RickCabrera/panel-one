@@ -165,4 +165,14 @@ describe('periodo en la URL', () => {
     expect(leerPeriodo(rango)).toEqual({ tipo: 'rango', desde: '2026-08-01', hasta: '2026-08-31' });
     expect(rango.get('empresa')).toBe('e');
   });
+
+  it('un periodo nuevo vuelve a la página 1 y no toca lo demás (F2-212)', () => {
+    const previos = new URLSearchParams('empresa=e&pagina=4&folio=A1');
+    const nuevos = escribirPeriodo(previos, { tipo: 'mes' });
+    expect(nuevos.has('pagina')).toBe(false);
+    expect(nuevos.get('folio')).toBe('A1');
+    expect(nuevos.get('empresa')).toBe('e');
+    // No muta los parámetros que recibe.
+    expect(previos.get('pagina')).toBe('4');
+  });
 });

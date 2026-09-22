@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 
 import { useUsuario } from '../auth/contexto';
-import { queryAlcance, useAlcance } from '../filtros/alcance';
+import { useAlcance } from '../filtros/alcance';
+import { queryVista } from '../filtros/vista';
 import { Logo, Marca, NOMBRE_PRODUCTO } from '../marca/Marca';
 import { sinReportar, UMBRAL_ALERTA_S } from '../paginas/admin/reglasAgentes';
 import { useEstadoAgentes } from '../paginas/admin/consultas';
@@ -92,8 +93,9 @@ function Seccion({
   onNavegar: () => void;
 }) {
   const [parametros] = useSearchParams();
-  // Los enlaces conservan empresa/sucursal: cambiar de vista no pierde el filtro.
-  const alcance = queryAlcance(parametros);
+  // Los enlaces conservan empresa, sucursal y periodo (F2-212): cambiar de vista no
+  // pierde el filtro.
+  const alcance = queryVista(parametros);
   const idLista = `menu-seccion-${seccion.id}`;
   const tieneAgentes = seccion.entradas.some((e) => e.id === 'administracion.agentes');
 

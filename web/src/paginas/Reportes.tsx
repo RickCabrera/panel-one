@@ -1,18 +1,9 @@
-import { useCallback, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useState } from 'react';
 
 import { nombreCsv } from '../csv/csv';
 import { useAlcance } from '../filtros/alcance';
-import {
-  escribirPeriodo,
-  leerPeriodo,
-  rangoDe,
-  zonaDelPanel,
-  type Periodo,
-} from '../filtros/periodo';
-import { useHoy } from '../filtros/useHoy';
+import { usePeriodo } from '../filtros/usePeriodo';
 import type { Filtro } from './inicio/consultas';
-import { SelectorPeriodo } from './inicio/SelectorPeriodo';
 import { useReporte, type LimiteTop, type OrdenTop } from './reportes/consultas';
 import { comparativoACsv, porDiaACsv, topACsv } from './reportes/csv';
 import { ReporteComparativo, ReportePorDia, ReporteTop } from './reportes/Tarjetas';
@@ -29,12 +20,8 @@ import { Vista } from './Vista';
  */
 export function Reportes() {
   const { empresa, sucursal, sucursalId, sucursales } = useAlcance();
-  const [parametros, setParametros] = useSearchParams();
-  const periodo = leerPeriodo(parametros);
-
-  const zona = zonaDelPanel(sucursal, sucursales.data);
-  const hoy = useHoy(zona);
-  const rango = rangoDe(periodo, hoy);
+  // El selector de periodo está en la cabecera (F2-212); aquí sólo se lee.
+  const { rango } = usePeriodo();
 
   // Sólo con el alcance validado y la lista de sucursales resuelta (de ella sale la
   // zona de "hoy"), igual que el Panel de ventas.
@@ -50,24 +37,17 @@ export function Reportes() {
   const comparativo = useReporte('comparativo-sucursales', filtro, rango);
   const top = useReporte('top-productos', filtro, rango, { por, limite });
 
-  const cambiarPeriodo = useCallback(
-    (nuevo: Periodo) => setParametros((previos) => escribirPeriodo(previos, nuevo)),
-    [setParametros],
-  );
-
   const archivo = (prefijo: string) =>
     rango ? nombreCsv(prefijo, rango.desde, rango.hasta, sucursal?.nombre) : `${prefijo}.csv`;
 
   return (
     <Vista titulo="Reportes">
-      <SelectorPeriodo periodo={periodo} rangoActual={rango} onCambiar={cambiarPeriodo} />
-
       {rango === null ? (
-        <p className="mt-6 text-sm text-tinta-tenue">
+        <p className="text-sm text-tinta-tenue">
           Corrige el rango de fechas para ver los reportes.
         </p>
       ) : (
-        <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
           <ReportePorDia consulta={porDia} nombreCsv={archivo('ventas-por-dia')} csv={porDiaACsv} />
           <ReporteComparativo
             consulta={comparativo}

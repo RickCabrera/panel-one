@@ -1,4 +1,5 @@
 import type { Sucursal } from '../api/tipos';
+import { PARAM_PAGINA } from './tickets';
 
 /**
  * El periodo del panel, en la URL (`?periodo=&desde=&hasta=`) igual que el alcance:
@@ -120,9 +121,14 @@ export function leerPeriodo(parametros: URLSearchParams): Periodo {
   return { tipo: conocido ? conocido.tipo : 'hoy' };
 }
 
-/** Escribe el periodo sobre los parámetros actuales (conserva empresa y sucursal). */
+/**
+ * Escribe el periodo sobre los parámetros actuales (conserva empresa y sucursal). Un
+ * periodo nuevo siempre vuelve a la página 1 (F2-212): el selector vive en la cabecera
+ * y la vista no se entera del cambio para reiniciar su paginación.
+ */
 export function escribirPeriodo(previos: URLSearchParams, periodo: Periodo): URLSearchParams {
   const nuevos = new URLSearchParams(previos);
+  nuevos.delete(PARAM_PAGINA);
   nuevos.delete(PARAM_DESDE);
   nuevos.delete(PARAM_HASTA);
   if (periodo.tipo === 'hoy') {

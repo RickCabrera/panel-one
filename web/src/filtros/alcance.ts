@@ -129,14 +129,3 @@ export function useNormalizarAlcance(): void {
     setParametros,
   ]);
 }
-
-/** El query string del alcance actual, para que la navegación lo conserve. */
-export function queryAlcance(parametros: URLSearchParams): string {
-  const alcance = new URLSearchParams();
-  for (const clave of [PARAM_EMPRESA, PARAM_SUCURSAL]) {
-    const valor = parametros.get(clave);
-    if (valor) alcance.set(clave, valor);
-  }
-  const texto = alcance.toString();
-  return texto ? `?${texto}` : '';
-}

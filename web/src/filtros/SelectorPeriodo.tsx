@@ -1,4 +1,4 @@
-import { errorDeRango, TIPOS_PERIODO, type Periodo, type Rango } from '../../filtros/periodo';
+import { errorDeRango, TIPOS_PERIODO, type Periodo, type Rango } from './periodo';
 
 const CLASE_FECHA =
   'min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 py-1 text-sm focus:border-acento-borde focus:outline-none';
@@ -6,6 +6,11 @@ const CLASE_FECHA =
 /**
  * Hoy / Esta semana / Este mes / Mes anterior / Rango. Al pasar a "Rango" se
  * precarga el rango que se estaba viendo, para no arrancar con uno inválido.
+ *
+ * Desde F2-212 vive en la cabecera y es el único del panel. Un rango invertido no se
+ * corrige en silencio (quien teclea día por día pasa por fechas intermedias): se
+ * explica, y con él `rangoDe` da `null` y ninguna vista consulta. `min`/`max` hacen
+ * que el calendario nativo ya no ofrezca las fechas que lo invertirían.
  */
 export function SelectorPeriodo({
   periodo,
@@ -56,6 +61,7 @@ export function SelectorPeriodo({
               type="date"
               className={CLASE_FECHA}
               value={periodo.desde ?? ''}
+              max={periodo.hasta || undefined}
               onChange={(e) => onCambiar({ ...periodo, desde: e.target.value })}
             />
           </label>
@@ -65,6 +71,7 @@ export function SelectorPeriodo({
               type="date"
               className={CLASE_FECHA}
               value={periodo.hasta ?? ''}
+              min={periodo.desde || undefined}
               onChange={(e) => onCambiar({ ...periodo, hasta: e.target.value })}
             />
           </label>
