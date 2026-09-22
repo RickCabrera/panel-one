@@ -55,6 +55,8 @@ describe('whereEmpresa / whereScoped', () => {
       AreaCatalogo: 'empresaId',
       CanalVentaCatalogo: 'empresaId',
       ProductoMetadata: 'empresaId',
+      // F2-233: el mapeo área → canal.
+      AreaCanal: 'empresaId',
       SincronizacionCatalogo: 'empresaId',
       SolicitudSincronizacion: 'empresaId',
     });

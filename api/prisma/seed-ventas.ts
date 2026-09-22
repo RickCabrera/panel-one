@@ -14,6 +14,7 @@ import {
 } from './seed-maestro/azar';
 import {
   areasDe,
+  claveDeArea,
   CLIENTES,
   meserosDe,
   MODIFICADORES,
@@ -124,9 +125,9 @@ export interface ChequeSeed {
   partidas: PartidaSeed[];
   pagos: PagoSeed[];
   /**
-   * Lo que el catálogo maestro sabe del cheque. Sólo `clienteClave` se persiste (como
-   * `cliente_origen_sr_id`, F2-232); lo demás lo usan el inventario del seed y las tareas de
-   * catálogos.
+   * Lo que el catálogo maestro sabe del cheque. Se persisten `clienteClave` (como
+   * `cliente_origen_sr_id`, F2-232) y el área (su clave, como `area_origen_sr_id`, F2-233); lo
+   * demás lo usan el inventario del seed y las tareas de catálogos.
    */
   maestro: {
     meseroClave: string;
@@ -371,15 +372,20 @@ export async function sembrarVentas(
   const sembrados = {
     cheque: { sucursalId: { in: sucursalIds }, folioSr: { startsWith: PREFIJO_SEED } },
   };
-  // Lo que no tiene columna (partidas y pagos van aparte; de `maestro` sólo el cliente, y la
-  // clave de producto no se persiste) se quita antes del `createMany`.
+  // Lo que no tiene columna (partidas y pagos van aparte; de `maestro` sólo el cliente y el
+  // área, y la clave de producto no se persiste) se quita antes del `createMany`.
   const filasCheque = cheques.map((c) => {
     const { partidas: _partidas, pagos: _pagos, maestro, ...fila } = c;
     void _partidas;
     void _pagos;
     // El cliente sí tiene columna desde F2-232: el seed de catálogos usa su clave como
     // `origenSrId`, así que la cuenta lo referencia por ese mismo id.
-    return { ...fila, clienteOrigenSrId: maestro.clienteClave };
+    // El área, desde F2-233: su clave es el `origenSrId` del catálogo de áreas del seed.
+    return {
+      ...fila,
+      clienteOrigenSrId: maestro.clienteClave,
+      areaOrigenSrId: claveDeArea(maestro.area),
+    };
   });
   const partidas = cheques.flatMap((c) =>
     c.partidas.map(({ productoClave: _clave, ...p }) => {
@@ -491,8 +497,8 @@ async function main(): Promise<void> {
         `(${DIAS} días hasta ${hoy}, sin cierres después de ${ahora.toISOString()}).`,
     );
     const universo = universoDe(op, generarVentas(op));
-    // Catálogos espejo (F2-230): grupos, productos, meseros y clientes, por la misma
-    // ingesta que usa el agente.
+    // Catálogos espejo (F2-230): grupos, productos, meseros, clientes, áreas y canales (F2-233),
+    // por la misma ingesta que usa el agente; y el mapeo demo área → canal (F2-233).
     const catalogos = await sembrarCatalogos(prisma, {
       empresaId: op.empresaId,
       sucursales,

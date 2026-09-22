@@ -199,6 +199,18 @@ descubre nada nuevo de SR; hereda los supuestos de arriba y fija este criterio:
   el desglose; los pagos no traen orden propio del POS (el contrato de ingesta no lo manda) y
   salen en un orden estable pero arbitrario.
 
+**El área de la cuenta (F2-233, `cheques.area_origen_sr_id`).**
+
+- ⚠️ **SUPUESTO — NO VALIDADO: el cheque de SR referencia el área donde se atendió por el MISMO
+  id estable que usa el catálogo de áreas de esa sucursal** (el `origenSrId` que manda el agente
+  en `POST /ingesta/catalogos`). No se ha visto una instalación real: puede que el cheque guarde
+  el nombre del área, la mesa (y la mesa el área), otro id o nada. Es `DECISION PROVISIONAL
+  (nocturno)` en `schema.prisma` (modelo `Cheque`) y en `DatosChequeDto.areaOrigenSrId`. Se
+  confirma en F1-090/F2-192: si el cheque no trae ese id, toda la venta sale "sin clasificar" o
+  "sin canal" en Áreas y canales.
+- Nulo = la cuenta no trae área ("sin clasificar"). Sin FK al espejo. Máximo 64, CHECK "no vacío"
+  en base. **Hoy ningún agente lo manda** (no hay lector de cheques, F1-022).
+
 **El cliente de la cuenta (F2-232, `cheques.cliente_origen_sr_id`).**
 
 - ⚠️ **SUPUESTO — NO VALIDADO: el cheque de SR referencia al cliente por el MISMO id estable que
@@ -748,9 +760,10 @@ una instalación real (F2-192):
 
 _(pendiente)_
 
-**Estado del modelo (F2-221):** el contrato de ingesta **no trae** área, estación ni canal, y
-`cheques` no tiene dónde guardarlos. El seed maestro los genera pero no los persiste. Por eso el
-desglose "por área y canal" de Análisis queda vacío con su explicación y lo completa F2-233.
+**Estado del modelo (F2-233):** el contrato de eventos trae el **área** de la cuenta
+(`datos.areaOrigenSrId`, §2 y §13) y `cheques.area_origen_sr_id` la guarda; **ni estación ni
+canal** viajan en el cheque. El canal de negocio es NUESTRO y sale del mapeo área → canal. El
+seed maestro persiste áreas, tipos de servicio, el área de cada cheque y un mapeo demo.
 
 **Lo que el espejo de áreas y canales (F2-230) supone.**
 
@@ -759,6 +772,37 @@ desglose "por área y canal" de Análisis queda vacío con su explicación y lo 
   servicio** (comedor / mostrador / domicilio) y se le dio tabla espejo (`canales_venta_catalogo`,
   comentario en `schema.prisma`). Si SR no lo tiene, el agente cierra ese catálogo con `total=0`.
   El mapeo **área → canal de negocio es nuestro** y es de F2-233.
+
+**Lo que Áreas y canales (F2-233) supone y decide** (`GET /ventas/por-area`,
+`GET /catalogos/areas/mapeo`, `PUT /catalogos/areas/{id}/canal`, vista `/areas` y el bloque "Por
+área y canal" de Análisis).
+
+- **El cruce cuenta ↔ área es por (sucursal, `origen_sr_id`) EXACTO**, contra el espejo en
+  cualquier estado (un área dada de baja sigue en sus periodos pasados con su nombre y su canal).
+  Nunca por la clave visible ni por el nombre. El mismo id en dos sucursales son dos áreas.
+- **El canal de negocio sale SÓLO del mapeo** (`areas_canal`, uno por fila espejo del área), que
+  es nuestro: ninguna sincronización lo toca y se aplica al leer, así que cambiarlo recalcula
+  cualquier periodo sin re-ingerir. Sin mapeo no se adivina desde el nombre del área.
+- **Nada se reparte a ojo:** Σ áreas + "sin clasificar" = Σ canales + "sin canal" + "sin
+  clasificar" = `/ventas/resumen`. "Sin clasificar" = la cuenta no trae área. "Sin canal" = área
+  sin canal asignado, o un id que el espejo no tiene (`sin-catalogo` si la sucursal sincronizó
+  áreas; `sin-sincronizar` si nunca lo hizo, porque entonces no se puede afirmar que falte).
+- **El catálogo de canales / tipos de servicio del POS (`canales_venta_catalogo`) NO interviene en
+  el cálculo.** Conservador: no se sabe cómo SR liga una cuenta con su tipo de servicio (si es
+  que lo hace). Si el cheque trae un tipo de servicio propio, usarlo o no es decisión de
+  F2-144/F2-192.
+- ⚠️ **Riesgo conocido del supuesto:** si una reinstalación del POS cambia los ids de las áreas,
+  llegan filas espejo NUEVAS sin mapeo (las viejas quedan `activo=false` con el suyo) y la venta
+  nueva cae en "sin canal" hasta que alguien las asigne. Es lo honesto; no se remapea por nombre.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — el conjunto de canales.** Quedó como enum fijo de Postgres
+  (`canal_negocio`: comedor, mostrador, domicilio, plataformas, el de F2-144); agregar uno ("para
+  llevar", "eventos") es una migración. Lo cierra el spike de F2-144.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — mapeo por sucursal o por empresa.** El espejo es por
+  sucursal, así que el mapeo también: una empresa con 10 sucursales mapea "Terraza" 10 veces.
+  ¿Mapear por nombre a nivel empresa? No se construyó sin decisión.
+- **Estaciones: sin dato.** No hay espejo, contrato ni seed de estaciones (terminales o puntos
+  de cobro); no se sabe si esta versión de SR las registra ni dónde. La vista lo dice en vez de
+  inventar un desglose. Queda para F2-240 (leerlas si existen) y F2-192 (validarlas).
 
 **Clientes (F2-230).** ⚠️ **SUPUESTO — no toda instalación usa clientes.** El espejo acepta
 nombre, teléfono, correo y RFC tal como el POS los guarde (sin validar formato: rechazar un cliente
@@ -1079,6 +1123,18 @@ que cumplir al leer SR:
 - **Forzado manual:** `GET /ingesta/catalogos/solicitud` → `pendiente=true` mientras algún catálogo
   de los seis no haya **recibido** un cierre (reloj del API) después de la solicitud. Un cierre
   tomado antes pero recibido después la da por atendida (desfase de relojes aceptado).
+
+### Campo nuevo del contrato de eventos (F2-233): `datos.areaOrigenSrId` del cheque
+
+- Opcional, texto de hasta 64. ⚠️ **SUPUESTO NO VALIDADO** (§2): es el mismo `origenSrId` que el
+  catálogo de áreas de esa sucursal. **El campo existe y hoy nadie lo manda**: no hay lector de
+  cheques (F1-022, bloqueada por F1-090). Mientras tanto, en una instalación real toda la venta
+  sale "sin clasificar" en Áreas y canales; la vista lo dice.
+- Mismas reglas que `clienteOrigenSrId`: tal cual; nulo, ausente o sólo espacios = sin área;
+  **omitirlo lo guarda nulo** (el cheque viaja completo); entra en la forma canónica
+  (`canonico.ts`): cambiarla reescribe el cheque y reenviar lo mismo no toca nada; los cheques de
+  antes de F2-233 tienen nulo y un reenvío sin el campo sigue siendo idéntico; uno de más de 64
+  rechaza sólo ese evento, con un motivo que no repite el valor.
 
 ### Campo nuevo del contrato de eventos (F2-232): `datos.clienteOrigenSrId` del cheque
 

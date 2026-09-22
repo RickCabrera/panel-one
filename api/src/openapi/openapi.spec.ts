@@ -152,6 +152,35 @@ describe('Contrato OpenAPI', () => {
     ]);
   });
 
+  it('documenta Áreas y canales: venta por área, el mapeo y el área de la cuenta (F2-233)', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const nombres = (op?: { parameters?: unknown[] }) =>
+      (op?.parameters ?? []).map((p) => (p as { name: string }).name).sort();
+    const porArea = paths['/ventas/por-area']?.get;
+    expect(Object.keys(porArea?.responses ?? {}).sort()).toEqual(['200', '400', '401', '404']);
+    const mapeo = paths['/catalogos/areas/mapeo']?.get;
+    expect(nombres(mapeo)).toEqual(['empresaId', 'sucursalId']);
+    const asignar = paths['/catalogos/areas/{id}/canal']?.put;
+    expect(Object.keys(asignar?.responses ?? {}).sort()).toEqual(['200', '400', '401', '403', '404']);
+    const esquemas = doc.components?.schemas as Record<
+      string,
+      { properties?: Record<string, { $ref?: string; allOf?: unknown[]; enum?: string[] }>; enum?: string[] }
+    >;
+    expect(Object.keys(esquemas.DatosChequeDto.properties ?? {})).toContain('areaOrigenSrId');
+    expect(Object.keys(esquemas.VentaPorAreaDto.properties ?? {})).toEqual([
+      'venta',
+      'cuentas',
+      'areas',
+      'sinArea',
+      'canales',
+      'sinCanal',
+      'catalogo',
+    ]);
+    expect(esquemas.CanalNegocio.enum).toEqual(['comedor', 'mostrador', 'domicilio', 'plataformas']);
+    expect(Object.keys(esquemas.AsignarCanalAreaDto.properties ?? {})).toEqual(['empresaId', 'canal']);
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
@@ -159,6 +188,8 @@ describe('Contrato OpenAPI', () => {
         '/agente/yo',
         '/agentes/estado',
         '/catalogos/areas',
+        '/catalogos/areas/mapeo',
+        '/catalogos/areas/{id}/canal',
         '/catalogos/canales',
         '/catalogos/clientes',
         '/catalogos/clientes/resumen',
@@ -199,6 +230,7 @@ describe('Contrato OpenAPI', () => {
         '/ventas/comparativo-sucursales',
         '/ventas/formas-pago',
         '/ventas/hora-dia',
+        '/ventas/por-area',
         '/ventas/por-dia',
         '/ventas/por-hora',
         '/ventas/por-mesa',
@@ -346,6 +378,8 @@ describe('Contrato OpenAPI', () => {
       '/ventas/por-producto',
       '/ventas/hora-dia',
       '/ventas/por-mesa',
+      // Áreas y canales (F2-233).
+      '/ventas/por-area',
     ]) {
       expect(nombres(ruta)).toEqual(FILTRO);
     }

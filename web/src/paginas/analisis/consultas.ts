@@ -1,7 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { pedir } from '../../api/cliente';
-import type { VentaHoraDia, VentaMesero, VentaPorMesa, VentaPorProducto } from '../../api/tipos';
+import type {
+  VentaHoraDia,
+  VentaMesero,
+  VentaPorArea,
+  VentaPorMesa,
+  VentaPorProducto,
+} from '../../api/tipos';
 import { llaveConAltura, mantenerSiSoloCambiaLaAltura } from '../../consultas/altura';
 import type { Rango } from '../../filtros/periodo';
 import { AUTO_REFRESCO_MS, type Filtro } from '../inicio/consultas';
@@ -11,6 +17,8 @@ interface Endpoints {
   'por-producto': VentaPorProducto;
   'hora-dia': VentaHoraDia;
   'por-mesa': VentaPorMesa;
+  // F2-233: también lo usa la vista Áreas y canales (misma llave: un cambio de mapeo refresca las dos).
+  'por-area': VentaPorArea;
 }
 
 export type EndpointAnalisis = keyof Endpoints;

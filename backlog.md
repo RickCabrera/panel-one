@@ -1019,6 +1019,16 @@ segunda vez; el agente registra en su log qué catálogo sincronizó, cuántas f
 tiempo; y `agente test` incluye una sonda que **falla ruidosamente** si el usuario SQL
 configurado tiene permisos de escritura.
 
+> **Y además (de F2-233).** (1) **Estaciones:** el panel no tiene espejo, contrato ni dato de
+> estaciones (terminales o puntos de cobro): F2-233 las dejó fuera y la vista Áreas y canales lo
+> dice. Si SR las tiene, este lector las busca y documenta en `docs/esquema-sr.md` §8 dónde
+> viven; su espejo, contrato y desglose serían una tarea nueva. (2) **Área de la cuenta:** el
+> contrato de `POST /ingesta/eventos` ya acepta `datos.areaOrigenSrId` (el MISMO `origenSrId`
+> que este lector manda en el catálogo de áreas). Hoy **ningún agente lo manda**, así que en una
+> instalación real toda la venta sale "sin clasificar" en Áreas y canales; lo llena el lector de
+> cheques (F1-022) cuando exista, y **omitirlo lo guarda nulo** (el cheque viaja completo). Ver
+> §2, §8 y §13.
+
 ### F2-241 · Lectores de inventario y recetas
 `[ ]` **Bloque H** · /agent
 
@@ -1370,6 +1380,12 @@ catálogo de SoftRestaurant (conteo y nombres); las existencias cuadran contra e
 inventario del POS del mismo corte; cada `DECISION PROVISIONAL (nocturno)` de los lectores
 queda confirmada o corregida y borrada del código; y `docs/esquema-sr.md` pasa de "supuesto" a
 "validado" en las secciones 6 a 10, con la instalación y la versión anotadas.
+
+> **Y además (de F2-233).** Validar contra una instalación real: que el cheque de SR referencia
+> el área por el MISMO id que su catálogo de áreas (`DECISION PROVISIONAL` en `schema.prisma`,
+> modelo `Cheque`, y en `ingesta.dto.ts#areaOrigenSrId`); si SR tiene estaciones y dónde; y si
+> una reinstalación del POS cambia los ids de las áreas (el mapeo área → canal quedaría colgado
+> de las filas viejas y la venta nueva caería en "sin canal"). esquema-sr §8.
 
 ## F2-193 · Validar inventario, recetas y utilidad contra la operación real
 `[ ]` **Bloque E** · 🔒 **Razón: necesita el piloto con operación real (depende de F1-091).**
@@ -1835,6 +1851,14 @@ antes de construir.
 
 **Listo cuando:** spike documentado en `/docs/delivery.md` con decisión de alcance; la vista
 muestra la mezcla por canal cuadrando contra el total de ventas.
+
+> **Y además (de F2-233).** Ya existen el mapeo área → canal de negocio (`areas_canal`,
+> `PUT /catalogos/areas/{id}/canal`) y `GET /ventas/por-area` (venta por canal con "sin canal" y
+> "sin clasificar" aparte, Σ = venta). ❓ **Decisión abierta para Ricardo, que esta tarea cierra
+> con su spike:** el conjunto de canales quedó como enum fijo de Postgres (`comedor`,
+> `mostrador`, `domicilio`, `plataformas`); agregar uno ("para llevar", "eventos") es una
+> migración. Y el mapeo es por área de CADA sucursal: ¿hace falta mapear por nombre a nivel
+> empresa? No construyas sobre otra forma sin decidir eso.
 
 ### F2-145 · Orquestador de menú / catálogo de productos
 `[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-192. Vista "Productos" y "Orquestador de menú": catálogo de productos leído de SR (grupos,

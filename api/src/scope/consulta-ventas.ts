@@ -17,11 +17,12 @@ import type { EmpresaScope } from './empresa-scope';
  * - `ventas(id, empresa_id, sucursal_id, folio, cerrado_at, hora_local,
  *   dia_local, comensales, subtotal, impuestos, descuentos, propina, total,
  *   recibido_at, mesa, mesero, abierto_at, dia_semana_local, segundos_abierta,
- *   cliente_origen_sr_id)`: cheques
+ *   cliente_origen_sr_id, area_origen_sr_id)`: cheques
  *   NO cancelados cerrados en el rango. `hora_local`, `dia_local` y `dia_semana_local`
  *   (ISO: 1 = lunes … 7 = domingo) son los del cierre en la zona de SU sucursal;
  *   `segundos_abierta` = cierre − apertura (F2-221; negativo si el POS los trae al revés).
  *   `cliente_origen_sr_id` = el id del cliente en el POS de SU sucursal, o nulo (F2-232).
+ *   `area_origen_sr_id` = el id del área en el POS de SU sucursal, o nulo (F2-233).
  * - `cancelados(id, empresa_id, sucursal_id, folio, momento, recibido_at, mesero, total,
  *   mesa, comensales, propina, abierto_at, cerrado_at, cliente_origen_sr_id)`:
  *   cheques cancelados del rango, ubicados por `momento = COALESCE(cerrado_at, abierto_at)`.
@@ -330,7 +331,8 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
            c.mesa, c.mesero, c.abierto_at,
            extract(isodow FROM c.cerrado_at AT TIME ZONE s.zona_horaria)::int AS dia_semana_local,
            extract(epoch FROM (c.cerrado_at - c.abierto_at))::int AS segundos_abierta,
-           c.cliente_origen_sr_id
+           c.cliente_origen_sr_id,
+           c.area_origen_sr_id
     FROM cheques c
     JOIN sucursales_alcance s ON s.id = c.sucursal_id AND s.empresa_id = c.empresa_id
     WHERE c.empresa_id = ${empresa} ${filtroTenant(scope, 'c')} ${sucursalCheque}

@@ -15,6 +15,7 @@ export type AccionAuditada =
   | 'regla_alerta.editar'
   | 'suscripcion_reporte.editar'
   | 'producto_metadata.editar'
+  | 'area_canal.asignar'
   | 'sucursal.forzar_sincronizacion';
 
 export interface EventoAuditoria {
@@ -25,7 +26,8 @@ export interface EventoAuditoria {
     | 'usuario'
     | 'regla_alerta'
     | 'suscripcion_reporte'
-    | 'producto';
+    | 'producto'
+    | 'area';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

@@ -76,7 +76,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'alerta',
       'alertaEvaluacion',
       // F2-230: catálogos espejo; sus escrituras van por `catalogosDeSucursal(agente)` y
-      // `catalogos(scope)`, no por aquí.
+      // `catalogos(scope)`, no por aquí. F2-233: el mapeo área → canal, por `catalogos(scope)`.
+      'areaCanal',
       'areaCatalogo',
       'canalVentaCatalogo',
       'cheque',

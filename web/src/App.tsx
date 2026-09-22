@@ -13,6 +13,7 @@ import { Analisis } from './paginas/Analisis';
 import { BajaReportes } from './paginas/BajaReportes';
 import { Comparativos } from './paginas/Comparativos';
 import { Cuenta } from './paginas/Cuenta';
+import { Areas } from './paginas/Areas';
 import { Clientes } from './paginas/Clientes';
 import { Inicio } from './paginas/Inicio';
 import { Login } from './paginas/Login';
@@ -83,6 +84,7 @@ export function Rutas() {
         <Route path="menu" element={<Menu />} />
         <Route path="meseros" element={<Meseros />} />
         <Route path="clientes" element={<Clientes />} />
+        <Route path="areas" element={<Areas />} />
         <Route path="cuenta" element={<Cuenta />} />
         <Route
           path="admin"

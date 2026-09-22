@@ -29,10 +29,16 @@ import { ErrorDto } from '../auth/dto/sesion.dto';
 import type { RequestAutenticado } from '../auth/request-autenticado';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
-import { CatalogosService, type FichaCliente, type Pagina } from './catalogos.service';
+import {
+  CatalogosService,
+  type FichaCliente,
+  type MapeoAreas,
+  type Pagina,
+} from './catalogos.service';
 import { POR_PAGINA_CLIENTES, type ResumenClientes } from './clientes';
 import type { RendimientoMeseros } from './meseros';
 import {
+  AsignarCanalAreaDto,
   CatalogoQueryDto,
   DetalleProductoDto,
   EmpresaQueryDto,
@@ -41,7 +47,10 @@ import {
   ResumenClientesDto,
   ResumenClientesQueryDto,
   ForzarSincronizacionDto,
+  FilaMapeoAreaDto,
   GuardarMetadataDto,
+  MapeoAreasDto,
+  MapeoAreasQueryDto,
   MenuDto,
   MenuQueryDto,
   PaginaCatalogoLecturaDto,
@@ -134,7 +143,9 @@ export class CatalogosController {
   @Get('canales')
   @ApiOperation({
     summary: 'Canales o tipos de servicio del POS.',
-    description: `${DESC_LISTA} El mapeo área → canal de negocio es nuestro y es otra tarea (F2-233).`,
+    description:
+      `${DESC_LISTA} No interviene en el canal de negocio de las ventas: ése sale del mapeo ` +
+      'área → canal (`/catalogos/areas/mapeo`, F2-233).',
   })
   @ApiOkResponse({ type: PaginaCatalogoLecturaDto })
   canales(
@@ -142,6 +153,41 @@ export class CatalogosController {
     @Query() q: CatalogoQueryDto,
   ): Promise<Pagina<FilaCatalogoDto>> {
     return this.listar(scope, 'canales', q);
+  }
+
+  @Get('areas/mapeo')
+  @ApiOperation({
+    summary: 'Áreas del espejo con su canal de negocio asignado (F2-233).',
+    description:
+      'Todas las áreas (también las dadas de baja) y la última sincronización completa del ' +
+      'catálogo de áreas de cada sucursal. El mapeo es nuestro: ninguna sincronización lo toca.',
+  })
+  @ApiOkResponse({ type: MapeoAreasDto })
+  mapeoAreas(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: MapeoAreasQueryDto,
+  ): Promise<MapeoAreas> {
+    return this.catalogos.mapeoAreas(scope, q.empresaId, q.sucursalId);
+  }
+
+  @Put('areas/:id/canal')
+  @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
+  @ApiOperation({
+    summary: 'Asigna (o quita, con null) el canal de negocio de un área del POS (F2-233).',
+    description:
+      'Se aplica al leer: `/ventas/por-area` recalcula cualquier periodo sin re-ingerir. Un área ' +
+      'de otra empresa, fuera de alcance o inexistente = el mismo 404. Responde la fila.',
+  })
+  @ApiOkResponse({ type: FilaMapeoAreaDto })
+  @ApiForbiddenResponse({ type: ErrorDto, description: 'Rol insuficiente (visor).' })
+  asignarCanalArea(
+    @Req() req: RequestAutenticado,
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AsignarCanalAreaDto,
+  ): Promise<FilaMapeoAreaDto> {
+    const { id: actorId, rol } = req.usuario!;
+    return this.catalogos.asignarCanalArea({ id: actorId, rol }, scope, id, dto);
   }
 
   @Get('menu')

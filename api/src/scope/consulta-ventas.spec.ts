@@ -90,6 +90,18 @@ function sinF2232(texto: string): string {
   return resto;
 }
 
+/**
+ * Lo que F2-233 (Áreas y canales) agregó, literal: `area_origen_sr_id` en `ventas`. TIENE que
+ * estar una sola vez y se quita; ningún filtro ni parámetro cambió.
+ */
+const COLUMNA_F2_233 = ',\n           c.area_origen_sr_id\n';
+
+function sinF2233(texto: string): string {
+  const resto = texto.replace(/\r\n/g, '\n');
+  expect(resto.split(COLUMNA_F2_233)).toHaveLength(2);
+  return resto.replace(COLUMNA_F2_233, '\n');
+}
+
 describe('guardiaCuerpo()', () => {
   it('conoce TODAS las tablas del datamodel, no una lista escrita a mano', () => {
     const modelos = Prisma.dmmf.datamodel.models.map((m) => m.dbName ?? m.name);
@@ -226,7 +238,8 @@ describe('alturaAl (F2-220)', () => {
     // F2-222 agregó columnas y dos CTEs AL FINAL (`partidas_empresa`, `pagos_empresa`), con sus
     // 4 parámetros también al final: se quitan, y lo demás sigue siendo el snapshot de siempre.
     // F2-232 sólo agregó `cliente_origen_sr_id` a las columnas: también se quita.
-    expect(sinColumnasF2221(sinF2222(sinF2232(armado.sql)))).toMatchSnapshot();
+    // F2-233 sólo agregó `area_origen_sr_id` a `ventas`: también se quita.
+    expect(sinColumnasF2221(sinF2222(sinF2232(sinF2233(armado.sql))))).toMatchSnapshot();
     expect(armado.values.slice(0, -4)).toMatchSnapshot();
     expect(armado.values.slice(-4)).toEqual([FX.empresaA, FX.empresaA, FX.empresaA, FX.empresaA]);
   });
