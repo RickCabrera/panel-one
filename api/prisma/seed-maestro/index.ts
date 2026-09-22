@@ -74,7 +74,7 @@ export interface MeseroUniverso {
   bajaDesde: string | null;
 }
 
-export interface AreaUniverso extends Pick<Area, 'nombre' | 'canal'> {
+export interface AreaUniverso extends Pick<Area, 'clave' | 'nombre' | 'canal'> {
   sucursalId: string;
 }
 
@@ -132,7 +132,7 @@ export function generarUniverso(op: {
     }),
   );
   const areas = op.sucursales.flatMap((s, i) =>
-    areasDe(i).map((a) => ({ nombre: a.nombre, canal: a.canal, sucursalId: s.id })),
+    areasDe(i).map((a) => ({ clave: a.clave, nombre: a.nombre, canal: a.canal, sucursalId: s.id })),
   );
   const recetas = Object.entries(RECETAS).map(([producto, renglones]) => ({ producto, renglones }));
 

@@ -1,4 +1,4 @@
-import { Prisma, type CatalogoSr } from '@prisma/client';
+import { Prisma, type CanalNegocio, type CatalogoSr } from '@prisma/client';
 
 import type { AgenteAutenticado } from '../auth/request-autenticado';
 import type { Contenido, FilaExistente, PlanPagina } from '../ingesta/catalogos';
@@ -347,7 +347,13 @@ export interface DatosMetadata {
 
 type ClientePanel = Pick<
   Prisma.TransactionClient,
-  'empresa' | 'sucursal' | 'producto' | 'productoMetadata' | 'solicitudSincronizacion'
+  | 'empresa'
+  | 'sucursal'
+  | 'producto'
+  | 'productoMetadata'
+  | 'solicitudSincronizacion'
+  | 'areaCatalogo'
+  | 'areaCanal'
 >;
 
 /** Lo que devuelve `ScopedPrismaService.catalogos(scope)`. */
@@ -384,6 +390,44 @@ export class EscrituraCatalogos {
     await this.#cliente.productoMetadata.upsert({
       where: { productoId: producto.id },
       create: { ...valores, productoId: producto.id, empresaId: producto.empresaId },
+      update: valores,
+    });
+  }
+
+  /**
+   * Asigna (o, con `null`, quita) el canal de negocio de un área del espejo (F2-233). El área se
+   * busca CON el scope y dentro de la empresa pedida: de otra empresa, fuera de alcance o
+   * inexistente = el mismo 404. Quitar un canal que no estaba no es error.
+   */
+  async asignarCanalArea(
+    empresaId: string,
+    areaId: string,
+    canal: CanalNegocio | null,
+    actorId: string,
+    ahora: Date,
+  ): Promise<void> {
+    const area = encontradoOr404(
+      await this.#cliente.areaCatalogo.findFirst({
+        where: whereScoped(this.#scope, 'AreaCatalogo', {
+          id: exigir('areaId', areaId),
+          empresaId: exigir('empresaId', empresaId),
+        }),
+        select: { id: true, empresaId: true },
+      }),
+    );
+    if (canal === null) {
+      await this.#cliente.areaCanal.deleteMany({
+        where: whereScoped(this.#scope, 'AreaCanal', {
+          areaId: area.id,
+          empresaId: area.empresaId,
+        }),
+      });
+      return;
+    }
+    const valores = { canal, actualizadoPor: exigir('actorId', actorId), updatedAt: ahora };
+    await this.#cliente.areaCanal.upsert({
+      where: { areaId: area.id },
+      create: { ...valores, areaId: area.id, empresaId: area.empresaId },
       update: valores,
     });
   }

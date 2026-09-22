@@ -200,6 +200,24 @@ export class DatosChequeDto {
   @MaxLength(64)
   clienteOrigenSrId?: string | null;
 
+  // DECISION PROVISIONAL (nocturno): se supone que el cheque de SR trae el MISMO id del área que
+  // su catálogo de áreas; no se ha visto una instalación real (docs/esquema-sr.md §2, §8, §13).
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'A01',
+    maxLength: 64,
+    description:
+      'F2-233: el id estable del área del POS donde se atendió la cuenta (comedor, terraza, ' +
+      'barra…), el MISMO `origenSrId` que manda el catálogo de áreas de esta sucursal. Nulo, ' +
+      'ausente o sólo espacios = la cuenta no trae área ("sin clasificar"; el cheque se manda ' +
+      'completo cada vez: omitirlo guarda nulo). No hace falta que el área ya esté en el catálogo.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  areaOrigenSrId?: string | null;
+
   @ApiProperty(DOC_DINERO)
   @IsString()
   @Matches(DINERO, { message: MENSAJE_DINERO })

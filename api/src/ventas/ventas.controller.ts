@@ -30,6 +30,7 @@ import {
   type VentaPorMesa,
   type VentaPorProducto,
 } from './analisis.service';
+import { AreasVentaService } from './areas-venta.service';
 import { CacheAgregados } from './cache-agregados';
 import {
   FiltroVentasQueryDto,
@@ -44,10 +45,12 @@ import {
   VentaHoraDiaDto,
   VentaHoraDto,
   VentaMeseroDto,
+  VentaPorAreaDto,
   VentaPorMesaDto,
   VentaPorProductoDto,
   VentaSucursalDto,
 } from './dto/ventas.dto';
+import type { VentaPorArea } from './por-area';
 import { TicketsService, type PaginaTickets } from './tickets.service';
 
 const DESC_404 =
@@ -87,6 +90,7 @@ export class VentasController {
   constructor(
     private readonly agregados: AgregadosVentasService,
     private readonly analisis: AnalisisService,
+    private readonly areas: AreasVentaService,
     private readonly tickets: TicketsService,
     private readonly cache: CacheAgregados,
   ) {}
@@ -265,6 +269,24 @@ export class VentasController {
     return this.cache.obtener(scope, 'por-mesa', parametros(q), () =>
       this.analisis.porMesa(scope, filtroDe(q)),
     );
+  }
+
+  @Get('por-area')
+  @ApiOperation({
+    summary:
+      'Áreas y canales (F2-233): venta y cuentas por (sucursal, área del POS) y por canal de ' +
+      'negocio, con "sin clasificar" (sin área) y "sin canal" (área sin canal asignado) aparte.',
+    description:
+      'Σ areas + sinArea = Σ canales + sinCanal + sinArea = /ventas/resumen. El canal sale del ' +
+      'mapeo área → canal (`PUT /catalogos/areas/{id}/canal`), que se aplica al leer: cambiarlo ' +
+      'recalcula cualquier periodo sin re-ingerir. Sin cache.',
+  })
+  @ApiOkResponse({ type: VentaPorAreaDto })
+  porArea(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: FiltroVentasQueryDto,
+  ): Promise<VentaPorArea> {
+    return this.areas.porArea(scope, filtroDe(q));
   }
 
   @Get('tickets')

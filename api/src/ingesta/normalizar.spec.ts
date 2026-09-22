@@ -91,6 +91,7 @@ describe('normalizar (F1-031)', () => {
       mesero: null,
       comensales: null,
       clienteOrigenSrId: null,
+      areaOrigenSrId: null,
       subtotal: D('10.5'),
       impuestos: D('0'),
       descuentos: D('0'),
@@ -146,6 +147,15 @@ describe('normalizar (F1-031)', () => {
       expect(conCliente).not.toBe(chequeCanonico(base));
       expect(chequeCanonico({ ...base, clienteOrigenSrId: 'SR-18' })).not.toBe(conCliente);
       expect(chequeCanonico({ ...base, clienteOrigenSrId: 'SR-17' })).toBe(conCliente);
+    });
+
+    it('F2-233: poner, cambiar o quitar el área lo cambia (el reenvío lo reescribe)', () => {
+      const conArea = chequeCanonico({ ...base, areaOrigenSrId: 'A01' });
+      expect(conArea).not.toBe(chequeCanonico(base));
+      expect(chequeCanonico({ ...base, areaOrigenSrId: 'A02' })).not.toBe(conArea);
+      expect(chequeCanonico({ ...base, areaOrigenSrId: 'A01' })).toBe(conArea);
+      // El área no es el cliente: el mismo texto en el otro campo es otro cheque.
+      expect(chequeCanonico({ ...base, clienteOrigenSrId: 'A01' })).not.toBe(conArea);
     });
   });
 });

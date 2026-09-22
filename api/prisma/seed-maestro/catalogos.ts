@@ -54,8 +54,10 @@ export interface Cliente {
 export type Canal = 'comedor' | 'mostrador' | 'domicilio';
 
 export interface Area {
+  /** Id del área en el "POS" del seed (`origenSrId` = `clave`). Constante: no usa el azar. */
+  clave: string;
   nombre: string;
-  /** Canal de negocio por defecto; F2-233 lo vuelve configurable. */
+  /** Canal de negocio por defecto: el mapeo demo que siembra F2-233 (configurable en el panel). */
   canal: Canal;
   /** Peso relativo del área al repartir los cheques. */
   peso: number;
@@ -184,12 +186,20 @@ export const CLIENTES: readonly Cliente[] = NOMBRES_CLIENTE.map((nombre, i) => (
 export const CANALES: readonly Canal[] = ['comedor', 'mostrador', 'domicilio'];
 
 export const AREAS: readonly Area[] = [
-  { nombre: 'Comedor', canal: 'comedor', peso: 55, sucursales: [0, 1] },
-  { nombre: 'Terraza', canal: 'comedor', peso: 12, sucursales: [0] },
-  { nombre: 'Barra', canal: 'comedor', peso: 8, sucursales: [0, 1] },
-  { nombre: 'Mostrador', canal: 'mostrador', peso: 10, sucursales: [0, 1] },
-  { nombre: 'Domicilio', canal: 'domicilio', peso: 12, sucursales: [0, 1] },
+  { clave: 'A01', nombre: 'Comedor', canal: 'comedor', peso: 55, sucursales: [0, 1] },
+  { clave: 'A02', nombre: 'Terraza', canal: 'comedor', peso: 12, sucursales: [0] },
+  { clave: 'A03', nombre: 'Barra', canal: 'comedor', peso: 8, sucursales: [0, 1] },
+  { clave: 'A04', nombre: 'Mostrador', canal: 'mostrador', peso: 10, sucursales: [0, 1] },
+  { clave: 'A05', nombre: 'Domicilio', canal: 'domicilio', peso: 12, sucursales: [0, 1] },
 ];
+
+/** La clave (id del "POS") de un área del seed por su nombre; null sin área. */
+export function claveDeArea(nombre: string | null): string | null {
+  if (nombre === null) return null;
+  const a = AREAS.find((x) => x.nombre === nombre);
+  if (!a) throw new Error(`Área desconocida en el seed: ${nombre}`);
+  return a.clave;
+}
 
 /**
  * Probabilidad de que un cheque llegue SIN área: F2-233 tiene que mostrar la

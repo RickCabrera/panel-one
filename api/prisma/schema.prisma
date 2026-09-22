@@ -264,6 +264,13 @@ model Cheque {
   // ha visto en una instalación real (docs/esquema-sr.md §2 y §8). CHECK "no vacío" a mano en la
   // migración `..._cheque_cliente`.
   clienteOrigenSrId String? @map("cliente_origen_sr_id")
+  // El área del POS donde se atendió la cuenta (F2-233): el MISMO id estable que usa el
+  // catálogo de áreas de esa sucursal (`areas_catalogo.origen_sr_id`). Sin FK: cheques y
+  // catálogos llegan en cualquier orden. Nulo = la cuenta no trae área ("sin clasificar").
+  // DECISION PROVISIONAL (nocturno): que el cheque de SR referencia el área por ese id no se ha
+  // visto en una instalación real (docs/esquema-sr.md §2, §8 y §13). CHECK "no vacío" a mano en
+  // la migración `..._areas_canal`.
+  areaOrigenSrId    String? @map("area_origen_sr_id")
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -734,8 +741,11 @@ model AreaCatalogo {
   updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
 
   sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "areas_catalogo_sucursal_empresa_fkey")
+  canal    AreaCanal?
 
   @@unique([sucursalId, origenSrId], map: "areas_catalogo_sucursal_id_origen_sr_id_key")
+  // Destino de la FK compuesta de `areas_canal` (F2-233).
+  @@unique([id, empresaId], map: "areas_catalogo_id_empresa_id_key")
   @@index([empresaId])
   // El conteo y la baja del cierre van por (sucursal, sincronización).
   @@index([sucursalId, sincronizacionId])
@@ -767,6 +777,37 @@ model CanalVentaCatalogo {
   // El conteo y la baja del cierre van por (sucursal, sincronización).
   @@index([sucursalId, sincronizacionId])
   @@map("canales_venta_catalogo")
+}
+
+// Canal de NEGOCIO de un área (F2-233). DECISION PROVISIONAL (nocturno): enum fijo con el
+// conjunto de F2-144; agregar un canal ("para llevar", "eventos") es una migración. Decisión
+// abierta para Ricardo (esquema-sr.md §8).
+enum CanalNegocio {
+  comedor
+  mostrador
+  domicilio
+  plataformas
+
+  @@map("canal_negocio")
+}
+
+// El mapeo área del POS → canal de negocio (F2-233). Es NUESTRO, no del POS: vive aparte, como
+// `productos_metadata`, y ninguna sincronización lo toca. Cuelga de la fila espejo del área, que
+// nunca se borra (renombrar = misma fila; desaparecer = `activo=false`; reaparecer = misma fila):
+// por eso sobrevive cualquier re-sync. Sin fila = "área sin canal asignado". Se aplica AL LEER:
+// cambiarlo recalcula cualquier periodo sin re-ingerir nada.
+model AreaCanal {
+  areaId         String       @id @map("area_id") @db.Uuid
+  empresaId      String       @map("empresa_id") @db.Uuid
+  canal          CanalNegocio
+  actualizadoPor String       @map("actualizado_por") @db.Uuid
+  updatedAt      DateTime     @map("updated_at") @db.Timestamptz(3)
+
+  area AreaCatalogo @relation(fields: [areaId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "areas_canal_area_empresa_fkey")
+
+  @@unique([areaId, empresaId], map: "areas_canal_area_id_empresa_id_key")
+  @@index([empresaId])
+  @@map("areas_canal")
 }
 
 // Metadata PROPIA de un producto (F2-230): es nuestra, no del POS, y por eso vive

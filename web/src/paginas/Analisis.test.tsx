@@ -8,6 +8,7 @@ import type {
   Resumen,
   VentaHoraDia,
   VentaMesero,
+  VentaPorArea,
   VentaPorMesa,
   VentaPorProducto,
 } from '../api/tipos';
@@ -171,6 +172,51 @@ const MESAS: VentaPorMesa = {
   },
 };
 
+// F2-233. Comedor 322.00 (2) + Domicilio 300.00 (1) + Barra sin canal 40.00 (1) + sin área
+// 50.00 (1) = 712.00 en 5 cuentas, la venta de Inicio.
+function area(
+  s: { id: string; nombre: string },
+  origen: string,
+  nombre: string,
+  canal: VentaPorArea['canales'][number]['canal'] | null,
+  venta: string,
+  cuentas: number,
+): VentaPorArea['areas'][number] {
+  return {
+    sucursalId: s.id,
+    sucursal: s.nombre,
+    areaOrigenSrId: origen,
+    areaId: `area-${origen}`,
+    clave: null,
+    nombre,
+    cruce: 'catalogo',
+    activo: true,
+    canal,
+    venta,
+    cuentas,
+  };
+}
+
+const AREAS: VentaPorArea = {
+  venta: '712.00',
+  cuentas: 5,
+  areas: [
+    area(SUCURSAL_A1, 'A01', 'Comedor', 'comedor', '322.00', 2),
+    area(A2, 'T01', 'Salón', 'domicilio', '300.00', 1),
+    area(SUCURSAL_A1, 'A03', 'Barra', null, '40.00', 1),
+  ],
+  sinArea: { venta: '50.00', cuentas: 1 },
+  canales: [
+    { canal: 'comedor', venta: '322.00', cuentas: 2 },
+    { canal: 'domicilio', venta: '300.00', cuentas: 1 },
+  ],
+  sinCanal: { venta: '40.00', cuentas: 1 },
+  catalogo: [
+    { sucursalId: SUCURSAL_A1.id, sucursal: 'Centro', sincronizado: true },
+    { sucursalId: A2.id, sucursal: 'Tijuana', sincronizado: true },
+  ],
+};
+
 const rango = (l: Llamada) => `${l.query.get('desde')}|${l.query.get('hasta')}`;
 const deA2 = (l: Llamada) => l.query.get('sucursalId') === A2.id;
 
@@ -185,6 +231,7 @@ function datos(l: Llamada) {
       productos: PRODUCTOS,
       mapa: MAPA,
       mesas: MESAS,
+      areas: AREAS,
     };
   }
   return {
@@ -201,6 +248,16 @@ function datos(l: Llamada) {
       filas: [MESAS.filas[2]],
       sinMesa: { cuentas: 0, venta: '0.00' },
       global: { ...MESAS.global, venta: '300.00', cuentas: 1, mesas: 1, cuentasConMesa: 1 },
+    },
+    areas: {
+      ...AREAS,
+      venta: '300.00',
+      cuentas: 1,
+      areas: [AREAS.areas[1]],
+      sinArea: { venta: '0.00', cuentas: 0 },
+      canales: [AREAS.canales[1]],
+      sinCanal: { venta: '0.00', cuentas: 0 },
+      catalogo: [AREAS.catalogo[1]],
     },
   };
 }
@@ -224,6 +281,15 @@ const VACIOS = {
       rotacion: null,
     },
   },
+  areas: {
+    venta: '0.00',
+    cuentas: 0,
+    areas: [],
+    sinArea: { venta: '0.00', cuentas: 0 },
+    canales: [],
+    sinCanal: { venta: '0.00', cuentas: 0 },
+    catalogo: [{ sucursalId: SUCURSAL_A1.id, sucursal: 'Centro', sincronizado: true }],
+  } as VentaPorArea,
 };
 
 function api(extra: Record<string, Manejador> = {}) {
@@ -247,6 +313,7 @@ function api(extra: Record<string, Manejador> = {}) {
     'GET /ventas/por-producto': (l) => json(200, de(l).productos),
     'GET /ventas/hora-dia': (l) => json(200, de(l).mapa),
     'GET /ventas/por-mesa': (l) => json(200, de(l).mesas),
+    'GET /ventas/por-area': (l) => json(200, de(l).areas),
     ...extra,
   });
 }
@@ -287,24 +354,28 @@ describe('AC · cada desglose cuadra con la venta total del mismo periodo y sucu
     ['la empresa', RUTA],
     ['una sucursal', `${RUTA}&sucursal=${A2.id}`],
   ])(
-    '%s: Σ meseros, productos (+ diferencia) y mesas (+ sin mesa) = "Venta total" de Inicio',
+    '%s: Σ meseros, productos (+ diferencia), mesas (+ sin mesa) y canales (+ sin canal + sin clasificar) = "Venta total" de Inicio',
     async (_caso, ruta) => {
       api();
       montar(ruta);
       await screen.findByTestId('cuadre-meseros');
       await screen.findByTestId('cuadre-productos');
       await screen.findByTestId('cuadre-mesas');
+      await screen.findByTestId('cuadre-areas');
       const meseros = texto('cuadre-meseros').match(/\$[\d,]+\.\d{2}/)?.[0];
       const productos = texto('productos-venta');
       expect(texto('cuadre-productos')).toMatch(/^Σ del desglose = venta del periodo: /);
       expect(texto('cuadre-mesas')).toMatch(/^Σ del desglose = venta del periodo: /);
       const mesas = texto('cuadre-mesas').match(/\$[\d,]+\.\d{2}/)?.[0];
+      // F2-233: la Σ de la tabla por canal la calcula la vista (en centavos) y dice que cuadra.
+      expect(texto('cuadre-areas')).toMatch(/^Σ del desglose = venta del periodo: /);
+      const areas = texto('cuadre-areas').match(/\$[\d,]+\.\d{2}/)?.[0];
       cleanup();
 
       montar(ruta.replace('/analisis', '/'));
       await screen.findByTestId('venta-total');
       const inicio = texto('venta-total');
-      expect([meseros, productos, mesas]).toEqual([inicio, inicio, inicio]);
+      expect([meseros, productos, mesas, areas]).toEqual([inicio, inicio, inicio, inicio]);
     },
   );
 
@@ -319,9 +390,10 @@ describe('AC · cada desglose cuadra con la venta total del mismo periodo y sucu
         '/ventas/por-producto',
         '/ventas/hora-dia',
         '/ventas/por-mesa',
+        '/ventas/por-area',
       ].includes(l.ruta),
     );
-    expect(new Set(analisis.map((l) => l.ruta)).size).toBe(4);
+    expect(new Set(analisis.map((l) => l.ruta)).size).toBe(5);
     expect(analisis.every((l) => l.query.get('sucursalId') === A2.id)).toBe(true);
     expect(new Set(analisis.map(rango))).toEqual(new Set([AGOSTO, JULIO]));
     expect(screen.getAllByTestId('fila-mesero')).toHaveLength(1);
@@ -495,18 +567,22 @@ describe('mesas', () => {
 });
 
 describe('estados vacíos y errores', () => {
-  it('sin ventas: cada bloque dice por qué está vacío, sin $0.00; área y canal explican su pendiente', async () => {
+  it('sin ventas: cada bloque dice por qué está vacío, sin $0.00 (área y canal también)', async () => {
     api({
       'GET /ventas/por-mesero': () => json(200, VACIOS.meseros),
       'GET /ventas/por-producto': () => json(200, VACIOS.productos),
       'GET /ventas/hora-dia': () => json(200, VACIOS.mapa),
       'GET /ventas/por-mesa': () => json(200, VACIOS.mesas),
+      'GET /ventas/por-area': () => json(200, VACIOS.areas),
     });
     montar(RUTA);
     for (const id of ['meseros-vacio', 'productos-vacio', 'mapa-vacio', 'mesas-vacio']) {
       expect(await screen.findByTestId(id)).toHaveTextContent('Sin ventas en el periodo');
     }
-    expect(texto('area-pendiente')).toContain('F2-233');
+    expect(await screen.findByTestId('areas-vacio')).toHaveTextContent(
+      'No hubo cuentas cerradas en el periodo',
+    );
+    expect(screen.queryByTestId('csv-areas')).toBeNull();
     for (const nombre of [
       'Por mesero',
       'Por producto',

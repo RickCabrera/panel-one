@@ -31,7 +31,7 @@ const BOTON =
   'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
 
 /** "Total del desglose" = la venta del periodo; si no cuadra (no debería), se dice. */
-function Cuadre({ suma, venta, testId }: { suma: bigint | null; venta: string; testId: string }) {
+export function Cuadre({ suma, venta, testId }: { suma: bigint | null; venta: string; testId: string }) {
   const esperado = sumaImportes([venta]);
   const cuadra = suma !== null && esperado !== null && suma === esperado;
   return (

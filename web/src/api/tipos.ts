@@ -759,3 +759,53 @@ export interface FichaCliente {
   periodo: CifrasCliente;
   productos: Array<{ producto: string; cantidad: string; importe: Importe; cuentas: number }>;
 }
+
+/** Áreas y canales (F2-233): `GET /ventas/por-area` y el mapeo área → canal de negocio. */
+export type CanalNegocio = 'comedor' | 'mostrador' | 'domicilio' | 'plataformas';
+export type CruceArea = 'catalogo' | 'sin-catalogo' | 'sin-sincronizar';
+
+export interface MontoArea {
+  venta: Importe;
+  cuentas: number;
+}
+
+export interface FilaVentaArea extends MontoArea {
+  sucursalId: string;
+  sucursal: string;
+  areaOrigenSrId: string;
+  areaId: string | null;
+  clave: string | null;
+  nombre: string | null;
+  cruce: CruceArea;
+  activo: boolean | null;
+  canal: CanalNegocio | null;
+}
+
+export interface VentaPorArea extends MontoArea {
+  areas: FilaVentaArea[];
+  /** "Sin clasificar": la cuenta no trae área. */
+  sinArea: MontoArea;
+  canales: Array<MontoArea & { canal: CanalNegocio }>;
+  /** Área sin canal asignado, o que no está en el catálogo. */
+  sinCanal: MontoArea;
+  catalogo: Array<{ sucursalId: string; sucursal: string; sincronizado: boolean }>;
+}
+
+export interface FilaMapeoArea {
+  id: string;
+  sucursalId: string;
+  sucursal: string;
+  origenSrId: string;
+  clave: string | null;
+  nombre: string;
+  activo: boolean;
+  activoPos: boolean | null;
+  canal: CanalNegocio | null;
+  canalActualizadoAt: string | null;
+}
+
+export interface MapeoAreas {
+  sucursales: Array<{ sucursalId: string; sucursal: string; ultimaCompletaAt: string | null }>;
+  areas: FilaMapeoArea[];
+  truncado: boolean;
+}

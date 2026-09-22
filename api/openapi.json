@@ -1843,6 +1843,117 @@
         ]
       }
     },
+    "/ventas/por-area": {
+      "get": {
+        "description": "Σ areas + sinArea = Σ canales + sinCanal + sinArea = /ventas/resumen. El canal sale del mapeo área → canal (`PUT /catalogos/areas/{id}/canal`), que se aplica al leer: cambiarlo recalcula cualquier periodo sin re-ingerir. Sin cache.",
+        "operationId": "VentasController_porArea",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "alturaAl",
+            "required": false,
+            "in": "query",
+            "description": "Corte \"a la misma altura\" (F2-220), para comparar contra un periodo anterior hasta la misma hora. Un INSTANTE ISO-8601 con zona obligatoria (sin zona, 400). Sólo afecta al ÚLTIMO día del rango (`hasta`): de ese día entra únicamente lo ocurrido ANTES de la hora local que marca el instante en la zona de CADA sucursal (corte exclusivo: una cuenta cerrada justo a esa hora no entra). Los días anteriores van completos. Con sucursales en zonas distintas, cada una se corta en su propia hora local del mismo instante (sólo la hora, no la fecha: en la hora en que el día local de una sucursal no es el de quien pide, su corte no corresponde a \"hoy\"; supuesto provisional). Los cancelados se ubican por su cierre o, sin cierre, por su apertura. Si ese día la hora local no existe (el reloj se adelanta) se lee con el offset de ANTES del salto (02:30 que no existe = 03:30 del horario nuevo); si pasa dos veces (el reloj se atrasa), con el de DESPUÉS (la segunda vez). Lo resuelve Postgres y lo fija un e2e. Sin él, el último día va completo.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-09-21T20:30:00.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VentaPorAreaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Áreas y canales (F2-233): venta y cuentas por (sucursal, área del POS) y por canal de negocio, con \"sin clasificar\" (sin área) y \"sin canal\" (área sin canal asignado) aparte.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
     "/ventas/tickets": {
       "get": {
         "description": "Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag `cancelado`, no suman). Filtros (F2-222) combinables con AND: mesero, mesa, forma, importeMin/importeMax, canceladas, producto, clienteId (F2-232) y folio; `total` es siempre el del filtro completo. Orden por `orden`/`dir`. Sin cache.",
@@ -4175,7 +4286,7 @@
     },
     "/catalogos/canales": {
       "get": {
-        "description": "Espejo de lo que el agente leyó del POS de cada sucursal (F2-230), 50 por página, por nombre. Nada se borra: lo que desapareció del POS sale con `activo=false` y su último `vistoAt`. El mapeo área → canal de negocio es nuestro y es otra tarea (F2-233).",
+        "description": "Espejo de lo que el agente leyó del POS de cada sucursal (F2-230), 50 por página, por nombre. Nada se borra: lo que desapareció del POS sale con `activo=false` y su último `vistoAt`. No interviene en el canal de negocio de las ventas: ése sale del mapeo área → canal (`/catalogos/areas/mapeo`, F2-233).",
         "operationId": "CatalogosController_canales",
         "parameters": [
           {
@@ -4284,6 +4395,172 @@
           }
         ],
         "summary": "Canales o tipos de servicio del POS.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/areas/mapeo": {
+      "get": {
+        "description": "Todas las áreas (también las dadas de baja) y la última sincronización completa del catálogo de áreas de cada sucursal. El mapeo es nuestro: ninguna sincronización lo toca.",
+        "operationId": "CatalogosController_mapeoAreas",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa (con una sola no hay precios que comparar). Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapeoAreasDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Áreas del espejo con su canal de negocio asignado (F2-233).",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/areas/{id}/canal": {
+      "put": {
+        "description": "Se aplica al leer: `/ventas/por-area` recalcula cualquier periodo sin re-ingerir. Un área de otra empresa, fuera de alcance o inexistente = el mismo 404. Responde la fila.",
+        "operationId": "CatalogosController_asignarCanalArea",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsignarCanalAreaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilaMapeoAreaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Asigna (o quita, con null) el canal de negocio de un área del POS (F2-233).",
         "tags": [
           "catalogos"
         ]
@@ -5539,6 +5816,13 @@
             "example": "C001",
             "maxLength": 64,
             "description": "F2-232: el id estable del cliente en el POS, el MISMO `origenSrId` que manda el catálogo de clientes de esta sucursal. Nulo, ausente o sólo espacios = la cuenta no trae cliente (el cheque se manda completo cada vez: omitirlo guarda nulo). No hace falta que el cliente ya esté en el catálogo."
+          },
+          "areaOrigenSrId": {
+            "type": "string",
+            "nullable": true,
+            "example": "A01",
+            "maxLength": 64,
+            "description": "F2-233: el id estable del área del POS donde se atendió la cuenta (comedor, terraza, barra…), el MISMO `origenSrId` que manda el catálogo de áreas de esta sucursal. Nulo, ausente o sólo espacios = la cuenta no trae área (\"sin clasificar\"; el cheque se manda completo cada vez: omitirlo guarda nulo). No hace falta que el área ya esté en el catálogo."
           },
           "subtotal": {
             "type": "string",
@@ -6823,6 +7107,212 @@
           "global"
         ]
       },
+      "CanalNegocio": {
+        "type": "string",
+        "enum": [
+          "comedor",
+          "mostrador",
+          "domicilio",
+          "plataformas"
+        ],
+        "description": "El canal de negocio asignado (nuestro, no del POS); null = sin asignar."
+      },
+      "FilaVentaAreaDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "areaOrigenSrId": {
+            "type": "string",
+            "description": "El id del área en el POS de esa sucursal, tal como llega."
+          },
+          "areaId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "El área en el espejo (`GET /catalogos/areas`); null si no está."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombre": {
+            "type": "string",
+            "nullable": true,
+            "description": "null si no está en el espejo."
+          },
+          "cruce": {
+            "type": "string",
+            "enum": [
+              "catalogo",
+              "sin-catalogo",
+              "sin-sincronizar"
+            ],
+            "description": "`catalogo`: está en el espejo. `sin-catalogo`: la sucursal sincronizó sus áreas y ésta no está. `sin-sincronizar`: la sucursal nunca cerró su catálogo de áreas."
+          },
+          "activo": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "false = el POS ya no la reporta; null si no está en el espejo."
+          },
+          "canal": {
+            "nullable": true,
+            "description": "El canal de negocio asignado (nuestro, no del POS); null = sin asignar.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CanalNegocio"
+              }
+            ]
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "cuentas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "areaOrigenSrId",
+          "areaId",
+          "clave",
+          "nombre",
+          "cruce",
+          "activo",
+          "canal",
+          "venta",
+          "cuentas"
+        ]
+      },
+      "MontoDto": {
+        "type": "object",
+        "properties": {
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "cuentas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "venta",
+          "cuentas"
+        ]
+      },
+      "VentaCanalDto": {
+        "type": "object",
+        "properties": {
+          "canal": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CanalNegocio"
+              }
+            ]
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "cuentas": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "canal",
+          "venta",
+          "cuentas"
+        ]
+      },
+      "CatalogoAreasSucursalDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "sincronizado": {
+            "type": "boolean",
+            "description": "La sucursal cerró al menos una sincronización completa de su catálogo de áreas."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "sincronizado"
+        ]
+      },
+      "VentaPorAreaDto": {
+        "type": "object",
+        "properties": {
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ cheques.total sin cancelados: = /ventas/resumen."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "areas": {
+            "description": "Una fila por (sucursal, área del POS) con cuentas en el periodo; venta desc.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaVentaAreaDto"
+            }
+          },
+          "sinArea": {
+            "description": "\"Sin clasificar\": cuentas que no traen área. Σ areas + sinArea = venta.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MontoDto"
+              }
+            ]
+          },
+          "canales": {
+            "description": "Sólo los canales con cuentas, en orden fijo. Σ canales + sinCanal + sinArea = venta.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VentaCanalDto"
+            }
+          },
+          "sinCanal": {
+            "description": "Cuentas de un área sin canal asignado o que no está en el espejo.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MontoDto"
+              }
+            ]
+          },
+          "catalogo": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogoAreasSucursalDto"
+            }
+          }
+        },
+        "required": [
+          "venta",
+          "cuentas",
+          "areas",
+          "sinArea",
+          "canales",
+          "sinCanal",
+          "catalogo"
+        ]
+      },
       "PartidaTicketDto": {
         "type": "object",
         "properties": {
@@ -8044,6 +8534,139 @@
           "pagina",
           "porPagina",
           "filas"
+        ]
+      },
+      "SucursalMapeoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "ultimaCompletaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "La última sincronización completa del catálogo de áreas; null = nunca."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "ultimaCompletaAt"
+        ]
+      },
+      "FilaMapeoAreaDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "origenSrId": {
+            "type": "string"
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "false = desapareció de la última sincronización completa."
+          },
+          "activoPos": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "canal": {
+            "nullable": true,
+            "description": "null = sin canal asignado.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CanalNegocio"
+              }
+            ]
+          },
+          "canalActualizadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "sucursal",
+          "origenSrId",
+          "clave",
+          "nombre",
+          "activo",
+          "activoPos",
+          "canal",
+          "canalActualizadoAt"
+        ]
+      },
+      "MapeoAreasDto": {
+        "type": "object",
+        "properties": {
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalMapeoDto"
+            }
+          },
+          "areas": {
+            "description": "Todas las áreas del espejo (también las dadas de baja), por sucursal y nombre.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaMapeoAreaDto"
+            }
+          },
+          "truncado": {
+            "type": "boolean",
+            "description": "Se leyeron más áreas que el tope (2000): la lista está cortada."
+          }
+        },
+        "required": [
+          "sucursales",
+          "areas",
+          "truncado"
+        ]
+      },
+      "AsignarCanalAreaDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Fuera del alcance del usuario = 404."
+          },
+          "canal": {
+            "nullable": true,
+            "description": "El canal de negocio del área. null quita la asignación: sus cuentas pasan a \"sin canal\". Se aplica al leer: recalcula cualquier periodo sin re-ingerir.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CanalNegocio"
+              }
+            ]
+          }
+        },
+        "required": [
+          "empresaId",
+          "canal"
         ]
       },
       "SucursalMenuDto": {

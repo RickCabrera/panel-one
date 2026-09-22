@@ -17,7 +17,16 @@ const FICHA: [string, string[]][] = [
   ['Ventas y dirección', ['Resumen', 'Tickets', 'Monitor de mesas', 'Análisis', 'Reportes']],
   [
     'Catálogos',
-    ['Productos', 'Orquestador de menú', 'Grupos de insumos', 'Insumos', 'Meseros', 'Clientes'],
+    [
+      'Productos',
+      'Orquestador de menú',
+      'Grupos de insumos',
+      'Insumos',
+      'Meseros',
+      'Clientes',
+      // F2-233: el mapeo área → canal vive en su propia vista de catálogo.
+      'Áreas y canales',
+    ],
   ],
   [
     'Inventario y compras',
@@ -95,6 +104,8 @@ describe('las seis secciones de la ficha', () => {
     expect(porId('catalogos.meseros').destino).toEqual({ ruta: '/meseros' });
     // F2-232 construyó Clientes: ya navega.
     expect(porId('catalogos.clientes').destino).toEqual({ ruta: '/clientes' });
+    // F2-233 construyó Áreas y canales: navega.
+    expect(porId('catalogos.areas').destino).toEqual({ ruta: '/areas' });
     expect(tarea('inventario.existencias')).toBe('F2-121');
     expect(tarea('inventario.conteos')).toBe('F2-123');
     expect(tarea('inventario.recetas')).toBe('F2-125');

@@ -1,9 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CatalogoSr } from '@prisma/client';
+import { CanalNegocio, CatalogoSr } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsEnum,
   IsIn,
   IsInt,
   IsOptional,
@@ -15,6 +16,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 /**
@@ -1047,4 +1049,96 @@ export class FichaClienteDto {
     description: 'Hasta 10, por cantidad desc, importe desc, nombre (de sus visitas).',
   })
   productos!: ProductoClienteDto[];
+}
+
+// ---------------------------------------------------------------------------
+// F2-233: mapeo área del POS → canal de negocio
+// ---------------------------------------------------------------------------
+
+export class MapeoAreasQueryDto extends MenuQueryDto {}
+
+export class AsignarCanalAreaDto {
+  @ApiProperty({ format: 'uuid', description: 'Fuera del alcance del usuario = 404.' })
+  @IsUUID('all')
+  empresaId!: string;
+
+  @ApiProperty({
+    enum: CanalNegocio,
+    enumName: 'CanalNegocio',
+    nullable: true,
+    description:
+      'El canal de negocio del área. null quita la asignación: sus cuentas pasan a "sin canal". ' +
+      'Se aplica al leer: recalcula cualquier periodo sin re-ingerir.',
+  })
+  // `null` explícito quita el canal; omitirlo es 400 (no se borra por un cuerpo incompleto).
+  @ValidateIf((o: { canal?: unknown }) => o.canal !== null)
+  @IsEnum(CanalNegocio)
+  canal!: CanalNegocio | null;
+}
+
+export class FilaMapeoAreaDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty()
+  origenSrId!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  clave!: string | null;
+
+  @ApiProperty()
+  nombre!: string;
+
+  @ApiProperty({ description: 'false = desapareció de la última sincronización completa.' })
+  activo!: boolean;
+
+  @ApiProperty({ type: Boolean, nullable: true })
+  activoPos!: boolean | null;
+
+  @ApiProperty({
+    enum: CanalNegocio,
+    enumName: 'CanalNegocio',
+    nullable: true,
+    description: 'null = sin canal asignado.',
+  })
+  canal!: CanalNegocio | null;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  canalActualizadoAt!: string | null;
+}
+
+export class SucursalMapeoDto {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description: 'La última sincronización completa del catálogo de áreas; null = nunca.',
+  })
+  ultimaCompletaAt!: string | null;
+}
+
+export class MapeoAreasDto {
+  @ApiProperty({ type: [SucursalMapeoDto] })
+  sucursales!: SucursalMapeoDto[];
+
+  @ApiProperty({
+    type: [FilaMapeoAreaDto],
+    description: 'Todas las áreas del espejo (también las dadas de baja), por sucursal y nombre.',
+  })
+  areas!: FilaMapeoAreaDto[];
+
+  @ApiProperty({ description: 'Se leyeron más áreas que el tope (2000): la lista está cortada.' })
+  truncado!: boolean;
 }

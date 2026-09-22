@@ -11,8 +11,8 @@ import type { Universo } from './seed-maestro';
 
 /**
  * Persiste los catálogos del seed maestro (F2-201) en las tablas espejo de F2-230:
- * **grupos, productos (con su precio por sucursal, F2-145), meseros y clientes** (el reparto
- * del backlog; áreas y canales los siembra F2-233).
+ * **grupos, productos (con su precio por sucursal, F2-145), meseros, clientes, áreas y canales
+ * (F2-233)**, y el mapeo demo área → canal de negocio (F2-233, `areas_canal`).
  *
  * No escribe directo: hace, por cada sucursal y catálogo, una sincronización COMPLETA
  * (páginas + cierre) por el MISMO servicio de la ingesta del agente
@@ -25,6 +25,11 @@ import type { Universo } from './seed-maestro';
  *   en un POS un producto o mesero dado de baja sigue existiendo, no desaparece.
  * - Grupos, productos y clientes en cada sucursal (cada una es su propio POS); cada mesero
  *   en la suya.
+ * - Áreas: las de SU sucursal (`origenSrId` = `clave` A01…). Canales: los tres tipos de servicio
+ *   del universo (S01…), en cada sucursal; no intervienen en el cálculo del canal de negocio.
+ * - Mapeo demo: el `canal` de cada área del universo, sólo donde el área NO tiene mapeo todavía
+ *   (`skipDuplicates`): re-sembrar no pisa lo que alguien cambió en el panel. La `empresa_id` sale
+ *   de la fila espejo, no de una constante.
  * - Idempotente: con el mismo `capturadoAt` (el reloj del seed; `SEED_AHORA` lo fija) N
  *   corridas dejan la misma foto. Con un reloj posterior sólo se mueven `visto_at` y
  *   `sincronizacion_id`, nunca `updated_at`.
@@ -35,7 +40,14 @@ export const CATALOGOS_SEMBRADOS: readonly CatalogoSr[] = [
   'productos',
   'meseros',
   'clientes',
+  'areas',
+  'canales',
 ];
+
+/** `actualizado_por` del mapeo demo: no es un usuario (la columna no tiene FK). */
+export const ACTOR_SEED = '00000000-0000-4000-8000-00000000f233';
+
+const nombreCanal = (c: string) => c.charAt(0).toUpperCase() + c.slice(1);
 
 type Registro = Record<string, string | boolean | null>;
 
@@ -73,6 +85,15 @@ export function registrosDe(u: Universo, sucursalId: string, catalogo: CatalogoS
         correo: c.correo,
         rfc: c.rfc,
       }));
+    case 'areas':
+      return u.areas
+        .filter((a) => a.sucursalId === sucursalId)
+        .map((a) => ({ origenSrId: a.clave, clave: a.clave, nombre: a.nombre }));
+    case 'canales':
+      return u.canales.map((c, i) => {
+        const clave = `S${String(i + 1).padStart(2, '0')}`;
+        return { origenSrId: clave, clave, nombre: nombreCanal(c) };
+      });
     default:
       return [];
   }
@@ -131,5 +152,35 @@ export async function sembrarCatalogos(
       conteo[catalogo] = (conteo[catalogo] ?? 0) + registros.length;
     }
   }
+  await sembrarMapeoAreas(prisma, op.sucursales, op.universo, op.capturadoAt);
   return conteo;
+}
+
+/** El mapeo demo área → canal (F2-233), sólo para las áreas que todavía no tienen uno. */
+export async function sembrarMapeoAreas(
+  prisma: PrismaClient,
+  sucursales: ReadonlyArray<{ id: string }>,
+  u: Universo,
+  ahora: Date,
+): Promise<number> {
+  const espejo = await prisma.areaCatalogo.findMany({
+    where: { sucursalId: { in: sucursales.map((s) => s.id) } },
+    select: { id: true, empresaId: true, sucursalId: true, origenSrId: true },
+  });
+  const filas = espejo.flatMap((a) => {
+    const del = u.areas.find((x) => x.sucursalId === a.sucursalId && x.clave === a.origenSrId);
+    return del
+      ? [
+          {
+            areaId: a.id,
+            empresaId: a.empresaId,
+            canal: del.canal,
+            actualizadoPor: ACTOR_SEED,
+            updatedAt: ahora,
+          },
+        ]
+      : [];
+  });
+  const r = await prisma.areaCanal.createMany({ data: filas, skipDuplicates: true });
+  return r.count;
 }

@@ -308,6 +308,8 @@ function normalizarCheque(d: DatosChequeDto): EventoNormalizado {
       // Tal cual (el catálogo tampoco recorta `origenSrId`, y el cruce es exacto); sólo espacios
       // = sin cliente.
       clienteOrigenSrId: d.clienteOrigenSrId?.trim() ? d.clienteOrigenSrId : null,
+      // F2-233: misma regla que el cliente (tal cual; sólo espacios = sin área).
+      areaOrigenSrId: d.areaOrigenSrId?.trim() ? d.areaOrigenSrId : null,
       subtotal: importe('datos.subtotal', d.subtotal),
       impuestos: importe('datos.impuestos', d.impuestos),
       descuentos: importe('datos.descuentos', d.descuentos),

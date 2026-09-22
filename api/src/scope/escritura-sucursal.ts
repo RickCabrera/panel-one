@@ -35,6 +35,8 @@ export interface DatosCheque {
   comensales: number | null;
   /** F2-232: id del cliente en el POS (el `origenSrId` del catálogo); nulo = sin cliente. */
   clienteOrigenSrId: string | null;
+  /** F2-233: id del área en el POS (el `origenSrId` del catálogo); nulo = sin área. */
+  areaOrigenSrId: string | null;
   subtotal: Prisma.Decimal;
   impuestos: Prisma.Decimal;
   descuentos: Prisma.Decimal;

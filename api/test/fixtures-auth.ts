@@ -102,6 +102,8 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   await prisma.correoEnviado.deleteMany(deEstas);
   // Catálogos espejo (F2-230): la metadata cuelga del producto; lo demás, de la sucursal.
   await prisma.productoMetadata.deleteMany(deEstas);
+  // El mapeo área → canal (F2-233) cuelga del área espejo.
+  await prisma.areaCanal.deleteMany(deEstas);
   await prisma.grupoProducto.deleteMany(deEstas);
   await prisma.producto.deleteMany(deEstas);
   await prisma.meseroCatalogo.deleteMany(deEstas);

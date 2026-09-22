@@ -8,7 +8,12 @@ import { ScopedPrismaService } from '../src/scope/scoped-prisma.service';
 import type { AgregadosVentasService } from '../src/ventas/agregados-ventas.service';
 import type { AnalisisService } from '../src/ventas/analisis.service';
 import { crearFixtures, FX, limpiarFixtures } from '../test/fixtures-auth';
-import { registrosDe, sembrarCatalogos, sincronizacionDelSeed } from './seed-catalogos';
+import {
+  ACTOR_SEED,
+  registrosDe,
+  sembrarCatalogos,
+  sincronizacionDelSeed,
+} from './seed-catalogos';
 import { generarVentas, universoDe, type OpcionesVentas } from './seed-ventas';
 
 // El seed de catálogos espejo (F2-230) contra Postgres real, en las sucursales de FIXTURES
@@ -45,6 +50,9 @@ describe('sembrarCatalogos() (F2-230)', () => {
           prisma.producto.findMany(w),
           prisma.meseroCatalogo.findMany(w),
           prisma.clienteCatalogo.findMany(w),
+          prisma.areaCatalogo.findMany(w),
+          prisma.canalVentaCatalogo.findMany(w),
+          prisma.areaCanal.findMany({ where: w.where, orderBy: { areaId: 'asc' } }),
           prisma.sincronizacionCatalogo.findMany({
             where: { empresaId: FX.empresaA },
             orderBy: [{ sucursalId: 'asc' }, { catalogo: 'asc' }],
@@ -66,7 +74,7 @@ describe('sembrarCatalogos() (F2-230)', () => {
     await prisma.$disconnect();
   });
 
-  it('persiste grupos, productos, meseros y clientes del universo, por sucursal', async () => {
+  it('persiste grupos, productos, meseros, clientes, áreas y canales del universo, por sucursal', async () => {
     const conteo = await sembrar(RELOJ);
     const n = OP.sucursales.length;
     expect(conteo).toEqual({
@@ -74,6 +82,9 @@ describe('sembrarCatalogos() (F2-230)', () => {
       productos: universo.productos.length * n,
       meseros: universo.meseros.length,
       clientes: universo.clientes.length * n,
+      // F2-233: las áreas de cada sucursal y los tres tipos de servicio en cada una.
+      areas: universo.areas.length,
+      canales: universo.canales.length * n,
     });
     for (const s of OP.sucursales) {
       const w = { where: { sucursalId: s.id } };
@@ -83,9 +94,11 @@ describe('sembrarCatalogos() (F2-230)', () => {
         universo.meseros.filter((m) => m.sucursalId === s.id).length,
       );
       expect(await prisma.clienteCatalogo.count(w)).toBe(universo.clientes.length);
-      // Áreas y canales los siembra F2-233.
-      expect(await prisma.areaCatalogo.count(w)).toBe(0);
-      expect(await prisma.canalVentaCatalogo.count(w)).toBe(0);
+      // F2-233: áreas y canales.
+      expect(await prisma.areaCatalogo.count(w)).toBe(
+        universo.areas.filter((a) => a.sucursalId === s.id).length,
+      );
+      expect(await prisma.canalVentaCatalogo.count(w)).toBe(universo.canales.length);
     }
   });
 
@@ -175,8 +188,53 @@ describe('sembrarCatalogos() (F2-230)', () => {
     }
   });
 
-  it('registrosDe() no manda áreas ni canales (son de F2-233)', () => {
-    expect(registrosDe(universo, FX.sucursalA1, 'areas')).toEqual([]);
-    expect(registrosDe(universo, FX.sucursalA1, 'canales')).toEqual([]);
+  it('F2-233: registrosDe() manda las áreas de SU sucursal (Terraza sólo en la par) y los canales', () => {
+    const nombres = (id: string) => registrosDe(universo, id, 'areas').map((r) => r.nombre);
+    expect(nombres(FX.sucursalA1)).toEqual(['Comedor', 'Terraza', 'Barra', 'Mostrador', 'Domicilio']);
+    expect(nombres(FX.sucursalA2)).toEqual(['Comedor', 'Barra', 'Mostrador', 'Domicilio']);
+    expect(registrosDe(universo, FX.sucursalA1, 'areas')[1]).toEqual({
+      origenSrId: 'A02',
+      clave: 'A02',
+      nombre: 'Terraza',
+    });
+    expect(registrosDe(universo, FX.sucursalA2, 'canales').map((r) => r.nombre)).toEqual([
+      'Comedor',
+      'Mostrador',
+      'Domicilio',
+    ]);
+  });
+
+  it('F2-233: el mapeo demo lleva el canal del universo, con la empresa de la fila espejo', async () => {
+    const filas = await prisma.areaCanal.findMany({
+      where: { empresaId: FX.empresaA },
+      include: { area: { select: { sucursalId: true, origenSrId: true, empresaId: true } } },
+    });
+    expect(filas).toHaveLength(universo.areas.length);
+    for (const f of filas) {
+      const u = universo.areas.find(
+        (a) => a.sucursalId === f.area.sucursalId && a.clave === f.area.origenSrId,
+      )!;
+      expect(f.canal).toBe(u.canal);
+      expect(f.empresaId).toBe(f.area.empresaId);
+      expect(f.actualizadoPor).toBe(ACTOR_SEED);
+    }
+  });
+
+  it('F2-233: re-sembrar no pisa un mapeo que alguien cambió en el panel', async () => {
+    const terraza = await prisma.areaCatalogo.findFirstOrThrow({
+      where: { sucursalId: FX.sucursalA1, origenSrId: 'A02' },
+    });
+    await prisma.areaCanal.update({
+      where: { areaId: terraza.id },
+      data: { canal: 'plataformas' },
+    });
+    await sembrar(RELOJ);
+    await sembrar(RELOJ);
+    expect(
+      (await prisma.areaCanal.findUniqueOrThrow({ where: { areaId: terraza.id } })).canal,
+    ).toBe('plataformas');
+    expect(await prisma.areaCanal.count({ where: { empresaId: FX.empresaA } })).toBe(
+      universo.areas.length,
+    );
   });
 });

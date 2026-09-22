@@ -41,6 +41,8 @@ export const LLAVE_EMPRESA = {
   AreaCatalogo: 'empresaId',
   CanalVentaCatalogo: 'empresaId',
   ProductoMetadata: 'empresaId',
+  // F2-233. El mapeo área → canal: lo escribe SÓLO `EscrituraCatalogos` (con scope).
+  AreaCanal: 'empresaId',
   SincronizacionCatalogo: 'empresaId',
   SolicitudSincronizacion: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;

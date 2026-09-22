@@ -33,7 +33,9 @@ import type { Filtro } from './inicio/consultas';
 import { Esqueleto, SegunEstado, Tarjeta } from './inicio/Tarjeta';
 import { periodoComparable } from './resumen/comparables';
 import { Vista } from './Vista';
-import { AREA_PENDIENTE, NOTA_CORTESIAS } from './analisis/textos';
+import { NOTA_CORTESIAS } from './analisis/textos';
+import { BloqueAreas } from './areas/Bloques';
+import { areasACsv, nombreCsvAreas } from './areas/csv';
 
 function EncabezadoBloque({ children, csv }: { children?: ReactNode; csv?: ReactNode }) {
   return (
@@ -48,7 +50,7 @@ function EncabezadoBloque({ children, csv }: { children?: ReactNode; csv?: React
  * Análisis (F2-221): desgloses por mesero, producto, hora × día de la semana y tiempo de mesa,
  * con el periodo y la sucursal de la cabecera. Cada bloque cuadra con la venta del periodo (la
  * API lo garantiza y el e2e lo prueba a mano; aquí se muestra la Σ) y tiene su CSV con TODAS sus
- * filas. Por área y canal queda vacío hasta F2-233: no hay dato.
+ * filas. Por área y canal (F2-233) sale del mapeo área → canal de la vista Áreas y canales.
  */
 export function Analisis() {
   const { empresa, sucursal, sucursalId, sucursales } = useAlcance();
@@ -76,6 +78,7 @@ export function Analisis() {
   );
   const mapa = useAnalisis('hora-dia', filtro, rango, auto);
   const mesas = useAnalisis('por-mesa', filtro, rango, auto);
+  const areas = useAnalisis('por-area', filtro, rango, auto);
 
   const archivo = (bloque: BloqueCsv, r: Rango) => nombreCsvAnalisis(bloque, r, sucursal?.nombre);
   const esq = <Esqueleto lineas={4} />;
@@ -189,9 +192,27 @@ export function Analisis() {
           </Tarjeta>
 
           <Tarjeta titulo="Por área y canal">
-            <p className="py-4 text-sm text-tinta-tenue" data-testid="area-pendiente">
-              {AREA_PENDIENTE}
-            </p>
+            <SegunEstado consulta={areas} esqueleto={esq}>
+              {(datos) => (
+                <>
+                  <EncabezadoBloque
+                    csv={
+                      datos.cuentas > 0 && (
+                        <BotonCsv
+                          nombre={nombreCsvAreas(rango, sucursal?.nombre)}
+                          generar={() => areasACsv(datos)}
+                          testId="csv-areas"
+                        />
+                      )
+                    }
+                  >
+                    Venta por el área del POS donde se atendió la cuenta y por canal de negocio. El
+                    canal de cada área se asigna en Catálogos → Áreas y canales.
+                  </EncabezadoBloque>
+                  <BloqueAreas datos={datos} />
+                </>
+              )}
+            </SegunEstado>
           </Tarjeta>
 
           <Tarjeta titulo="Por tiempo de mesa">

@@ -28,7 +28,10 @@ import {
 } from './clientes';
 import { MAX_CATALOGO_MESEROS, rendimientoMeseros, type RendimientoMeseros } from './meseros';
 import type {
+  AsignarCanalAreaDto,
   DetalleProductoDto,
+  FilaMapeoAreaDto,
+  SucursalMapeoDto,
   MenuDto,
   VendidosSinCatalogoDto,
   EstadoFiltro,
@@ -40,6 +43,51 @@ import type {
 } from './dto/catalogos.dto';
 
 export const POR_PAGINA = 50;
+/** Áreas del espejo que lee el mapeo (F2-233). Un restaurante tiene decenas, no miles. */
+export const MAX_AREAS_MAPEO = 2000;
+
+export interface MapeoAreas {
+  sucursales: SucursalMapeoDto[];
+  areas: FilaMapeoAreaDto[];
+  truncado: boolean;
+}
+
+const SELECT_MAPEO = {
+  id: true,
+  sucursalId: true,
+  origenSrId: true,
+  clave: true,
+  nombre: true,
+  activo: true,
+  activoPos: true,
+  sucursal: { select: { nombre: true } },
+  canal: { select: { canal: true, updatedAt: true } },
+} as const;
+
+function filaMapeo(a: {
+  id: string;
+  sucursalId: string;
+  origenSrId: string;
+  clave: string | null;
+  nombre: string;
+  activo: boolean;
+  activoPos: boolean | null;
+  sucursal: { nombre: string };
+  canal: { canal: FilaMapeoAreaDto['canal']; updatedAt: Date } | null;
+}): FilaMapeoAreaDto {
+  return {
+    id: a.id,
+    sucursalId: a.sucursalId,
+    sucursal: a.sucursal.nombre,
+    origenSrId: a.origenSrId,
+    clave: a.clave,
+    nombre: a.nombre,
+    activo: a.activo,
+    activoPos: a.activoPos,
+    canal: a.canal?.canal ?? null,
+    canalActualizadoAt: a.canal?.updatedAt.toISOString() ?? null,
+  };
+}
 /** Productos que muestra la ficha de un cliente (F2-232). */
 export const MAX_PRODUCTOS_FICHA = 10;
 /** Pares (sucursal, id) por consulta al buscar los clientes de las cuentas (F2-232). */
@@ -302,6 +350,71 @@ export class CatalogosService {
       campos: ['descripcion', 'fotoUrl', 'etiquetas', 'minimo', 'maximo'],
     });
     return this.producto(scope, dto.empresaId, id);
+  }
+
+  /**
+   * Las áreas del espejo con su canal de negocio (F2-233), en cualquier estado: un área dada de
+   * baja sigue teniendo ventas en periodos pasados y su canal se puede corregir.
+   */
+  async mapeoAreas(scope: EmpresaScope, empresaId: string, sucursalId?: string): Promise<MapeoAreas> {
+    const datos = this.datos.para(scope);
+    await verificarAlcance(datos, empresaId, sucursalId);
+    const deLaSucursal = sucursalId ? { sucursalId } : {};
+    const [sucursales, estados, areas] = await Promise.all([
+      datos.sucursal.findMany({
+        where: { empresaId, ...(sucursalId ? { id: sucursalId } : {}) },
+        select: { id: true, nombre: true },
+        orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
+      }),
+      datos.sincronizacionCatalogo.findMany({
+        where: { empresaId, catalogo: 'areas', ...deLaSucursal },
+        select: { sucursalId: true, ultimaCompletaAt: true },
+      }),
+      datos.areaCatalogo.findMany({
+        where: { empresaId, ...deLaSucursal },
+        select: SELECT_MAPEO,
+        orderBy: [{ sucursalId: 'asc' }, { nombre: 'asc' }, { id: 'asc' }],
+        take: MAX_AREAS_MAPEO + 1,
+      }),
+    ]);
+    return {
+      sucursales: sucursales.map((s) => ({
+        sucursalId: s.id,
+        sucursal: s.nombre,
+        ultimaCompletaAt:
+          estados.find((e) => e.sucursalId === s.id)?.ultimaCompletaAt.toISOString() ?? null,
+      })),
+      areas: areas.slice(0, MAX_AREAS_MAPEO).map(filaMapeo),
+      truncado: areas.length > MAX_AREAS_MAPEO,
+    };
+  }
+
+  async asignarCanalArea(
+    actor: Actor,
+    scope: EmpresaScope,
+    id: string,
+    dto: AsignarCanalAreaDto,
+  ): Promise<FilaMapeoAreaDto> {
+    // 404 con el scope del USUARIO antes de escribir (la escritura lo vuelve a verificar).
+    const datos = this.datos.para(scope);
+    await verificarAlcance(datos, dto.empresaId);
+    await this.datos
+      .catalogos(scope)
+      .asignarCanalArea(dto.empresaId, id, dto.canal, actor.id, new Date(this.reloj.ahora()));
+    this.auditoria.registrar(actor, {
+      accion: 'area_canal.asignar',
+      recurso: 'area',
+      recursoId: id,
+      empresaId: dto.empresaId,
+      campos: ['canal'],
+    });
+    const fila = encontradoOr404(
+      await datos.areaCatalogo.findFirst({
+        where: { id, empresaId: dto.empresaId },
+        select: SELECT_MAPEO,
+      }),
+    );
+    return filaMapeo(fila);
   }
 
   async sincronizacion(

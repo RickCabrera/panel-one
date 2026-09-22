@@ -5146,3 +5146,131 @@ CON OBSERVACIONES en el 2.º pase.
 **Qué haría distinto.** Esperar el veredicto del plan antes de tocar código aunque sea "obvio", y
 buscar desde el plan qué objeto cierra la idempotencia (aquí, `chequeCanonico`): un campo nuevo
 que no entra en esa comparación se pierde en silencio.
+
+
+## 2026-09-22 15:10 — F2-233 · Áreas, estaciones y canales de venta
+**Estado:** CERRADA si el PR se mergea, con **ALCANCE recortado** (estaciones NO se construyen).
+Carriles /api + /web (+ docs, backlog). Revisor, gate del plan: APROBADO CON OBSERVACIONES al
+primer pase (0 bloqueos, O1–O11). Gate del entregable: APROBADO CON OBSERVACIONES al primer pase
+(0 bloqueos, O1–O5; atendidas abajo). OpenAPI regenerado. `docs/esquema-sr.md` §2, §8 y §13:
+son supuestos, no hallazgos.
+
+**Qué quedó hecho.**
+- **El área de la cuenta** (antes `cheques` no la guardaba):
+  - Migración `20260922140000_areas_canal`: `cheques.area_origen_sr_id TEXT NULL` + CHECK 1..64,
+    enum `canal_negocio` (comedor, mostrador, domicilio, plataformas) y tabla `areas_canal`
+    (PK `area_id`, FK compuesta `(area_id, empresa_id)` → `areas_catalogo(id, empresa_id)`, que
+    ganó `@@unique([id, empresaId])`).
+  - `DatosChequeDto.areaOrigenSrId` en `POST /ingesta/eventos`: tal cual, sólo espacios u
+    omitido = nulo, entra en `chequeCanonico` (×3 idéntico no reescribe; cambiarla sí).
+  - Helper de scope: SÓLO la columna `area_origen_sr_id` en la CTE `ventas`
+    (`consulta-ventas.spec` la quita con `sinF2233` y compara contra el snapshot de siempre).
+- **API:**
+  - `GET /ventas/por-area` (`ventas/areas-venta.service.ts` + parte pura `ventas/por-area.ts`).
+    UNA sentencia agrupa por (sucursal, área); el espejo, el mapeo y la sincronización se leen
+    con `ScopedPrismaService.para(scope)`. Devuelve `areas`, `sinArea` ("sin clasificar"),
+    `canales`, `sinCanal`, `catalogo`. Σ areas + sinArea = Σ canales + sinCanal + sinArea = venta.
+    **Sin cache** a propósito: un cambio de mapeo se ve al instante.
+  - `GET /catalogos/areas/mapeo` (todas las áreas del espejo con su canal, tope 2000 con
+    `truncado`, y la última sincronización completa de áreas por sucursal).
+  - `PUT /catalogos/areas/{id}/canal` `{ empresaId, canal | null }`, sólo admins.
+    `EscrituraCatalogos.asignarCanalArea` busca el área CON scope (ajena = inexistente = 404) y
+    hace upsert o, con null, borra el mapeo. Omitir la llave `canal` = 400 (`ValidateIf`), para
+    no borrar por un cuerpo incompleto. Auditoría `area_canal.asignar`.
+- **Seed:** `AREAS` ganó `clave` A01..A05 (constante, no mueve el PRNG). `sembrarCatalogos` siembra
+  también `areas` y `canales` (S01..S03) por la ingesta; `sembrarVentas` persiste el área de cada
+  cheque (`claveDeArea(maestro.area)`); `sembrarMapeoAreas` crea el mapeo demo con el canal del
+  universo, `createMany skipDuplicates` (re-sembrar NO pisa lo que alguien cambió en el panel) y
+  la empresa de la fila espejo.
+- **Web:**
+  - Vista `/areas` "Áreas y canales" (Catálogos en el menú, en `VISTAS_CON_PERIODO`): tabla por
+    canal con "Área sin canal asignado" y "Sin clasificar" como renglones propios y el cuadre
+    Σ = venta; tabla por área (50 por página); editor del mapeo con un `<select>` por área para
+    admins (PUT + invalidar `['ventas','por-area']` y `['catalogos','areas-mapeo']`); el visor
+    sólo lo ve; aviso de sucursal sin catálogo, de `truncado` y de estaciones; CSV.
+  - Análisis: el bloque "Por área y canal" ya es real (mismo `BloqueAreas`, misma llave de
+    consulta que `/areas`); se borró `AREA_PENDIENTE`.
+  - CSV `areas-canales_<desde>_<hasta>[_suc].csv`: una fila por área con su canal en una columna
+    y al final "sin clasificar". NO lleva filas por canal: sumaría la venta dos veces.
+
+**ALCANCE RECORTADO: estaciones.** No hay espejo, contrato ni dato del seed de estaciones, y no se
+sabe si esta versión de SR las registra. Construirlas sería inventar. La vista lo dice
+(`paginas/areas/textos.ts#ESTACIONES_PENDIENTES`); quedó en §8 y como "Y además (de F2-233)" en
+F2-240 (leerlas si existen) y F2-192 (validarlas). El `[x]` de F2-233 lleva ese ALCANCE.
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` en `schema.prisma` (modelo `Cheque`) y en
+  `ingesta.dto.ts#areaOrigenSrId`: **el cheque de SR trae el MISMO id del área que su catálogo.**
+  No validado. **Hoy ningún agente manda el campo** (no hay lector de cheques, F1-022): en una
+  instalación real toda la venta sale "sin clasificar" y la vista lo explica (`motivoVacio`).
+- Cruce por (sucursal, `origen_sr_id`) EXACTO contra el espejo en cualquier estado; un área dada
+  de baja conserva nombre y canal en sus periodos pasados.
+- El canal sale SÓLO del mapeo; sin mapeo no se adivina por el nombre. `canales_venta_catalogo`
+  (tipos de servicio del POS) NO interviene en el cálculo: no se sabe cómo SR liga cuenta ↔
+  tipo de servicio.
+- ❓ **Abiertas para Ricardo** (en §8 y en la ficha de F2-144): el enum fijo de canales (agregar
+  uno es migración) y mapear por sucursal vs. por nombre a nivel empresa.
+- Riesgo documentado en §8: una reinstalación del POS que cambie ids deja la venta nueva "sin
+  canal" hasta reasignar (las filas viejas conservan su mapeo).
+
+**Trampas que encontré.**
+- **`prisma migrate dev` NO corre aquí** ("environment is non-interactive"). La migración se generó
+  con `npx prisma migrate diff --from-schema-datasource prisma/schema.prisma
+  --to-schema-datamodel prisma/schema.prisma --script` (la base local estaba al día), se le
+  agregó el CHECK a mano y se aplicó con `migrate deploy`. `prisma generate` dio el EPERM del DLL
+  de siempre; los tipos sí se generaron.
+- **Los e2e comparten fixtures: nunca los corras en paralelo.** `npx jest src/ventas/por-area` sin
+  `--runInBand` da rojos falsos (dos suites limpian las mismas fixtures). `npm test` ya usa
+  `--runInBand`.
+- **Python con `\n` dentro de un heredoc** convirtió `'\n'` de un literal TS en saltos reales y,
+  al normalizar CRLF, cambió 1000 líneas de `consulta-ventas.spec.ts`. Lo revertí con `git
+  checkout` y usé Edit. Para literales con escapes, usa Edit.
+- `scope.helper.spec` y `scoped-prisma.service.spec` enumeran TODOS los modelos: un modelo nuevo
+  los rompe a propósito; se agrega a la lista (adaptación, no aflojar).
+- El ValidationPipe rechaza parámetros de más: `/catalogos/areas/mapeo` con `desde/hasta` = 400.
+- `por-area.e2e.spec.ts`: el test de `GET /catalogos/areas/mapeo` depende del orden del archivo
+  (corre después de AC3). Está comentado. Suelto con `-t` falla.
+- Rojo local PREEXISTENTE: `prisma/esquema.spec.ts` ("argon2id verificable"), el de siempre (FK de
+  la suscripción del seed local). En esta corrida `reportes.e2e` y `alertas.e2e` pasaron.
+
+**Qué quedó abierto.**
+- Estaciones (arriba). Enum de canales y mapeo por empresa (decisiones abiertas).
+- O3 del revisor: `asignarCanalArea` hace buscar + upsert sin transacción; dos PUT simultáneos
+  sobre un área sin mapeo pueden dar 500 por P2002 (mismo patrón aceptado en `guardarMetadata`).
+  La base no queda inconsistente.
+- Verificación visual y a 390 px de `/areas`: NO se hizo (sin arnés de Chrome). Las tablas tienen
+  su `overflow-x-auto`. Para F2-250.
+- F2-144 (Ventas por canal) construye encima de `/ventas/por-area`; su entrada del menú sigue
+  pendiente.
+
+**Tests.**
+- **Nuevos, api:**
+  - `ventas/por-area.spec.ts` (7 puros): clave ≠ id, otra sucursal, sin sincronizar, sin canal,
+    dada de baja con su canal, invariantes al centavo, orden, periodo vacío.
+  - `ventas/por-area.e2e.spec.ts` (14), cuentas A MANO en la tabla del comentario: **AC1**
+    (183.34 + 20.00 + 97.50 + 80.00 = 380.84 = `/ventas/resumen`, "sin clasificar" exacto),
+    **AC2** (PUT mueve 300.00 del 15-ago de mostrador a domicilio y a "sin canal"; `cheques`
+    idénticos, `updated_at` incluido), **AC3** (renombrar, desaparecer y reaparecer: misma fila,
+    mismo mapeo); ingesta ×3, cambio, omitido/espacios, >64; matriz de roles (404 idéntico en los
+    3 endpoints; 403 del visor idéntico para área propia, ajena e inexistente); 400/401.
+  - `ventas/por-area-seed.e2e.spec.ts` (4): persistencia del área, Σ = resumen, cada (sucursal,
+    área) contra el generador, Tijuana. Prueba persistencia y suma, NO el cruce (en el seed
+    `origenSrId = clave`).
+  - `seed-catalogos.spec` (+3): áreas por sucursal, mapeo demo, re-sembrar no pisa un cambio.
+  - `normalizar.spec` (+1), `openapi.spec` (+1).
+  - **Mutación a mano:** cruzar por clave en vez de `origen_sr_id` da 8 rojos.
+- **Nuevos, web:** `paginas/Areas.test.tsx` (9: AC Σ = Inicio, sucursal en las dos consultas, PUT
+  y recálculo, quitar canal, PUT fallido, visor sin select, estados vacíos, todas sin área,
+  sucursal sin catálogo), `areas/reglas.test.ts` (8), `areas/csv.test.ts` (4).
+- **Adaptados, no aflojados:** `consulta-ventas.spec` (`sinF2233`), `openapi.spec`,
+  `seed-catalogos.spec` (ahora siembra áreas y canales), `normalizar.spec` y
+  `escritura-sucursal.spec` (campo nuevo), `scope.helper.spec` y `scoped-prisma.service.spec`
+  (modelo nuevo); web: `Analisis.test` (bloque real, Σ área = Inicio, 5 endpoints), `menu.test`,
+  `vista.test`.
+- **Números:**
+  - /api: lint y typecheck limpios, `prisma validate` OK, jest 1354/1355 con 0 skips (el rojo es
+    el preexistente de arriba).
+  - /web: build y lint limpios, `check:bundle` 260 kB, vitest 930/930.
+
+**Qué haría distinto.** Correr los e2e nuevos con `--runInBand` desde el principio: el primer
+"5 rojos" tras restaurar la mutación eran dos suites pisándose las fixtures, no un bug.

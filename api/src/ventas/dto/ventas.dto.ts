@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { FormaPago } from '@prisma/client';
+import { CanalNegocio, FormaPago } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsIn,
@@ -37,6 +37,14 @@ import type {
   VentaPorMesa,
   VentaPorProducto,
 } from '../analisis.service';
+import type {
+  CatalogoAreasSucursal,
+  CruceArea,
+  FilaVentaArea,
+  Monto,
+  VentaCanal,
+  VentaPorArea,
+} from '../por-area';
 import {
   CANCELADAS,
   DIRECCIONES,
@@ -817,4 +825,131 @@ export class VentaPorMesaDto implements VentaPorMesa {
 
   @ApiProperty({ type: GlobalMesasDto })
   global!: GlobalMesasDto;
+}
+
+// ---------------------------------------------------------------------------
+// F2-233: venta por área y canal
+// ---------------------------------------------------------------------------
+
+const CRUCES: readonly CruceArea[] = ['catalogo', 'sin-catalogo', 'sin-sincronizar'];
+
+export class FilaVentaAreaDto implements FilaVentaArea {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({ description: 'El id del área en el POS de esa sucursal, tal como llega.' })
+  areaOrigenSrId!: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'El área en el espejo (`GET /catalogos/areas`); null si no está.',
+  })
+  areaId!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  clave!: string | null;
+
+  @ApiProperty({ type: String, nullable: true, description: 'null si no está en el espejo.' })
+  nombre!: string | null;
+
+  @ApiProperty({
+    enum: CRUCES,
+    description:
+      '`catalogo`: está en el espejo. `sin-catalogo`: la sucursal sincronizó sus áreas y ésta ' +
+      'no está. `sin-sincronizar`: la sucursal nunca cerró su catálogo de áreas.',
+  })
+  cruce!: CruceArea;
+
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description: 'false = el POS ya no la reporta; null si no está en el espejo.',
+  })
+  activo!: boolean | null;
+
+  @ApiProperty({
+    enum: CanalNegocio,
+    enumName: 'CanalNegocio',
+    nullable: true,
+    description: 'El canal de negocio asignado (nuestro, no del POS); null = sin asignar.',
+  })
+  canal!: CanalNegocio | null;
+
+  @ApiProperty(DINERO)
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+}
+
+class MontoDto implements Monto {
+  @ApiProperty(DINERO)
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+}
+
+class VentaCanalDto implements VentaCanal {
+  @ApiProperty({ enum: CanalNegocio, enumName: 'CanalNegocio' })
+  canal!: CanalNegocio;
+
+  @ApiProperty(DINERO)
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+}
+
+class CatalogoAreasSucursalDto implements CatalogoAreasSucursal {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({
+    description: 'La sucursal cerró al menos una sincronización completa de su catálogo de áreas.',
+  })
+  sincronizado!: boolean;
+}
+
+export class VentaPorAreaDto implements VentaPorArea {
+  @ApiProperty({ ...DINERO, description: 'Σ cheques.total sin cancelados: = /ventas/resumen.' })
+  venta!: string;
+
+  @ApiProperty()
+  cuentas!: number;
+
+  @ApiProperty({
+    type: [FilaVentaAreaDto],
+    description: 'Una fila por (sucursal, área del POS) con cuentas en el periodo; venta desc.',
+  })
+  areas!: FilaVentaAreaDto[];
+
+  @ApiProperty({
+    type: MontoDto,
+    description: '"Sin clasificar": cuentas que no traen área. Σ areas + sinArea = venta.',
+  })
+  sinArea!: MontoDto;
+
+  @ApiProperty({
+    type: [VentaCanalDto],
+    description: 'Sólo los canales con cuentas, en orden fijo. Σ canales + sinCanal + sinArea = venta.',
+  })
+  canales!: VentaCanalDto[];
+
+  @ApiProperty({
+    type: MontoDto,
+    description: 'Cuentas de un área sin canal asignado o que no está en el espejo.',
+  })
+  sinCanal!: MontoDto;
+
+  @ApiProperty({ type: [CatalogoAreasSucursalDto] })
+  catalogo!: CatalogoAreasSucursalDto[];
 }
