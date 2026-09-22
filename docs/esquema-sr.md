@@ -266,6 +266,13 @@ descubre nada de SR: son supuestos del modelo, sin validar, y se revisan en F1-0
 - ⚠️ **SUPUESTO — mesero y mesa se comparan como TEXTO EXACTO** (`mesero = $1`, sensible a
   mayúsculas y a espacios internos). Si SR guarda el nombre con variantes ("ANA" / "Ana"), el
   filtro las separa. Las cuentas sin mesero o sin mesa (nulo) no se pueden pedir con el filtro.
+  **Espacios alrededor:** el web recorta (`trim`) lo que se escribe o llega en la URL, pero ni la
+  ingesta ni el API recortan lo guardado. Si SR manda el nombre relleno de espacios (un `CHAR` de
+  SQL Server, p. ej. `"Ana   "`), sale en el select de meseros y filtrarlo da 0 tickets. No
+  validado; si pasa, se normaliza en la ingesta, no en el filtro.
+- ⚠️ **Ordenar por tiempo de mesa con duraciones negativas** (cierre anterior a la apertura, ver
+  arriba): el orden usa `cerrado_at − abierto_at` tal cual, así que esas cuentas quedan como las
+  más cortas en ascendente, mientras la tabla las muestra como "Sin dato". Se dejó así.
 - ⚠️ **SUPUESTO — la forma de pago de un filtro es la del CATÁLOGO de la empresa** (texto sin
   catálogo → `otro`), el mismo criterio que `pagos[].forma` del detalle, **no** la columna
   `cheque_pagos.forma` guardada en la ingesta. Si las dos difieren, manda el catálogo.
