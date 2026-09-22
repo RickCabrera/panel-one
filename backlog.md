@@ -1790,7 +1790,7 @@ periodo B (Δ absoluto y %), ranking de sucursales y export CSV.
 sucursal sin datos en un periodo muestra "—", no 0 engañoso.
 
 ### F2-141 · Reportes programados por correo
-`[ ]` Configurable por usuario: resumen diario (venta de ayer por sucursal, top 5 productos,
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-191. Configurable por usuario: resumen diario (venta de ayer por sucursal, top 5 productos,
 alertas) y/o semanal (comparativo, tendencia), enviado vía Brevo con HTML simple + link al
 panel. Cron por zona horaria de la empresa; opción de desuscribirse desde el correo.
 
