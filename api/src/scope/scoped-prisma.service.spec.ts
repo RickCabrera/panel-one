@@ -87,6 +87,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'chequePago',
       'chequePartida',
       'clienteCatalogo',
+      // F2-123: conteos físicos; se escriben por `conteos(scope)`, no por aquí.
+      'conteoFisico',
       // F2-202: bandeja del correo falso, filtrada por empresa_id como las demás.
       'correoEnviado',
       'empresa',
@@ -105,6 +107,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'meseroCatalogo',
       // F2-122: pólizas y movimientos; se escriben por `movimientosDeSucursal(agente)`.
       'movimientoInventario',
+      'partidaConteo',
       'polizaInventario',
       'producto',
       'productoMetadata',
