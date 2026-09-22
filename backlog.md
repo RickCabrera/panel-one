@@ -1074,6 +1074,23 @@ escritura contra el POS (test que lo afirma inspeccionando el modo de la conexi�
 > Documentar en §10 si el costo promedio de SR es por almacén o por insumo. Ver
 > `docs/esquema-sr.md` §10 y §13.
 
+> **Y además (de F2-122).** El panel ya acepta los movimientos por `POST /ingesta/movimientos`: un
+> **lote de pólizas**, cada una con TODAS sus partidas (`{ leidoAt, polizas: [{ origenSrId, folio,
+> tipo, tipoSr, almacenOrigenSrId, fecha, referencia, cancelada, partidas: [{ insumoOrigenSrId,
+> cantidad, costoUnitario }] }] }`). Obligaciones del lector: (1) la póliza viaja **completa** —
+> reenviarla con otras partidas las REEMPLAZA, así que una póliza a medias borra renglones; (2)
+> cantidad **con signo** (+ entra, − sale) en texto NUMERIC(12,3) y costo con la regla de dinero (el
+> importe lo calcula el API); (3) traducir el tipo de SR al enum del panel y mandar el crudo en
+> `tipoSr` (lo que no sepa traducir, `otro`); (4) un almacén por póliza: un traspaso de SR con origen
+> y destino son DOS pólizas con ids distintos; (5) una póliza cancelada o desaparecida en SR se
+> manda `cancelada = true`, nunca se deja de mandar (el panel no borra); (6) `leidoAt` = cuándo se
+> leyó (un lote viejo reintentado no revierte uno nuevo) y la `fecha` del movimiento del MISMO reloj
+> que el `capturadoAt` de las existencias (el cuadre del kardex corta ahí); (7) a lo más 200 pólizas
+> y **5000 partidas en total** por lote — partir por partidas; (8) el cursor incremental y la
+> ventana de relectura reenvían pólizas corregidas completas. Documentar en §10 si SR agrupa sus
+> movimientos en documentos y cómo ordena los folios (el desempate del kardex es el folio como
+> texto). Ver `docs/esquema-sr.md` §10 y §13.
+
 ## BLOQUE I · Cierre
 
 ### F2-250 · Cierre de Ronda 2: auditoría de paridad y pendientes
@@ -1431,6 +1448,16 @@ Recorre el AC original de F2-121, F2-122, F2-125, F2-126 y F2-127 con datos del 
 > diferencia); (2) el panel SUMA las existencias negativas (con valor negativo) al total; (3) una
 > alerta de bajo mínimo de un artículo que dejó de venir en la foto se queda abierta sin plazo
 > (decidir si se cierra tras X horas). Todo en `docs/esquema-sr.md` §10.
+
+> **Y además (de F2-122).** Al comparar el kardex con el saldo real: (1) el panel calcula el importe
+> de cada partida (`round(cantidad × costo, 2)`), puede diferir por centavos del de SR; (2) una póliza
+> cancelada no suma, y una que SR borre sin rastro se quedaría en el panel; (3) el desempate de dos
+> movimientos a la misma hora es el folio como texto (el saldo corrido intermedio puede verse
+> distinto al de SR, el final no); (4) el cuadre compara contra lo recibido HASTA el `capturadoAt` de
+> la foto de existencias: confirmar que los dos relojes son el mismo, y una póliza cancelada DESPUÉS
+> de la foto sale como diferencia hasta la foto siguiente. El AC de F2-122 sólo se probó
+> con el seed (conserva lo que simuló): el kardex contra el saldo real del piloto es de aquí. Todo en
+> `docs/esquema-sr.md` §10.
 
 **Listo cuando:** el valor de inventario cuadra contra el reporte de SR del mismo corte; el
 kardex de un artículo reproduce su saldo real; la variación teórico contra real de tres
@@ -1813,6 +1840,13 @@ sync detecte el movimiento espejo.
 **Listo cuando:** un traspaso web queda conciliado automáticamente cuando aparece su
 movimiento en SR (match por artículo+cantidad+fecha±1día); los no conciliados en 48 h se
 marcan en alerta.
+
+> **Y además (de F2-122).** Los traspasos LEÍDOS de SR ya llegan como pólizas por `POST
+> /ingesta/movimientos`: una `traspaso_salida` en el almacén de origen y una `traspaso_entrada` en
+> el de destino, con la `referencia` del documento de traspaso (así los arma el seed: `TR-0001`). El
+> "movimiento espejo" que concilia un traspaso web se busca en `movimientos_inventario` (artículo +
+> cantidad + fecha ± 1 día, y el tipo de póliza). Si SR registra el traspaso como un solo documento,
+> ver §10 de `docs/esquema-sr.md` (un almacén por póliza).
 
 ### F2-125 · Recetas y consumo teórico
 `[ ]` Ingesta de recetas de SR (explosión de insumos por producto). Cálculo diario de consumo

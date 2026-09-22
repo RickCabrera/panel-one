@@ -93,6 +93,8 @@ model Sucursal {
   existencias         Existencia[]
   lecturasExistencias LecturaExistencias[]
   limitesExistencia   LimiteExistencia[]
+  polizasInventario     PolizaInventario[]
+  movimientosInventario MovimientoInventario[]
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -1093,4 +1095,83 @@ model LimiteExistencia {
   @@unique([sucursalId, almacenOrigenSrId, insumoOrigenSrId], map: "limites_existencia_sucursal_almacen_insumo_key")
   @@index([empresaId])
   @@map("limites_existencia")
+}
+
+// F2-122. Tipo de una póliza de inventario, NUESTRO: SR no está mapeado (esquema-sr §10). El
+// lector (F2-241) traduce el tipo de SR a éste y manda además el código crudo (`tipo_sr`); lo
+// que no sepa traducir llega como `otro`.
+enum TipoPolizaInventario {
+  inicial
+  compra
+  consumo
+  merma
+  traspaso_salida
+  traspaso_entrada
+  ajuste
+  otro
+
+  @@map("tipo_poliza_inventario")
+}
+
+// F2-122. Una póliza (documento) de inventario leída de SR: la cabecera. La escribe SÓLO
+// `IngestaMovimientos` (clavada a la sucursal del agente), upsert por (sucursal, origen_sr_id).
+// `hash` = sha256 de su forma canónica (cabecera + partidas): igual = no se toca. `leida_at`
+// (reloj del agente) decide qué versión es más nueva: una más vieja no escribe nada.
+// DECISION PROVISIONAL (nocturno): un almacén por póliza (un traspaso son dos pólizas), y una
+// póliza que desaparece de SR no se borra: el lector la manda `cancelada`. esquema-sr §10.
+model PolizaInventario {
+  id                String               @id @default(uuid()) @db.Uuid
+  empresaId         String               @map("empresa_id") @db.Uuid
+  sucursalId        String               @map("sucursal_id") @db.Uuid
+  origenSrId        String               @map("origen_sr_id")
+  folio             String
+  tipo              TipoPolizaInventario
+  tipoSr            String?              @map("tipo_sr")
+  almacenOrigenSrId String               @map("almacen_origen_sr_id")
+  fecha             DateTime             @db.Timestamptz(3)
+  referencia        String?
+  cancelada         Boolean
+  partidas          Int
+  hash              String
+  leidaAt           DateTime             @map("leida_at") @db.Timestamptz(3)
+  recibidaAt        DateTime             @map("recibida_at") @db.Timestamptz(3)
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime             @map("updated_at") @db.Timestamptz(3)
+
+  sucursal    Sucursal               @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "polizas_inventario_sucursal_empresa_fkey")
+  movimientos MovimientoInventario[]
+
+  @@unique([sucursalId, origenSrId], map: "polizas_inventario_sucursal_origen_key")
+  @@unique([id, sucursalId, empresaId], map: "polizas_inventario_id_sucursal_empresa_key")
+  @@index([empresaId])
+  @@index([sucursalId, fecha])
+  @@map("polizas_inventario")
+}
+
+// F2-122. Una partida (renglón) de una póliza: el movimiento de UN insumo. `cantidad` CON SIGNO
+// (+ entra, − sale); `importe` = round(cantidad × costo_unitario, 2) lo calcula el API. El
+// almacén y la fecha son copias de su póliza (se reescriben con ella) para el kardex sin JOIN.
+// La FK compuesta impide que una partida cuelgue de una póliza de otra sucursal o empresa.
+model MovimientoInventario {
+  id                String   @id @default(uuid()) @db.Uuid
+  empresaId         String   @map("empresa_id") @db.Uuid
+  sucursalId        String   @map("sucursal_id") @db.Uuid
+  polizaId          String   @map("poliza_id") @db.Uuid
+  renglon           Int
+  almacenOrigenSrId String   @map("almacen_origen_sr_id")
+  insumoOrigenSrId  String   @map("insumo_origen_sr_id")
+  fecha             DateTime @db.Timestamptz(3)
+  cantidad          Decimal  @db.Decimal(12, 3)
+  costoUnitario     Decimal  @map("costo_unitario") @db.Decimal(12, 2)
+  importe           Decimal  @db.Decimal(12, 2)
+
+  sucursal Sucursal         @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "movimientos_inventario_sucursal_empresa_fkey")
+  poliza   PolizaInventario @relation(fields: [polizaId, sucursalId, empresaId], references: [id, sucursalId, empresaId], onDelete: Cascade, map: "movimientos_inventario_poliza_fkey")
+
+  @@unique([polizaId, renglon], map: "movimientos_inventario_poliza_renglon_key")
+  @@index([empresaId])
+  @@index([sucursalId, almacenOrigenSrId, insumoOrigenSrId, fecha], map: "movimientos_inventario_kardex_idx")
+  // La línea de tiempo sin almacén: sucursal + rango, ordenada por fecha.
+  @@index([sucursalId, fecha], map: "movimientos_inventario_linea_tiempo_idx")
+  @@map("movimientos_inventario")
 }

@@ -27,6 +27,7 @@ import {
 } from './seed-maestro/catalogos';
 import { sembrarCatalogos } from './seed-catalogos';
 import { sembrarExistencias } from './seed-existencias';
+import { sembrarMovimientos } from './seed-movimientos';
 import { generarUniverso, resumenPorModulo } from './seed-maestro';
 
 // Se re-exportan: los specs y los consumidores los importaban de aquí.
@@ -512,6 +513,18 @@ async function main(): Promise<void> {
           .map(([c, n]) => `${c} ${n}`)
           .join(', ') +
         '.',
+    );
+    // Pólizas y movimientos (F2-122): por la misma ingesta del agente, en lotes. Sus saldos son
+    // exactamente la foto de existencias de abajo: el kardex la reproduce.
+    const movimientos = await sembrarMovimientos(prisma, {
+      empresaId: op.empresaId,
+      sucursales,
+      universo,
+      ahora,
+    });
+    console.log(
+      `Pólizas sembradas (F2-122): ${movimientos.polizas} con ${movimientos.movimientos} ` +
+        `movimientos; ${movimientos.borradas} de otra ventana borradas.`,
     );
     // Existencias (F2-121): una foto por almacén por la misma ingesta del agente, y los límites
     // demo (sin pisar los que se editaron en el panel).

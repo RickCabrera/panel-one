@@ -285,6 +285,79 @@ describe('Contrato OpenAPI', () => {
     expect(esquemas.TipoAlerta?.enum ?? []).toContain('bajo_minimo');
   });
 
+  it('F2-122: contrato de movimientos (lote de pólizas), línea de tiempo, detalle y kardex', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const codigos = (op: { responses?: object } | undefined) =>
+      Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/ingesta/movimientos']?.post)).toEqual([
+      '200',
+      '400',
+      '401',
+      '429',
+      '500',
+      '503',
+    ]);
+    for (const ruta of [
+      '/inventario/movimientos',
+      '/inventario/polizas/{id}',
+      '/inventario/kardex',
+    ]) {
+      expect([ruta, codigos(paths[ruta]?.get)]).toEqual([ruta, ['200', '400', '401', '404']]);
+    }
+    const esquemas = doc.components?.schemas as Record<
+      string,
+      { properties?: Record<string, unknown>; enum?: string[] }
+    >;
+    expect(Object.keys(esquemas.LoteMovimientosDto.properties ?? {})).toEqual([
+      'leidoAt',
+      'polizas',
+    ]);
+    expect(Object.keys(esquemas.PolizaMovimientosDto.properties ?? {})).toEqual([
+      'origenSrId',
+      'folio',
+      'tipo',
+      'tipoSr',
+      'almacenOrigenSrId',
+      'fecha',
+      'referencia',
+      'cancelada',
+      'partidas',
+    ]);
+    expect(Object.keys(esquemas.PartidaMovimientoDto.properties ?? {})).toEqual([
+      'insumoOrigenSrId',
+      'cantidad',
+      'costoUnitario',
+    ]);
+    expect(Object.keys(esquemas.ResultadoMovimientosDto.properties ?? {})).toEqual([
+      'recibidas',
+      'creadas',
+      'actualizadas',
+      'sinCambios',
+      'obsoletas',
+      'rechazadas',
+    ]);
+    expect(esquemas.TipoPolizaInventario.enum).toEqual([
+      'inicial',
+      'compra',
+      'consumo',
+      'merma',
+      'traspaso_salida',
+      'traspaso_entrada',
+      'ajuste',
+      'otro',
+    ]);
+    expect(Object.keys(esquemas.KardexDto.properties ?? {})).toEqual(
+      expect.arrayContaining([
+        'saldoInicial',
+        'saldoFinal',
+        'corteExistencia',
+        'saldoAlCorte',
+        'cuadra',
+      ]),
+    );
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
@@ -336,6 +409,11 @@ describe('Contrato OpenAPI', () => {
         '/ingesta/existencias',
         '/inventario/existencias',
         '/inventario/existencias/limites',
+        // F2-122: movimientos, pólizas y kardex.
+        '/ingesta/movimientos',
+        '/inventario/movimientos',
+        '/inventario/polizas/{id}',
+        '/inventario/kardex',
         '/mesas/abiertas',
         '/sucursales',
         '/sucursales/{id}',

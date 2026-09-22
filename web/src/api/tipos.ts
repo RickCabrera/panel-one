@@ -885,3 +885,131 @@ export interface Existencias {
   almacenes: AlmacenExistencias[];
   sucursales: SucursalExistencias[];
 }
+
+// ---------------------------------------------------------------------------
+// Movimientos, pólizas y kardex (F2-122): `GET /inventario/movimientos`,
+// `GET /inventario/polizas/{id}` y `GET /inventario/kardex`
+// ---------------------------------------------------------------------------
+
+/** `TipoPolizaInventario` del API. `otro` = el lector no supo traducir el tipo de SR. */
+export type TipoPolizaInventario =
+  | 'inicial'
+  | 'compra'
+  | 'consumo'
+  | 'merma'
+  | 'traspaso_salida'
+  | 'traspaso_entrada'
+  | 'ajuste'
+  | 'otro';
+
+export interface PolizaResumen {
+  id: string;
+  folio: string;
+  tipo: TipoPolizaInventario;
+  /** Cancelada en SR: se muestra, pero no suma al kardex. */
+  cancelada: boolean;
+  referencia: string | null;
+}
+
+/** Cantidades (con signo, 3 decimales) y dinero como TEXTO decimal. */
+export interface FilaMovimiento {
+  id: string;
+  poliza: PolizaResumen;
+  renglon: number;
+  /** ISO UTC; se presenta en la zona de la sucursal. */
+  fecha: string;
+  sucursalId: string;
+  sucursal: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  clave: string | null;
+  unidad: string | null;
+  cantidad: string;
+  costoUnitario: string;
+  importe: string;
+}
+
+export interface SucursalMovimientos {
+  sucursalId: string;
+  sucursal: string;
+  zonaHoraria: string;
+  /** 0 = esa sucursal nunca mandó movimientos. */
+  polizasRecibidas: number;
+}
+
+export interface AlmacenMovimientos {
+  sucursalId: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+}
+
+export interface Movimientos {
+  movimientos: FilaMovimiento[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+  sucursales: SucursalMovimientos[];
+  almacenes: AlmacenMovimientos[];
+}
+
+export interface PartidaPoliza {
+  renglon: number;
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  clave: string | null;
+  unidad: string | null;
+  cantidad: string;
+  costoUnitario: string;
+  importe: string;
+}
+
+export interface PolizaDetalle {
+  id: string;
+  origenSrId: string;
+  folio: string;
+  tipo: TipoPolizaInventario;
+  tipoSr: string | null;
+  fecha: string;
+  referencia: string | null;
+  cancelada: boolean;
+  sucursalId: string;
+  sucursal: string;
+  zonaHoraria: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+  recibidaAt: string;
+  partidas: PartidaPoliza[];
+  importeTotal: string;
+}
+
+export interface FilaKardex extends FilaMovimiento {
+  /** Saldo después de este movimiento (una fila cancelada repite el anterior). */
+  saldo: string;
+}
+
+export interface Kardex {
+  sucursalId: string;
+  sucursal: string;
+  zonaHoraria: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  clave: string | null;
+  unidad: string | null;
+  polizasRecibidas: number;
+  saldoInicial: string;
+  movimientos: FilaKardex[];
+  saldoFinal: string;
+  entradas: string;
+  salidas: string;
+  /** Cuándo se leyó la última foto de existencias de ese almacén. Nulo = nunca. */
+  corteExistencia: string | null;
+  existencia: string | null;
+  saldoAlCorte: string | null;
+  diferencia: string | null;
+  /** Nulo = sin movimientos recibidos o sin existencia leída: no hay con qué comparar. */
+  cuadra: boolean | null;
+}

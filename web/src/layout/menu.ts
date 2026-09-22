@@ -8,6 +8,7 @@ import {
   Contact,
   FileCheck,
   FileText,
+  History,
   GitCompareArrows,
   House,
   Layers,
@@ -219,6 +220,12 @@ export const SECCIONES: readonly SeccionMenu[] = [
         texto: 'Existencias',
         icono: Warehouse,
         destino: { ruta: '/existencias' },
+      },
+      {
+        id: 'inventario.movimientos',
+        texto: 'Movimientos y kardex',
+        icono: History,
+        destino: { ruta: '/movimientos' },
       },
       {
         id: 'inventario.conteos',

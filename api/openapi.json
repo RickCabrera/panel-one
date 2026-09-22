@@ -775,6 +775,87 @@
         ]
       }
     },
+    "/ingesta/movimientos": {
+      "post": {
+        "description": "Upsert por (sucursal de la API key, `origenSrId`). Idempotente: el mismo lote tres veces deja exactamente los mismos datos. Una póliza que cambió REEMPLAZA su cabecera y sus partidas (una corrección no duplica). Una póliza guardada con una lectura más nueva que `leidoAt` no se toca (`obsoletas`). Cada póliza se valida aparte: una inválida, o con alguna partida inválida, va a `rechazadas` sin tocar lo guardado. Nunca se borra una póliza: se anula mandándola `cancelada`. Registra el contacto del agente.",
+        "operationId": "MovimientosIngestaController_recibir",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoteMovimientosDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoMovimientosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sobre inválido: `leidoAt` sin zona o más de 5 min en el futuro, `polizas` vacío, no arreglo, con más de 200 o con no-objetos, más de 5000 partidas en total, o un campo de más en el sobre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          },
+          "500": {
+            "description": "Falla determinista: no se guardó nada y reenviar lo mismo va a fallar igual. No reintentar en bucle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Falla transitoria (base, o el candado lo tiene otro lote de la misma sucursal). No se guardó nada: reenviar igual más tarde.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "Recibe un lote de pólizas de inventario del POS, cada una con todas sus partidas.",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
     "/ventas/resumen": {
       "get": {
         "description": "Cache de 15 s por usuario-alcance y filtro.",
@@ -6234,6 +6315,347 @@
           "inventario"
         ]
       }
+    },
+    "/inventario/movimientos": {
+      "get": {
+        "description": "Las partidas de las pólizas que el agente mandó (`POST /ingesta/movimientos`), con los nombres de los catálogos espejo. Filtra por sucursal, almacén, insumo, tipo y rango de días (en la zona de cada sucursal). Las de pólizas canceladas salen marcadas. `sucursales[].polizasRecibidas = 0` = esa sucursal nunca mandó movimientos.",
+        "operationId": "MovimientosController_listar",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "almacenOrigenSrId",
+            "required": false,
+            "in": "query",
+            "description": "El `origenSrId` de un almacén de esa sucursal. Exige `sucursalId` (si no, 400).",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "insumoOrigenSrId",
+            "required": false,
+            "in": "query",
+            "description": "El `origenSrId` de un insumo de esa sucursal. Exige `sucursalId` (si no, 400).",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "tipo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/TipoPolizaInventario"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "porPagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovimientosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la póliza no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Línea de tiempo de movimientos de inventario (F2-122), más reciente primero.",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/polizas/{id}": {
+      "get": {
+        "operationId": "MovimientosController_poliza",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolizaDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la póliza no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalle de una póliza de inventario con todas sus partidas (F2-122).",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
+    "/inventario/kardex": {
+      "get": {
+        "description": "Saldo inicial = Σ de lo no cancelado antes del rango; cada movimiento del rango con su saldo (fecha → folio → renglón; uno cancelado se muestra y no mueve el saldo). `cuadra` compara la existencia de la última foto (F2-121) con el saldo de los movimientos HASTA el corte de esa foto; es nulo si la sucursal nunca mandó movimientos o no hay existencia leída.",
+        "operationId": "MovimientosController_kardex",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": true,
+            "in": "query",
+            "description": "La sucursal del almacén. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "almacenOrigenSrId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "insumoOrigenSrId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KardexDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la póliza no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Kardex de un artículo en un almacén: saldo corrido y cuadre contra la existencia.",
+        "tags": [
+          "inventario"
+        ]
+      }
     }
   },
   "info": {
@@ -7481,6 +7903,209 @@
           "conservados",
           "ausentesConservados",
           "rechazados"
+        ]
+      },
+      "TipoPolizaInventario": {
+        "type": "string",
+        "enum": [
+          "inicial",
+          "compra",
+          "consumo",
+          "merma",
+          "traspaso_salida",
+          "traspaso_entrada",
+          "ajuste",
+          "otro"
+        ],
+        "description": "Tipo NUESTRO: el lector traduce el de SR (esquema-sr §10). Lo que no sepa traducir = `otro`."
+      },
+      "PartidaMovimientoDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string",
+            "example": "I001",
+            "description": "El `origenSrId` del insumo en el catálogo `insumos` de esta sucursal (1–64). Sin FK: el catálogo puede llegar después. Puede repetirse dentro de la póliza (dos renglones)."
+          },
+          "cantidad": {
+            "type": "string",
+            "pattern": "^-?\\d{1,9}(\\.\\d{1,3})?$",
+            "example": "-2.500",
+            "description": "Cantidad CON SIGNO en la unidad del insumo (+ entra al almacén, − sale), texto decimal NUMERIC(12,3) (no se redondea). Puede ser 0."
+          },
+          "costoUnitario": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "85.40",
+            "description": "Costo por unidad del movimiento, sin IVA supuesto (esquema-sr §10). Regla de los importes de `/ingesta/eventos`: hasta 10 enteros y 4 decimales, se redondea a 2 mitad lejos de cero. El importe (cantidad × costo, a 2 decimales, con signo) lo calcula el API."
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "cantidad",
+          "costoUnitario"
+        ]
+      },
+      "PolizaMovimientosDto": {
+        "type": "object",
+        "properties": {
+          "origenSrId": {
+            "type": "string",
+            "example": "48213",
+            "description": "Identidad de la póliza en SR (1–64). Llave de la idempotencia junto con la sucursal de la API key. Repetida dentro del lote = se rechazan todas sus apariciones."
+          },
+          "folio": {
+            "type": "string",
+            "example": "POL-0042",
+            "description": "Folio visible del documento (1–64)."
+          },
+          "tipo": {
+            "description": "Tipo NUESTRO: el lector traduce el de SR (esquema-sr §10). Lo que no sepa traducir = `otro`.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TipoPolizaInventario"
+              }
+            ]
+          },
+          "tipoSr": {
+            "type": "string",
+            "nullable": true,
+            "example": "E",
+            "description": "El código de tipo CRUDO de SR (1–64), para validar la traducción (F2-192)."
+          },
+          "almacenOrigenSrId": {
+            "type": "string",
+            "example": "ALM-GEN",
+            "description": "El `origenSrId` del almacén de la póliza (1–64). Un almacén por póliza. Sin FK."
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-22T15:30:00.000Z",
+            "description": "Fecha y hora del movimiento en el POS, ISO-8601 con zona. Más de 5 min en el futuro = se rechaza la póliza."
+          },
+          "referencia": {
+            "type": "string",
+            "nullable": true,
+            "example": "OC-0042",
+            "description": "Documento que la originó (compra, traspaso, conteo), 1–120; nulo si no hay."
+          },
+          "cancelada": {
+            "type": "boolean",
+            "description": "true = la póliza se canceló en SR (o ya no existe): se muestra marcada y NO suma al kardex. El panel nunca borra una póliza: para anularla se reenvía cancelada."
+          },
+          "partidas": {
+            "description": "TODAS las partidas de la póliza, en su orden (el renglón es la posición). Una partida inválida rechaza la póliza entera. Reenviar la póliza con otras partidas las REEMPLAZA.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartidaMovimientoDto"
+            }
+          }
+        },
+        "required": [
+          "origenSrId",
+          "folio",
+          "tipo",
+          "almacenOrigenSrId",
+          "fecha",
+          "referencia",
+          "cancelada",
+          "partidas"
+        ]
+      },
+      "LoteMovimientosDto": {
+        "type": "object",
+        "properties": {
+          "leidoAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-22T15:30:00.000Z",
+            "description": "El instante en que se LEYÓ el lote en el POS (reloj del agente), ISO-8601 con zona. Una póliza guardada con una lectura más nueva no se toca (`obsoletas`): un lote viejo reintentado no revierte una corrección. Con el MISMO instante, gana el que llega después. Más de 5 min en el futuro = 400."
+          },
+          "polizas": {
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "1 a 200 pólizas, con 5000 partidas a lo más EN TOTAL (si no, 400).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PolizaMovimientosDto"
+            }
+          }
+        },
+        "required": [
+          "leidoAt",
+          "polizas"
+        ]
+      },
+      "RechazoPolizaDto": {
+        "type": "object",
+        "properties": {
+          "indice": {
+            "type": "number",
+            "example": 3,
+            "description": "Posición de la póliza en el lote (desde 0)."
+          },
+          "origenSrId": {
+            "type": "string",
+            "nullable": true,
+            "description": "El `origenSrId` si era válido; nulo si no."
+          },
+          "motivo": {
+            "type": "string",
+            "example": "polizas.3.partidas.1.cantidad: cantidad debe ser una cantidad decimal en texto",
+            "description": "Ruta y regla. NUNCA repite el valor."
+          },
+          "reintentable": {
+            "type": "boolean",
+            "description": "Siempre false: reenviarla igual va a fallar igual."
+          }
+        },
+        "required": [
+          "indice",
+          "origenSrId",
+          "motivo",
+          "reintentable"
+        ]
+      },
+      "ResultadoMovimientosDto": {
+        "type": "object",
+        "properties": {
+          "recibidas": {
+            "type": "number",
+            "description": "Pólizas en el lote."
+          },
+          "creadas": {
+            "type": "number",
+            "description": "Pólizas nuevas."
+          },
+          "actualizadas": {
+            "type": "number",
+            "description": "Pólizas que cambiaron: su cabecera y sus partidas se reescribieron."
+          },
+          "sinCambios": {
+            "type": "number",
+            "description": "Pólizas iguales a lo guardado: no se tocaron."
+          },
+          "obsoletas": {
+            "type": "number",
+            "description": "Pólizas cuya versión guardada se leyó DESPUÉS de este lote: no se tocaron (no es error)."
+          },
+          "rechazadas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RechazoPolizaDto"
+            }
+          }
+        },
+        "required": [
+          "recibidas",
+          "creadas",
+          "actualizadas",
+          "sinCambios",
+          "obsoletas",
+          "rechazadas"
         ]
       },
       "DescuentosDto": {
@@ -11411,6 +12036,548 @@
           "insumoOrigenSrId",
           "minimo",
           "maximo"
+        ]
+      },
+      "PolizaResumenDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Id del panel: el del detalle."
+          },
+          "folio": {
+            "type": "string"
+          },
+          "tipo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TipoPolizaInventario"
+              }
+            ]
+          },
+          "cancelada": {
+            "type": "boolean",
+            "description": "Cancelada en SR: se muestra, pero no suma al kardex."
+          },
+          "referencia": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "folio",
+          "tipo",
+          "cancelada",
+          "referencia"
+        ]
+      },
+      "FilaMovimientoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "poliza": {
+            "$ref": "#/components/schemas/PolizaResumenDto"
+          },
+          "renglon": {
+            "type": "number",
+            "description": "Renglón de la partida en su póliza (desde 0)."
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC; se presenta en la zona de la sucursal."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo; nulo si no está."
+          },
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo; nulo si no está."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true
+          },
+          "cantidad": {
+            "type": "string",
+            "description": "Texto decimal con 3 decimales, CON SIGNO (+ entra, − sale).",
+            "example": "-2.500"
+          },
+          "costoUnitario": {
+            "type": "string",
+            "description": "Costo por unidad, 2 decimales.",
+            "example": "85.40"
+          },
+          "importe": {
+            "type": "string",
+            "description": "cantidad × costo, 2 decimales, con signo.",
+            "example": "-213.50"
+          }
+        },
+        "required": [
+          "id",
+          "poliza",
+          "renglon",
+          "fecha",
+          "sucursalId",
+          "sucursal",
+          "almacenOrigenSrId",
+          "almacen",
+          "insumoOrigenSrId",
+          "insumo",
+          "clave",
+          "unidad",
+          "cantidad",
+          "costoUnitario",
+          "importe"
+        ]
+      },
+      "SucursalMovimientosDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "description": "Zona IANA de la sucursal: las horas se presentan en ella."
+          },
+          "polizasRecibidas": {
+            "type": "number",
+            "description": "Pólizas recibidas del agente en toda la historia. 0 = nunca mandó movimientos."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "zonaHoraria",
+          "polizasRecibidas"
+        ]
+      },
+      "AlmacenMovimientosDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "sucursalId",
+          "almacenOrigenSrId",
+          "almacen"
+        ]
+      },
+      "MovimientosDto": {
+        "type": "object",
+        "properties": {
+          "movimientos": {
+            "description": "Más reciente primero.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaMovimientoDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Movimientos del filtro (todas las páginas)."
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number"
+          },
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalMovimientosDto"
+            }
+          },
+          "almacenes": {
+            "description": "Los almacenes con pólizas o del catálogo (activos), para el filtro.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlmacenMovimientosDto"
+            }
+          }
+        },
+        "required": [
+          "movimientos",
+          "total",
+          "pagina",
+          "porPagina",
+          "sucursales",
+          "almacenes"
+        ]
+      },
+      "PartidaPolizaDto": {
+        "type": "object",
+        "properties": {
+          "renglon": {
+            "type": "number"
+          },
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true
+          },
+          "cantidad": {
+            "type": "string",
+            "description": "Texto decimal con 3 decimales, CON SIGNO (+ entra, − sale)."
+          },
+          "costoUnitario": {
+            "type": "string"
+          },
+          "importe": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "renglon",
+          "insumoOrigenSrId",
+          "insumo",
+          "clave",
+          "unidad",
+          "cantidad",
+          "costoUnitario",
+          "importe"
+        ]
+      },
+      "PolizaDetalleDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "origenSrId": {
+            "type": "string"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "tipo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TipoPolizaInventario"
+              }
+            ]
+          },
+          "tipoSr": {
+            "type": "string",
+            "nullable": true,
+            "description": "El código crudo de SR."
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "referencia": {
+            "type": "string",
+            "nullable": true
+          },
+          "cancelada": {
+            "type": "boolean"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true
+          },
+          "recibidaAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cuándo la recibió el API por última vez."
+          },
+          "partidas": {
+            "description": "En orden de renglón.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartidaPolizaDto"
+            }
+          },
+          "importeTotal": {
+            "type": "string",
+            "description": "Σ importes de las partidas, con signo, 2 decimales."
+          }
+        },
+        "required": [
+          "id",
+          "origenSrId",
+          "folio",
+          "tipo",
+          "tipoSr",
+          "fecha",
+          "referencia",
+          "cancelada",
+          "sucursalId",
+          "sucursal",
+          "zonaHoraria",
+          "almacenOrigenSrId",
+          "almacen",
+          "recibidaAt",
+          "partidas",
+          "importeTotal"
+        ]
+      },
+      "FilaKardexDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "poliza": {
+            "$ref": "#/components/schemas/PolizaResumenDto"
+          },
+          "renglon": {
+            "type": "number",
+            "description": "Renglón de la partida en su póliza (desde 0)."
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC; se presenta en la zona de la sucursal."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo; nulo si no está."
+          },
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del catálogo; nulo si no está."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true
+          },
+          "cantidad": {
+            "type": "string",
+            "description": "Texto decimal con 3 decimales, CON SIGNO (+ entra, − sale).",
+            "example": "-2.500"
+          },
+          "costoUnitario": {
+            "type": "string",
+            "description": "Costo por unidad, 2 decimales.",
+            "example": "85.40"
+          },
+          "importe": {
+            "type": "string",
+            "description": "cantidad × costo, 2 decimales, con signo.",
+            "example": "-213.50"
+          },
+          "saldo": {
+            "type": "string",
+            "description": "Saldo después de este movimiento (una fila cancelada repite el anterior)."
+          }
+        },
+        "required": [
+          "id",
+          "poliza",
+          "renglon",
+          "fecha",
+          "sucursalId",
+          "sucursal",
+          "almacenOrigenSrId",
+          "almacen",
+          "insumoOrigenSrId",
+          "insumo",
+          "clave",
+          "unidad",
+          "cantidad",
+          "costoUnitario",
+          "importe",
+          "saldo"
+        ]
+      },
+      "KardexDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true
+          },
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true
+          },
+          "polizasRecibidas": {
+            "type": "number",
+            "description": "Pólizas recibidas de la sucursal en toda la historia. 0 = nunca mandó movimientos."
+          },
+          "saldoInicial": {
+            "type": "string",
+            "description": "Σ de lo no cancelado ANTES del rango. 3 decimales."
+          },
+          "movimientos": {
+            "description": "Del rango, fecha → folio → renglón.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaKardexDto"
+            }
+          },
+          "saldoFinal": {
+            "type": "string",
+            "description": "Saldo al final del rango."
+          },
+          "entradas": {
+            "type": "string",
+            "description": "Σ entradas del rango (no canceladas)."
+          },
+          "salidas": {
+            "type": "string",
+            "description": "Σ salidas del rango, en positivo (no canceladas)."
+          },
+          "corteExistencia": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cuándo se leyó la última foto de existencias de ese almacén. Nulo = nunca."
+          },
+          "existencia": {
+            "type": "string",
+            "nullable": true,
+            "description": "La existencia de ese artículo en esa foto. Nulo = no viene en ella o no hay foto."
+          },
+          "saldoAlCorte": {
+            "type": "string",
+            "nullable": true,
+            "description": "Σ de lo no cancelado con fecha ≤ `corteExistencia`. Nulo sin foto."
+          },
+          "diferencia": {
+            "type": "string",
+            "nullable": true,
+            "description": "existencia − saldoAlCorte. Nulo si no hay con qué comparar."
+          },
+          "cuadra": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "true = el kardex reproduce la existencia leída. Nulo = sin movimientos recibidos o sin existencia leída."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "zonaHoraria",
+          "almacenOrigenSrId",
+          "almacen",
+          "insumoOrigenSrId",
+          "insumo",
+          "clave",
+          "unidad",
+          "polizasRecibidas",
+          "saldoInicial",
+          "movimientos",
+          "saldoFinal",
+          "entradas",
+          "salidas",
+          "corteExistencia",
+          "existencia",
+          "saldoAlCorte",
+          "diferencia",
+          "cuadra"
         ]
       }
     }

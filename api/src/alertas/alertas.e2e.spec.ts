@@ -229,8 +229,18 @@ describe('Centro de alertas (e2e, F2-224)', () => {
     const abiertas = await get(`/alertas/abiertas?empresaId=${FX.empresaA}`);
     expect(abiertas.status).toBe(200);
     expect(abiertas.body.map((a: { id: string }) => a.id)).not.toContain(antes.id);
-    const hist = await get(`/alertas/historial?empresaId=${FX.empresaA}`);
-    const enHist = hist.body.filas.filter((a: { id: string }) => a.id === antes.id);
+    // Las ~60 alertas del seed abren en el MISMO T0 y el historial pagina de 50 con desempate por
+    // id (uuid aleatorio): la fila puede caer en cualquier página. Se recorren todas.
+    const primera = await get(`/alertas/historial?empresaId=${FX.empresaA}`);
+    expect(primera.status).toBe(200);
+    const paginas = Math.ceil(primera.body.total / primera.body.porPagina);
+    const filasHist: Array<{ id: string }> = [...primera.body.filas];
+    for (let p = 2; p <= paginas; p++) {
+      filasHist.push(
+        ...(await get(`/alertas/historial?empresaId=${FX.empresaA}&pagina=${p}`)).body.filas,
+      );
+    }
+    const enHist = filasHist.filter((a) => a.id === antes.id);
     expect(enHist).toEqual([
       expect.objectContaining({
         abiertaAt: new Date(T0).toISOString(),
