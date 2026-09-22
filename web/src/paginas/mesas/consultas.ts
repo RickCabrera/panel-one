@@ -42,10 +42,29 @@ export function useAhora(): number {
   return ahora;
 }
 
-/** Un intervalo por suscriptor; de módulo para que la suscripción sea estable. */
+/**
+ * UN solo intervalo para todos los suscriptores (F2-223): con 60 tarjetas del Monitor
+ * serían 60 relojes desfasados, y cada uno con su propio render. Así, todo lo que
+ * cambia en un pulso sale en el mismo commit. Arranca con el primer suscriptor y se
+ * detiene con el último.
+ */
+const suscriptores = new Set<() => void>();
+let pulso: ReturnType<typeof setInterval> | null = null;
+
 function suscribirPulso(avisar: () => void): () => void {
-  const id = setInterval(avisar, PULSO_MS);
-  return () => clearInterval(id);
+  suscriptores.add(avisar);
+  if (pulso === null) {
+    pulso = setInterval(() => {
+      for (const s of [...suscriptores]) s();
+    }, PULSO_MS);
+  }
+  return () => {
+    suscriptores.delete(avisar);
+    if (suscriptores.size === 0 && pulso !== null) {
+      clearInterval(pulso);
+      pulso = null;
+    }
+  };
 }
 
 /**

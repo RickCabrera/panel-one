@@ -503,9 +503,34 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
     mesa y `abiertoAt`; sin folio **ni** `abiertoAt` no hay forma de confirmarla y el modal
     dice "ya no aparece" en el siguiente poll. Si F1-023 descubre que las cuentas abiertas
     de SR no traen folio, hay que buscar otra llave estable.
+- **Lo que el Monitor de mesas (F2-223, paridad fina) supone.** ⚠️ **SUPUESTO no validado.**
+  - `DECISION PROVISIONAL (nocturno)` — **`partidas[].comandaImpresa` (bool, opcional)**: si
+    la comanda de ESA partida ya salió impresa (cocina/barra). Es distinto del `impreso` de
+    la cuenta (la precuenta). **Ni el nombre ni la semántica salen de SR**: nadie ha visto
+    cómo marca SR una comanda impresa (¿una columna de `tempcheqdet`?, ¿otra tabla?). Es la
+    forma que el agente (F1-023 / F2-240) **tendría que producir**. Pendiente para esas
+    tareas: encontrar la columna y mandarlo por partida.
+  - Lectura defensiva (`web/src/paginas/mesas/mesa.ts`): sólo cuenta si es booleano; ausente
+    o cualquier otra cosa = `null` = "no se sabe". El detalle marca "Pendiente de imprimir"
+    las `false` y las cuenta; si **ninguna** partida trae el dato, dice "El agente no reporta
+    qué partidas faltan por imprimir." (nunca supone "todo impreso").
+  - El contrato de `GET /mesas/abiertas` (DTO `mesas.dto.ts` y `openapi.json`) lo describe
+    con el mismo marcador de supuesto. El API sigue sin validar la forma.
+  - Los minutos del Monitor salen de una "apertura en el reloj del navegador"
+    (`respuestaAt − edadRecepcion − (capturadoAt − abiertoAt)`), estabilizada entre polls por
+    sucursal + `folio` con 2 s de tolerancia. No es un hallazgo de SR: es presentación. Otra
+    razón más para que F1-023 confirme que el folio de una cuenta abierta es estable entre
+    lecturas (sin folio, la tarjeta se vuelve a pintar en cada poll, sin más daño).
+  - La llave de React de cada tarjeta es `sucursal:folio:posición en el snapshot`. Si el
+    agente reordena las cuentas o intercala una nueva, las tarjetas se remontan aunque el
+    folio sea el mismo: costo de repintado, no error de datos. Si F1-023 ve que SR no
+    devuelve las cuentas abiertas en orden estable, conviene quitar la posición de la llave.
 - El seed de desarrollo `api/prisma/seed-mesas.ts` (`npm run seed:mesas`) genera snapshots
   **sintéticos** con esta forma: la sucursal Centro en vivo y la Norte desconectada hace 2 h.
-  Marca los suyos con `payload.origen = 'seed'` y sólo borra ésos.
+  Marca los suyos con `payload.origen = 'seed'` y sólo borra ésos. Desde F2-223, Centro trae
+  **60 mesas abiertas**: 8 escritas a mano y 52 generadas sin azar con el catálogo maestro
+  (F2-201), más `comandaImpresa` por partida. Las 52 y el `comandaImpresa` son **invención del
+  seed**, igual que advierte el recuadro de §6–§10: no son evidencia de SR.
 
 ---
 

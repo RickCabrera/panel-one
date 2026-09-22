@@ -2,14 +2,18 @@ import { Prisma, PrismaClient } from '@prisma/client';
 
 import { cargarEnvLocal } from '../src/config/cargar-env';
 import { SEED_IDS } from './seed';
+import { meserosDe, nombreGrupo, precioEn, PRODUCTOS } from './seed-maestro/catalogos';
 
 /**
  * Seed de SNAPSHOTS de mesas abiertas (F1-050), SINTÉTICOS. Ningún dato es de un
  * restaurante real. Deja probar el Monitor de mesas sin agente ni SoftRestaurant:
  *
- * - La PRIMERA sucursal queda "en vivo": capturado y recibido = `ahora`, con mesas que
- *   cubren todo el semáforo (< 40, 40–60, > 60 min), cuentas con más de 3 partidas,
- *   modificadores (también de $0.00) e `impreso` mezclado.
+ * - La PRIMERA sucursal queda "en vivo": capturado y recibido = `ahora`, con
+ *   `MESAS_EN_VIVO` (60) mesas que cubren todo el semáforo (< 40, 40–60, > 60 min),
+ *   cuentas con más de 3 partidas, modificadores (también de $0.00), `impreso` mezclado
+ *   y partidas con la comanda pendiente de imprimir. Las 8 primeras están escritas a
+ *   mano (sus importes se cuadran a mano en el spec); las otras 52 las genera
+ *   `generadas()` sin azar (F2-223: el Monitor se prueba con 60 mesas abiertas).
  * - La SEGUNDA queda "desconectada": su último snapshot es de hace 2 h, para ver el
  *   banner en lugar de sus mesas.
  *
@@ -41,6 +45,12 @@ export interface PartidaMesaSeed {
   precioUnit: string;
   total: string;
   modificadores: Array<{ nombre: string; precio: string }>;
+  /**
+   * DECISION PROVISIONAL (nocturno): forma NUESTRA, no de SR (F2-223, esquema-sr.md §5):
+   * si la comanda de la partida ya salió impresa. Regla del seed: en una cuenta ya
+   * impresa, todas `true`; en una sin imprimir de índice impar, la última va `false`.
+   */
+  comandaImpresa: boolean;
 }
 
 export interface MesaSeed {
@@ -136,6 +146,33 @@ const EN_VIVO: readonly Plantilla[] = [
   ['Barra', 'Lucía Hernández', 22, 1, false, [['Café de olla', 'Bebidas', '42.00', '1']]],
 ];
 
+/** Cuántas mesas abiertas tiene la sucursal en vivo (F2-223). */
+export const MESAS_EN_VIVO = 60;
+
+/**
+ * Las mesas 13–64 de la sucursal en vivo, generadas SIN azar (aritmética sobre el
+ * índice): meseros, productos, grupos y precios del catálogo maestro, minutos entre 5 y
+ * 150 (los tres colores del semáforo), de 1 a 4 partidas e `impreso` mezclado. Son
+ * invención del seed, como todo lo del catálogo maestro: no evidencia de SR.
+ */
+function generadas(cuantas: number): Plantilla[] {
+  const meseros = meserosDe(0).map((m) => m.nombre);
+  return Array.from({ length: cuantas }, (_, k): Plantilla => {
+    const renglones = Array.from({ length: 1 + (k % 4) }, (_, j): Renglon => {
+      const q = PRODUCTOS[(k * 7 + j * 11) % PRODUCTOS.length];
+      return [q.nombre, nombreGrupo(q.grupo), precioEn(q, 0), String(1 + ((k + j) % 3))];
+    });
+    return [
+      String(13 + k),
+      meseros[k % meseros.length],
+      5 + ((k * 37) % 146),
+      1 + (k % 6),
+      k % 3 === 0,
+      renglones,
+    ];
+  });
+}
+
 const DESCONECTADA: readonly Plantilla[] = [
   ['3', 'Ana López', 20, 2, false, [['Guacamole', 'Entradas', '95.00', '1']]],
   ['8', 'Carlos Ramírez', 50, 4, true, [['Carnitas', 'Cortes por kg', '360.00', '1.000']]],
@@ -147,7 +184,7 @@ function dinero(v: Prisma.Decimal.Value): string {
 
 function mesas(plantillas: readonly Plantilla[], capturadoAt: Date, clave: string): MesaSeed[] {
   return plantillas.map(([mesa, mesero, minutos, comensales, impreso, renglones], i) => {
-    const partidas = renglones.map(([producto, categoria, precio, cantidad, mods]) => {
+    const partidas = renglones.map(([producto, categoria, precio, cantidad, mods], j) => {
       const modificadores = mods === undefined ? [] : [mods === 0 ? MOD_GRATIS : MOD_CON_COSTO];
       const unitario = modificadores.reduce((s, m) => s.plus(m.precio), new Prisma.Decimal(precio));
       return {
@@ -157,6 +194,7 @@ function mesas(plantillas: readonly Plantilla[], capturadoAt: Date, clave: strin
         precioUnit: precio,
         total: dinero(unitario.times(cantidad)),
         modificadores,
+        comandaImpresa: impreso || j < renglones.length - 1 || i % 2 === 0,
       };
     });
     return {
@@ -184,7 +222,10 @@ export function generarSnapshots(op: OpcionesMesas): SnapshotSeed[] {
       empresaId: op.empresaId,
       capturadoAt: ahora,
       recibidoAt: ahora,
-      payload: { origen: ORIGEN_SEED, mesas: mesas(EN_VIVO, ahora, 'VIVO') },
+      payload: {
+        origen: ORIGEN_SEED,
+        mesas: mesas([...EN_VIVO, ...generadas(MESAS_EN_VIVO - EN_VIVO.length)], ahora, 'VIVO'),
+      },
     },
     {
       sucursalId: desconectada,
@@ -241,7 +282,8 @@ async function main(): Promise<void> {
       ahora: new Date(),
     });
     console.log(
-      `Seed de mesas aplicado: ${n} snapshots (Sucursal Centro en vivo por 90 s; ` +
+      `Seed de mesas aplicado: ${n} snapshots (Sucursal Centro en vivo por 90 s, ` +
+        `con ${MESAS_EN_VIVO} mesas abiertas; ` +
         'Sucursal Norte desconectada hace 2 h).',
     );
   } finally {

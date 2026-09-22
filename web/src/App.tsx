@@ -14,6 +14,7 @@ import { Cuenta } from './paginas/Cuenta';
 import { Inicio } from './paginas/Inicio';
 import { Login } from './paginas/Login';
 import { Mesas } from './paginas/Mesas';
+import { MesasPared } from './paginas/MesasPared';
 import { NoEncontrada } from './paginas/NoEncontrada';
 import { Reportes } from './paginas/Reportes';
 import { Resumen } from './paginas/Resumen';
@@ -45,6 +46,15 @@ export function Rutas() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* F2-223: la vista de pared va FUERA de Layout (sin menú ni cabecera). */}
+      <Route
+        path="/mesas/pared"
+        element={
+          <RutaProtegida>
+            <MesasPared />
+          </RutaProtegida>
+        }
+      />
       <Route
         element={
           <RutaProtegida>

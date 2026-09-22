@@ -1,4 +1,4 @@
-import type { MesaMonitor, Semaforo } from './reglas';
+import type { Semaforo } from './reglas';
 
 /** El semáforo en palabras, para el lector de pantalla (el color no basta). */
 export const TEXTO_SEMAFORO: Record<Semaforo, string> = {
@@ -9,7 +9,10 @@ export const TEXTO_SEMAFORO: Record<Semaforo, string> = {
 };
 
 /** "Mesa 12" o "Mesa 12 · Centro": el nombre de la tarjeta y el título del modal. */
-export function nombreMesa(mesa: MesaMonitor, conSucursal: boolean): string {
+export function nombreMesa(
+  mesa: { mesa: string | null; sucursal: string },
+  conSucursal: boolean,
+): string {
   const nombre = `Mesa ${mesa.mesa ?? 'sin número'}`;
   return conSucursal ? `${nombre} · ${mesa.sucursal}` : nombre;
 }

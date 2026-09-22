@@ -8,6 +8,7 @@ import { crearFixtures, FX, limpiarFixtures } from '../test/fixtures-auth';
 import {
   DESCONECTADA_HACE_MS,
   generarSnapshots,
+  MESAS_EN_VIVO,
   ORIGEN_SEED,
   sembrarMesas,
   type OpcionesMesas,
@@ -51,6 +52,44 @@ describe('generarSnapshots()', () => {
     const mods = vivo.payload.mesas.flatMap((m) => m.partidas.flatMap((p) => p.modificadores));
     expect(mods.some((x) => x.precio === '0.00')).toBe(true);
     expect(mods.some((x) => x.precio !== '0.00')).toBe(true);
+  });
+
+  it('F2-223: la sucursal en vivo trae 60 mesas, con número y folio únicos', () => {
+    expect(MESAS_EN_VIVO).toBe(60);
+    expect(vivo.payload.mesas).toHaveLength(60);
+    expect(new Set(vivo.payload.mesas.map((m) => m.mesa)).size).toBe(60);
+    expect(new Set(vivo.payload.mesas.map((m) => m.folio)).size).toBe(60);
+    // Las 8 escritas a mano siguen siendo las primeras (sus importes se cuadran abajo).
+    expect(vivo.payload.mesas.slice(0, 8).map((m) => m.mesa)).toEqual([
+      '1',
+      '2',
+      '4',
+      '5',
+      '7',
+      '10',
+      '12',
+      'Barra',
+    ]);
+    // Las generadas también cubren los tres colores del semáforo.
+    const minutos = vivo.payload.mesas
+      .slice(8)
+      .map((m) => (AHORA.getTime() - Date.parse(m.abiertoAt)) / 60_000);
+    expect(minutos.some((m) => m < 40)).toBe(true);
+    expect(minutos.some((m) => m >= 40 && m <= 60)).toBe(true);
+    expect(minutos.some((m) => m > 60)).toBe(true);
+    expect(minutos.every((m) => Number.isInteger(m) && m >= 5 && m <= 150)).toBe(true);
+  });
+
+  it('F2-223: comandaImpresa mezclado, y siempre true en una cuenta ya impresa', () => {
+    const todas = [vivo, desconectada].flatMap((s) => s.payload.mesas);
+    const partidas = todas.flatMap((m) => m.partidas);
+    expect(new Set(partidas.map((p) => p.comandaImpresa))).toEqual(new Set([true, false]));
+    for (const m of todas.filter((x) => x.impreso)) {
+      expect(m.partidas.every((p) => p.comandaImpresa)).toBe(true);
+    }
+    // La mesa 2 (sin imprimir, índice impar): su última partida está pendiente.
+    const dos = vivo.payload.mesas.find((m) => m.mesa === '2')!;
+    expect(dos.partidas.map((p) => p.comandaImpresa)).toEqual([true, false]);
   });
 
   it('los importes cuadran a mano: la mesa 5 y la mesa 2', () => {
@@ -163,7 +202,7 @@ describe('sembrarMesas() contra Postgres', () => {
     const a1 = filas.find((f) => f.sucursalId === FX.sucursalA1)!;
     expect(a1.snapshot!.capturadoAt).toBe('2026-11-15T20:00:00.000Z');
     expect(a1.snapshot!.edadRecepcionSegundos).toBe(30);
-    expect(a1.snapshot!.mesas).toHaveLength(8);
+    expect(a1.snapshot!.mesas).toHaveLength(60);
     const a2 = filas.find((f) => f.sucursalId === FX.sucursalA2)!;
     expect(a2.snapshot!.edadRecepcionSegundos).toBe(7230);
 

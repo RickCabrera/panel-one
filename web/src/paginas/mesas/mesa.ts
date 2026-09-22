@@ -34,6 +34,11 @@ export interface PartidaMesa {
   total: bigint | null;
   /** `[]` = sin modificadores (también si el campo falta); `null` = no es una lista. */
   modificadores: ModificadorMesa[] | null;
+  /**
+   * F2-223: `false` = la comanda de esta partida está pendiente de imprimir; `null` = el
+   * agente no lo dice (campo ausente o no booleano). Ver `leerMesa`.
+   */
+  comandaImpresa: boolean | null;
 }
 
 /**
@@ -61,7 +66,14 @@ export interface MesaAbierta {
  *
  * `{ mesa, mesero, folio, abiertoAt (ISO UTC, reloj del POS), total ("350.50" o número),
  *    comensales, impreso (bool), partidas: [{ producto, categoria, cantidad, precioUnit,
- *    total, modificadores: [{ nombre, precio, modificadores?: [...] }] }] }`
+ *    total, modificadores: [{ nombre, precio, modificadores?: [...] }],
+ *    comandaImpresa? (bool) }] }`
+ *
+ * DECISION PROVISIONAL (nocturno): `partidas[].comandaImpresa` (F2-223) es forma
+ * NUESTRA, no de SR: ni el nombre ni la semántica salen de una instalación real. Dice
+ * si la comanda de esa partida ya salió impresa (cocina/barra); es distinto del
+ * `impreso` de la cuenta. El agente (F1-023/F2-240) tendría que mandarlo; mientras no
+ * llegue, el detalle dice que el dato no se recibe (esquema-sr.md §5).
  *
  * Los modificadores pueden anidarse con la MISMA llave (F1-051): un modificador de
  * modificador. Uno que llega como texto (`"Sin cebolla"`) es su nombre, sin precio.
@@ -92,6 +104,7 @@ function leerPartida(crudo: unknown): PartidaMesa {
       precioUnit: null,
       total: null,
       modificadores: null,
+      comandaImpresa: null,
     };
   }
   return {
@@ -108,6 +121,7 @@ function leerPartida(crudo: unknown): PartidaMesa {
         : Array.isArray(crudo.modificadores)
           ? crudo.modificadores.map((m) => leerModificador(m, 1))
           : null,
+    comandaImpresa: typeof crudo.comandaImpresa === 'boolean' ? crudo.comandaImpresa : null,
   };
 }
 

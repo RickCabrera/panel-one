@@ -1,4 +1,11 @@
-import type { MesaMonitor } from './reglas';
+/** Lo que la selección necesita de una mesa: sirve la del Monitor y la de `armarMonitor`. */
+interface MesaIdentificable {
+  clave: string;
+  sucursalId: string;
+  folio: string | null;
+  mesa: string | null;
+  abiertoAt: number | null;
+}
 
 /**
  * La cuenta que está abierta en el modal de detalle (F1-051). No es una copia de la
@@ -17,7 +24,7 @@ export interface Seleccion {
   titulo: string;
 }
 
-export function seleccionDe(m: MesaMonitor, respuestaAt: number, titulo: string): Seleccion {
+export function seleccionDe(m: MesaIdentificable, respuestaAt: number, titulo: string): Seleccion {
   return {
     sucursalId: m.sucursalId,
     folio: m.folio,
@@ -40,11 +47,11 @@ export function seleccionDe(m: MesaMonitor, respuestaAt: number, titulo: string)
  *   sin hora de apertura no hay con qué confirmarlo. Mejor "ya no aparece" que otra
  *   cuenta bajo el mismo título.
  */
-export function buscarSeleccion(
-  mesas: readonly MesaMonitor[],
+export function buscarSeleccion<T extends MesaIdentificable>(
+  mesas: readonly T[],
   respuestaAt: number,
   sel: Seleccion | null,
-): MesaMonitor | null {
+): T | null {
   if (sel === null) return null;
   const porClave = mesas.find((m) => m.clave === sel.clave && m.sucursalId === sel.sucursalId);
   if (respuestaAt === sel.respuestaAt) return porClave ?? null;

@@ -3,7 +3,8 @@ import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { formatearPesos } from '../../dinero/dinero';
 import type { ModificadorMesa, PartidaMesa } from './mesa';
 
-import type { MesaMonitor } from './reglas';
+import { useConReloj } from './consultas';
+import { minutosDesde, semaforo, type MesaViva } from './reglas';
 import { TEXTO_SEMAFORO } from './textos';
 
 const SIN_DATO = 'Sin dato';
@@ -25,7 +26,7 @@ export function DetalleMesa({
   conSucursal,
   onCerrar,
 }: {
-  mesa: MesaMonitor | null;
+  mesa: MesaViva | null;
   /** El nombre con que se abrió, para que el título no cambie si la cuenta desaparece. */
   titulo: string;
   conSucursal: boolean;
@@ -134,7 +135,12 @@ function Dato({
   );
 }
 
-function Consumo({ mesa, conSucursal }: { mesa: MesaMonitor; conSucursal: boolean }) {
+function Consumo({ mesa, conSucursal }: { mesa: MesaViva; conSucursal: boolean }) {
+  // Los minutos avanzan con el reloj, como en la tarjeta (F2-223).
+  const minutos = useConReloj((ahora) => minutosDesde(mesa.apertura, ahora));
+  const partidas = mesa.partidas ?? [];
+  const pendientes = partidas.filter((p) => p.comandaImpresa === false).length;
+  const sinDatoComanda = partidas.length > 0 && partidas.every((p) => p.comandaImpresa === null);
   return (
     <>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
@@ -156,8 +162,8 @@ function Consumo({ mesa, conSucursal }: { mesa: MesaMonitor; conSucursal: boolea
           {mesa.comensales ?? SIN_DATO}
         </Dato>
         <Dato etiqueta="Tiempo abierta" testId="detalle-minutos">
-          {mesa.minutos === null ? SIN_DATO : `${mesa.minutos} min`}
-          <span className="sr-only"> · {TEXTO_SEMAFORO[mesa.semaforo]}</span>
+          {minutos === null ? SIN_DATO : `${minutos} min`}
+          <span className="sr-only"> · {TEXTO_SEMAFORO[semaforo(minutos)]}</span>
         </Dato>
         <Dato etiqueta="Total" testId="detalle-total">
           {importe(mesa.total)}
@@ -170,11 +176,25 @@ function Consumo({ mesa, conSucursal }: { mesa: MesaMonitor; conSucursal: boolea
       ) : mesa.partidas.length === 0 ? (
         <p className="mt-1 text-sm text-tinta-tenue">Sin partidas.</p>
       ) : (
-        <ul aria-label="Partidas" className="mt-1 divide-y divide-linea text-sm text-tinta-medio">
+        <>
+          {pendientes > 0 && (
+            <p data-testid="detalle-pendientes" className="mt-1 text-sm font-medium text-aviso">
+              {pendientes === 1
+                ? '1 partida pendiente de imprimir.'
+                : `${pendientes} partidas pendientes de imprimir.`}
+            </p>
+          )}
+          {sinDatoComanda && (
+            <p data-testid="detalle-sin-comanda" className="mt-1 text-xs text-tinta-tenue">
+              El agente no reporta qué partidas faltan por imprimir.
+            </p>
+          )}
+          <ul aria-label="Partidas" className="mt-1 divide-y divide-linea text-sm text-tinta-medio">
           {mesa.partidas.map((p, i) => (
             <Partida key={i} partida={p} />
           ))}
-        </ul>
+          </ul>
+        </>
       )}
 
       <div className="mt-3 flex justify-between gap-3 border-t border-linea-fuerte pt-3 font-semibold">
@@ -193,7 +213,8 @@ function Consumo({ mesa, conSucursal }: { mesa: MesaMonitor; conSucursal: boolea
  * el snapshot (esquema-sr.md §5): llevan nombre y precio, sin inventarla.
  */
 function etiquetaPartida(p: PartidaMesa): string {
-  return `${p.cantidad ?? SIN_DATO} × ${p.producto ?? SIN_DATO}, ${importe(p.total)}`;
+  const pendiente = p.comandaImpresa === false ? ', pendiente de imprimir' : '';
+  return `${p.cantidad ?? SIN_DATO} × ${p.producto ?? SIN_DATO}, ${importe(p.total)}${pendiente}`;
 }
 
 function etiquetaModificador(m: ModificadorMesa): string {
@@ -207,6 +228,14 @@ function Partida({ partida: p }: { partida: PartidaMesa }) {
         <span className="w-12 shrink-0 text-right tabular-nums">{p.cantidad ?? SIN_DATO}</span>
         <span className="min-w-0 flex-1 break-words">
           {p.producto ?? SIN_DATO}
+          {p.comandaImpresa === false && (
+            <span
+              data-testid="partida-pendiente"
+              className="ml-2 rounded border border-aviso-borde px-1 text-xs font-medium text-aviso"
+            >
+              Pendiente de imprimir
+            </span>
+          )}
           <span className="block text-xs text-tinta-tenue">
             {p.categoria ?? 'Categoría: sin dato'} · {importe(p.precioUnit)} c/u
           </span>

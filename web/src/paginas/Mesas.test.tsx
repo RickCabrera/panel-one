@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MesasSucursal } from '../api/tipos';
@@ -251,7 +251,10 @@ describe('Monitor de mesas: sucursal desconectada', () => {
     apiMesas(() => json(200, [tijuana(7200)]));
     montar(`/mesas?empresa=${A}&sucursal=${SUCURSAL_A2.id}`);
     expect(await screen.findByTestId('banner-desconectada')).toBeInTheDocument();
-    expect(screen.getByText('No hay datos en vivo que mostrar.')).toBeInTheDocument();
+    // F2-223: dice POR QUÉ está vacía, no sólo que lo está.
+    expect(screen.getByTestId('sin-vivo')).toHaveTextContent(
+      'Ninguna sucursal está reportando en vivo: sus mesas aparecen cuando su agente vuelva a mandar lectura.',
+    );
     expect(screen.queryByTestId('kpi-mesas')).not.toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Mesas abiertas' })).not.toBeInTheDocument();
   });
@@ -665,5 +668,221 @@ describe('Detalle de consumo (modal, F1-051)', () => {
     await usuarioEvt.selectOptions(selector, '');
     expect(await screen.findByRole('listitem', { name: 'Mesa 5 · Centro' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------------
+// F2-223: orden, filtro, KPI de atención, estados vacíos y pendientes de imprimir.
+// ---------------------------------------------------------------------------------
+
+function Ubicacion() {
+  const { pathname, search } = useLocation();
+  return <output data-testid="ubicacion">{`${pathname}${search}`}</output>;
+}
+
+function montarConUrl(ruta: string) {
+  const queryClient = crearQueryClient();
+  queryClient.setDefaultOptions({
+    queries: { ...queryClient.getDefaultOptions().queries, retry: false },
+  });
+  render(
+    <MemoryRouter initialEntries={[ruta]}>
+      <Proveedores queryClient={queryClient}>
+        <Rutas />
+        <Ubicacion />
+      </Proveedores>
+    </MemoryRouter>,
+  );
+}
+
+const CLAVE_PREFERENCIA = `monitor-mesas:${usuario('admin_empresa').id}`;
+const ubicacion = () => new URL(screen.getByTestId('ubicacion').textContent!, 'http://x');
+
+/** Los nombres de las tarjetas del grid, en orden. */
+function ordenGrid(): string[] {
+  const grid = screen.getByRole('list', { name: 'Mesas abiertas' });
+  return within(grid)
+    .getAllByRole('listitem')
+    .filter((li) => li.parentElement === grid)
+    .map((li) => li.getAttribute('aria-label')!);
+}
+
+describe('F2-223: orden y filtro, en la URL y recordados', () => {
+  const RUTA = `/mesas?empresa=${A}&sucursal=${SUCURSAL_A1.id}`;
+
+  it('ordenar por importe o antigüedad; la URL y la preferencia lo guardan', async () => {
+    apiMesas(() => json(200, [centro()]));
+    montarConUrl(RUTA);
+    await screen.findByTestId('kpi-mesas');
+    expect(ordenGrid()).toEqual(['Mesa 3', 'Mesa 7', 'Mesa 10', 'Mesa 12']);
+
+    const select = screen.getByRole('combobox', { name: 'Ordenar por' });
+    await userEvent.selectOptions(select, 'importe');
+    // 1200.00, 350.50, 0.20, 0.10
+    expect(ordenGrid()).toEqual(['Mesa 3', 'Mesa 12', 'Mesa 7', 'Mesa 10']);
+    expect(ubicacion().searchParams.get('orden')).toBe('importe');
+    expect(ubicacion().searchParams.get('estado')).toBe('todas');
+    expect(JSON.parse(window.localStorage.getItem(CLAVE_PREFERENCIA)!)).toEqual({
+      orden: 'importe',
+      estado: 'todas',
+    });
+
+    await userEvent.selectOptions(select, 'antiguedad');
+    // 65, 40, 39, 15 min
+    expect(ordenGrid()).toEqual(['Mesa 3', 'Mesa 7', 'Mesa 10', 'Mesa 12']);
+    expect(ubicacion().searchParams.get('orden')).toBe('antiguedad');
+  });
+
+  it('recargar con la misma URL conserva orden y filtro', async () => {
+    apiMesas(() => json(200, [centro()]));
+    montarConUrl(`${RUTA}&orden=importe&estado=sin-imprimir`);
+    await screen.findByTestId('kpi-mesas');
+    // Sin imprimir: todas menos la 3; por importe.
+    expect(ordenGrid()).toEqual(['Mesa 12', 'Mesa 7', 'Mesa 10']);
+    expect(screen.getByRole('combobox', { name: 'Ordenar por' })).toHaveValue('importe');
+    expect(screen.getByRole('button', { name: 'Sólo sin imprimir' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('entrar sin criterio en la URL (desde el menú) aplica lo recordado', async () => {
+    window.localStorage.setItem(
+      CLAVE_PREFERENCIA,
+      JSON.stringify({ orden: 'importe', estado: 'sin-imprimir' }),
+    );
+    apiMesas(() => json(200, [centro()]));
+    montarConUrl(RUTA);
+    await screen.findByTestId('kpi-mesas');
+    expect(ordenGrid()).toEqual(['Mesa 12', 'Mesa 7', 'Mesa 10']);
+  });
+
+  it('un criterio inválido en la URL se ignora (no rompe la vista)', async () => {
+    apiMesas(() => json(200, [centro()]));
+    montarConUrl(`${RUTA}&orden=precio&estado=rojo`);
+    await screen.findByTestId('kpi-mesas');
+    expect(ordenGrid()).toEqual(['Mesa 3', 'Mesa 7', 'Mesa 10', 'Mesa 12']);
+  });
+
+  it('el KPI "Atención requerida" filtra a esas mesas, y otro clic lo quita', async () => {
+    apiMesas(() => json(200, [centro()]));
+    montarConUrl(RUTA);
+    const kpiBoton = await screen.findByRole('button', { name: /Atención requerida/ });
+    expect(kpiBoton).toHaveAttribute('aria-pressed', 'false');
+    expect(kpi('kpi-atencion')).toHaveTextContent('1');
+
+    await userEvent.click(kpiBoton);
+    expect(ordenGrid()).toEqual(['Mesa 3']);
+    expect(kpiBoton).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Sólo atención' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(ubicacion().searchParams.get('estado')).toBe('atencion');
+    // Los KPIs no se filtran: siguen diciendo cuántas hay en total.
+    expect(kpi('kpi-mesas')).toHaveTextContent('4');
+
+    await userEvent.click(kpiBoton);
+    expect(ordenGrid()).toHaveLength(4);
+    expect(ubicacion().searchParams.get('estado')).toBe('todas');
+  });
+
+  it('un filtro vacío dice por qué, y nombra lo que no se puede medir', async () => {
+    apiMesas(() =>
+      json(200, [
+        centro(30, [
+          mesa('1', '1.00', 5, { impreso: true }),
+          mesa('2', '1.00', 5, { abiertoAt: null, impreso: 'sí' }),
+        ]),
+      ]),
+    );
+    montarConUrl(`${RUTA}&estado=atencion`);
+    expect(
+      await screen.findByText(
+        'Ninguna mesa requiere atención (1 sin hora de apertura: no se pueden medir).',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No hay mesas abiertas.')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sólo sin imprimir' }));
+    expect(
+      screen.getByText('Ninguna cuenta sin imprimir (1 no dicen si ya se imprimieron).'),
+    ).toBeInTheDocument();
+  });
+
+  it('el filtro de atención sigue al reloj: una mesa que cruza los 60 min entra sola', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], shouldAdvanceTime: true });
+    vi.setSystemTime(AHORA);
+    // Abierta hace 60 min 50 s; en ~10 s cruza a 61.
+    apiMesas(() =>
+      json(200, [
+        centro(0, [mesa('8', '1.00', 60, { abiertoAt: hace(3650) }), mesa('9', '1.00', 5)]),
+      ]),
+    );
+    montarConUrl(`${RUTA}&estado=atencion`);
+    expect(await screen.findByText('Ninguna mesa requiere atención.')).toBeInTheDocument();
+    expect(kpi('kpi-atencion')).toHaveTextContent('0');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    await waitFor(() => expect(ordenGrid()).toEqual(['Mesa 8']));
+    expect(kpi('kpi-atencion')).toHaveTextContent('1');
+    expect(within(tarjetaMesa('Mesa 8')).getByTestId('mesa-minutos')).toHaveTextContent('61 min');
+  });
+
+  it('"Vista de pared" lleva el alcance y el criterio actuales', async () => {
+    apiMesas(() => json(200, [centro()]));
+    montarConUrl(`${RUTA}&orden=importe&periodo=hoy`);
+    const enlace = await screen.findByRole('link', { name: 'Vista de pared' });
+    const destino = new URL(enlace.getAttribute('href')!, 'http://x');
+    expect(destino.pathname).toBe('/mesas/pared');
+    expect(destino.searchParams.get('empresa')).toBe(A);
+    expect(destino.searchParams.get('sucursal')).toBe(SUCURSAL_A1.id);
+    expect(destino.searchParams.get('orden')).toBe('importe');
+    expect(destino.searchParams.get('estado')).toBe('todas');
+  });
+});
+
+describe('F2-223: partidas pendientes de imprimir en el detalle', () => {
+  const RUTA = `/mesas?empresa=${A}&sucursal=${SUCURSAL_A1.id}`;
+
+  it('marca cada partida pendiente con texto y las cuenta', async () => {
+    apiMesas(() =>
+      json(200, [
+        centro(30, [
+          mesa('5', '100.00', 10, {
+            partidas: [
+              { producto: 'Guacamole', cantidad: '1', total: '95.00', comandaImpresa: true },
+              { producto: 'Café de olla', cantidad: '2', total: '84.00', comandaImpresa: false },
+              { producto: 'Flan', cantidad: '1', total: '68.00', comandaImpresa: false },
+            ],
+          }),
+        ]),
+      ]),
+    );
+    montarConUrl(RUTA);
+    await userEvent.click(await screen.findByRole('button', { name: 'Ver consumo de Mesa 5' }));
+    const dialogo = screen.getByRole('dialog');
+    expect(within(dialogo).getByTestId('detalle-pendientes')).toHaveTextContent(
+      '2 partidas pendientes de imprimir.',
+    );
+    expect(within(dialogo).getAllByTestId('partida-pendiente')).toHaveLength(2);
+    const partidas = within(dialogo).getByRole('list', { name: 'Partidas' });
+    expect(within(partidas).getByRole('listitem', { name: /Café de olla/ })).toHaveAccessibleName(
+      '2 × Café de olla, $84.00, pendiente de imprimir',
+    );
+    expect(within(dialogo).queryByTestId('detalle-sin-comanda')).not.toBeInTheDocument();
+  });
+
+  it('si el agente no lo manda, lo dice (no inventa "todo impreso")', async () => {
+    apiMesas(() => json(200, [centro(30, [mesa('5', '100.00', 10)])]));
+    montarConUrl(RUTA);
+    await userEvent.click(await screen.findByRole('button', { name: 'Ver consumo de Mesa 5' }));
+    const dialogo = screen.getByRole('dialog');
+    expect(within(dialogo).getByTestId('detalle-sin-comanda')).toHaveTextContent(
+      'El agente no reporta qué partidas faltan por imprimir.',
+    );
+    expect(within(dialogo).queryByTestId('detalle-pendientes')).not.toBeInTheDocument();
   });
 });
