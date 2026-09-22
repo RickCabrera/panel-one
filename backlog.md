@@ -803,7 +803,7 @@ y un rango invertido (fin antes que inicio) se corrige o se explica, no se manda
 ## BLOQUE C · Ventas y dirección
 
 ### F2-220 · Resumen ejecutivo
-`[ ]` **Bloque C** · /web + /api
+`[x]` **Bloque C** · /web + /api
 
 Vista "Resumen": lo que un dueño quiere ver en veinte segundos sin filtrar nada. Ventas del día
 contra el mismo día de la semana pasada (Δ y %), venta en curso, acumulado del mes contra el mes
