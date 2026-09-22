@@ -75,3 +75,12 @@ body {
   color: var(--tinta);
   background-color: var(--fondo);
 }
+
+/*
+ * Todo placeholder usa la tinta tenue del tema, que paleta.test.ts prueba a 4.5:1. El
+ * de fábrica (el texto al 50 %) quedaba en ~3.5:1 y ningún test lo veía.
+ */
+::placeholder {
+  color: var(--tinta-tenue);
+  opacity: 1;
+}

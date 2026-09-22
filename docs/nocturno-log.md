@@ -3314,3 +3314,142 @@ Se midió en /cuenta, /tickets y /admin?tab=agentes:
 
 **Qué haría distinto.** Mirar el lateral completo en Chrome antes de dar por buena la clase
 del texto: el `not-sr-only` rompiendo el `truncate` no lo ve jsdom.
+
+## 2026-09-21 22:36 — F2-211 · Modo oscuro
+**Estado:** CERRADA si el PR se mergea. Revisor: plan APROBADO CON OBSERVACIONES (0 bloqueos,
+11 observaciones, todas atendidas); entregable APROBADO CON OBSERVACIONES (0 bloqueos). Sólo
+/web: sin API, sin OpenAPI, sin hallazgos de SoftRestaurant (no se tocó `docs/esquema-sr.md`).
+
+**Qué quedó hecho.**
+- **`web/src/tema/paleta.ts` es el ÚNICO lugar con colores.** Tokens semánticos con valor
+  para `claro` y `oscuro`:
+  - superficies: `fondo`, `superficie`, `realce`, `realce-fuerte`;
+  - líneas: `linea-suave`, `linea`, `linea-fuerte`;
+  - texto: `tinta`, `tinta-medio`, `tinta-suave`, `tinta-tenue`;
+  - estados: `peligro|aviso|exito` con `-fondo`, `-borde`, `-fuerte`, más `sobre-peligro` e
+    `info`;
+  - semáforo: `semaforo-ok|alerta|rojo|sin-dato`;
+  - gráficas: `serie-2..4`, `rejilla`; y `velo` para los diálogos.
+- **Acento derivado** (`tema/acento.ts`): el relleno `acento` es el de `VITE_COLOR_ACENTO` en
+  los dos temas. Por tema se calculan `acento-texto` (≥ 4.5 contra toda superficie),
+  `acento-borde` (≥ 3: foco, borde activo y `serie-1`) y `sobre-acento` (blanco o negro). Se
+  hace empujando el color 5 % por paso hacia negro o blanco. Así un acento configurado
+  cualquiera sigue siendo legible (probado con `#ffff00`, `#111`, `#777`...). Ojo: el acento de
+  fábrica `#0f766e` da 4.44:1 sobre `realce-fuerte`, así que en claro `acento-texto` sale un
+  pelo más oscuro (`#0e7069`). Es correcto, no un bug.
+- **`index.css` no tiene ni un color.**
+  - `@theme { --color-*: initial }` apaga la paleta de fábrica de Tailwind: `text-slate-500`
+    ya NO genera CSS.
+  - `@theme inline` mapea `--color-x: var(--x)`, de donde salen `bg-fondo`, `text-tinta`...
+  - `body` hereda `color: var(--tinta)` y `background-color: var(--fondo)`.
+  - Todo `::placeholder` usa `tinta-tenue` con opacidad 1: el de fábrica quedaba en ~3.5:1.
+- **Cómo se aplica.** `aplicarTema()` (`tema/tema.ts`) pone cada token como `--x` en `:root`
+  por CSSOM (`style.setProperty`), más `data-tema` y `color-scheme`. Es compatible con la CSP
+  `style-src 'self'`. **No lo cambies** a `setAttribute('style')` ni a un `<style>` inyectado:
+  hay un test que lo vigila.
+- **El orden de montaje.** `main.tsx` llama `iniciarTema()` antes del primer render.
+  `ProveedorTema` va dentro de `AuthProvider` (en `Proveedores` de `App.tsx`) y
+  `InterruptorTema` en la `Topbar`: tres botones con `aria-pressed` (Tema claro / Tema oscuro /
+  Tema del sistema).
+- **Gráficas.** Recharts recibe hex, no `var()`, porque SVG no lee bien `var()` en atributos.
+  Los saca de `useTema().colores`, que re-renderiza al cambiar de tema. La dona usa
+  `SERIES_FORMA` (`serie-1..4`) en `puntosHora.ts`; `ACENTO` y `COLORES_FORMA` ya no existen.
+- **Migración mecánica.** ~290 clases pasaron a tokens con un script. Los casos a mano:
+  - el badge rojo del menú usa `sobre-peligro`;
+  - `sin-dato` del semáforo usa `border-semaforo-sin-dato`;
+  - los `focus:border-acento` pasaron a `acento-borde`.
+- **Tabla de Tickets atenuada:** ya no usa `opacity-60`, que bajaba el texto de 4.5:1. Ahora es
+  `bg-realce` con `aria-busy`.
+
+**Decisiones que tomé y por qué.**
+- **DECISION PROVISIONAL (nocturno)** en `web/src/tema/tema.ts`: la preferencia vive en
+  **localStorage, por usuario Y por navegador**. No se sincroniza entre dispositivos.
+  - Claves: `monitor.tema.<usuarioId>` y `monitor.tema.ultimo`. La segunda es la que ven el
+    login y el arranque.
+  - Salir no borra ninguna: por eso el tema sobrevive al logout.
+  - Quien entre después en esa máquina sin preferencia propia hereda `ultimo`. Es el mismo
+    precedente que `monitor.menu.colapsadas.<id>`.
+  - Una columna en `Usuario` metería migración, endpoint y OpenAPI para algo de pura
+    presentación. **Ricardo decide** si lo quiere entre dispositivos, y eso sería una tarea de
+    /api.
+- **La regla de lint es un plugin local** (`web/eslint/sin-colores.mjs`, regla
+  `tema/sin-colores`), no `no-restricted-syntax`: esquery no parsea regex con `\w`, `\d` ni
+  `\[`.
+  - Marca clases de la paleta de Tailwind, hex, `rgb()`/`hsl()`/`oklch()` y
+    `var(--color-slate-*)`.
+  - Deja pasar `text-[10px]`.
+  - Cubre `src/**` salvo `paleta.ts` y los tests.
+- **Los tests que corren en Node** (`css.node.test.ts`, `lint.node.test.ts`) se llaman
+  `*.node.test.ts` a propósito:
+  - `tsconfig.app.json` los excluye y `tsconfig.node.json` los tipa, así los tipos de Node no
+    se cuelan al código del navegador;
+  - llevan `// @vitest-environment node`;
+  - `css.node.test.ts` lee `index.css` del disco porque `?raw` pasa por el plugin de Tailwind.
+- El default sin preferencia es **"sistema"**.
+
+**REGLA PARA LAS TAREAS SIGUIENTES.**
+- Un color nuevo = un token nuevo en `paleta.ts`, con valor en los DOS temas.
+- `index.css` suma su línea `--color-x: var(--x)`; si falta, `css.node.test.ts` truena.
+- En `paleta.test.ts`:
+  - un color de texto va a `TEXTOS`;
+  - una pareja texto-sobre-fondo nueva (insignia, botón) va a `PAREJAS`;
+  - un color gráfico va a `GRAFICOS`.
+- Nunca `dark:`: el tema cambia los valores, no los componentes.
+- En tests, `test/matchMedia.ts` trae `temaDelSistema(true)` para simular el SO en oscuro.
+
+**Tests.**
+- Nuevos:
+  - `paleta.test.ts` (AC1): cada texto contra las 4 superficies en los dos temas, las
+    parejas de insignias y botones, lo gráfico ≥ 3:1, y ΔE ≥ 20 entre los estados del
+    semáforo (con `linea` incluida) y entre las series. Con deuteranopia, ΔE ≥ 10.
+  - `contraste.test.ts`: la aritmética contra valores de referencia. Encontró un bug real en
+    mi conversión a Lab: todos los ΔE salían en ~1.
+  - `acento.test.ts`: los derivados con acentos extremos.
+  - `css.node.test.ts`: mapeo idéntico a la paleta, sin colores, `body` y `::placeholder`.
+  - `lint.node.test.ts` (AC4): la regla con la config REAL del repo; marca 9 casos y deja
+    pasar 4.
+  - `tema.test.tsx` (AC3): storage roto o con basura, arranque, `matchMedia` ausente, el
+    cambio del SO en vivo, que deja de escuchar al desmontar, y el cambio de usuario.
+  - `App.test.tsx` (AC2): elegir oscuro, recargar, salir (el login sigue oscuro) y volver a
+    entrar.
+- Adaptado sin aflojar: `Mesas.test.tsx` pasó de `border-red-600` a `border-semaforo-rojo`.
+- Web: lint limpio, build limpio, **vitest 599/599** (35 archivos, 0 skips), bundle
+  **218.1 → 219.8 kB gzip**.
+
+**Verificación visual.** En Chrome, con un arnés temporal (`web/arnes-tema.html` +
+`src/arnesTema.tsx`, fetch falso, sin contraseñas); **ya está borrado**.
+- Vistas: Inicio (gráfica, dona, tarjetas), Mesas (los cuatro bordes del semáforo se
+  distinguen) y Admin, en oscuro (por sistema) y en claro.
+- Elegir claro y recargar lo conserva.
+- A 390 px (iframe): `scrollWidth == clientWidth`, y el interruptor baja a la segunda fila de
+  la cabecera.
+- No se usó la API local con login: habría que teclear una contraseña en el navegador.
+
+**Trampas.**
+- **Git Bash se come las `\` y se atraganta con heredocs largos**: el regex salió como
+  `[^w-]`, y dos heredocs dieron "unexpected EOF". Escribe los archivos con la herramienta de
+  archivos y los regex con `String.raw`.
+- `resize_window` no achica la ventana si está maximizada: mide los 390 px con un iframe del
+  mismo origen. Y las capturas con iframes cuelgan el renderer (ya lo decía F2-210): mide con
+  JS.
+- El 5173 lo tenía ocupado otro proceso: usé `--port 5199`.
+- `prettier --check` sin `--end-of-line auto` marca ~80 archivos por CRLF del working copy: no
+  es real.
+
+**Qué quedó abierto.**
+- **Destello posible al cargar:** con "oscuro" elegido y el SO en claro, puede verse blanco un
+  instante mientras baja el JS. La CSP no deja un script inline en `index.html`. Está
+  documentado en `tema.ts`. Arreglarlo exigiría un hash en la CSP de Caddy, así que es para
+  F2-250 o una Diurna.
+- **La regla de lint no detecta colores por nombre** (`fill="red"`,
+  `style={{ color: 'white' }}`). Hoy no hay ninguno. Si aparece, se extiende
+  `sin-colores.mjs`.
+- **`disabled:opacity-50/60`** sigue en los botones deshabilitados (Topbar, Inicio, Login,
+  Mesas, Tickets, Reportes). WCAG exime los controles deshabilitados: no es un incumplimiento.
+- `<meta name="theme-color">` de `index.html` sigue fijo en el acento. No se toca por tema.
+- En el arnés, Admin › Agentes decía "hace NaN días": fueron **mis datos falsos con una forma
+  equivocada**, no un bug del panel.
+
+**Qué haría distinto.** Escribir primero los tests de la aritmética de color (contraste, ΔE) y
+después la paleta. El bug de Lab hizo fallar los 45 casos de distinción a la vez, y por un
+momento pareció que la paleta era mala.

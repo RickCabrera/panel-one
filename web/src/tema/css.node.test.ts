@@ -40,6 +40,12 @@ describe('index.css (F2-211)', () => {
     expect(sinComentarios).toMatch(/@theme\s*\{\s*--color-\*:\s*initial;\s*\}/);
   });
 
+  it('los placeholders usan la tinta tenue, opaca (la de fábrica queda bajo 4.5:1)', () => {
+    const regla = /::placeholder\s*\{([^}]*)\}/.exec(sinComentarios)?.[1] ?? '';
+    expect(regla).toMatch(/(^|[\s;])color:\s*var\(--tinta-tenue\);/);
+    expect(regla).toMatch(/opacity:\s*1;/);
+  });
+
   it('el texto sin clase hereda la tinta del tema, sobre el fondo del tema', () => {
     const body = /body\s*\{([^}]*)\}/.exec(sinComentarios)?.[1] ?? '';
     expect(body).toMatch(/(^|[\s;])color:\s*var\(--tinta\);/);
