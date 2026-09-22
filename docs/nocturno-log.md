@@ -4633,3 +4633,136 @@ hubo ningún hallazgo del POS. Las dos DECISION PROVISIONAL de abajo son de prod
 **Qué haría distinto.** Escribir la línea de tiempo del e2e (qué reloj, qué zona y qué
 suscripciones) en papel ANTES de escribir los `it`. Con varias zonas y días, el orden de las
 vueltas es parte del test.
+
+## 2026-09-22 10:55 — F2-230 · Catálogos espejo: modelo, ingesta y sincronización
+**Estado:** CERRADA si el PR se mergea. Carril /api (+ docs). Revisor, gate del plan: BLOQUEADO
+una vez (B1: la página era todo-o-nada y un registro malo trababa el cierre para siempre; B2:
+faltaba la matriz de scope por rol en las escrituras) y APROBADO CON OBSERVACIONES en el 2.º
+pase. Gate del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos).
+
+**Qué quedó hecho.**
+- **Modelo** (migración `20260922101535_catalogos_espejo`): seis tablas espejo POR SUCURSAL
+  (`grupos_producto`, `productos`, `meseros_catalogo`, `clientes_catalogo`, `areas_catalogo`,
+  `canales_venta_catalogo`) con `origen_sr_id` (único por sucursal = llave de idempotencia),
+  `clave` visible aparte, `nombre`, `activo_pos`, `hash`, `activo`, `visto_at`,
+  `sincronizacion_id`, y `updated_at` SIN `@updatedAt` (lo pone el helper sólo si cambia el
+  contenido o `activo`). Más `productos_metadata` (propia, sobrevive re-sync),
+  `sincronizaciones_catalogo` (último cierre aplicado por catálogo) y
+  `solicitudes_sincronizacion` (forzado manual). CHECKs a mano en la migración.
+- **Ingesta del agente** (`src/ingesta/catalogos*.ts`, `dto/catalogos.dto.ts`):
+  - `POST /ingesta/catalogos`: una página de 1–1000 registros, validados UNO POR UNO.
+  - `POST /ingesta/catalogos/cierre`: cierra una sincronización completa.
+  - `GET /ingesta/catalogos/solicitud`: el forzado manual.
+  - La parte pura (`normalizarPagina`, `decidir`, `solicitudPendiente`) está en
+    `src/ingesta/catalogos.ts`. La escritura (`IngestaCatalogos` + `TransaccionCatalogo`,
+    bajo `pg_advisory_xact_lock(sucursal, catálogo)`) está en `src/scope/escritura-catalogos.ts`.
+- **Panel** (`src/catalogos/`):
+  - `GET /catalogos/{grupos|productos|meseros|clientes|areas|canales}`: 50 por página, con
+    filtro de estado y texto.
+  - `GET /catalogos/productos/{id}` y `PUT /catalogos/productos/{id}/metadata` (admins).
+  - `GET /catalogos/sincronizacion` y `POST /catalogos/sincronizacion/forzar` (admins, 202).
+  - Todo va por `para(scope)` + `verificarAlcance`; fuera de alcance = 404.
+- **Seed:** `prisma/seed-catalogos.ts`, llamado desde `main()` de `seed-ventas.ts`. Siembra grupos,
+  productos, meseros y clientes POR EL MISMO `CatalogosIngestaService` (páginas + cierre, con
+  `sincronizacionId` determinista). En la base de desarrollo quedan grupos 12, productos 52,
+  meseros 11 y clientes 40. Áreas y canales NO se siembran: son de F2-233 (reparto del backlog).
+- OpenAPI: 13 rutas nuevas, ninguna existente cambió. `docs/esquema-sr.md` §6/§7/§8/§13.
+
+**Decisiones que tomé y por qué.**
+- **Qué es una sincronización.** Un `sincronizacionId` (uuid del agente) + un `capturadoAt`
+  (cuándo EMPEZÓ a leer), repetidos en todas sus páginas y en su cierre. Sin cierre, es
+  incremental y no da de baja nada.
+- **Cómo cuadra el cierre.** Antes de dar de baja, exige filas vistas por ese id + `rechazados`
+  >= `total`. Si no, **409 y no desactiva nada**. Se cuenta por id y no por fecha: una página de
+  otra sincronización no puede rellenar el hueco.
+- **Un registro inválido se rechaza solo.**
+  - Si ya tenía fila, se marca "visto" sin tocar su contenido: no se da de baja por un dato malo.
+  - Sin fila, cuenta en `rechazadosSinFila`. El agente suma esos números y los manda como
+    `rechazados` en el cierre.
+- **El servidor CONFÍA en el `rechazados` del agente** (sólo exige `0 <= rechazados <= total`).
+  Uno inflado dejaría pasar un cierre con páginas perdidas.
+- **CONTRATO que F2-240 tiene que cumplir: no intercalar dos sincronizaciones del mismo
+  catálogo.** Si una incremental toca filas mientras corre una completa, el cierre de la completa
+  no cuadra nunca (409 perpetuo) y hay que abrir otra.
+- `DECISION PROVISIONAL (nocturno)` en `catalogos-ingesta.service.ts#cierre`: **`total=0` da de
+  baja todo el catálogo** (caso "el POS no usa clientes"). Riesgo: un agente que se trague un
+  error y lea cero deja el catálogo inactivo hasta la siguiente sincronización (nada se borra).
+- `DECISION PROVISIONAL (nocturno)` en `schema.prisma`:
+  - el grupo del producto va por TEXTO, sin FK;
+  - se supone un catálogo de canal en SR (§8).
+- **Nombre obligatorio (1–200)** en el DTO: es provisional, porque no se sabe si SR tiene productos
+  sin nombre.
+- **Sin precio** en el contrato: los precios por sucursal son de F2-145.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO: la metadata propia es POR SUCURSAL.** Está en la nota de la
+  ficha de F2-145 y en §6.
+- **`capturadoAt` a más de 5 min en el futuro = 400.** Un reloj adelantado congelaría `visto_at`.
+  Un reloj que se corrige hacia atrás hace que sus páginas salgan en `obsoletos`: F2-240 debe
+  registrarlo en su log.
+- **Seed: las bajas del universo van PRESENTES con `activoPos=false`.** En un POS un producto dado
+  de baja sigue existiendo.
+- **Errores de la ingesta:**
+  - 503 = transitorio o candado ocupado (reintentar igual);
+  - 500 = determinista ("no reintentar igual"). El log lleva el nombre y el código del error, nunca
+    el mensaje de Prisma (puede traer datos de clientes).
+
+**Trampas que encontré.**
+- **La nota del BLOQUE H del backlog es FALSA.** Dice que §6–§8 de `esquema-sr.md` "ya los
+  documentan" con la base "CAFETERIA DEMO". El archivo decía `_(pendiente)_`. F2-240 no se puede
+  fiar de esa nota: las tablas de SR de productos, meseros y áreas siguen sin mapear.
+- **`prisma/esquema.spec.ts` ("al crear el admin guarda su contraseña como argon2id") falla en
+  LOCAL, también en main.** La base de desarrollo tiene la suscripción de reportes del admin
+  (`seed:reportes`, F2-141) y su FK impide el `delete` del test. En CI la base llega vacía. No es
+  regresión de F2-230. Arreglo posible: que el test borre antes la suscripción dentro de la
+  transacción. Tarea chica para F2-250.
+- **`reportes.e2e.spec.ts` es INTERMITENTE, también en main.** En main lo vi fallar 2 de 4 veces
+  en "un token alterado … 404": a veces da 200. Probablemente la alteración del token cae en bits
+  que no cambian el HMAC decodificado. `alertas.e2e` también falló una vez en una corrida completa
+  ("la cuenta sale del snapshot", la fila no estaba en la página 1 del historial). Ninguno de los
+  dos lo toca este PR. Van para F2-250.
+- **En el CI de este PR (#43) falló `alertas.e2e` AC1** ("la cuenta sale del snapshot…": la fila
+  cerrada no aparece en `/alertas/historial`). Lo reproduje en MAIN sin este cambio: 1 de 6 corridas
+  sueltas. Se relanzó el job (primer intento de CI) y pasó en verde; no se tocó ningún test. Es una
+  intermitencia previa de F2-224 que pide su propia tarea: sospecha, algo que depende del reloj real
+  o del orden del historial.
+- **`npx jest` sin `--runInBand` rompe suites** que comparten fixtures (vi 10 falsos rojos en
+  `escritura-admin.spec`). Usa siempre `npm test`, o `npx jest --runInBand`.
+- **`prisma migrate dev` volvió a dar EPERM con el DLL del motor.** Los tipos sí se generan (ver la
+  nota de F2-141).
+- Para comparar contra main hice un worktree en `.wt-main/`. No lo pude borrar: el permiso negó el
+  `rm`. **ACCIÓN PARA RICARDO: borrar la carpeta `.wt-main/`** en la raíz. No está en el repo; su
+  copia de `api/.env` está gitignorada. Ojo: un `git add -A` la metería como repo embebido.
+  Agrega por ruta.
+- **Los heredocs de bash con comillas mixtas mueren** (`unexpected EOF while looking for matching`)
+  en este entorno, incluso con `<<'EOF'`. Me pasó dos veces (schema y este log). Para archivos
+  largos usa Write o Edit.
+
+**Qué quedó abierto.**
+- Botón "sincronizar ahora" y vista de estado en Administración: el API está listo
+  (`/catalogos/sincronizacion*`), la vista no (anotado en la ficha de F2-145).
+- La unión espejo ↔ cheques (`cheques.mesero` y `cheque_partidas.producto` son texto) no existe:
+  es de F2-231/F2-145. Hoy sólo se puede hacer por nombre.
+- Cuando una página llega entera obsoleta, todos sus rechazos cuentan como `rechazadosSinFila`.
+  No afecta a ningún cierre (ese cierre también sale `aplicado:false`).
+- `pendiente` del forzado compara con la hora de RECEPCIÓN del cierre. Un cierre tomado antes de
+  la solicitud pero recibido después la da por atendida.
+
+**Tests.**
+- **Nuevos:**
+  - `src/ingesta/catalogos.spec.ts` (22): hash canónico, acentos/comillas/NULL, rechazos, PII
+    fuera del motivo, repetidos, `decidir()` con marcas que no retroceden, `solicitudPendiente`.
+  - `src/ingesta/catalogos.e2e.spec.ts` (40): los 5 AC, rechazo por registro + cierre, 409,
+    `total=0`, concurrencia (página ×2 y página+cierre en paralelo), 400 del sobre, y la matriz de
+    scope completa.
+  - `prisma/seed-catalogos.spec.ts` (6): cuenta en base, dos corridas con reloj fijo = misma foto,
+    y una corrida posterior sólo mueve marcas.
+- **Mutaciones hechas a mano:** quitar el hash de `decidir()` hace fallar 4 tests; romper el filtro
+  de baja hace fallar 15.
+- **Adaptados (no aflojados):** `openapi.spec` (rutas + un test propio), `scope.helper.spec`,
+  `scoped-prisma.service.spec` y `test/fixtures-auth.ts` (limpieza).
+- **Números /api:** lint y typecheck limpios; `prisma validate` OK; jest 1209/1210, 0 skips. El
+  rojo es `esquema.spec`, el de la base local que falla igual en main.
+
+**Qué haría distinto.** Pensar la guardia del cierre JUNTO con el rechazo por registro desde el
+primer plan: el revisor bloqueó justo por separarlos. Y nunca hacer mutaciones con `sed` sobre un
+archivo sin respaldo: `git checkout` no restaura un archivo que todavía no está en git (me pasó;
+lo arreglé a mano).

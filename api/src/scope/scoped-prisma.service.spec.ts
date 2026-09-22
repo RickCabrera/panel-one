@@ -75,18 +75,29 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // F2-224: centro de alertas; sus escrituras van por `alertas(scope)`, no por aquí.
       'alerta',
       'alertaEvaluacion',
+      // F2-230: catálogos espejo; sus escrituras van por `catalogosDeSucursal(agente)` y
+      // `catalogos(scope)`, no por aquí.
+      'areaCatalogo',
+      'canalVentaCatalogo',
       'cheque',
       'chequePago',
       'chequePartida',
+      'clienteCatalogo',
       // F2-202: bandeja del correo falso, filtrada por empresa_id como las demás.
       'correoEnviado',
       'empresa',
       // F2-141: reportes programados; sus escrituras van por `reportes(scope)`.
       'envioReporte',
       'formaPagoCatalogo',
+      'grupoProducto',
       'mesaSnapshot',
+      'meseroCatalogo',
+      'producto',
+      'productoMetadata',
       'reglaAlerta',
       'sesionUsuario',
+      'sincronizacionCatalogo',
+      'solicitudSincronizacion',
       'sucursal',
       'suscripcionReporte',
       'usuario',

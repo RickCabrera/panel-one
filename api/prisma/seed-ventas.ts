@@ -24,6 +24,7 @@ import {
   type Area,
   type Canal,
 } from './seed-maestro/catalogos';
+import { sembrarCatalogos } from './seed-catalogos';
 import { generarUniverso, resumenPorModulo } from './seed-maestro';
 
 // Se re-exportan: los specs y los consumidores los importaban de aquí.
@@ -487,9 +488,24 @@ async function main(): Promise<void> {
       `Seed de ventas aplicado: ${r.cheques} cheques, ${r.partidas} partidas, ${r.pagos} pagos ` +
         `(${DIAS} días hasta ${hoy}, sin cierres después de ${ahora.toISOString()}).`,
     );
+    const universo = universoDe(op, generarVentas(op));
+    // Catálogos espejo (F2-230): grupos, productos, meseros y clientes, por la misma
+    // ingesta que usa el agente.
+    const catalogos = await sembrarCatalogos(prisma, {
+      empresaId: op.empresaId,
+      sucursales,
+      universo,
+      capturadoAt: ahora,
+    });
+    console.log(
+      'Catálogos espejo sembrados (F2-230): ' +
+        Object.entries(catalogos)
+          .map(([c, n]) => `${c} ${n}`)
+          .join(', ') +
+        '.',
+    );
     // El resto del universo todavía no tiene tabla: se genera (y se valida en los
     // specs) para que la tarea que la cree lo persista desde aquí.
-    const universo = universoDe(op, generarVentas(op));
     console.log('Seed maestro (generado; lo persiste la tarea que crea cada tabla):');
     for (const [modulo, filas, tarea] of resumenPorModulo(universo)) {
       console.log(`  - ${modulo}: ${filas} (${tarea})`);

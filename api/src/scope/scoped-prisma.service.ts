@@ -7,6 +7,7 @@ import type { AgenteAutenticado } from '../auth/request-autenticado';
 import { ConsultaVentas, type FiltroVentas } from './consulta-ventas';
 import { EscrituraAdmin } from './escritura-admin';
 import { EscrituraAlertas } from './escritura-alertas';
+import { EscrituraCatalogos, IngestaCatalogos } from './escritura-catalogos';
 import { EscrituraReportes } from './escritura-reportes';
 import { EscrituraSucursal } from './escritura-sucursal';
 import {
@@ -201,6 +202,24 @@ export class ScopedPrismaService {
    */
   reportes(scope: EmpresaScope): EscrituraReportes {
     return new EscrituraReportes(this.#prisma, scope);
+  }
+
+  /**
+   * Las escrituras de la ingesta de catálogos (F2-230), clavadas a la SUCURSAL del agente
+   * como `deSucursal()`: página y cierre bajo el candado de (sucursal, catálogo). Ver
+   * `escritura-catalogos.ts`.
+   */
+  catalogosDeSucursal(agente: AgenteAutenticado): IngestaCatalogos {
+    return new IngestaCatalogos(this.#prisma, agente);
+  }
+
+  /**
+   * Las escrituras del panel sobre catálogos (F2-230): metadata propia de un producto y la
+   * solicitud de sincronización. Empresa, sucursal y producto se verifican con este `scope`:
+   * fuera de alcance, 404.
+   */
+  catalogos(scope: EmpresaScope): EscrituraCatalogos {
+    return new EscrituraCatalogos(this.#prisma, scope);
   }
 
   /**

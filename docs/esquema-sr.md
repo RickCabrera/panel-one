@@ -605,6 +605,28 @@ y no debe compararse con ella.
   columna lo dice.
 
 
+**Lo que el espejo de catálogos (F2-230, `POST /ingesta/catalogos`) supone.** Nada de esto se ha
+visto en SR: la tabla de productos de §6 sigue `_(pendiente)_`. Lo lee F2-240 y lo valida F2-192.
+
+- ⚠️ **SUPUESTO — cada registro del POS tiene una llave ESTABLE (`origenSrId`, texto 1–64) dentro
+  de la base de SU sucursal.** El espejo es por sucursal: el mismo `origenSrId` en dos sucursales
+  son dos filas. Si SR reutiliza o renumera ids, el espejo confunde dos productos.
+- ⚠️ **SUPUESTO — la clave visible y el id interno pueden ser distintos**: el contrato los lleva
+  aparte (`clave` nulable, `origenSrId`). El seed manda los dos iguales.
+- `DECISION PROVISIONAL (nocturno)` — **nombre obligatorio, 1–200** (`api/src/ingesta/dto/catalogos.dto.ts`).
+  Un registro sin nombre se RECHAZA solo (no tumba la página) y, si ya tenía fila, se marca visto
+  sin tocar su contenido. No se sabe si SR tiene productos sin nombre.
+- `DECISION PROVISIONAL (nocturno)` — **el grupo del producto va por texto** (`grupoOrigenSrId`,
+  sin FK; `schema.prisma`, modelo `Producto`). Un producto con un grupo que aún no llegó no se
+  rechaza; la lectura resuelve el nombre en la misma sucursal.
+- ⚠️ **SUPUESTO — SR marca la baja de un producto con algún estado** (suspendido, inactivo). El
+  contrato lo lleva en `activoPos` (nulable = "no lo reporta"), distinto de desaparecer de la
+  lectura (`activo`). No se sabe qué columna es.
+- **El precio NO viaja todavía**: es de F2-145 (precios por sucursal), que amplía el contrato.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — la metadata propia es por sucursal** (`productos_metadata`
+  cuelga del producto espejo de ESA sucursal). Mínimo/máximo tiene sentido por sucursal; foto,
+  descripción y etiquetas del menú quizá deberían ser por empresa. Ver la nota en la ficha de F2-145.
+
 ---
 
 ## 7. Meseros y usuarios del POS
@@ -632,6 +654,11 @@ sucursales son una sola opción, y el filtro trae las dos: el filtro es por text
 (sucursal, texto)). "Sin mesero" no aparece: el filtro exacto no puede pedir un nulo.
 
 
+**Lo que el espejo de meseros (F2-230) supone.** Mismas reglas que §6: llave estable por sucursal
+(`origenSrId`), clave visible aparte, nombre obligatorio, `activoPos` para la baja en SR. El espejo
+todavía **no** se liga con `cheques.mesero` (texto): esa unión es de F2-231 y hoy sólo puede ir
+por nombre.
+
 ---
 
 ## 8. Áreas, estaciones y canales de venta
@@ -644,6 +671,19 @@ _(pendiente)_
 **Estado del modelo (F2-221):** el contrato de ingesta **no trae** área, estación ni canal, y
 `cheques` no tiene dónde guardarlos. El seed maestro los genera pero no los persiste. Por eso el
 desglose "por área y canal" de Análisis queda vacío con su explicación y lo completa F2-233.
+
+**Lo que el espejo de áreas y canales (F2-230) supone.**
+
+- ⚠️ **SUPUESTO — SR tiene un catálogo de áreas** (comedor, terraza, barra) con llave estable.
+- `DECISION PROVISIONAL (nocturno)` — **se supone también algún catálogo de canal o tipo de
+  servicio** (comedor / mostrador / domicilio) y se le dio tabla espejo (`canales_venta_catalogo`,
+  comentario en `schema.prisma`). Si SR no lo tiene, el agente cierra ese catálogo con `total=0`.
+  El mapeo **área → canal de negocio es nuestro** y es de F2-233.
+
+**Clientes (F2-230).** ⚠️ **SUPUESTO — no toda instalación usa clientes.** El espejo acepta
+nombre, teléfono, correo y RFC tal como el POS los guarde (sin validar formato: rechazar un cliente
+por un correo mal escrito sería perderlo). Son datos personales: el API nunca los repite en un
+motivo de rechazo ni en el log.
 
 ---
 
@@ -889,6 +929,39 @@ Supuestos del instalador (⚠️ ninguno visto funcionando):
   implementado el upsert por `(sucursal_id, folio_sr)`: si SR reinicia folios, un cheque
   nuevo **pisa en silencio** a uno viejo con el mismo `folio_sr`. Sigue sin resolverse y
   es lo primero que hay que mirar en F1-090.
+
+
+### Contrato de catálogos (F2-230): `POST /ingesta/catalogos`, `/cierre` y `GET /solicitud`
+
+Lo define `api/src/ingesta/dto/catalogos.dto.ts` y lo publica `api/openapi.json`. Lo que F2-240 tiene
+que cumplir al leer SR:
+
+- **Una sincronización = un `sincronizacionId` (uuid del agente) + un `capturadoAt`** = el instante
+  en que EMPEZÓ la lectura de ese catálogo. **Todas** sus páginas (1–1000 registros) y su cierre
+  repiten el mismo par. Sin cierre, la sincronización es incremental: actualiza y no da de baja nada.
+- **El agente no intercala dos sincronizaciones del mismo catálogo** (una incremental espera al
+  cierre de la completa). Si lo hace, la fila que toque la más nueva deja de contar para la vieja y
+  su cierre responde 409 para siempre: hay que abandonarla y abrir otra.
+- **El cierre cuadra antes de dar de baja:** filas vistas por esa sincronización + `rechazados`
+  (la suma de `rechazadosSinFila` de sus páginas) >= `total`. Si no, **409 y no se da de baja
+  nada** (faltan páginas). El API confía en el `rechazados` del agente (sólo exige
+  `0 <= rechazados <= total`): uno inflado dejaría pasar un cierre con páginas perdidas.
+- `DECISION PROVISIONAL (nocturno)` — **`total = 0` da de baja todo el catálogo**
+  (`catalogos-ingesta.service.ts#cierre`). Es el caso "el POS no usa clientes". Riesgo: un agente
+  que se trague un error de lectura y reporte cero deja el catálogo inactivo en el panel hasta la
+  siguiente sincronización (no se borra nada).
+- **Nada se borra**: desaparecer deja `activo=false` con el último `visto_at`. Reaparecer reactiva la
+  MISMA fila.
+- **`capturadoAt` > 5 min en el futuro = 400.** Un reloj del agente adelantado congelaría
+  `visto_at`. Uno que se corrige **hacia atrás** hace que sus páginas salgan en `obsoletos` hasta
+  alcanzar la última sincronización completa aplicada: F2-240 debe registrarlo en su log.
+- **Un registro inválido se rechaza solo** (`rechazados[]` con índice, `origenSrId` si era válido y
+  motivo SIN el valor). Un `origenSrId` repetido en la página se rechaza en todas sus apariciones.
+- **Errores:** 409 = no cuadra (reintentar tras completar); 503 = transitorio o candado del catálogo
+  ocupado (reintentar igual); 500 = determinista (**no** reintentar igual).
+- **Forzado manual:** `GET /ingesta/catalogos/solicitud` → `pendiente=true` mientras algún catálogo
+  de los seis no haya **recibido** un cierre (reloj del API) después de la solicitud. Un cierre
+  tomado antes pero recibido después la da por atendida (desfase de relojes aceptado).
 
 ---
 

@@ -34,9 +34,10 @@ import { RECETAS, type Renglon } from './recetas';
  * El UNIVERSO del seed maestro (F2-201): todo lo que la Ronda 2 va a necesitar
  * ver, generado de forma PURA y determinista a partir de las ventas del seed.
  *
- * Hoy sólo las ventas (cheques, partidas, pagos, formas) tienen tabla. El resto
- * NO se persiste aquí: lo persiste, desde esta función, la tarea que cree su
- * tabla (regla 2 de la Ronda 2), para no adelantarse a su diseño:
+ * Las ventas (cheques, partidas, pagos, formas) y, desde F2-230, grupos,
+ * productos, meseros y clientes (`prisma/seed-catalogos.ts`) ya tienen tabla. El
+ * resto NO se persiste aquí: lo persiste, desde esta función, la tarea que cree
+ * su tabla (regla 2 de la Ronda 2), para no adelantarse a su diseño:
  *
  * | Parte del universo                     | La persiste |
  * |----------------------------------------|-------------|

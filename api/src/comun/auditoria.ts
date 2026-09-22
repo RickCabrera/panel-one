@@ -13,11 +13,19 @@ export type AccionAuditada =
   | 'usuario.reset_password'
   | 'usuario.cambiar_password'
   | 'regla_alerta.editar'
-  | 'suscripcion_reporte.editar';
+  | 'suscripcion_reporte.editar'
+  | 'producto_metadata.editar'
+  | 'sucursal.forzar_sincronizacion';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
-  recurso: 'empresa' | 'sucursal' | 'usuario' | 'regla_alerta' | 'suscripcion_reporte';
+  recurso:
+    | 'empresa'
+    | 'sucursal'
+    | 'usuario'
+    | 'regla_alerta'
+    | 'suscripcion_reporte'
+    | 'producto';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

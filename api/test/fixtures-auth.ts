@@ -100,6 +100,16 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   await prisma.alertaEvaluacion.deleteMany(deEstas);
   // La bandeja del correo falso (F2-202) guarda la empresa de cada correo (F2-141 manda).
   await prisma.correoEnviado.deleteMany(deEstas);
+  // Catálogos espejo (F2-230): la metadata cuelga del producto; lo demás, de la sucursal.
+  await prisma.productoMetadata.deleteMany(deEstas);
+  await prisma.grupoProducto.deleteMany(deEstas);
+  await prisma.producto.deleteMany(deEstas);
+  await prisma.meseroCatalogo.deleteMany(deEstas);
+  await prisma.clienteCatalogo.deleteMany(deEstas);
+  await prisma.areaCatalogo.deleteMany(deEstas);
+  await prisma.canalVentaCatalogo.deleteMany(deEstas);
+  await prisma.sincronizacionCatalogo.deleteMany(deEstas);
+  await prisma.solicitudSincronizacion.deleteMany(deEstas);
   await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });
   await prisma.empresa.deleteMany({ where: { id: { in: empresas } } });
 }
