@@ -40,6 +40,35 @@ function sinColumnasF2221(texto: string): string {
   return resto;
 }
 
+/**
+ * Lo que F2-222 (filtros de Tickets) agregó, literal: columnas de `cancelados`, columnas de
+ * cada rama de `tickets` (distinguibles por el `FROM` con que terminan) y las dos CTEs nuevas,
+ * que van al FINAL del `WITH`. Cada bloque TIENE que estar una sola vez y se quita.
+ */
+const COLUMNAS_F2_222: ReadonlyArray<readonly [string, string]> = [
+  [',\n           c.mesa, c.comensales, c.propina, c.abierto_at, c.cerrado_at', ''],
+  [
+    ',\n           mesa, mesero, comensales, propina, total, abierto_at, cerrado_at FROM ventas',
+    ' FROM ventas',
+  ],
+  [
+    ',\n           mesa, mesero, comensales, propina, total, abierto_at, cerrado_at FROM cancelados',
+    ' FROM cancelados',
+  ],
+];
+const CTES_F2_222 =
+  /,\n {2}partidas_empresa AS \([\s\S]*?\n {2}\),\n {2}pagos_empresa AS \([\s\S]*?\n {2}\)(?= SELECT )/;
+
+function sinF2222(texto: string): string {
+  let resto = texto.replace(/\r\n/g, '\n');
+  for (const [columnas, queda] of COLUMNAS_F2_222) {
+    expect(resto.split(columnas)).toHaveLength(2);
+    resto = resto.replace(columnas, queda);
+  }
+  expect(resto.split(CTES_F2_222)).toHaveLength(2);
+  return resto.replace(CTES_F2_222, '');
+}
+
 describe('guardiaCuerpo()', () => {
   it('conoce TODAS las tablas del datamodel, no una lista escrita a mano', () => {
     const modelos = Prisma.dmmf.datamodel.models.map((m) => m.dbName ?? m.name);
@@ -173,8 +202,59 @@ describe('alturaAl (F2-220)', () => {
     const armado = await sqlDe(ok);
     // F2-221 sólo agregó columnas al SELECT de `ventas` y `cancelados`. Se quitan aquí y lo que
     // queda tiene que ser el snapshot de SIEMPRE (no se regeneró): ningún filtro cambió.
-    expect(sinColumnasF2221(armado.sql)).toMatchSnapshot();
-    expect(armado.values).toMatchSnapshot();
+    // F2-222 agregó columnas y dos CTEs AL FINAL (`partidas_empresa`, `pagos_empresa`), con sus
+    // 4 parámetros también al final: se quitan, y lo demás sigue siendo el snapshot de siempre.
+    expect(sinColumnasF2221(sinF2222(armado.sql))).toMatchSnapshot();
+    expect(armado.values.slice(0, -4)).toMatchSnapshot();
+    expect(armado.values.slice(-4)).toEqual([FX.empresaA, FX.empresaA, FX.empresaA, FX.empresaA]);
+  });
+
+  // Las CTEs nuevas se quitan del snapshot: su filtro de tenant se prueba AQUÍ, texto y valores,
+  // con scope empresa y con scope global.
+  describe('CTEs de F2-222 (partidas_empresa, pagos_empresa)', () => {
+    async function armadoCon(scope: EmpresaScope): Promise<Prisma.Sql> {
+      let capturado: Prisma.Sql | undefined;
+      const consulta = new ConsultaVentas(
+        (armado) => {
+          capturado = armado;
+          return Promise.resolve([]);
+        },
+        scope,
+        ok,
+      );
+      await consulta.consultar(sql('SELECT 1 FROM ventas'));
+      return capturado!;
+    }
+
+    it.each([
+      ['partidas_empresa', 'p', 'cheque_partidas'],
+      ['pagos_empresa', 'g', 'cheque_pagos'],
+    ])('%s: SÓLO su tabla, empresa pedida + tenant del usuario', async (cte, a, tabla) => {
+      const armado = await armadoCon(A);
+      const texto = armado.sql.replace(/\r\n/g, '\n');
+      const cuerpo = new RegExp(`\\n {2}${cte} AS \\(([\\s\\S]*?)\\n {2}\\)`).exec(texto)![1];
+      expect(cuerpo).toContain(`FROM ${tabla} ${a}\n`);
+      expect(cuerpo).toMatch(
+        new RegExp(`WHERE ${a}\\.empresa_id = \\?::uuid AND ${a}\\.empresa_id = \\?::uuid$`),
+      );
+      // Sin JOIN: atarlas a `ventas`/`cancelados` (CTEs materializadas) daba nested loops O(n²)
+      // que pasaban el timeout; a `tickets`, la dejaría con dos referencias (materializada).
+      expect(cuerpo).not.toMatch(/\bjoin\b/i);
+      expect(cuerpo).not.toMatch(/\b(tickets|ventas|cancelados)\b/);
+    });
+
+    it('con scope global sólo va la empresa pedida (sin tenant), 2 parámetros', async () => {
+      const armado = await armadoCon({ tipo: 'global' });
+      const texto = armado.sql.replace(/\r\n/g, '\n');
+      for (const [cte, a] of [
+        ['partidas_empresa', 'p'],
+        ['pagos_empresa', 'g'],
+      ]) {
+        const cuerpo = new RegExp(`\\n {2}${cte} AS \\(([\\s\\S]*?)\\n {2}\\)`).exec(texto)![1];
+        expect(cuerpo).toMatch(new RegExp(`WHERE ${a}\\.empresa_id = \\?::uuid\\s*$`));
+      }
+      expect(armado.values.slice(-2)).toEqual([FX.empresaA, FX.empresaA]);
+    });
   });
 
   it('con alturaAl, el instante viaja como parámetro y sólo cambia el fin del último día', async () => {

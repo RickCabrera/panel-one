@@ -415,6 +415,13 @@ export async function sembrarVentas(
     },
     { timeout: 60_000 },
   );
+  // Carga masiva: se refrescan en el acto las estadísticas del planificador (F2-222). Si se
+  // analizaron con las tablas vacías (lo normal justo antes de sembrar), Postgres cree que
+  // hay ~1 fila y los filtros de Tickets entran a las partidas por el índice de `empresa_id`
+  // en vez del de `cheque_id`: medido, 2.7 s por consulta en vez de 16 ms. En producción lo
+  // hace autovacuum (al pasar de 50 filas + 10 %); aquí no se le espera. Es NUESTRA base,
+  // nunca la de SoftRestaurant.
+  await prisma.$executeRaw`ANALYZE cheques, cheque_partidas, cheque_pagos`;
   return { cheques: cheques.length, partidas: partidas.length, pagos: pagos.length };
 }
 

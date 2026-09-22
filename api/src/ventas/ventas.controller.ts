@@ -272,7 +272,9 @@ export class VentasController {
     summary: 'Tickets del rango, paginados, con partidas y pagos (la fila expandible).',
     description:
       'Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag ' +
-      '`cancelado`, no suman). Sin cache.',
+      '`cancelado`, no suman). Filtros (F2-222) combinables con AND: mesero, mesa, forma, ' +
+      'importeMin/importeMax, canceladas, producto y folio; `total` es siempre el del filtro ' +
+      'completo. Orden por `orden`/`dir`. Sin cache.',
   })
   @ApiOkResponse({ type: PaginaTicketsDto })
   listarTickets(
@@ -284,6 +286,15 @@ export class VentasController {
       porPagina: q.porPagina ?? POR_PAGINA_DEFAULT,
       folio: q.folio,
       corte: q.corte,
+      mesero: q.mesero,
+      mesa: q.mesa,
+      forma: q.forma,
+      importeMin: q.importeMin,
+      importeMax: q.importeMax,
+      canceladas: q.canceladas,
+      producto: q.producto,
+      orden: q.orden,
+      dir: q.dir,
     });
   }
 }

@@ -247,6 +247,42 @@ descubre nada de SR: son supuestos del modelo, sin validar, y se revisan en F1-0
 - ⚠️ **SUPUESTO — texto vacío no es "sin dato".** Una `mesa` en `''` sale como una mesa sin
   nombre y cuenta en la rotación; un `mesero` en `''` sale separado de "Sin mesero". No se
   normaliza: si SR manda vacíos en vez de nulos, se decide en F2-231 / F2-222 (o en la ingesta).
+  F2-222 **no** lo decidió: sus filtros de mesero y mesa son de igualdad exacta y un `''` sólo se
+  encuentra pidiendo `''`, cosa que el filtro no permite (mínimo 1 carácter).
+
+**Lo que los filtros y el detalle de Tickets (F2-222, `api/src/ventas/tickets.service.ts`,
+`web/src/paginas/tickets/Tabla.tsx`) suponen de esta sección.** Todo es supuesto no validado:
+
+- ⚠️ **SUPUESTO — el panel no recibe la HORA de una cancelación.** El contrato de ingesta sólo trae
+  `cancelado` (sí/no) y las fechas de apertura y cierre del cheque; no hay un "cancelado a las…".
+  El detalle de un cancelado dice "El panel no recibe la hora de la cancelación" y da el instante
+  por el que la cuenta está ubicada (cierre o, sin cierre, apertura). No se usa `updated_at`: es
+  cuándo nuestra base reescribió la fila, no cuándo se canceló en el POS. `DECISION PROVISIONAL
+  (nocturno)` en `Tabla.tsx`. Si SR guarda la hora de cancelación (¿en `cheques`?, ¿en una
+  bitácora?), el contrato de ingesta la tiene que traer y el detalle la muestra. **Decisión
+  abierta para Ricardo** (log de F2-222).
+- ⚠️ **SUPUESTO — la cancelación es de la cuenta completa** (ya estaba arriba, "cancelaciones
+  parciales"). El detalle lo dice así: "Se canceló la cuenta entera: N partidas por $X".
+- ⚠️ **SUPUESTO — mesero y mesa se comparan como TEXTO EXACTO** (`mesero = $1`, sensible a
+  mayúsculas y a espacios internos). Si SR guarda el nombre con variantes ("ANA" / "Ana"), el
+  filtro las separa. Las cuentas sin mesero o sin mesa (nulo) no se pueden pedir con el filtro.
+  **Espacios alrededor:** el web recorta (`trim`) lo que se escribe o llega en la URL, pero ni la
+  ingesta ni el API recortan lo guardado. Si SR manda el nombre relleno de espacios (un `CHAR` de
+  SQL Server, p. ej. `"Ana   "`), sale en el select de meseros y filtrarlo da 0 tickets. No
+  validado; si pasa, se normaliza en la ingesta, no en el filtro.
+- ⚠️ **Ordenar por tiempo de mesa con duraciones negativas** (cierre anterior a la apertura, ver
+  arriba): el orden usa `cerrado_at − abierto_at` tal cual, así que esas cuentas quedan como las
+  más cortas en ascendente, mientras la tabla las muestra como "Sin dato". Se dejó así.
+- ⚠️ **SUPUESTO — la forma de pago de un filtro es la del CATÁLOGO de la empresa** (texto sin
+  catálogo → `otro`), el mismo criterio que `pagos[].forma` del detalle, **no** la columna
+  `cheque_pagos.forma` guardada en la ingesta. Si las dos difieren, manda el catálogo.
+- ⚠️ **SUPUESTO — el filtro de producto busca en el NOMBRE de la partida** (`strpos(lower(…))`):
+  contiene, sin mayúsculas, **sin ignorar acentos** ("jamon" no encuentra "Jamón"). Si SR guarda
+  nombres con y sin acento para el mismo producto, el filtro los separa; `unaccent` necesitaría
+  una extensión de Postgres y quedó fuera.
+- ⚠️ **SUPUESTO — `folio` ordena por largo y luego por texto** (`length(folio), folio COLLATE
+  ucs_basic`): "999" antes de "1000" si los folios son numéricos. Con folios alfanuméricos de
+  distinto largo el orden es raro pero estable. `DECISION PROVISIONAL (nocturno)` en el servicio.
 
 
 ---
@@ -287,6 +323,12 @@ muestran en el detalle)_
   hijos y la vista Tickets (F1-042) pinta un solo nivel. Si SR resulta tener modificadores
   anidados, cambian el contrato de ingesta, el `jsonb` y Tickets. No está resuelto: sólo
   se dejó de asumir en el panel de mesas.
+- ⚠️ **SUPUESTO — el panel no recibe descuentos ni cortesías POR PARTIDA** (F2-222). El contrato
+  de ingesta trae `descuentos` sólo a nivel de cheque, y ninguna marca de cortesía. La ficha de
+  F2-222 pedía "descuentos y cortesías línea por línea"; el detalle muestra "Descuento de la
+  cuenta" y una nota que dice que el panel no recibe el desglose por partida. Si SR guarda el
+  descuento por partida (o la cortesía como descuento del 100 % de una partida), el contrato de
+  ingesta y `cheque_partidas` lo tienen que traer. **Decisión abierta para Ricardo.**
 
 ---
 
@@ -536,6 +578,11 @@ y no debe compararse con ella.
   persona que trabaja en las dos es el error menos grave y además se ve. Si SR renombra a un
   mesero, sale como dos.
 - `mesero` nulo = "Sin mesero" (una fila por sucursal).
+
+**Lo que el filtro de mesero de Tickets (F2-222) supone.** Las opciones del filtro salen de
+`GET /ventas/por-mesero` del mismo alcance y periodo, **por nombre sin repetir** (dos "Ana" de dos
+sucursales son una sola opción, y el filtro trae las dos: el filtro es por texto, no por
+(sucursal, texto)). "Sin mesero" no aparece: el filtro exacto no puede pedir un nulo.
 
 
 ---

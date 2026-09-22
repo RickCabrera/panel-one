@@ -4003,3 +4003,144 @@ pase, con 0 bloqueos (observaciones atendidas abajo). Carriles /api + /web. Open
 **Qué haría distinto.** Escribir primero la tabla de cuentas a mano del e2e, con una columna
 "total − Σ partidas". Esa columna es la que obliga a que el test de productos pruebe algo y no
 cuadre sola.
+
+## 2026-09-22 01:50 — F2-222 · Tickets: filtros y detalle completos
+**Estado:** CERRADA si el PR se mergea. Tres puntos de la ficha **no** se pudieron cumplir por
+falta de datos; quedan como decisiones abiertas para Ricardo (abajo).
+Revisor: plan APROBADO CON OBSERVACIONES en el primer pase (0 bloqueos). Entregable APROBADO CON
+OBSERVACIONES en el primer pase (0 bloqueos). Carriles /api + /web. OpenAPI actualizado.
+`docs/esquema-sr.md` actualizado en §2, §3 y §7; todo lo agregado son supuestos, no hallazgos.
+
+**Qué quedó hecho.**
+- **API: `GET /ventas/tickets` con 9 parámetros nuevos.** Todos son opcionales y se combinan con AND.
+  - `mesero` y `mesa`: igualdad exacta.
+  - `forma` (enum): se compara contra el CATÁLOGO de la empresa, y lo que no está en el catálogo
+    cuenta como `otro`. Es el mismo criterio que usa `pagos[].forma` del detalle.
+  - `importeMin` e `importeMax`: texto `^-?\d{1,10}(\.\d{1,2})?$`, inclusivos. Si min > max, 400,
+    validado con `Prisma.Decimal` antes de consultar.
+  - `canceladas`: `incluir`, `excluir` o `solo`.
+  - `producto`: busca "contiene" con `strpos(lower())`. Es literal y **no ignora acentos**.
+  - `orden` y `dir`: lista blanca en `ordenSql()` (`tickets.service.ts`). Los nulos van al final,
+    el desempate es por id, los textos se comparan con `COLLATE ucs_basic` y el folio ordena por
+    `length(folio), folio`.
+  - El `WHERE` es el mismo para el conteo y para la página, así que `total` siempre corresponde al
+    filtro completo.
+- **Helper de scope (`consulta-ventas.ts`), sólo cambios aditivos.**
+  - Columnas nuevas en `cancelados` y en las dos ramas de `tickets` (mesa, mesero, comensales,
+    propina, total, abierto_at, cerrado_at).
+  - Dos CTEs nuevas al final: `partidas_empresa` y `pagos_empresa` (ver Decisiones).
+  - `consulta-ventas.spec.ts` recorta los bloques de F2-222 y compara contra el snapshot de SIEMPRE,
+    que no se regeneró. Hay tests explícitos del tenant de cada CTE con scope empresa y global.
+- **Web, `/tickets`:**
+  - Formulario de filtros (`tickets/Filtros.tsx`) con Aplicar y Limpiar, más una lista de "Filtros
+    activos" con un botón de quitar en cada uno.
+  - Todo va en la URL (`mesero, mesa, forma, min, max, canceladas, producto, orden, dir`, en
+    `filtros/tickets.ts`), NO en `PARAMS_VISTA`. Lo inválido de la URL se descarta, incluido un rango
+    de importes al revés, que se compara en centavos `bigint`.
+  - Encabezados ordenables con `aria-sort`: la columna activa invierte el orden; los textos arrancan
+    en asc y las cifras en desc.
+  - Columnas nuevas: Tiempo (de mesa) y Propina. En móvil se esconden.
+  - El select de mesero sale de `/ventas/por-mesero` sin repetir y sin null. Si esa consulta falla,
+    el campo pasa a texto libre.
+- **Conteo antes de exportar:** el botón dice "Exportar CSV · N tickets", y abajo hay una línea de
+  ayuda sobre el corte de 30 s.
+  - Al terminar dice "Se exportaron M tickets, recibidos hasta las HH:MM:SS", en la zona de la
+    sucursal o en CDMX si son todas. Esto cierra el pendiente de F2-203.
+  - El CSV sale del mismo `exportarTickets` con los filtros en `ParametrosTickets`.
+- **Detalle:** apertura, cierre y tiempo de mesa.
+  - Tiempo "Sin cierre" en un cancelado que no se cerró, y "Sin dato" más una nota si el cierre es
+    anterior a la apertura.
+  - "Descuento de la cuenta", con la nota "El panel no recibe descuentos ni cortesías por
+    partida…".
+  - Un cancelado muestra el bloque "Cuenta cancelada completa: N partidas por $X", seguido de "El
+    panel no recibe la hora de la cancelación; la cuenta está ubicada por su cierre/apertura:
+    fecha". Las partidas aparecen tachadas.
+
+**Decisiones abiertas PARA RICARDO (la ficha las pedía y el modelo no las tiene).**
+1. **"Cuándo" se canceló.** El contrato de ingesta sólo trae `cancelado`. Hoy se muestra el instante
+   por el que se ubica la cuenta y se dice que la hora no llega. No se usa `updated_at`, porque es
+   cuándo NUESTRA base reescribió la fila. Para cumplirlo, SR tiene que guardar esa hora y el agente
+   tiene que mandarla (§2).
+2. **Descuentos y cortesías línea por línea.** Sólo existe el descuento a nivel de cheque, y no hay
+   ninguna marca de cortesía (§2 y §3).
+3. **Código de facturación:** espera a F2-101 (la ficha lo dice: "cuando exista").
+
+**Decisiones que tomé y por qué.**
+- **CAMBIO RESPECTO AL PLAN: CTEs `partidas_empresa` y `pagos_empresa` SIN rango.** Sólo tienen
+  `FROM cheque_partidas p WHERE p.empresa_id = $empresa + tenant`, y se usan SÓLO correlacionadas
+  con `tickets` en un `EXISTS (… x.cheque_id = t.id AND x.empresa_id = t.empresa_id)`. El comentario
+  del helper dice que nunca se agregan solas, porque la suma sería de toda la historia.
+  - El plan original las ataba a `ventas ∪ cancelados`.
+  - Medido con EXPLAIN ANALYZE: esas CTEs están materializadas, no tienen índice y se estiman en 1
+    fila, así que Postgres las resolvía con nested loops de CTE Scan por cada ticket, O(n²). Eran
+    100 ms en frío y **57014 (statement timeout)** en la suite completa.
+  - Sin el join, cada ticket busca sus partidas por el índice de `cheque_id`: 16 ms.
+  - Tampoco se atan a la CTE `tickets`: con dos referencias, Postgres la materializaría también en
+    la lista sin filtros. Main contra rama sin filtros: 66–85 ms en las dos, sin diferencia medible.
+- **`ANALYZE cheques, cheque_partidas, cheque_pagos` al final de `sembrarVentas`**
+  (`api/prisma/seed-ventas.ts`).
+  - Con estadísticas de "tabla vacía" (autovacuum analizó antes de sembrar), Postgres entraba a
+    `cheque_partidas` por el índice de `empresa_id`: 2.7 s por consulta. Por eso la mediana de "tres
+    filtros" dio 5.3 s en 1 de 4 corridas completas.
+  - Lo reproduje: analicé las tablas vacías y luego sembré. Con el ANALYZE, el mismo escenario da
+    15 ms. Ni `OFFSET 0` ni quitar la correlación por empresa lo arreglaban; sólo las estadísticas.
+- `folio` ordena por largo y luego por texto (`DECISION PROVISIONAL (nocturno)` en el servicio).
+- Hora de cancelación: `DECISION PROVISIONAL (nocturno)` en `web/src/paginas/tickets/Tabla.tsx`.
+- **El conteo en pantalla no es el del CSV** (observación O11 del revisor). La lista no lleva corte y
+  el export sí ("ahora − 30 s"). Elegí línea de ayuda + mensaje con lo que de verdad se exportó, y no
+  poner corte en la lista: con corte, la lista de "Hoy" iría 30 s atrasada. Hay un test del caso en
+  que el archivo lleva menos.
+
+**Trampas que encontré.**
+- **Rendimiento de SQL:** una prueba de rendimiento que pasa sola puede tronar en la suite completa
+  por las estadísticas del planificador. Para diagnosticar: arma el SQL con `ConsultaVentas` y un
+  ejecutor falso, y corre `EXPLAIN (ANALYZE) ${sql.text}` con `$queryRawUnsafe(texto, ...values)`.
+  Ojo: `sql.sql` trae `?` y `sql.text` trae `$n`.
+- **Riesgo en producción (va para F2-223 y F2-224, que usan el mismo helper):** justo después de una
+  carga masiva, antes de que autovacuum analice (50 filas + 10 %, naptime de 1 min), los filtros de
+  producto y forma pueden tardar segundos. Si un cliente grande importa historia de golpe, vale
+  correr `ANALYZE` al final de un lote grande de la ingesta. No lo hice: es otra tarea.
+- **Nombre accesible de un control DENTRO de su `<label>`:** incluye el valor del control, así que un
+  select quedaba "Mesero Todos". Se usa `htmlFor` + `useId`.
+- **`key` de un formulario que depende de datos asíncronos** (la lista de meseros) lo remonta a
+  media captura, y los tests con `within(form)` se quedan con el nodo viejo. El `key` sólo lleva los
+  filtros aplicados.
+- `react-refresh/only-export-components`: las funciones exportadas (`activos`, `errorDe`) van en
+  `tickets/reglasFiltros.ts`, no en el `.tsx`.
+- Heredocs largos en el Bash tool: fallaron DOS veces más (uno dejó un archivo de test truncado a la
+  mitad). Para bloques grandes, Write a un archivo del scratchpad y luego `cat >>` o python.
+- Arranqué con los 61 archivos de `web/src` marcados M sólo por CRLF. `git diff --ignore-cr-at-eol`
+  vacío → `git checkout -- web/src` los limpió sin perder nada.
+
+**Qué quedó abierto.**
+- Las 3 decisiones para Ricardo de arriba.
+- **Espacios alrededor del mesero (observación O2 del revisor):** el web recorta y la ingesta no. Un
+  `CHAR` relleno de SR saldría en el select y filtraría 0. Está anotado en §2 y se normalizaría en la
+  ingesta.
+- **Ordenar por tiempo con duraciones negativas:** quedan como "las más cortas" aunque la celda diga
+  "Sin dato" (§2). Se dejó así.
+- **Verificación visual y a 390 px: NO se hizo.** jsdom no mide layout. Las 2 columnas nuevas son
+  `hidden md:table-cell`, pero el formulario de filtros es nuevo. Queda para F2-250.
+- **Enlace desde Análisis (detalle de mesero) a `/tickets?mesero=…`:** ahora existe el filtro y es
+  barato, pero no se hizo (nada de pasada).
+- El filtro no puede pedir "Sin mesero" ni "Sin mesa" (nulos).
+
+**Tests.**
+- API: `tickets.e2e.spec.ts` (nuevo, 59): 9 cuentas escritas a mano en una tabla de alias.
+  - Cada filtro por separado, combinados, orden con empates y nulos, y paginación sin huecos.
+  - 400 y 404, y que un producto de B no aparezca en A.
+- `tickets.service.spec.ts` (nuevo): la lista blanca y el min > max.
+- Bloque de 90 días de seed en `lectura.e2e.spec.ts`: esperados con un filtro JS propio y la prueba
+  de rendimiento (warm-up + mediana de 3 < 1 s, sin condición de entorno).
+- Adaptados: `consulta-ventas.spec.ts` y `openapi.spec.ts`.
+- Web: `filtros/tickets.test.ts`, `reglasFiltros.test.ts`, `formato.test.ts` y `Tickets.test.tsx`
+  (bloques F2-222 de filtros, orden, export y detalle).
+  - Adaptados: columnas nuevas y el nombre del botón de export (regex).
+- Números:
+  - API: lint y typecheck limpios; jest **1027/1027** (49 suites, 8 snapshots, 0 skips), dos corridas
+    completas seguidas.
+  - Web: build y lint limpios; vitest **785/785** (51 archivos, 0 skips).
+
+**Qué haría distinto.** Correr la suite COMPLETA del API antes de dar por buena una consulta nueva
+con EXISTS o joins: el EXPLAIN aislado y la prueba sola me dijeron 17 ms y 170 ms, y el problema
+sólo salía con el estado de estadísticas que dejan las otras suites.

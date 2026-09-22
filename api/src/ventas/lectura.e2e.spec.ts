@@ -1063,6 +1063,114 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
       const res = await get(`/ventas/tickets?${Q(base)}&${extra}`, USUARIOS.visorA);
       expect(res.status).toBe(400);
     });
+
+    // F2-222: filtros sobre los 90 días COMPLETOS del seed. El esperado sale del generador con
+    // un filtro en JS escrito aparte (la forma, del CATALOGO_SEED; nada copiado del SQL).
+    describe('filtros sobre 90 días de seed (F2-222)', () => {
+      const RANGO_90 = { desde: '2026-08-18', hasta: HOY }; // 14 + 30 + 31 + 15 = 90 días
+      const base90 = { empresaId: FX.empresaA, ...RANGO_90 };
+      const formaDe = new Map(CATALOGO_SEED.map((c) => [c.formaRaw, c.forma] as const));
+      const todos = () => ticketsAMano(chequesA, RANGO_90.desde, RANGO_90.hasta).map(({ c }) => c);
+      // Un fragmento de un producto real del seed, en minúsculas: "contiene", no "igual".
+      const producto = () => chequesA[0].partidas[0].producto.slice(1, 5).toLowerCase();
+
+      const cumple = (
+        c: ChequeSeed,
+        f: { forma?: FormaPago; producto?: string; importeMin?: string; mesero?: string },
+      ) =>
+        (f.forma === undefined ||
+          c.pagos.some((p) => (formaDe.get(p.formaRaw) ?? FormaPago.otro) === f.forma)) &&
+        (f.producto === undefined ||
+          c.partidas.some((p) => p.producto.toLowerCase().includes(f.producto!))) &&
+        (f.importeMin === undefined || c.total.gte(new Prisma.Decimal(f.importeMin))) &&
+        (f.mesero === undefined || c.mesero === f.mesero);
+
+      async function idsDe(
+        query: Record<string, string>,
+      ): Promise<{ total: number | undefined; ids: string[] }> {
+        const ids: string[] = [];
+        let total: number | undefined;
+        for (let pagina = 1; ; pagina++) {
+          const res = await get(
+            `/ventas/tickets?${Q({ ...base90, ...query, pagina, porPagina: 100 })}`,
+            USUARIOS.visorA,
+          );
+          expect(res.status).toBe(200);
+          total = res.body.total;
+          if (res.body.items.length === 0) break;
+          ids.push(...res.body.items.map((i: { id: string }) => i.id));
+        }
+        return { total, ids };
+      }
+
+      it('el rango trae de todo: guarda de que el seed sirve para probar los filtros', () => {
+        const t = todos();
+        expect(
+          new Set(t.map((c) => diaLocal(c.cerradoAt ?? c.abiertoAt, ZONA[c.sucursalId]))).size,
+        ).toBe(90);
+        expect(t.some((c) => c.pagos.some((p) => !formaDe.has(p.formaRaw)))).toBe(true);
+        expect(t.some((c) => c.cancelado)).toBe(true);
+      });
+
+      it.each([
+        ['forma tarjeta', () => ({ forma: FormaPago.tarjeta })],
+        ['forma otro (sin catálogo)', () => ({ forma: FormaPago.otro })],
+        ['producto contiene', () => ({ producto: producto() })],
+        [
+          'tres a la vez: forma + producto + importe',
+          () => ({
+            forma: FormaPago.tarjeta,
+            producto: producto(),
+            importeMin: '200',
+          }),
+        ],
+      ])(
+        '%s = el filtro hecho a mano sobre el generador, en el mismo orden',
+        async (_n, filtro) => {
+          const f = filtro();
+          const e = todos().filter((c) => cumple(c, f));
+          expect(e.length).toBeGreaterThan(0);
+          expect(e.length).toBeLessThan(todos().length);
+          const r = await idsDe(f as Record<string, string>);
+          expect(r.total).toBe(e.length);
+          expect(r.ids).toEqual(e.map((c) => c.id));
+        },
+        60_000,
+      );
+
+      // AC: "combinar tres filtros a la vez responde en menos de un segundo con 90 días de seed".
+      // Extremo a extremo (supertest, token, ValidationPipe, dos consultas y el detalle), sin
+      // sucursal. Un request de calentamiento y la MEDIANA de tres. La lista sin filtros también,
+      // porque las CTEs nuevas no deben empeorarla.
+      it.each([
+        ['tres filtros', () => ({ forma: 'tarjeta', producto: producto(), importeMin: '200' })],
+        [
+          'tres filtros con mesero',
+          () => ({
+            mesero: chequesA[0].mesero,
+            canceladas: 'excluir',
+            importeMax: '500',
+          }),
+        ],
+        ['sin filtros', () => ({})],
+      ])(
+        'rendimiento, %s: mediana < 1 s',
+        async (_n, filtro) => {
+          const ruta = `/ventas/tickets?${Q({ ...base90, ...filtro(), porPagina: 50 })}`;
+          expect((await get(ruta, USUARIOS.visorA)).status).toBe(200);
+          const tiempos: number[] = [];
+          for (let i = 0; i < 3; i++) {
+            const t0 = performance.now();
+            const res = await get(ruta, USUARIOS.visorA);
+            tiempos.push(performance.now() - t0);
+            expect(res.status).toBe(200);
+          }
+          tiempos.sort((a, b) => a - b);
+          expect(tiempos[1]).toBeLessThan(1000);
+        },
+        30_000,
+      );
+    });
   });
 
   // -------------------------------------------------------------------------

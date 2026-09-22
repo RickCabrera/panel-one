@@ -37,7 +37,19 @@ import type {
   VentaPorMesa,
   VentaPorProducto,
 } from '../analisis.service';
-import type { PagoTicket, PaginaTickets, PartidaTicket, Ticket } from '../tickets.service';
+import {
+  CANCELADAS,
+  DIRECCIONES,
+  IMPORTE_FILTRO,
+  ORDENES_TICKETS,
+  type Canceladas,
+  type Direccion,
+  type OrdenTickets,
+  type PagoTicket,
+  type PaginaTickets,
+  type PartidaTicket,
+  type Ticket,
+} from '../tickets.service';
 
 // ---------------------------------------------------------------------------
 // Query
@@ -123,6 +135,7 @@ export const POR_PAGINA_MAX = 100;
 /** Más allá de esto el OFFSET ya no es navegación, es un escaneo inútil. */
 export const PAGINA_MAX = 10_000;
 export const LARGO_MAX_FOLIO = 40;
+export const LARGO_MAX_TEXTO_FILTRO = 80;
 
 export class TicketsQueryDto extends FiltroVentasQueryDto {
   @ApiPropertyOptional({ minimum: 1, maximum: PAGINA_MAX, default: 1 })
@@ -171,6 +184,107 @@ export class TicketsQueryDto extends FiltroVentasQueryDto {
   @Matches(ISO_CON_ZONA, { message: '$property debe ser ISO-8601 con zona (Z u offset ±hh:mm)' })
   @IsISO8601({ strict: true, strictSeparator: true })
   corte?: string;
+
+  // --- Filtros y orden de F2-222 ------------------------------------------------------------
+
+  @ApiPropertyOptional({
+    maxLength: LARGO_MAX_TEXTO_FILTRO,
+    description:
+      'Igualdad EXACTA con el mesero del cheque (sensible a mayúsculas; "Ana" no trae a "Ana ' +
+      'María"). Las cuentas sin mesero no se pueden pedir con este filtro.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(LARGO_MAX_TEXTO_FILTRO)
+  mesero?: string;
+
+  @ApiPropertyOptional({
+    maxLength: LARGO_MAX_FOLIO,
+    description:
+      'Igualdad EXACTA con la mesa del cheque. Las cuentas sin mesa no se pueden pedir con este filtro.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(LARGO_MAX_FOLIO)
+  mesa?: string;
+
+  @ApiPropertyOptional({
+    enum: FormaPago,
+    enumName: 'FormaPago',
+    description:
+      'El ticket tiene AL MENOS un pago de esa forma, derivada con el catálogo de la empresa (un ' +
+      'texto sin catálogo cuenta como `otro`): el mismo criterio que `pagos[].forma`. Un ticket ' +
+      'pagado con dos formas aparece con cualquiera de las dos.',
+  })
+  @IsOptional()
+  @IsIn(Object.values(FormaPago))
+  forma?: FormaPago;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '100.00',
+    pattern: IMPORTE_FILTRO.source,
+    description: 'Total del ticket MAYOR O IGUAL a esto. Pesos en texto, hasta 2 decimales.',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(IMPORTE_FILTRO, { message: '$property debe ser un importe con hasta 2 decimales' })
+  importeMin?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    example: '500.00',
+    pattern: IMPORTE_FILTRO.source,
+    description:
+      'Total del ticket MENOR O IGUAL a esto. Pesos en texto, hasta 2 decimales. Menor que ' +
+      '`importeMin` = 400.',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(IMPORTE_FILTRO, { message: '$property debe ser un importe con hasta 2 decimales' })
+  importeMax?: string;
+
+  @ApiPropertyOptional({
+    enum: CANCELADAS,
+    default: 'incluir',
+    description:
+      '`incluir`: todos (los cancelados con su flag); `excluir`: sin cancelados; `solo`: sólo cancelados.',
+  })
+  @IsOptional()
+  @IsIn(CANCELADAS)
+  canceladas?: Canceladas;
+
+  @ApiPropertyOptional({
+    maxLength: LARGO_MAX_TEXTO_FILTRO,
+    description:
+      'El ticket tiene al menos una partida cuyo producto CONTIENE este texto, sin distinguir ' +
+      'mayúsculas y literal (`%` y `_` no son comodines). NO ignora acentos: "jamon" no ' +
+      'encuentra "Jamón". Incluye a los cancelados.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(LARGO_MAX_TEXTO_FILTRO)
+  producto?: string;
+
+  @ApiPropertyOptional({
+    enum: ORDENES_TICKETS,
+    default: 'momento',
+    description:
+      'Columna de orden. `momento` = cierre (o apertura de un cancelado sin cierre); `folio` ordena ' +
+      'por largo y luego por texto ("999" antes de "1000"); `duracion` = cierre − apertura. Los ' +
+      'textos se comparan byte a byte (collation `ucs_basic`). Los nulos van siempre al final.',
+  })
+  @IsOptional()
+  @IsIn(ORDENES_TICKETS)
+  orden?: OrdenTickets;
+
+  @ApiPropertyOptional({ enum: DIRECCIONES, default: 'desc' })
+  @IsOptional()
+  @IsIn(DIRECCIONES)
+  dir?: Direccion;
 }
 
 // ---------------------------------------------------------------------------

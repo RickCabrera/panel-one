@@ -1632,7 +1632,7 @@
     },
     "/ventas/tickets": {
       "get": {
-        "description": "Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag `cancelado`, no suman). Sin cache.",
+        "description": "Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag `cancelado`, no suman). Filtros (F2-222) combinables con AND: mesero, mesa, forma, importeMin/importeMax, canceladas, producto y folio; `total` es siempre el del filtro completo. Orden por `orden`/`dir`. Sin cache.",
         "operationId": "VentasController_listarTickets",
         "parameters": [
           {
@@ -1729,6 +1729,115 @@
               "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
               "example": "2026-09-21T19:42:10.123Z",
               "type": "string"
+            }
+          },
+          {
+            "name": "mesero",
+            "required": false,
+            "in": "query",
+            "description": "Igualdad EXACTA con el mesero del cheque (sensible a mayúsculas; \"Ana\" no trae a \"Ana María\"). Las cuentas sin mesero no se pueden pedir con este filtro.",
+            "schema": {
+              "maxLength": 80,
+              "type": "string"
+            }
+          },
+          {
+            "name": "mesa",
+            "required": false,
+            "in": "query",
+            "description": "Igualdad EXACTA con la mesa del cheque. Las cuentas sin mesa no se pueden pedir con este filtro.",
+            "schema": {
+              "maxLength": 40,
+              "type": "string"
+            }
+          },
+          {
+            "name": "forma",
+            "required": false,
+            "in": "query",
+            "description": "El ticket tiene AL MENOS un pago de esa forma, derivada con el catálogo de la empresa (un texto sin catálogo cuenta como `otro`): el mismo criterio que `pagos[].forma`. Un ticket pagado con dos formas aparece con cualquiera de las dos.",
+            "schema": {
+              "$ref": "#/components/schemas/FormaPago"
+            }
+          },
+          {
+            "name": "importeMin",
+            "required": false,
+            "in": "query",
+            "description": "Total del ticket MAYOR O IGUAL a esto. Pesos en texto, hasta 2 decimales.",
+            "schema": {
+              "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+              "example": "100.00",
+              "type": "string"
+            }
+          },
+          {
+            "name": "importeMax",
+            "required": false,
+            "in": "query",
+            "description": "Total del ticket MENOR O IGUAL a esto. Pesos en texto, hasta 2 decimales. Menor que `importeMin` = 400.",
+            "schema": {
+              "pattern": "^-?\\d{1,10}(\\.\\d{1,2})?$",
+              "example": "500.00",
+              "type": "string"
+            }
+          },
+          {
+            "name": "canceladas",
+            "required": false,
+            "in": "query",
+            "description": "`incluir`: todos (los cancelados con su flag); `excluir`: sin cancelados; `solo`: sólo cancelados.",
+            "schema": {
+              "default": "incluir",
+              "type": "string",
+              "enum": [
+                "incluir",
+                "excluir",
+                "solo"
+              ]
+            }
+          },
+          {
+            "name": "producto",
+            "required": false,
+            "in": "query",
+            "description": "El ticket tiene al menos una partida cuyo producto CONTIENE este texto, sin distinguir mayúsculas y literal (`%` y `_` no son comodines). NO ignora acentos: \"jamon\" no encuentra \"Jamón\". Incluye a los cancelados.",
+            "schema": {
+              "maxLength": 80,
+              "type": "string"
+            }
+          },
+          {
+            "name": "orden",
+            "required": false,
+            "in": "query",
+            "description": "Columna de orden. `momento` = cierre (o apertura de un cancelado sin cierre); `folio` ordena por largo y luego por texto (\"999\" antes de \"1000\"); `duracion` = cierre − apertura. Los textos se comparan byte a byte (collation `ucs_basic`). Los nulos van siempre al final.",
+            "schema": {
+              "default": "momento",
+              "type": "string",
+              "enum": [
+                "momento",
+                "folio",
+                "total",
+                "mesa",
+                "mesero",
+                "comensales",
+                "propina",
+                "duracion"
+              ]
+            }
+          },
+          {
+            "name": "dir",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
             }
           }
         ],
