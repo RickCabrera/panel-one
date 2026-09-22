@@ -451,7 +451,40 @@ describe('Conteos físicos (e2e, F2-123)', () => {
       ).toBe(409);
     });
 
-    it('captura y cierre concurrentes: nada se escribe después del cierre', async () => {
+    it('captura bloqueada por un cierre en curso: al soltarse, 409 y nada escrito', async () => {
+      const nuevo = await crear(USUARIOS.adminEmpresaA, { almacenOrigenSrId: 'ALM1' });
+      const id = nuevo.body.conteo.id as string;
+      // Otra conexión toma el MISMO candado del conteo y lo cierra sin confirmar todavía: es un
+      // cierre en curso. La captura que llega en ese momento tiene que esperarlo y ver el cierre.
+      let soltar: () => void = () => undefined;
+      const suelto = new Promise<void>((r) => (soltar = r));
+      let tomado: () => void = () => undefined;
+      const conCandado = new Promise<void>((r) => (tomado = r));
+      const cierre = prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('conteo'), hashtext(${id}))`;
+          await tx.$executeRaw`UPDATE conteos_fisicos SET estado = 'cerrado', cerrado_at = now(), cerrado_por = ${USUARIOS.adminEmpresaA.id}::uuid, updated_at = now() WHERE id = ${id}::uuid`;
+          tomado();
+          await suelto;
+        },
+        { timeout: 15_000 },
+      );
+      await conCandado;
+      const captura = capturar(USUARIOS.adminEmpresaA, id, [
+        { insumoOrigenSrId: 'I1', contado: '5' },
+        { insumoOrigenSrId: 'I2', contado: '6' },
+      ]);
+      // La captura ya está esperando (el lock_timeout es de 4 s).
+      await new Promise((r) => setTimeout(r, 800));
+      soltar();
+      await cierre;
+      const r = await captura;
+      expect(r.status).toBe(409);
+      const filas = await filasConteo(id);
+      expect(filas.every((f) => f.contado === null && f.capturadoAt === null)).toBe(true);
+    });
+
+    it('captura y cierre a la vez: cada 200 dejó su valor y cada 409 nada', async () => {
       const nuevo = await crear(USUARIOS.adminEmpresaA, { almacenOrigenSrId: 'ALM1' });
       const id = nuevo.body.conteo.id as string;
       const capturas = ['I1', 'I2', 'I3', 'I4', 'I9'].map((insumo, i) =>
@@ -465,15 +498,7 @@ describe('Conteos físicos (e2e, F2-123)', () => {
       ]);
       expect(cierre.status).toBe(200);
       for (const r of resultados) expect([200, 409]).toContain(r.status);
-      const conteo = await prisma.conteoFisico.findUniqueOrThrow({ where: { id } });
-      const filas = await filasConteo(id);
-      for (const f of filas) {
-        if (f.capturadoAt) {
-          expect(f.capturadoAt.getTime()).toBeLessThanOrEqual(conteo.cerradoAt!.getTime());
-        }
-      }
-      // Cada 200 dejó su valor; cada 409 no dejó nada.
-      const guardados = filas.filter((f) => f.contado !== null).length;
+      const guardados = (await filasConteo(id)).filter((f) => f.contado !== null).length;
       expect(guardados).toBe(resultados.filter((r) => r.status === 200).length);
     });
   });
@@ -482,7 +507,7 @@ describe('Conteos físicos (e2e, F2-123)', () => {
     it('lista: avance por conteo, almacenes (con y sin lectura) y grupos; nada de B', async () => {
       const r = await listar(USUARIOS.visorA, { empresaId: FX.empresaA });
       expect(r.status).toBe(200);
-      expect(r.body.total).toBe(4);
+      expect(r.body.total).toBe(5);
       const todos = r.body.conteos.find((c: { id: string }) => c.id === ids.todos);
       expect(todos).toMatchObject({ estado: 'cerrado', articulos: 5, contados: 4 });
       const alm3 = r.body.almacenes.find(

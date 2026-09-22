@@ -16,8 +16,8 @@ import { entero, fnv, prng } from './seed-maestro/azar';
  *   panel (scope global): el teórico sale de la foto de existencias, como en producción.
  * - Lo contado sale de un PRNG con semilla fija por (sucursal, almacén): la mayoría igual al
  *   teórico, algunos con faltante o sobrante de medias unidades, y algunos sin contar.
- * - Se reconocen por su `nota` fija (`NOTA_SEED_CONTEOS`), nunca por folio: un conteo de un
- *   usuario no se toca. Idempotente: si los del seed ya están sobre la foto vigente, no se
+ * - Se reconocen por su `nota` fija (`NOTA_SEED_CONTEOS`) Y su autor (`ACTOR_SEED_CONTEOS`, que
+ *   no es un usuario), nunca por folio: un conteo de un usuario no se toca aunque copie la nota. Idempotente: si los del seed ya están sobre la foto vigente, no se
  *   mueve nada; si la foto cambió (sembrar otro día), se borran SÓLO los del seed de esa
  *   sucursal y se vuelven a crear. Ese borrado vive aquí, no en el panel (ninguna ruta borra).
  */
@@ -107,7 +107,7 @@ export async function sembrarConteos(
         select: { almacenOrigenSrId: true, capturadoAt: true },
       }),
       prisma.conteoFisico.findMany({
-        where: { ...deLaSucursal, nota: NOTA_SEED_CONTEOS },
+        where: { ...deLaSucursal, nota: NOTA_SEED_CONTEOS, creadoPor: ACTOR_SEED_CONTEOS },
         select: { almacenOrigenSrId: true, teoricoCapturadoAt: true, estado: true },
       }),
     ]);
@@ -128,7 +128,9 @@ export async function sembrarConteos(
     }
     // Otra foto (otro día) o quedaron a medias: se rehacen SÓLO los del seed de esta sucursal.
     res.borrados += (
-      await prisma.conteoFisico.deleteMany({ where: { ...deLaSucursal, nota: NOTA_SEED_CONTEOS } })
+      await prisma.conteoFisico.deleteMany({
+        where: { ...deLaSucursal, nota: NOTA_SEED_CONTEOS, creadoPor: ACTOR_SEED_CONTEOS },
+      })
     ).count;
     for (const p of planes) {
       if (!corteDe.has(p.almacen)) continue; // sin foto no hay conteo (409 en el panel)

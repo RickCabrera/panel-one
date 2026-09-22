@@ -162,6 +162,32 @@ describe('CapturaConteo', () => {
     expect(window.localStorage.getItem(LLAVE)).toBeNull();
   });
 
+  it('403 (rol que cambió) = rechazado; 401 (sesión vencida) guarda y dice por qué', async () => {
+    const prohibido = vi.fn<Mandar>(async () => {
+      throw new ErrorApi(403, 'Forbidden');
+    });
+    const a = new CapturaConteo({ llave: LLAVE, mandar: prohibido });
+    a.capturar('I1', '3');
+    await vi.advanceTimersByTimeAsync(ESPERA_ENVIO_MS);
+    expect(a.estado().envio).toEqual({
+      tipo: 'rechazado',
+      mensaje: 'No enviado: tu usuario ya no puede capturar conteos.',
+    });
+    await vi.advanceTimersByTimeAsync(REINTENTO_MS * 2);
+    expect(prohibido).toHaveBeenCalledTimes(1);
+    a.detener();
+
+    const vencida = vi.fn<Mandar>(async () => {
+      throw new ErrorApi(401, 'Unauthorized');
+    });
+    const b = new CapturaConteo({ llave: LLAVE, mandar: vencida });
+    await b.enviar();
+    expect(b.estado().envio).toMatchObject({ tipo: 'sin-red' });
+    expect((b.estado().envio as { mensaje: string }).mensaje).toContain('Tu sesión venció');
+    expect(b.estado().borrador).toEqual({ I1: '3' });
+    b.detener();
+  });
+
   it('lo que se captura mientras viaja una petición no se pierde ni se confirma de más', async () => {
     let soltar: () => void = () => undefined;
     const mandar = vi.fn<Mandar>(

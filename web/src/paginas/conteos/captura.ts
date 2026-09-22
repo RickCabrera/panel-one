@@ -38,7 +38,8 @@ export interface EstadoCaptura {
  * - Se manda en lotes de hasta 500; lo confirmado (con el mismo valor) sale del borrador.
  * - Error de red o 5xx: el borrador se queda; se reintenta cuando quien la usa llama `enviar`
  *   (al montar, al volver la pestaña o la red) y sola cada `REINTENTO_MS`.
- * - 409 (el conteo ya no está en captura), 404 o 400: NO se reintenta en bucle ni se descarta en
+ * - Sesión vencida (401): como sin red, con su propio mensaje; el borrador espera el nuevo login.
+ * - 409 (el conteo ya no está en captura), 404, 403 o 400: NO se reintenta en bucle ni se descarta en
  *   silencio. Queda "rechazado" con su motivo hasta que el usuario decida (`descartar`).
  */
 export class CapturaConteo {
@@ -124,7 +125,7 @@ export class CapturaConteo {
       if (loteDe(this.#borrador).length > 0) await this.enviar();
     } catch (e) {
       this.#enVuelo = false;
-      if (e instanceof ErrorApi && [400, 404, 409].includes(e.status)) {
+      if (e instanceof ErrorApi && [400, 403, 404, 409].includes(e.status)) {
         this.#envio = {
           tipo: 'rechazado',
           mensaje:
@@ -132,12 +133,18 @@ export class CapturaConteo {
               ? 'No enviado: el conteo ya está cerrado o cancelado.'
               : e.status === 404
                 ? 'No enviado: el conteo ya no existe o no está en tu alcance.'
-                : `No enviado: el servidor rechazó lo capturado (${e.message}).`,
+                : e.status === 403
+                  ? 'No enviado: tu usuario ya no puede capturar conteos.'
+                  : `No enviado: el servidor rechazó lo capturado (${e.message}).`,
         };
       } else {
         this.#envio = {
           tipo: 'sin-red',
-          mensaje: 'Sin conexión: lo capturado está guardado en este dispositivo y se reenviará.',
+          mensaje:
+            e instanceof ErrorApi && e.status === 401
+              ? 'Tu sesión venció: lo capturado está guardado en este dispositivo; vuelve a ' +
+                'entrar y se reenviará.'
+              : 'Sin conexión: lo capturado está guardado en este dispositivo y se reenviará.',
         };
         this.#programar(REINTENTO_MS);
       }

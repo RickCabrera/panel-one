@@ -185,7 +185,8 @@ describe('sembrarConteos() (F2-123)', () => {
           sucursalId: FX.sucursalA1,
           almacenOrigenSrId: 'A1-GEN',
           grupoOrigenSrId: null,
-          nota: 'Conteo de un usuario',
+          // Un usuario que copia la nota del seed: su conteo tampoco se toca.
+          nota: NOTA_SEED_CONTEOS,
         },
         USUARIOS.adminEmpresaA.id,
         RELOJ,
@@ -197,7 +198,7 @@ describe('sembrarConteos() (F2-123)', () => {
     await existencias(OTRO_DIA);
     expect(await sembrar(OTRO_DIA)).toEqual({ creados: 4, conservados: 0, borrados: 4 });
     const seed = await prisma.conteoFisico.findMany({
-      where: { empresaId: FX.empresaA, nota: NOTA_SEED_CONTEOS },
+      where: { empresaId: FX.empresaA, creadoPor: ACTOR_SEED_CONTEOS },
     });
     expect(seed).toHaveLength(4);
     expect(seed.every((c) => c.teoricoCapturadoAt.getTime() === OTRO_DIA.getTime())).toBe(true);

@@ -312,10 +312,15 @@ export class EscrituraConteos {
           },
         });
       }
-      await tx.conteoFisico.updateMany({
+      // Segunda defensa (además del candado): el conteo sigue en captura AL ESCRIBIR. Si otro lo
+      // cerró, esta fila no cambia y todo lo de arriba se deshace con la transacción.
+      const sigue = await tx.conteoFisico.updateMany({
         where: whereScoped(this.#scope, 'ConteoFisico', { id: conteo.id, estado: 'en_captura' }),
         data: { updatedAt: ahora },
       });
+      if (sigue.count !== 1) {
+        throw new ConflictException('El conteo dejó de estar en captura; no se guardó nada.');
+      }
       return { sucursalId: conteo.sucursalId };
     });
   }
