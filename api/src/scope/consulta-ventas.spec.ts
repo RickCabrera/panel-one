@@ -20,6 +20,26 @@ import { ScopedPrismaService } from './scoped-prisma.service';
 
 const sql = (texto: string) => Prisma.sql([texto]);
 
+/**
+ * Las columnas que F2-221 (Análisis) agregó al SELECT de `ventas` y `cancelados`, literales. Cada
+ * una TIENE que estar (una sola vez) y se quita; lo que queda se compara contra el snapshot de antes.
+ */
+const COLUMNAS_F2_221 = [
+  ',\n           c.mesa, c.mesero, c.abierto_at,\n' +
+    '           extract(isodow FROM c.cerrado_at AT TIME ZONE s.zona_horaria)::int AS dia_semana_local,\n' +
+    '           extract(epoch FROM (c.cerrado_at - c.abierto_at))::int AS segundos_abierta',
+  ',\n           c.mesero, c.total',
+];
+
+function sinColumnasF2221(texto: string): string {
+  let resto = texto.replace(/\r\n/g, '\n');
+  for (const columnas of COLUMNAS_F2_221) {
+    expect(resto.split(columnas)).toHaveLength(2);
+    resto = resto.replace(columnas, '');
+  }
+  return resto;
+}
+
 describe('guardiaCuerpo()', () => {
   it('conoce TODAS las tablas del datamodel, no una lista escrita a mano', () => {
     const modelos = Prisma.dmmf.datamodel.models.map((m) => m.dbName ?? m.name);
@@ -151,7 +171,9 @@ describe('alturaAl (F2-220)', () => {
 
   it('sin alturaAl, el SQL es byte a byte el de antes de F2-220', async () => {
     const armado = await sqlDe(ok);
-    expect(armado.sql).toMatchSnapshot();
+    // F2-221 sólo agregó columnas al SELECT de `ventas` y `cancelados`. Se quitan aquí y lo que
+    // queda tiene que ser el snapshot de SIEMPRE (no se regeneró): ningún filtro cambió.
+    expect(sinColumnasF2221(armado.sql)).toMatchSnapshot();
     expect(armado.values).toMatchSnapshot();
   });
 

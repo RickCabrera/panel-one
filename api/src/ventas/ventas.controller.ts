@@ -23,6 +23,13 @@ import {
   type VentaHora,
   type VentaSucursal,
 } from './agregados-ventas.service';
+import {
+  AnalisisService,
+  type VentaHoraDia,
+  type VentaMesero,
+  type VentaPorMesa,
+  type VentaPorProducto,
+} from './analisis.service';
 import { CacheAgregados } from './cache-agregados';
 import {
   FiltroVentasQueryDto,
@@ -34,7 +41,11 @@ import {
   TicketsQueryDto,
   TopProductosQueryDto,
   VentaDiaDto,
+  VentaHoraDiaDto,
   VentaHoraDto,
+  VentaMeseroDto,
+  VentaPorMesaDto,
+  VentaPorProductoDto,
   VentaSucursalDto,
 } from './dto/ventas.dto';
 import { TicketsService, type PaginaTickets } from './tickets.service';
@@ -75,6 +86,7 @@ function parametros(q: FiltroVentasQueryDto): string[] {
 export class VentasController {
   constructor(
     private readonly agregados: AgregadosVentasService,
+    private readonly analisis: AnalisisService,
     private readonly tickets: TicketsService,
     private readonly cache: CacheAgregados,
   ) {}
@@ -175,6 +187,83 @@ export class VentasController {
     const limite = q.limite ?? LIMITE_TOP_DEFAULT;
     return this.cache.obtener(scope, 'top-productos', [...parametros(q), por, limite], () =>
       this.agregados.topProductos(scope, filtroDe(q), { por, limite }),
+    );
+  }
+
+  @Get('por-mesero')
+  @ApiOperation({
+    summary:
+      'Análisis (F2-221): una fila por (sucursal, mesero) con venta, cuentas, ticket promedio, ' +
+      'comensales, propina, descuentos y cancelados.',
+    description:
+      'Σ venta = la de /ventas/resumen con el mismo filtro. Los cancelados no suman: se cuentan ' +
+      'aparte por mesero. Un mesero con sólo cancelados aparece con venta 0.00 y cuentas 0. Null ' +
+      '= cuentas sin mesero. Orden: venta desc, sucursal, mesero. Cache de 15 s.',
+  })
+  @ApiOkResponse({ type: [VentaMeseroDto] })
+  porMesero(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: FiltroVentasQueryDto,
+  ): Promise<VentaMesero[]> {
+    return this.cache.obtener(scope, 'por-mesero', parametros(q), () =>
+      this.analisis.porMesero(scope, filtroDe(q)),
+    );
+  }
+
+  @Get('por-producto')
+  @ApiOperation({
+    summary:
+      'Análisis (F2-221): TODOS los productos vendidos (por nombre) con importe y cantidad, y la ' +
+      'diferencia contra la venta.',
+    description:
+      'Σ importe + diferenciaCuentas = venta = la de /ventas/resumen. Los cancelados no ' +
+      'entran. Sin límite de filas (el panel pagina). Cache de 15 s.',
+  })
+  @ApiOkResponse({ type: VentaPorProductoDto })
+  porProducto(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: FiltroVentasQueryDto,
+  ): Promise<VentaPorProducto> {
+    return this.cache.obtener(scope, 'por-producto', parametros(q), () =>
+      this.analisis.porProducto(scope, filtroDe(q)),
+    );
+  }
+
+  @Get('hora-dia')
+  @ApiOperation({
+    summary:
+      'Análisis (F2-221): mapa de calor día de la semana × hora LOCAL de cierre (168 celdas).',
+    description:
+      'Σ celdas = /ventas/resumen. Cada cuenta cae en el día y la hora de SU sucursal. ' +
+      '`diasEnRango` dice cuántas veces cae cada día de la semana en el rango, para distinguir ' +
+      '"no está en el periodo" de "sin ventas". Cache de 15 s.',
+  })
+  @ApiOkResponse({ type: VentaHoraDiaDto })
+  horaDia(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: FiltroVentasQueryDto,
+  ): Promise<VentaHoraDia> {
+    return this.cache.obtener(scope, 'hora-dia', parametros(q), () =>
+      this.analisis.horaDia(scope, filtroDe(q)),
+    );
+  }
+
+  @Get('por-mesa')
+  @ApiOperation({
+    summary:
+      'Análisis (F2-221): tiempo de mesa y rotación, una fila por (sucursal, mesa), más las ' +
+      'cuentas sin mesa.',
+    description:
+      'Duración = cierre − apertura; una negativa no entra al promedio y se cuenta en ' +
+      '`duracionesInvalidas`. Σ venta de filas + sinMesa = /ventas/resumen. Cache de 15 s.',
+  })
+  @ApiOkResponse({ type: VentaPorMesaDto })
+  porMesa(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: FiltroVentasQueryDto,
+  ): Promise<VentaPorMesa> {
+    return this.cache.obtener(scope, 'por-mesa', parametros(q), () =>
+      this.analisis.porMesa(scope, filtroDe(q)),
     );
   }
 

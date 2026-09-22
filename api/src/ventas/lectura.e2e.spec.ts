@@ -539,6 +539,256 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
         expect(conHoraDeCdmx.cuentas - tijuana.cuentas).toBe(entre.length);
       });
     });
+
+    // F2-221 · Análisis: cada desglose, calculado A MANO desde el generador del seed
+    // (`chequesA`), no desde otro endpoint. Σ de cada uno = la venta del periodo. No inserta nada.
+    describe('F2-221: desgloses de Análisis sobre el seed', () => {
+      const cero = () => new Prisma.Decimal(0);
+      const DIA_ISO: Record<string, number> = {
+        Mon: 1,
+        Tue: 2,
+        Wed: 3,
+        Thu: 4,
+        Fri: 5,
+        Sat: 6,
+        Sun: 7,
+      };
+
+      function horaYDia(t: Date, zona: string): { hora: number; diaSemana: number } {
+        const partes = new Intl.DateTimeFormat('en-US', {
+          timeZone: zona,
+          hour: '2-digit',
+          hourCycle: 'h23',
+          weekday: 'short',
+        }).formatToParts(t);
+        const v = (tipo: string) => partes.find((p) => p.type === tipo)!.value;
+        return { hora: Number(v('hour')), diaSemana: DIA_ISO[v('weekday')] };
+      }
+
+      const enRango = (t: Date | null, suc: string) => {
+        if (!t) return false;
+        const dia = diaLocal(t, ZONA[suc]);
+        return dia >= RANGO.desde && dia <= RANGO.hasta;
+      };
+      const ventas = chequesA.filter((c) => !c.cancelado && enRango(c.cerradoAt, c.sucursalId));
+      const cancelados = chequesA.filter(
+        (c) => c.cancelado && enRango(c.cerradoAt ?? c.abiertoAt, c.sucursalId),
+      );
+      const suma = (xs: Prisma.Decimal[]) => xs.reduce((s, x) => s.plus(x), cero());
+      const venta = suma(ventas.map((c) => c.total));
+      const filtro = { empresaId: FX.empresaA, ...RANGO };
+
+      it('guarda: el rango del seed trae descuentos, cancelados, cuentas sin mesa y dos zonas', () => {
+        expect(ventas.length).toBeGreaterThan(100);
+        expect(ventas.some((c) => !c.descuentos.isZero())).toBe(true);
+        expect(cancelados.length).toBeGreaterThan(0);
+        expect(cancelados.some((c) => c.cerradoAt === null)).toBe(true);
+        expect(ventas.some((c) => c.mesa === null)).toBe(true);
+        expect(new Set(ventas.map((c) => c.sucursalId)).size).toBe(2);
+      });
+
+      it('por mesero: cada fila a mano, cancelados aparte, Σ venta = venta del periodo', async () => {
+        interface Fila {
+          sucursalId: string;
+          mesero: string | null;
+          venta: string;
+          cuentas: number;
+          propina: string;
+          descuentos: { monto: string; cuentas: number };
+          cancelados: { cuentas: number; monto: string };
+        }
+        interface Acumulado {
+          sucursalId: string;
+          mesero: string;
+          venta: Prisma.Decimal;
+          cuentas: number;
+          propina: Prisma.Decimal;
+          descuentos: Prisma.Decimal;
+          conDescuento: number;
+          cancelados: number;
+          montoCancelado: Prisma.Decimal;
+        }
+        const esperado = new Map<string, Acumulado>();
+        const fila = (c: ChequeSeed) => {
+          const k = `${c.sucursalId}|${c.mesero}`;
+          let f = esperado.get(k);
+          if (!f) {
+            f = {
+              sucursalId: c.sucursalId,
+              mesero: c.mesero,
+              venta: cero(),
+              cuentas: 0,
+              propina: cero(),
+              descuentos: cero(),
+              conDescuento: 0,
+              cancelados: 0,
+              montoCancelado: cero(),
+            };
+            esperado.set(k, f);
+          }
+          return f;
+        };
+        for (const c of ventas) {
+          const f = fila(c);
+          f.venta = f.venta.plus(c.total);
+          f.cuentas += 1;
+          f.propina = f.propina.plus(c.propina);
+          f.descuentos = f.descuentos.plus(c.descuentos);
+          f.conDescuento += c.descuentos.isZero() ? 0 : 1;
+        }
+        for (const c of cancelados) {
+          const f = fila(c);
+          f.cancelados += 1;
+          f.montoCancelado = f.montoCancelado.plus(c.total);
+        }
+        const orden = (a: Fila, b: Fila) =>
+          `${a.sucursalId}|${a.mesero}` < `${b.sucursalId}|${b.mesero}` ? -1 : 1;
+
+        const r = await get(`/ventas/por-mesero?${Q(filtro)}`, USUARIOS.visorA);
+        expect(r.status).toBe(200);
+        const filas = r.body as Fila[];
+        expect(
+          filas
+            .map((f) => ({
+              sucursalId: f.sucursalId,
+              mesero: f.mesero,
+              venta: f.venta,
+              cuentas: f.cuentas,
+              propina: f.propina,
+              descuentos: f.descuentos,
+              cancelados: f.cancelados,
+            }))
+            .sort(orden),
+        ).toEqual(
+          [...esperado.values()]
+            .map((e): Fila => ({
+              sucursalId: e.sucursalId,
+              mesero: e.mesero,
+              venta: e.venta.toFixed(2),
+              cuentas: e.cuentas,
+              propina: e.propina.toFixed(2),
+              descuentos: { monto: e.descuentos.toFixed(2), cuentas: e.conDescuento },
+              cancelados: { cuentas: e.cancelados, monto: e.montoCancelado.toFixed(2) },
+            }))
+            .sort(orden),
+        );
+        expect(suma(filas.map((f) => new Prisma.Decimal(f.venta))).toFixed(2)).toBe(
+          venta.toFixed(2),
+        );
+      });
+
+      it('por producto: cada importe = Σ de sus partidas del seed; diferencia = −Σ descuentos', async () => {
+        const esperado = new Map<string, { importe: Prisma.Decimal; cantidad: Prisma.Decimal }>();
+        for (const p of ventas.flatMap((c) => c.partidas)) {
+          const e = esperado.get(p.producto) ?? { importe: cero(), cantidad: cero() };
+          esperado.set(p.producto, {
+            importe: e.importe.plus(p.total),
+            cantidad: e.cantidad.plus(p.cantidad),
+          });
+        }
+        const r = await get(`/ventas/por-producto?${Q(filtro)}`, USUARIOS.visorA);
+        expect(r.status).toBe(200);
+        const cuerpo = r.body as {
+          venta: string;
+          productos: Array<{ producto: string; importe: string; cantidad: string }>;
+          diferenciaCuentas: string;
+        };
+        expect(cuerpo.venta).toBe(venta.toFixed(2));
+        expect(
+          Object.fromEntries(cuerpo.productos.map((p) => [p.producto, [p.importe, p.cantidad]])),
+        ).toEqual(
+          Object.fromEntries(
+            [...esperado].map(([n, e]) => [n, [e.importe.toFixed(2), e.cantidad.toFixed(3)]]),
+          ),
+        );
+        // En el seed total = Σ partidas − descuento (seed-ventas.ts): es una regla del GENERADOR,
+        // no un dato de SoftRestaurant (docs/esquema-sr.md §6).
+        expect(cuerpo.diferenciaCuentas).toBe(
+          suma(ventas.map((c) => c.descuentos))
+            .neg()
+            .toFixed(2),
+        );
+      });
+
+      it('hora × día: cada celda a mano en la zona de SU sucursal', async () => {
+        const esperado = new Map<string, { venta: Prisma.Decimal; cuentas: number }>();
+        for (const c of ventas) {
+          const { hora, diaSemana } = horaYDia(c.cerradoAt!, ZONA[c.sucursalId]);
+          const k = `${diaSemana}-${hora}`;
+          const e = esperado.get(k) ?? { venta: cero(), cuentas: 0 };
+          esperado.set(k, { venta: e.venta.plus(c.total), cuentas: e.cuentas + 1 });
+        }
+        const r = await get(`/ventas/hora-dia?${Q(filtro)}`, USUARIOS.visorA);
+        expect(r.status).toBe(200);
+        const celdas = r.body.celdas as Array<{
+          diaSemana: number;
+          hora: number;
+          venta: string;
+          cuentas: number;
+        }>;
+        expect(celdas).toHaveLength(168);
+        for (const celda of celdas) {
+          const e = esperado.get(`${celda.diaSemana}-${celda.hora}`);
+          expect([celda.diaSemana, celda.hora, celda.venta, celda.cuentas]).toEqual([
+            celda.diaSemana,
+            celda.hora,
+            e?.venta.toFixed(2) ?? '0.00',
+            e?.cuentas ?? 0,
+          ]);
+        }
+        expect(suma(celdas.map((c) => new Prisma.Decimal(c.venta))).toFixed(2)).toBe(
+          venta.toFixed(2),
+        );
+      });
+
+      it('por mesa: cuentas y venta por (sucursal, mesa) a mano; filas + sin mesa = venta', async () => {
+        const esperado = new Map<string, { cuentas: number; venta: Prisma.Decimal }>();
+        let sinMesa = { cuentas: 0, venta: cero() };
+        let segundos = 0;
+        for (const c of ventas) {
+          segundos += (c.cerradoAt!.getTime() - c.abiertoAt.getTime()) / 1000;
+          if (c.mesa === null) {
+            sinMesa = { cuentas: sinMesa.cuentas + 1, venta: sinMesa.venta.plus(c.total) };
+            continue;
+          }
+          const k = `${c.sucursalId}|${c.mesa}`;
+          const e = esperado.get(k) ?? { cuentas: 0, venta: cero() };
+          esperado.set(k, { cuentas: e.cuentas + 1, venta: e.venta.plus(c.total) });
+        }
+        const r = await get(`/ventas/por-mesa?${Q(filtro)}`, USUARIOS.visorA);
+        expect(r.status).toBe(200);
+        const filas = r.body.filas as Array<{
+          sucursalId: string;
+          mesa: string;
+          cuentas: number;
+          venta: string;
+        }>;
+        expect(
+          Object.fromEntries(filas.map((f) => [`${f.sucursalId}|${f.mesa}`, [f.cuentas, f.venta]])),
+        ).toEqual(
+          Object.fromEntries([...esperado].map(([k, e]) => [k, [e.cuentas, e.venta.toFixed(2)]])),
+        );
+        expect(r.body.sinMesa).toEqual({
+          cuentas: sinMesa.cuentas,
+          venta: sinMesa.venta.toFixed(2),
+        });
+        expect(r.body.global).toMatchObject({
+          venta: venta.toFixed(2),
+          cuentas: ventas.length,
+          duracionesInvalidas: 0,
+          mesas: esperado.size,
+          minutosPromedio: new Prisma.Decimal(segundos)
+            .div(ventas.length * 60)
+            .toFixed(1, Prisma.Decimal.ROUND_HALF_UP),
+        });
+        expect(
+          suma([
+            ...filas.map((f) => new Prisma.Decimal(f.venta)),
+            new Prisma.Decimal(r.body.sinMesa.venta),
+          ]).toFixed(2),
+        ).toBe(venta.toFixed(2));
+      });
+    });
   });
 
   // -------------------------------------------------------------------------

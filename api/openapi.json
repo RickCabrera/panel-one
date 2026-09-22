@@ -1183,6 +1183,453 @@
         ]
       }
     },
+    "/ventas/por-mesero": {
+      "get": {
+        "description": "Σ venta = la de /ventas/resumen con el mismo filtro. Los cancelados no suman: se cuentan aparte por mesero. Un mesero con sólo cancelados aparece con venta 0.00 y cuentas 0. Null = cuentas sin mesero. Orden: venta desc, sucursal, mesero. Cache de 15 s.",
+        "operationId": "VentasController_porMesero",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "alturaAl",
+            "required": false,
+            "in": "query",
+            "description": "Corte \"a la misma altura\" (F2-220), para comparar contra un periodo anterior hasta la misma hora. Un INSTANTE ISO-8601 con zona obligatoria (sin zona, 400). Sólo afecta al ÚLTIMO día del rango (`hasta`): de ese día entra únicamente lo ocurrido ANTES de la hora local que marca el instante en la zona de CADA sucursal (corte exclusivo: una cuenta cerrada justo a esa hora no entra). Los días anteriores van completos. Con sucursales en zonas distintas, cada una se corta en su propia hora local del mismo instante (sólo la hora, no la fecha: en la hora en que el día local de una sucursal no es el de quien pide, su corte no corresponde a \"hoy\"; supuesto provisional). Los cancelados se ubican por su cierre o, sin cierre, por su apertura. Si ese día la hora local no existe (el reloj se adelanta) se lee con el offset de ANTES del salto (02:30 que no existe = 03:30 del horario nuevo); si pasa dos veces (el reloj se atrasa), con el de DESPUÉS (la segunda vez). Lo resuelve Postgres y lo fija un e2e. Sin él, el último día va completo.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-09-21T20:30:00.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VentaMeseroDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Análisis (F2-221): una fila por (sucursal, mesero) con venta, cuentas, ticket promedio, comensales, propina, descuentos y cancelados.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/ventas/por-producto": {
+      "get": {
+        "description": "Σ importe + diferenciaCuentas = venta = la de /ventas/resumen. Los cancelados no entran. Sin límite de filas (el panel pagina). Cache de 15 s.",
+        "operationId": "VentasController_porProducto",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "alturaAl",
+            "required": false,
+            "in": "query",
+            "description": "Corte \"a la misma altura\" (F2-220), para comparar contra un periodo anterior hasta la misma hora. Un INSTANTE ISO-8601 con zona obligatoria (sin zona, 400). Sólo afecta al ÚLTIMO día del rango (`hasta`): de ese día entra únicamente lo ocurrido ANTES de la hora local que marca el instante en la zona de CADA sucursal (corte exclusivo: una cuenta cerrada justo a esa hora no entra). Los días anteriores van completos. Con sucursales en zonas distintas, cada una se corta en su propia hora local del mismo instante (sólo la hora, no la fecha: en la hora en que el día local de una sucursal no es el de quien pide, su corte no corresponde a \"hoy\"; supuesto provisional). Los cancelados se ubican por su cierre o, sin cierre, por su apertura. Si ese día la hora local no existe (el reloj se adelanta) se lee con el offset de ANTES del salto (02:30 que no existe = 03:30 del horario nuevo); si pasa dos veces (el reloj se atrasa), con el de DESPUÉS (la segunda vez). Lo resuelve Postgres y lo fija un e2e. Sin él, el último día va completo.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-09-21T20:30:00.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VentaPorProductoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Análisis (F2-221): TODOS los productos vendidos (por nombre) con importe y cantidad, y la diferencia contra la venta.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/ventas/hora-dia": {
+      "get": {
+        "description": "Σ celdas = /ventas/resumen. Cada cuenta cae en el día y la hora de SU sucursal. `diasEnRango` dice cuántas veces cae cada día de la semana en el rango, para distinguir \"no está en el periodo\" de \"sin ventas\". Cache de 15 s.",
+        "operationId": "VentasController_horaDia",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "alturaAl",
+            "required": false,
+            "in": "query",
+            "description": "Corte \"a la misma altura\" (F2-220), para comparar contra un periodo anterior hasta la misma hora. Un INSTANTE ISO-8601 con zona obligatoria (sin zona, 400). Sólo afecta al ÚLTIMO día del rango (`hasta`): de ese día entra únicamente lo ocurrido ANTES de la hora local que marca el instante en la zona de CADA sucursal (corte exclusivo: una cuenta cerrada justo a esa hora no entra). Los días anteriores van completos. Con sucursales en zonas distintas, cada una se corta en su propia hora local del mismo instante (sólo la hora, no la fecha: en la hora en que el día local de una sucursal no es el de quien pide, su corte no corresponde a \"hoy\"; supuesto provisional). Los cancelados se ubican por su cierre o, sin cierre, por su apertura. Si ese día la hora local no existe (el reloj se adelanta) se lee con el offset de ANTES del salto (02:30 que no existe = 03:30 del horario nuevo); si pasa dos veces (el reloj se atrasa), con el de DESPUÉS (la segunda vez). Lo resuelve Postgres y lo fija un e2e. Sin él, el último día va completo.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-09-21T20:30:00.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VentaHoraDiaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Análisis (F2-221): mapa de calor día de la semana × hora LOCAL de cierre (168 celdas).",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/ventas/por-mesa": {
+      "get": {
+        "description": "Duración = cierre − apertura; una negativa no entra al promedio y se cuenta en `duracionesInvalidas`. Σ venta de filas + sinMesa = /ventas/resumen. Cache de 15 s.",
+        "operationId": "VentasController_porMesa",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "alturaAl",
+            "required": false,
+            "in": "query",
+            "description": "Corte \"a la misma altura\" (F2-220), para comparar contra un periodo anterior hasta la misma hora. Un INSTANTE ISO-8601 con zona obligatoria (sin zona, 400). Sólo afecta al ÚLTIMO día del rango (`hasta`): de ese día entra únicamente lo ocurrido ANTES de la hora local que marca el instante en la zona de CADA sucursal (corte exclusivo: una cuenta cerrada justo a esa hora no entra). Los días anteriores van completos. Con sucursales en zonas distintas, cada una se corta en su propia hora local del mismo instante (sólo la hora, no la fecha: en la hora en que el día local de una sucursal no es el de quien pide, su corte no corresponde a \"hoy\"; supuesto provisional). Los cancelados se ubican por su cierre o, sin cierre, por su apertura. Si ese día la hora local no existe (el reloj se adelanta) se lee con el offset de ANTES del salto (02:30 que no existe = 03:30 del horario nuevo); si pasa dos veces (el reloj se atrasa), con el de DESPUÉS (la segunda vez). Lo resuelve Postgres y lo fija un e2e. Sin él, el último día va completo.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-09-21T20:30:00.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VentaPorMesaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Análisis (F2-221): tiempo de mesa y rotación, una fila por (sucursal, mesa), más las cuentas sin mesa.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
     "/ventas/tickets": {
       "get": {
         "description": "Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag `cancelado`, no suman). Sin cache.",
@@ -3194,6 +3641,348 @@
           "producto",
           "importe",
           "cantidad"
+        ]
+      },
+      "CanceladosMeseroDto": {
+        "type": "object",
+        "properties": {
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas canceladas del rango. No suman a ninguna venta."
+          },
+          "monto": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de esas cuentas tal como llegó del POS (supuesto: SR conserva el importe original de un cancelado)."
+          }
+        },
+        "required": [
+          "cuentas",
+          "monto"
+        ]
+      },
+      "VentaMeseroDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "mesero": {
+            "type": "string",
+            "nullable": true,
+            "description": "Texto del POS. Null = la cuenta no trae mesero. Se agrupa por (sucursal, texto): el mismo nombre en dos sucursales son dos filas."
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de sus cuentas no canceladas."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas no canceladas cerradas en el rango."
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "nullable": true,
+            "description": "venta / cuentas; null sin cuentas."
+          },
+          "comensales": {
+            "type": "number",
+            "description": "Σ comensales (las cuentas sin el dato cuentan 0)."
+          },
+          "cuentasConComensales": {
+            "type": "number",
+            "description": "Cuentas que sí traían comensales."
+          },
+          "propina": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "descuentos": {
+            "$ref": "#/components/schemas/DescuentosDto"
+          },
+          "cancelados": {
+            "$ref": "#/components/schemas/CanceladosMeseroDto"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "mesero",
+          "venta",
+          "cuentas",
+          "ticketPromedio",
+          "comensales",
+          "cuentasConComensales",
+          "propina",
+          "descuentos",
+          "cancelados"
+        ]
+      },
+      "ProductoAnalisisDto": {
+        "type": "object",
+        "properties": {
+          "producto": {
+            "type": "string"
+          },
+          "importe": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ partidas.total (antes del descuento de la cuenta)."
+          },
+          "cantidad": {
+            "type": "string",
+            "example": "2.000",
+            "description": "3 decimales, en texto."
+          }
+        },
+        "required": [
+          "producto",
+          "importe",
+          "cantidad"
+        ]
+      },
+      "VentaPorProductoDto": {
+        "type": "object",
+        "properties": {
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de las cuentas: la venta de /ventas/resumen."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "productos": {
+            "description": "TODOS los productos vendidos, por importe desc y nombre (sin límite).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductoAnalisisDto"
+            }
+          },
+          "diferenciaCuentas": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "venta − Σ importe: lo que el total de las cuentas no reparte entre sus partidas (descuentos, impuestos si las partidas no los traen, y otros ajustes). Σ importe + diferenciaCuentas = venta, exacto. Supuesto provisional: no se prorratea."
+          }
+        },
+        "required": [
+          "venta",
+          "cuentas",
+          "productos",
+          "diferenciaCuentas"
+        ]
+      },
+      "CeldaHoraDiaDto": {
+        "type": "object",
+        "properties": {
+          "diaSemana": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 7,
+            "description": "ISO: 1 = lunes … 7 = domingo (local)."
+          },
+          "hora": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 23,
+            "description": "Hora LOCAL de cierre."
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "0 = sin ventas en esa celda (distinto de venta \"0.00\" con cuentas)."
+          }
+        },
+        "required": [
+          "diaSemana",
+          "hora",
+          "venta",
+          "cuentas"
+        ]
+      },
+      "DiasEnRangoDto": {
+        "type": "object",
+        "properties": {
+          "diaSemana": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 7
+          },
+          "dias": {
+            "type": "number",
+            "description": "Veces que ese día de la semana cae en desde..hasta (0 = no está)."
+          }
+        },
+        "required": [
+          "diaSemana",
+          "dias"
+        ]
+      },
+      "VentaHoraDiaDto": {
+        "type": "object",
+        "properties": {
+          "celdas": {
+            "description": "Siempre 168 celdas, lunes..domingo × 0..23. Σ = /ventas/resumen.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CeldaHoraDiaDto"
+            }
+          },
+          "diasEnRango": {
+            "description": "Siempre 7 filas, lunes..domingo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiasEnRangoDto"
+            }
+          }
+        },
+        "required": [
+          "celdas",
+          "diasEnRango"
+        ]
+      },
+      "VentaMesaDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "mesa": {
+            "type": "string",
+            "description": "Texto del POS. Se agrupa por (sucursal, mesa)."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "minutosPromedio": {
+            "type": "string",
+            "nullable": true,
+            "example": "52.5",
+            "description": "Minutos promedio (cierre − apertura), 1 decimal; null sin duraciones válidas."
+          },
+          "cuentasConDuracion": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "mesa",
+          "cuentas",
+          "venta",
+          "minutosPromedio",
+          "cuentasConDuracion"
+        ]
+      },
+      "SinMesaDto": {
+        "type": "object",
+        "properties": {
+          "cuentas": {
+            "type": "number"
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          }
+        },
+        "required": [
+          "cuentas",
+          "venta"
+        ]
+      },
+      "GlobalMesasDto": {
+        "type": "object",
+        "properties": {
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ venta de las filas + sinMesa = /ventas/resumen."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "minutosPromedio": {
+            "type": "string",
+            "nullable": true,
+            "example": "48.3"
+          },
+          "cuentasConDuracion": {
+            "type": "number"
+          },
+          "duracionesInvalidas": {
+            "type": "number",
+            "description": "Cuentas con cierre antes que la apertura: fuera del promedio."
+          },
+          "mesas": {
+            "type": "number",
+            "description": "Mesas distintas (sucursal, mesa) con al menos una cuenta."
+          },
+          "cuentasConMesa": {
+            "type": "number"
+          },
+          "rotacion": {
+            "type": "string",
+            "nullable": true,
+            "example": "3.25",
+            "description": "Rotación: cuentasConMesa / mesas, 2 decimales; null sin mesas."
+          }
+        },
+        "required": [
+          "venta",
+          "cuentas",
+          "minutosPromedio",
+          "cuentasConDuracion",
+          "duracionesInvalidas",
+          "mesas",
+          "cuentasConMesa",
+          "rotacion"
+        ]
+      },
+      "VentaPorMesaDto": {
+        "type": "object",
+        "properties": {
+          "filas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VentaMesaDto"
+            }
+          },
+          "sinMesa": {
+            "description": "Cuentas sin mesa: no entran a la rotación.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SinMesaDto"
+              }
+            ]
+          },
+          "global": {
+            "$ref": "#/components/schemas/GlobalMesasDto"
+          }
+        },
+        "required": [
+          "filas",
+          "sinMesa",
+          "global"
         ]
       },
       "PartidaTicketDto": {

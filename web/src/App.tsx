@@ -8,6 +8,7 @@ import { RequiereRol, RutaProtegida } from './auth/RutaProtegida';
 import { crearQueryClient } from './consultas/queryClient';
 import { Layout } from './layout/Layout';
 import { Administracion } from './paginas/Administracion';
+import { Analisis } from './paginas/Analisis';
 import { Comparativos } from './paginas/Comparativos';
 import { Cuenta } from './paginas/Cuenta';
 import { Inicio } from './paginas/Inicio';
@@ -54,6 +55,7 @@ export function Rutas() {
         <Route index element={<Inicio />} />
         <Route path="resumen" element={<Resumen />} />
         <Route path="comparativos" element={<Comparativos />} />
+        <Route path="analisis" element={<Analisis />} />
         <Route path="mesas" element={<Mesas />} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="reportes" element={<Reportes />} />

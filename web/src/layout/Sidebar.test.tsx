@@ -125,17 +125,17 @@ describe('AC2 · una entrada sin módulo no navega a una pantalla rota', () => {
     api(usuario('visor'));
     montar(`/tickets?empresa=${A}`);
     const nav = await menu();
-    // Resumen ya navega (F2-220): la pendiente de ejemplo es Análisis (F2-221).
-    const analisis = within(nav).getByRole('button', { name: 'Análisis' });
+    // Análisis ya navega (F2-221): la pendiente de ejemplo es Productos (F2-145).
+    const productos = within(nav).getByRole('button', { name: 'Productos' });
 
-    expect(analisis).toHaveAttribute('aria-disabled', 'true');
-    expect(analisis).not.toBeDisabled(); // sigue en el orden de Tab
-    expect(analisis).toHaveAccessibleDescription('Se construye en F2-221.');
-    expect(analisis).toHaveAttribute('title', 'Análisis: Se construye en F2-221.');
+    expect(productos).toHaveAttribute('aria-disabled', 'true');
+    expect(productos).not.toBeDisabled(); // sigue en el orden de Tab
+    expect(productos).toHaveAccessibleDescription('Se construye en F2-145.');
+    expect(productos).toHaveAttribute('title', 'Productos: Se construye en F2-145.');
 
-    await userEvent.click(analisis);
+    await userEvent.click(productos);
     expect(ubicacion()).toBe(`/tickets?empresa=${A}`);
-    analisis.focus();
+    productos.focus();
     await userEvent.keyboard('{Enter}');
     await userEvent.keyboard(' ');
     expect(ubicacion()).toBe(`/tickets?empresa=${A}`);

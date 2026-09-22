@@ -300,3 +300,79 @@ export interface Sistema {
   /** `MODO_DEMO=1` en la API: los datos son de ejemplo. */
   modoDemo: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Análisis (F2-221)
+// ---------------------------------------------------------------------------
+
+/** `VentaMeseroDto`: una fila de `GET /ventas/por-mesero`, por (sucursal, mesero). */
+export interface VentaMesero {
+  sucursalId: string;
+  sucursal: string;
+  /** Null = la cuenta no trae mesero. */
+  mesero: string | null;
+  venta: Importe;
+  cuentas: number;
+  ticketPromedio: Importe | null;
+  comensales: number;
+  cuentasConComensales: number;
+  propina: Importe;
+  descuentos: { monto: Importe; cuentas: number };
+  /** No suman a la venta. */
+  cancelados: { cuentas: number; monto: Importe };
+}
+
+/** `VentaPorProductoDto` de `GET /ventas/por-producto`. */
+export interface VentaPorProducto {
+  venta: Importe;
+  cuentas: number;
+  /** TODOS los productos, por importe desc. */
+  productos: ProductoTop[];
+  /** venta − Σ importe: lo que no es de ningún producto. */
+  diferenciaCuentas: Importe;
+}
+
+/** `CeldaHoraDiaDto`. */
+export interface CeldaHoraDia {
+  /** ISO: 1 = lunes … 7 = domingo. */
+  diaSemana: number;
+  hora: number;
+  venta: Importe;
+  cuentas: number;
+}
+
+/** `VentaHoraDiaDto` de `GET /ventas/hora-dia`. */
+export interface VentaHoraDia {
+  /** 168 celdas. */
+  celdas: CeldaHoraDia[];
+  /** Cuántas veces cae cada día de la semana en el periodo (0 = no está). */
+  diasEnRango: { diaSemana: number; dias: number }[];
+}
+
+/** `VentaMesaDto`. */
+export interface VentaMesa {
+  sucursalId: string;
+  sucursal: string;
+  mesa: string;
+  cuentas: number;
+  venta: Importe;
+  /** 1 decimal, en texto; null sin duraciones válidas. */
+  minutosPromedio: string | null;
+  cuentasConDuracion: number;
+}
+
+/** `VentaPorMesaDto` de `GET /ventas/por-mesa`. */
+export interface VentaPorMesa {
+  filas: VentaMesa[];
+  sinMesa: { cuentas: number; venta: Importe };
+  global: {
+    venta: Importe;
+    cuentas: number;
+    minutosPromedio: string | null;
+    cuentasConDuracion: number;
+    duracionesInvalidas: number;
+    mesas: number;
+    cuentasConMesa: number;
+    rotacion: string | null;
+  };
+}

@@ -86,7 +86,8 @@ describe('las seis secciones de la ficha', () => {
     expect(porId('principal.comparativos').destino).toEqual({ ruta: '/comparativos' });
     // F2-220 construyó el Resumen: ya navega.
     expect(porId('ventas.resumen').destino).toEqual({ ruta: '/resumen' });
-    expect(tarea('ventas.analisis')).toBe('F2-221');
+    // F2-221 construyó Análisis: ya navega.
+    expect(porId('ventas.analisis').destino).toEqual({ ruta: '/analisis' });
     expect(tarea('catalogos.productos')).toBe('F2-145');
     expect(tarea('catalogos.orquestador')).toBe('F2-145');
     expect(tarea('catalogos.meseros')).toBe('F2-231');

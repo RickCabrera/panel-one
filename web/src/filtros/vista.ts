@@ -34,6 +34,7 @@ export const VISTAS_CON_PERIODO: readonly string[] = [
   '/',
   '/resumen',
   '/comparativos',
+  '/analisis',
   '/tickets',
   '/reportes',
 ];
