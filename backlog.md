@@ -660,7 +660,7 @@ contrato falla si `api/package.json` pierde el `postinstall`; y `docs/verificaci
 registra la corrida completa con su salida real (no una reconstrucción).
 
 ### F2-201 · Seed maestro: realismo y datos para todos los módulos
-`[ ]` **Bloque A** · /api
+`[x]` **Bloque A** · /api
 
 El seed actual es la única fuente de datos del proyecto hasta que el POS tenga ventas, así que
 es también el único lugar donde se puede ver si un módulo nuevo funciona. Hoy le faltan dos
