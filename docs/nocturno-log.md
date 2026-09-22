@@ -5080,7 +5080,7 @@ CON OBSERVACIONES en el 2.º pase.
   `normalizar.spec.ts`.
 - El snapshot de `consulta-ventas.spec` NO se regeneró: `sinF2232()` quita literalmente las 4
   apariciones de la columna, igual que hicieron F2-221 y F2-222.
-- El Write de este entorno convierte un `﻿` escrito en un test en el carácter BOM real, y el
+- El Write de este entorno convierte un `\uFEFF` escrito en un test en el carácter BOM real, y el
   lint lo marca como `no-irregular-whitespace`. Lo arreglé con un script de python.
 - Los heredocs de bash con comillas mixtas siguen muriendo (ya lo advertían F2-230 y F2-231). Usa
   Edit, o escribe el texto a un archivo con Write y pégalo con python.
