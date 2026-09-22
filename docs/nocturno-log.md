@@ -3212,3 +3212,105 @@ CON OBSERVACIONES (sin bloqueo); entregable: ver el final de esta entrada.
 **Qué haría distinto.** Medir la tarjeta en varios anchos ANTES de arreglar la leyenda: el
 síntoma era de 1280 px y a 390 px no se veía nada. Y ponerle timeout explícito desde el principio
 a todo e2e que recorra páginas.
+
+## 2026-09-21 22:02 — F2-210 · Navegación por secciones tipo centro de control
+**Estado:** CERRADA si el PR se mergea. Revisor: plan APROBADO CON OBSERVACIONES (0 bloqueos);
+entregable APROBADO CON OBSERVACIONES (0 bloqueos). Sólo /web: sin API, sin OpenAPI, sin
+hallazgos de SoftRestaurant (no se tocó `docs/esquema-sr.md`).
+
+**Qué quedó hecho.**
+- `web/src/layout/menu.ts` es el **mapa del producto**: `SECCIONES`, con las seis secciones y
+  sus entradas en el orden y con los nombres exactos de la ficha. Cada entrada tiene `destino`
+  (módulo construido: `{ ruta, tab? }`) **o** `pendiente` (`{ tarea?, razon }`), nunca las dos.
+  - Construidas hoy: Inicio `/`, Tickets, Monitor de mesas, Reportes, y en Administración
+    Sucursales / Usuarios / Agentes / Empresas → `/admin?tab=...`.
+  - Pendientes con tarea: Comparativos F2-140, Resumen F2-220, Análisis F2-221, Productos y
+    Orquestador F2-145, Meseros F2-231, Clientes F2-232, Existencias F2-121, Conteos F2-123,
+    Recetas F2-125, Proyecciones F2-127, Compras y Gastos F2-126, Traspasos F2-124, Ventas por
+    canal F2-144 (la razón menciona F2-233), Facturación F2-100 + F2-106.
+- `Sidebar.tsx`: encabezado de sección = botón con `aria-expanded`. Lo colapsado es
+  `<ul hidden>` **sin hijos** (sale del orden de Tab). El colapso se recuerda en
+  `localStorage` con la clave `monitor.menu.colapsadas.<usuarioId>`; si el storage falla o trae
+  basura, el menú sale abierto.
+- **Pendiente = `<button aria-disabled="true">`** (no `disabled`, para que siga en el Tab). La
+  razón se expone por `aria-describedby`, en el `title` ("Nombre: razón") y debajo al enfocar
+  con teclado en el lateral completo y en el cajón móvil. Lleva la etiqueta "Pronto". Clic,
+  Enter y Espacio no hacen nada.
+- La entrada activa de Administración sigue a `?tab=` (sin tab o con uno desconocido =
+  Sucursales, igual que `Administracion.tsx`): `entradaActiva()`.
+- El badge de agentes (F1-061) está ahora en la entrada **Agentes**. Con Administración
+  colapsada **sube al encabezado** (nunca dos a la vez).
+- Rol: el visor no ve la sección Administración. admin_empresa no ve Administración › Empresas.
+  Ocultar por permiso sí; ocultar por "no construido", nunca.
+
+**Interpretación de "se colapsa a iconos en pantallas chicas" (anotada como tal):**
+- `< md`: cajón con ☰, como antes. Cerrado queda `invisible` y fuera de pantalla.
+- `md` a `lg` (768–1023 px): riel de iconos de 64 px. Los textos van `md:hidden`, y el nombre
+  accesible sale del `aria-label` de cada control, más `title` a la vista. El riel no tiene
+  barra de scroll visible (`scrollbar-width:none`) porque se comía el icono.
+- `≥ lg`: lateral completo de 256 px.
+- El aside es `md:sticky md:top-0 md:h-screen` con `overflow-y-auto` en todos los anchos: con
+  30 entradas ya no cabe a lo alto.
+
+**Decisiones que tomé y por qué.**
+- **DECISION ABIERTA (F2-250)** — `SIN_TAREA` son cuatro entradas que ninguna tarea construye:
+  - Principal › Empresas y Principal › Sucursales: vistas de consulta. La gestión está en
+    Administración.
+  - Catálogos › Grupos de insumos e Insumos: F2-120 sólo sincroniza, no pinta vista.
+  - Salen deshabilitadas **sin inventarles tarea**. `menu.test.ts` exige que la lista sea
+    EXACTAMENTE esa: si alguien agrega una pendiente sin tarea, el test truena. **F2-250 decide
+    si llevan tarea nueva o salen del menú.**
+- `lucide-react` **1.47.0 fijo** (`--save-exact`), con imports icono por icono. Bundle:
+  **211.5 → 218.1 kB gzip** (tope 400). Si un día aprieta, la salida es SVG inline, no subir
+  el tope.
+- Sin `truncate` en los nombres del menú: "Orquestador de menú" pasa de renglón. Lección de
+  F2-203: no recortar etiquetas. Ojo: `sr-only`/`not-sr-only` no sirve para el riel, porque
+  `not-sr-only` repone `white-space: normal`. Por eso se usa `md:hidden lg:block` + `aria-label`.
+- Texto de las pendientes en `slate-500`, no `slate-400`, que queda bajo 4.5:1 sobre blanco.
+  F2-211 hará el test de contraste de verdad.
+
+**REGLA PARA LAS TAREAS SIGUIENTES.** Cuando una tarea construya su módulo, **cambia su
+entrada de `pendiente` a `destino` en `menu.ts`**. El test de `Sidebar.test.tsx` monta `Rutas`
+en cada destino y falla si cae en "No encontrada", así que primero se agrega la ruta en
+`App.tsx`. `menu.test.ts` fija la tarea de cada pendiente: al pasarla a destino, quita su línea.
+
+**Tests.**
+- Nuevos: `menu.test.ts` (ficha exacta, destino XOR pendiente, `SIN_TAREA`, tareas por
+  entrada, rol, activa por pestaña, storage) y `Sidebar.test.tsx` (AC1–AC4 contra la app real,
+  rutas reales, badge).
+- Adaptados porque cambió el comportamiento, **sin aflojar**, en `App.test.tsx`:
+  - visor: ahora afirma la ausencia del encabezado, de Usuarios/Agentes/Facturación y de
+    cualquier href a `/admin`;
+  - admin_empresa: afirma la sección y que Sucursales es la activa en `/admin`.
+- Web: lint limpio, build limpio, **vitest 393/393** (30 archivos, 0 skips), `check:bundle`
+  218.1 kB.
+
+**AC5 (390 px), medido en Chrome real** con un arnés temporal (`web/arnes-390.html` +
+`src/arnes390.tsx`, fetch falso, sin contraseñas). **Ya está borrado y no va en el commit.**
+Se midió en /cuenta, /tickets y /admin?tab=agentes:
+- 390 px: `scrollWidth == clientWidth == 390`, aside `visibility:hidden` con `right=0`, main
+  desde x=0 y 390 de ancho.
+- 820 px: riel de 64 px, main de 756.
+- 1280 px: lateral de 256, main de 1024.
+- Cero controles recortados o fuera del aside. La tabla de agentes a 390 desborda dentro de su
+  propio `overflow-x-auto` (ya era así).
+
+**Trampas.**
+- `npx prettier --check` marca `layout/Layout.tsx` y `layout/Topbar.tsx`: **vienen así de
+  main** (verificado con stash), no los toqué. Formatea sólo tus archivos.
+- La herramienta de Chrome bloquea la salida de JS que contenga query strings: devuelve
+  índices en vez de URLs. Los screenshots con varios iframes a veces se congelan: es mejor
+  medir con JS y fotografiar la página sola.
+- En Testing Library, `getAllByRole` no acepta un regex como rol: usa `querySelectorAll`.
+
+**Qué quedó abierto.**
+- Las cuatro de `SIN_TAREA` → F2-250.
+- El título de la página sigue siendo "Monitor de Mesas" (`Mesas.tsx:61`) y el menú dice
+  "Monitor de mesas", como la ficha. No se tocó (fuera de alcance); lo alinea F2-223 o F2-250.
+- En el riel, quien usa teclado no VE la razón de una pendiente: sólo `title` al pasar el
+  cursor, y el lector de pantalla por `aria-describedby`. Pulido para F2-250.
+- Hay dos "Sucursales" y dos "Empresas" (Principal = botón pendiente, Administración =
+  enlace). Los tests futuros que busquen por nombre tienen que acotar por sección o por rol.
+
+**Qué haría distinto.** Mirar el lateral completo en Chrome antes de dar por buena la clase
+del texto: el `not-sr-only` rompiendo el `truncate` no lo ve jsdom.
