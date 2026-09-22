@@ -71,7 +71,7 @@ export function Inicio() {
     <Vista titulo="Panel de ventas">
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <SelectorPeriodo periodo={periodo} rangoActual={rango} onCambiar={cambiarPeriodo} />
-        <div className="flex items-center gap-3 text-sm text-slate-500">
+        <div className="flex items-center gap-3 text-sm text-tinta-tenue">
           <span data-testid="actualizado">
             {actualizado === null
               ? 'Sin datos todavía'
@@ -81,7 +81,7 @@ export function Inicio() {
             type="button"
             onClick={refrescar}
             disabled={filtro === null || rango === null || refrescando}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            className="rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50"
           >
             {refrescando ? 'Actualizando…' : 'Refrescar'}
           </button>
@@ -89,7 +89,7 @@ export function Inicio() {
       </div>
 
       {rango === null ? (
-        <p className="mt-6 text-sm text-slate-500">
+        <p className="mt-6 text-sm text-tinta-tenue">
           Corrige el rango de fechas para ver los datos.
         </p>
       ) : (

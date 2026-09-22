@@ -30,7 +30,7 @@ export function MarcaDemo() {
     <div
       role="status"
       data-testid="marca-demo"
-      className="sticky top-0 z-50 w-full border-b border-amber-300 bg-amber-100 px-4 py-1.5 text-center text-sm font-semibold text-amber-900"
+      className="sticky top-0 z-50 w-full border-b border-aviso-borde bg-aviso-fondo px-4 py-1.5 text-center text-sm font-semibold text-aviso"
     >
       {TEXTO_MARCA_DEMO}
       <span className="font-normal"> — no son ventas reales de ningún restaurante</span>

@@ -58,7 +58,7 @@ export function Cuenta() {
   return (
     <section className="p-4 md:p-6">
       <h1 className="text-xl font-semibold">Mi cuenta</h1>
-      <p className="mt-1 truncate text-sm text-slate-600">
+      <p className="mt-1 truncate text-sm text-tinta-suave">
         {usuario.email} · {NOMBRE_ROL[usuario.rol]}
       </p>
       <form
@@ -68,7 +68,7 @@ export function Cuenta() {
       >
         <h2 className="font-medium">Cambiar contraseña</h2>
         <label className="block text-sm">
-          <span className="text-slate-600">Contraseña actual</span>
+          <span className="text-tinta-suave">Contraseña actual</span>
           <input
             type="password"
             autoComplete="current-password"
@@ -79,7 +79,7 @@ export function Cuenta() {
           />
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Contraseña nueva</span>
+          <span className="text-tinta-suave">Contraseña nueva</span>
           <input
             type="password"
             autoComplete="new-password"
@@ -90,10 +90,10 @@ export function Cuenta() {
             maxLength={PASSWORD_MAX}
             onChange={(e) => setNueva(e.target.value)}
           />
-          <span className="text-xs text-slate-500">Mínimo {PASSWORD_MIN} caracteres.</span>
+          <span className="text-xs text-tinta-tenue">Mínimo {PASSWORD_MIN} caracteres.</span>
         </label>
         <label className="block text-sm">
-          <span className="text-slate-600">Confirma la contraseña nueva</span>
+          <span className="text-tinta-suave">Confirma la contraseña nueva</span>
           <input
             type="password"
             autoComplete="new-password"
@@ -104,12 +104,12 @@ export function Cuenta() {
           />
         </label>
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-peligro">
             {error}
           </p>
         )}
         {listo && (
-          <p role="status" className="text-sm text-green-800">
+          <p role="status" className="text-sm text-exito">
             Contraseña cambiada. Tus sesiones en otros navegadores se cerrarán en cuanto intenten
             renovarse.
           </p>

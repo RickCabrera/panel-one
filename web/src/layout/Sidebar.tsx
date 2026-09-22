@@ -36,13 +36,13 @@ export function Sidebar({ abierto, onNavegar }: { abierto: boolean; onNavegar: (
   return (
     <aside
       id="menu-principal"
-      className={`fixed inset-y-0 left-0 z-30 w-64 max-w-[80vw] overflow-y-auto border-r border-slate-200 bg-white transition-transform md:sticky md:top-0 md:z-auto md:h-screen md:w-16 md:max-w-none md:shrink-0 md:translate-x-0 md:[scrollbar-width:none] lg:w-64 lg:[scrollbar-width:auto] ${
+      className={`fixed inset-y-0 left-0 z-30 w-64 max-w-[80vw] overflow-y-auto border-r border-linea bg-superficie transition-transform md:sticky md:top-0 md:z-auto md:h-screen md:w-16 md:max-w-none md:shrink-0 md:translate-x-0 md:[scrollbar-width:none] lg:w-64 lg:[scrollbar-width:auto] ${
         abierto ? 'translate-x-0' : '-translate-x-full max-md:invisible'
       }`}
     >
-      <div className="flex h-14 items-center border-b border-slate-200 px-4 md:justify-center md:px-0 lg:justify-start lg:px-4">
+      <div className="flex h-14 items-center border-b border-linea px-4 md:justify-center md:px-0 lg:justify-start lg:px-4">
         <Marca className="md:hidden lg:inline-flex" />
-        <span className="hidden text-acento md:inline-flex lg:hidden" title={NOMBRE_PRODUCTO}>
+        <span className="hidden text-acento-texto md:inline-flex lg:hidden" title={NOMBRE_PRODUCTO}>
           <Logo className="h-7 w-7" />
         </span>
       </div>
@@ -98,7 +98,7 @@ function Seccion({
   const tieneAgentes = seccion.entradas.some((e) => e.id === 'administracion.agentes');
 
   return (
-    <div className="mt-3 first:mt-0 md:border-t md:border-slate-100 md:pt-2 md:first:border-t-0 lg:border-t-0 lg:pt-0">
+    <div className="mt-3 first:mt-0 md:border-t md:border-linea-suave md:pt-2 md:first:border-t-0 lg:border-t-0 lg:pt-0">
       <div className="relative flex items-center gap-1">
         <button
           type="button"
@@ -107,7 +107,7 @@ function Seccion({
           aria-label={seccion.titulo}
           title={seccion.titulo}
           onClick={onAlternar}
-          className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-3 py-1 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase hover:bg-slate-100 md:justify-center md:px-0 lg:justify-start lg:px-3"
+          className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-3 py-1 text-left text-xs font-semibold tracking-wide text-tinta-tenue uppercase hover:bg-realce md:justify-center md:px-0 lg:justify-start lg:px-3"
         >
           <span className={SOLO_TEXTO_ANCHO}>{seccion.titulo}</span>
           <ChevronDown
@@ -166,7 +166,7 @@ function EnlaceEntrada({
       aria-label={entrada.texto}
       title={entrada.texto}
       className={`${CLASE_ENTRADA} ${
-        activa ? 'bg-acento text-white' : 'text-slate-700 hover:bg-slate-100'
+        activa ? 'bg-acento text-sobre-acento' : 'text-tinta-medio hover:bg-realce'
       }`}
     >
       <Icono aria-hidden="true" className="h-4 w-4 shrink-0" />
@@ -194,20 +194,20 @@ function EntradaPendiente({ entrada }: { entrada: EntradaMenu }) {
         aria-describedby={idRazon}
         aria-label={entrada.texto}
         title={`${entrada.texto}: ${pendiente.razon}`}
-        className={`peer ${CLASE_ENTRADA} cursor-not-allowed text-left text-slate-500 hover:bg-slate-50`}
+        className={`peer ${CLASE_ENTRADA} cursor-not-allowed text-left text-tinta-tenue hover:bg-fondo`}
       >
         <Icono aria-hidden="true" className="h-4 w-4 shrink-0" />
         <span className={SOLO_TEXTO_ANCHO}>{entrada.texto}</span>
         <span
           aria-hidden="true"
-          className="ml-auto shrink-0 rounded bg-slate-100 px-1.5 text-[10px] font-semibold tracking-wide text-slate-600 uppercase md:hidden lg:inline"
+          className="ml-auto shrink-0 rounded bg-realce px-1.5 text-[10px] font-semibold tracking-wide text-tinta-suave uppercase md:hidden lg:inline"
         >
           Pronto
         </span>
       </button>
       <span
         id={idRazon}
-        className="hidden w-full px-3 pb-1 text-xs text-slate-500 lg:peer-focus-visible:block max-md:peer-focus-visible:block"
+        className="hidden w-full px-3 pb-1 text-xs text-tinta-tenue lg:peer-focus-visible:block max-md:peer-focus-visible:block"
       >
         {pendiente.razon}
       </span>
@@ -245,7 +245,7 @@ function AlertaAgentes({ search, onNavegar }: { search: string; onNavegar: () =>
       aria-label={texto}
       title={texto}
       data-testid="alerta-agentes"
-      className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white md:absolute md:top-0 md:right-0 md:px-1.5 md:text-[10px] lg:static lg:px-2 lg:text-xs"
+      className="shrink-0 rounded-full bg-peligro-fuerte px-2 py-0.5 text-xs font-semibold text-sobre-peligro md:absolute md:top-0 md:right-0 md:px-1.5 md:text-[10px] lg:static lg:px-2 lg:text-xs"
     >
       {caidas}
     </Link>

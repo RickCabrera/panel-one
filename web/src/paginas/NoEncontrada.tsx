@@ -7,17 +7,17 @@ import { Link } from 'react-router';
 export function NoEncontrada() {
   return (
     <section className="flex flex-col items-center p-8 text-center md:p-12">
-      <p className="text-5xl font-bold text-acento" aria-hidden="true">
+      <p className="text-5xl font-bold text-acento-texto" aria-hidden="true">
         404
       </p>
       <h1 className="mt-3 text-xl font-semibold">No encontrada</h1>
-      <p className="mt-2 max-w-md text-slate-600">
+      <p className="mt-2 max-w-md text-tinta-suave">
         La vista que buscas no existe o no tienes acceso a ella. Revisa la dirección o vuelve al
         inicio.
       </p>
       <Link
         to="/"
-        className="mt-6 inline-block rounded-md bg-acento px-4 py-2 text-sm font-medium text-white hover:brightness-110"
+        className="mt-6 inline-block rounded-md bg-acento px-4 py-2 text-sm font-medium text-sobre-acento hover:brightness-110"
       >
         Ir al inicio
       </Link>

@@ -8,6 +8,8 @@ import type { UsuarioActual } from './api/tipos';
 import { Proveedores, Rutas } from './App';
 import { terminarSesion, tokenActual } from './auth/sesion';
 import { crearQueryClient } from './consultas/queryClient';
+import { ACENTO_POR_DEFECTO } from './tema/acento';
+import { iniciarTema } from './tema/tema';
 import {
   EMPRESA_A,
   EMPRESA_B,
@@ -459,5 +461,58 @@ describe('selector de empresa y sucursal en la URL', () => {
 
     expect(await screen.findByTestId('empresa-unica')).toHaveTextContent('Tacos Demo');
     expect(screen.queryByLabelText('Empresa')).not.toBeInTheDocument();
+  });
+});
+
+// F2-211, AC2: el tema elegido sobrevive la recarga y el cierre de sesión.
+describe('tema claro / oscuro', () => {
+  const temaVisible = () => document.documentElement.dataset.tema;
+
+  it('elegido en la cabecera, sobrevive la recarga, el logout y el siguiente login', async () => {
+    const api = apiDePrueba({ u: usuario('admin_global'), cookieViva: true });
+    const primera = montar(`/?empresa=${A}`);
+    await screen.findByRole('heading', { name: 'Panel de ventas' });
+    expect(temaVisible()).toBe('claro');
+
+    const tema = screen.getByRole('group', { name: 'Tema' });
+    await userEvent.setup().click(within(tema).getByRole('button', { name: 'Tema oscuro' }));
+    expect(temaVisible()).toBe('oscuro');
+
+    // Recarga: la raíz pierde el tema, main.tsx lo aplica antes de montar y la app
+    // arranca de cero (refresh silencioso con la cookie).
+    primera.unmount();
+    document.documentElement.removeAttribute('style');
+    delete document.documentElement.dataset.tema;
+    iniciarTema(ACENTO_POR_DEFECTO);
+    expect(temaVisible()).toBe('oscuro');
+    montar(`/?empresa=${A}`);
+    await screen.findByRole('heading', { name: 'Panel de ventas' });
+    expect(temaVisible()).toBe('oscuro');
+    expect(
+      within(screen.getByRole('group', { name: 'Tema' })).getByRole('button', {
+        name: 'Tema oscuro',
+      }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    // Salir: el login sigue en oscuro.
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Salir' }));
+    await screen.findByRole('button', { name: 'Entrar' });
+    expect(api.contar('POST', '/auth/logout')).toBe(1);
+    expect(temaVisible()).toBe('oscuro');
+
+    // Y al volver a entrar, también.
+    await entrar();
+    await screen.findByRole('heading', { name: 'Panel de ventas' });
+    expect(temaVisible()).toBe('oscuro');
+  });
+
+  it('cada usuario conserva el suyo en este navegador', async () => {
+    window.localStorage.setItem('monitor.tema.u-otra', 'claro');
+    const yo = usuario('admin_global');
+    window.localStorage.setItem(`monitor.tema.${yo.id}`, 'oscuro');
+    apiDePrueba({ u: yo, cookieViva: true });
+    montar(`/?empresa=${A}`);
+    await screen.findByRole('heading', { name: 'Panel de ventas' });
+    expect(temaVisible()).toBe('oscuro');
   });
 });

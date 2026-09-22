@@ -71,7 +71,7 @@ export function DetalleMesa({
   return (
     <div
       data-testid="detalle-fondo"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-2 sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-velo p-2 sm:p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCerrar();
       }}
@@ -85,9 +85,9 @@ export function DetalleMesa({
         // del modal y Escape/Tab lo siguen escuchando.
         tabIndex={-1}
         onKeyDown={teclado}
-        className="flex max-h-full w-full max-w-2xl min-w-0 flex-col rounded-lg bg-white shadow-xl outline-none"
+        className="flex max-h-full w-full max-w-2xl min-w-0 flex-col rounded-lg bg-superficie shadow-xl outline-none"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
+        <div className="flex items-start justify-between gap-3 border-b border-linea p-4">
           <h2 id="detalle-mesa-titulo" className="min-w-0 text-lg font-semibold break-words">
             {titulo}
           </h2>
@@ -95,14 +95,14 @@ export function DetalleMesa({
             ref={cerrar}
             type="button"
             onClick={onCerrar}
-            className="shrink-0 rounded-md border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-100"
+            className="shrink-0 rounded-md border border-linea-fuerte px-3 py-1 text-sm text-tinta-medio hover:bg-realce"
           >
             Cerrar
           </button>
         </div>
         <div className="min-w-0 overflow-y-auto p-4">
           {mesa === null ? (
-            <p role="status" className="text-sm text-slate-600">
+            <p role="status" className="text-sm text-tinta-suave">
               Esta cuenta ya no aparece entre las abiertas en vivo: se cerró, o su sucursal dejó de
               reportar.
             </p>
@@ -126,7 +126,7 @@ function Dato({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs text-slate-500">{etiqueta}</dt>
+      <dt className="text-xs text-tinta-tenue">{etiqueta}</dt>
       <dd data-testid={testId} className="break-words tabular-nums">
         {children}
       </dd>
@@ -164,20 +164,20 @@ function Consumo({ mesa, conSucursal }: { mesa: MesaMonitor; conSucursal: boolea
         </Dato>
       </dl>
 
-      <h3 className="mt-4 text-xs font-medium text-slate-500 uppercase">Partidas</h3>
+      <h3 className="mt-4 text-xs font-medium text-tinta-tenue uppercase">Partidas</h3>
       {mesa.partidas === null ? (
-        <p className="mt-1 text-sm text-slate-500">Partidas: sin dato.</p>
+        <p className="mt-1 text-sm text-tinta-tenue">Partidas: sin dato.</p>
       ) : mesa.partidas.length === 0 ? (
-        <p className="mt-1 text-sm text-slate-500">Sin partidas.</p>
+        <p className="mt-1 text-sm text-tinta-tenue">Sin partidas.</p>
       ) : (
-        <ul aria-label="Partidas" className="mt-1 divide-y divide-slate-200 text-sm text-slate-700">
+        <ul aria-label="Partidas" className="mt-1 divide-y divide-linea text-sm text-tinta-medio">
           {mesa.partidas.map((p, i) => (
             <Partida key={i} partida={p} />
           ))}
         </ul>
       )}
 
-      <div className="mt-3 flex justify-between gap-3 border-t border-slate-300 pt-3 font-semibold">
+      <div className="mt-3 flex justify-between gap-3 border-t border-linea-fuerte pt-3 font-semibold">
         <span>Total de la cuenta</span>
         <span data-testid="detalle-total-cuenta" className="tabular-nums">
           {importe(mesa.total)}
@@ -207,14 +207,14 @@ function Partida({ partida: p }: { partida: PartidaMesa }) {
         <span className="w-12 shrink-0 text-right tabular-nums">{p.cantidad ?? SIN_DATO}</span>
         <span className="min-w-0 flex-1 break-words">
           {p.producto ?? SIN_DATO}
-          <span className="block text-xs text-slate-500">
+          <span className="block text-xs text-tinta-tenue">
             {p.categoria ?? 'Categoría: sin dato'} · {importe(p.precioUnit)} c/u
           </span>
         </span>
         <span className="shrink-0 tabular-nums">{importe(p.total)}</span>
       </div>
       {p.modificadores === null ? (
-        <p className="mt-0.5 ml-15 text-xs text-slate-500">Modificadores: sin dato</p>
+        <p className="mt-0.5 ml-15 text-xs text-tinta-tenue">Modificadores: sin dato</p>
       ) : (
         <Modificadores lista={p.modificadores} truncado={false} className="ml-15" />
       )}
@@ -233,7 +233,7 @@ function Modificadores({
 }) {
   if (lista.length === 0 && !truncado) return null;
   return (
-    <ul className={`mt-0.5 text-xs text-slate-500 ${className}`}>
+    <ul className={`mt-0.5 text-xs text-tinta-tenue ${className}`}>
       {lista.map((m, i) => (
         <li key={i} aria-label={etiquetaModificador(m)}>
           <div className="flex gap-3">

@@ -25,19 +25,19 @@ export function Empresas() {
       <AltaEmpresa />
       <div className="min-w-0 overflow-x-auto">
         {accion.error && (
-          <p role="alert" className="mb-2 text-sm text-red-700">
+          <p role="alert" className="mb-2 text-sm text-peligro">
             {accion.error}
           </p>
         )}
         {empresas.isPending ? (
-          <p className="text-sm text-slate-500">Cargando empresas…</p>
+          <p className="text-sm text-tinta-tenue">Cargando empresas…</p>
         ) : empresas.isError ? (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-peligro">
             No se pudieron cargar las empresas.
           </p>
         ) : (
           <table className={CLASE_TABLA}>
-            <thead className="text-xs text-slate-500">
+            <thead className="text-xs text-tinta-tenue">
               <tr>
                 <th className="py-2 pr-3 font-medium">Empresa</th>
                 <th className="py-2 pr-3 font-medium">Estado</th>
@@ -46,11 +46,7 @@ export function Empresas() {
             </thead>
             <tbody>
               {empresas.data.map((e) => (
-                <tr
-                  key={e.id}
-                  aria-label={e.nombre}
-                  className="border-t border-slate-200 align-top"
-                >
+                <tr key={e.id} aria-label={e.nombre} className="border-t border-linea align-top">
                   <td className="py-2 pr-3 break-words">{e.nombre}</td>
                   <td className="py-2 pr-3">{e.activo ? 'Activa' : 'Inactiva'}</td>
                   <td className="flex flex-wrap gap-2 py-2">
@@ -91,10 +87,10 @@ function AltaEmpresa() {
     <form
       aria-label="Nueva empresa"
       onSubmit={(e) => void enviar(e)}
-      className="grid min-w-0 gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1fr_auto] sm:items-end"
+      className="grid min-w-0 gap-3 rounded-lg border border-linea p-3 sm:grid-cols-[1fr_auto] sm:items-end"
     >
       <label className="min-w-0 text-sm">
-        <span className="text-slate-600">Nombre de la empresa</span>
+        <span className="text-tinta-suave">Nombre de la empresa</span>
         <input
           className={CLASE_INPUT}
           value={nombre}
@@ -107,7 +103,7 @@ function AltaEmpresa() {
         Agregar empresa
       </button>
       {accion.error && (
-        <p role="alert" className="text-sm text-red-700 sm:col-span-2">
+        <p role="alert" className="text-sm text-peligro sm:col-span-2">
           {accion.error}
         </p>
       )}
@@ -133,7 +129,7 @@ function Renombrar({ empresa, onCerrar }: { empresa: Empresa; onCerrar: () => vo
     <Dialogo titulo={`Renombrar ${empresa.nombre}`} onCerrar={onCerrar}>
       <form onSubmit={(e) => void enviar(e)} className="space-y-3">
         <label className="block text-sm">
-          <span className="text-slate-600">Nombre</span>
+          <span className="text-tinta-suave">Nombre</span>
           <input
             className={CLASE_INPUT}
             value={nombre}
@@ -143,7 +139,7 @@ function Renombrar({ empresa, onCerrar }: { empresa: Empresa; onCerrar: () => vo
           />
         </label>
         {accion.error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-peligro">
             {accion.error}
           </p>
         )}

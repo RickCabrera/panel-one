@@ -59,12 +59,12 @@ export function Mesas() {
 
   return (
     <Vista titulo="Monitor de Mesas">
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-3 text-sm text-slate-500">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-3 text-sm text-tinta-tenue">
         <span data-testid="consultado" className="flex items-center gap-2">
           <span
             aria-hidden="true"
             className={`inline-block h-2 w-2 rounded-full ${
-              consulta.isFetching ? 'animate-pulse bg-sky-500' : 'bg-slate-300'
+              consulta.isFetching ? 'animate-pulse bg-info' : 'bg-linea-fuerte'
             }`}
           />
           {consulta.isFetching
@@ -77,7 +77,7 @@ export function Mesas() {
           type="button"
           onClick={() => void consulta.refetch()}
           disabled={filtro === null || consulta.isFetching}
-          className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          className="rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50"
         >
           Refrescar
         </button>
@@ -119,7 +119,7 @@ function Contenido({
     if (consulta.isError) {
       const detalle = consulta.error instanceof ErrorApi ? consulta.error.message : '';
       return (
-        <p role="alert" className="mt-6 text-center text-sm text-red-700">
+        <p role="alert" className="mt-6 text-center text-sm text-peligro">
           No se pudieron cargar las mesas. {detalle}
         </p>
       );
@@ -139,13 +139,13 @@ function Contenido({
   return (
     <>
       {consulta.isError && (
-        <p role="status" data-testid="sin-actualizar" className="mt-2 text-sm text-amber-700">
+        <p role="status" data-testid="sin-actualizar" className="mt-2 text-sm text-aviso">
           No se pudo actualizar; se muestra la última respuesta con su edad real.
         </p>
       )}
       <Avisos sucursales={monitor.sucursales} zona={zona} />
       {conectadas === 0 ? (
-        <p className="mt-6 text-center text-sm text-slate-500">
+        <p className="mt-6 text-center text-sm text-tinta-tenue">
           {monitor.sucursales.length === 0
             ? 'No hay sucursales en este alcance.'
             : 'No hay datos en vivo que mostrar.'}

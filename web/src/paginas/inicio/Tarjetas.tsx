@@ -10,9 +10,10 @@ import {
   sumar,
 } from '../../dinero/dinero';
 import type { Rango } from '../../filtros/periodo';
+import { useTema } from '../../tema/contexto';
 import { useAhora } from '../mesas/consultas';
 import { etiquetaForma } from './formasPago';
-import { COLORES_FORMA, datosPorHora } from './puntosHora';
+import { datosPorHora, SERIES_FORMA } from './puntosHora';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './Tarjeta';
 import { edadLegible, ventaEnVivo } from './ventaEnVivo';
 
@@ -70,12 +71,12 @@ export function TarjetaVentaTotal({
           ) : (
             <>
               <Cifra testId="venta-total">{pesos(r.venta)}</Cifra>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-tinta-tenue">
                 {plural(r.cuentas, 'cuenta cerrada', 'cuentas cerradas')}
                 {r.cancelados.cuentas > 0 &&
                   ` · ${plural(r.cancelados.cuentas, 'cancelada', 'canceladas')} (no suman)`}
               </p>
-              <h3 className="mt-4 text-xs font-medium text-slate-500">
+              <h3 className="mt-4 text-xs font-medium text-tinta-tenue">
                 {dias === 1
                   ? 'Venta por hora de cierre'
                   : `Venta por hora de cierre (suma de los ${dias} días)`}
@@ -91,7 +92,7 @@ export function TarjetaVentaTotal({
                         </Suspense>
                       </div>
                       {puntos.some((p) => p.valor === null) && (
-                        <p className="mt-1 text-xs text-slate-500" data-testid="horas-sin-dato">
+                        <p className="mt-1 text-xs text-tinta-tenue" data-testid="horas-sin-dato">
                           Alguna hora no trae un importe legible; la línea se corta ahí.
                         </p>
                       )}
@@ -108,6 +109,7 @@ export function TarjetaVentaTotal({
 }
 
 export function TarjetaFormasPago({ consulta }: { consulta: Consulta<FormasPago> }) {
+  const { colores } = useTema();
   return (
     <Tarjeta titulo="Formas de pago">
       <SegunEstado consulta={consulta} esqueleto={<Esqueleto lineas={4} />}>
@@ -116,7 +118,7 @@ export function TarjetaFormasPago({ consulta }: { consulta: Consulta<FormasPago>
             ...f,
             // `null` = importe ilegible: se dice "Sin dato", nunca $0.00 (F1-094).
             centavos: aCentavos(f.monto),
-            color: COLORES_FORMA[i % COLORES_FORMA.length],
+            color: colores[SERIES_FORMA[i % SERIES_FORMA.length]],
           }));
           const legibles = formas.flatMap((f) =>
             f.centavos === null ? [] : [{ ...f, centavos: f.centavos }],
@@ -174,7 +176,7 @@ export function TarjetaFormasPago({ consulta }: { consulta: Consulta<FormasPago>
                           {f.centavos === null ? 'Sin dato' : formatearPesos(f.centavos)}
                         </span>
                         {total !== null && f.centavos !== null && (
-                          <span className="w-16 text-right text-slate-500 tabular-nums">
+                          <span className="w-16 text-right text-tinta-tenue tabular-nums">
                             {porcentaje(f.centavos, total)}
                           </span>
                         )}
@@ -184,13 +186,13 @@ export function TarjetaFormasPago({ consulta }: { consulta: Consulta<FormasPago>
                 </div>
               </div>
               {total === null && (
-                <p className="mt-3 text-xs text-slate-500" data-testid="formas-incompletas">
+                <p className="mt-3 text-xs text-tinta-tenue" data-testid="formas-incompletas">
                   Alguna forma de pago no trae un importe legible; no se muestran porcentajes sobre
                   una suma incompleta.
                 </p>
               )}
               {datos.sinCatalogo.length > 0 && (
-                <p className="mt-3 text-xs text-slate-500">
+                <p className="mt-3 text-xs text-tinta-tenue">
                   "Otro" incluye formas del POS sin catálogo:{' '}
                   {datos.sinCatalogo.map((s) => `${s.formaRaw} (${pesos(s.monto)})`).join(', ')}.
                 </p>
@@ -232,12 +234,12 @@ function VentaEnVivoCifras({
   const fuera = (
     <>
       {vivo.desconectadas.length > 0 && (
-        <p className="mt-1 text-xs text-amber-700" data-testid="vivo-desconectadas">
+        <p className="mt-1 text-xs text-aviso" data-testid="vivo-desconectadas">
           Desconectadas, sin contar: {vivo.desconectadas.join(', ')}.
         </p>
       )}
       {vivo.sinReporte.length > 0 && (
-        <p className="mt-1 text-xs text-amber-700">
+        <p className="mt-1 text-xs text-aviso">
           Sin reporte todavía: {vivo.sinReporte.join(', ')}.
         </p>
       )}
@@ -257,12 +259,12 @@ function VentaEnVivoCifras({
       <Cifra testId="venta-en-vivo">
         {vivo.total === null ? 'Sin dato' : formatearPesos(vivo.total)}
       </Cifra>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-tinta-tenue">
         {plural(vivo.mesas, 'mesa abierta', 'mesas abiertas')}
         {vivo.edadMaximaSegundos !== null && ` · dato de ${edadLegible(vivo.edadMaximaSegundos)}`}
       </p>
       {vivo.total === null && (
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-tinta-tenue">
           Alguna mesa no trae un importe legible; no se muestra una suma incompleta.
         </p>
       )}
@@ -286,13 +288,13 @@ export function TarjetaTicketPromedio({ consulta }: { consulta: Consulta<Resumen
               </Cifra>
               <dl className="mt-1 space-y-0.5 text-sm">
                 <div className="flex justify-between gap-2">
-                  <dt className="text-slate-500">Comensales</dt>
+                  <dt className="text-tinta-tenue">Comensales</dt>
                   <dd className="tabular-nums" data-testid="comensales">
                     {r.comensales.total}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt className="text-slate-500">Por comensal</dt>
+                  <dt className="text-tinta-tenue">Por comensal</dt>
                   <dd className="tabular-nums" data-testid="por-comensal">
                     {r.comensales.promedioPorComensal === null
                       ? '—'
@@ -301,7 +303,7 @@ export function TarjetaTicketPromedio({ consulta }: { consulta: Consulta<Resumen
                 </div>
               </dl>
               {r.comensales.cuentasConDato < r.cuentas && (
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-tinta-tenue">
                   {r.comensales.cuentasConDato} de {r.cuentas} cuentas traían comensales.
                 </p>
               )}
@@ -323,17 +325,17 @@ export function TarjetaDescuentos({ consulta }: { consulta: Consulta<Resumen> })
           ) : (
             <>
               <Cifra testId="descuentos">{pesos(r.descuentos.monto)}</Cifra>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-tinta-tenue">
                 en {plural(r.descuentos.cuentas, 'cuenta', 'cuentas')}
               </p>
               <dl className="mt-2 text-sm">
                 <div className="flex justify-between gap-2">
-                  <dt className="text-slate-500">Cortesías</dt>
+                  <dt className="text-tinta-tenue">Cortesías</dt>
                   {/* La API siempre manda null: el modelo aún no distingue una cortesía. */}
                   <dd data-testid="cortesias">Sin dato</dd>
                 </div>
               </dl>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-tinta-tenue">
                 El POS todavía no nos dice qué cuenta fue cortesía.
               </p>
             </>

@@ -63,7 +63,7 @@ export function Reportes() {
       <SelectorPeriodo periodo={periodo} rangoActual={rango} onCambiar={cambiarPeriodo} />
 
       {rango === null ? (
-        <p className="mt-6 text-sm text-slate-500">
+        <p className="mt-6 text-sm text-tinta-tenue">
           Corrige el rango de fechas para ver los reportes.
         </p>
       ) : (

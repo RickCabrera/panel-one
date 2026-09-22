@@ -20,7 +20,10 @@ export function TablaTickets({
   sucursales: ReadonlyMap<string, Sucursal>;
   /** Con "Todas las sucursales" cada fila dice de cuál es. */
   mostrarSucursal: boolean;
-  /** Mientras llega la página nueva se ve la anterior, atenuada. */
+  /**
+   * Mientras llega la página nueva se ve la anterior, atenuada: fondo `realce` y
+   * `aria-busy`, NO opacidad, que bajaba el texto de 4.5:1 (F2-211).
+   */
   atenuada: boolean;
 }) {
   const [abiertos, setAbiertos] = useState<ReadonlySet<string>>(new Set());
@@ -37,10 +40,11 @@ export function TablaTickets({
   return (
     // La tabla desborda DENTRO de su caja: la página nunca tiene scroll horizontal.
     <div
-      className={`min-w-0 overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm ${atenuada ? 'opacity-60' : ''}`}
+      className={`min-w-0 overflow-x-auto rounded-lg border border-linea shadow-sm ${atenuada ? 'bg-realce' : 'bg-superficie'}`}
+      aria-busy={atenuada}
     >
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-600 uppercase">
+        <thead className="border-b border-linea bg-fondo text-xs text-tinta-suave uppercase">
           <tr>
             <th scope="col" className={CELDA}>
               <span className="sr-only">Detalle</span>
@@ -82,7 +86,7 @@ export function TablaTickets({
               <Fragment key={t.id}>
                 <tr
                   data-testid={`ticket-${t.folio}`}
-                  className={`border-b border-slate-100 ${t.cancelado ? 'bg-slate-50 text-slate-500' : ''}`}
+                  className={`border-b border-linea-suave ${t.cancelado ? 'bg-fondo text-tinta-tenue' : ''}`}
                 >
                   <td className={CELDA}>
                     <button
@@ -91,7 +95,7 @@ export function TablaTickets({
                       aria-controls={idDetalle}
                       aria-label={`${abierto ? 'Ocultar' : 'Ver'} detalle del folio ${t.folio}`}
                       onClick={() => alternar(t.id)}
-                      className="rounded px-1 text-slate-500 hover:bg-slate-100"
+                      className="rounded px-1 text-tinta-tenue hover:bg-realce"
                     >
                       {abierto ? '▾' : '▸'}
                     </button>
@@ -99,7 +103,7 @@ export function TablaTickets({
                   <td className={`${CELDA} font-medium whitespace-nowrap`}>
                     {t.folio}
                     {t.cancelado && (
-                      <span className="ml-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-normal text-slate-600">
+                      <span className="ml-2 rounded bg-realce-fuerte px-1.5 py-0.5 text-xs font-normal text-tinta-suave">
                         Cancelado
                       </span>
                     )}
@@ -125,7 +129,7 @@ export function TablaTickets({
                   <td className={`${CELDA} ${SOLO_ESCRITORIO}`}>{formasDePago(t.pagos) || '—'}</td>
                 </tr>
                 {abierto && (
-                  <tr id={idDetalle} className="border-b border-slate-200 bg-slate-50">
+                  <tr id={idDetalle} className="border-b border-linea bg-fondo">
                     <td colSpan={columnas} className="px-3 py-3">
                       <Detalle
                         ticket={t}
@@ -149,14 +153,14 @@ function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: string }) 
     <div
       role="region"
       aria-label={`Detalle del folio ${t.folio}`}
-      className="flex min-w-0 flex-col gap-4 text-slate-700 lg:flex-row"
+      className="flex min-w-0 flex-col gap-4 text-tinta-medio lg:flex-row"
     >
       <div className="min-w-0 flex-1">
-        <h3 className="text-xs font-medium text-slate-500 uppercase">Partidas</h3>
+        <h3 className="text-xs font-medium text-tinta-tenue uppercase">Partidas</h3>
         {t.partidas.length === 0 ? (
-          <p className="mt-1 text-sm text-slate-500">Sin partidas.</p>
+          <p className="mt-1 text-sm text-tinta-tenue">Sin partidas.</p>
         ) : (
-          <ul className="mt-1 divide-y divide-slate-200">
+          <ul className="mt-1 divide-y divide-linea">
             {t.partidas.map((p, i) => (
               <li key={i} className="py-1.5">
                 <div className="flex gap-3">
@@ -165,12 +169,14 @@ function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: string }) 
                   </span>
                   <span className="min-w-0 flex-1 break-words">
                     {p.producto}
-                    <span className="block text-xs text-slate-500">{pesos(p.precioUnit)} c/u</span>
+                    <span className="block text-xs text-tinta-tenue">
+                      {pesos(p.precioUnit)} c/u
+                    </span>
                   </span>
                   <span className="shrink-0 tabular-nums">{pesos(p.total)}</span>
                 </div>
                 {p.modificadores.length > 0 && (
-                  <ul className="mt-0.5 ml-15 text-xs text-slate-500">
+                  <ul className="mt-0.5 ml-15 text-xs text-tinta-tenue">
                     {p.modificadores.map((m, j) => (
                       <li key={j} className="flex gap-3">
                         <span className="min-w-0 flex-1 break-words">+ {m.nombre}</span>
@@ -187,9 +193,9 @@ function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: string }) 
 
       <div className="flex min-w-0 flex-col gap-4 lg:w-72">
         <div>
-          <h3 className="text-xs font-medium text-slate-500 uppercase">Pagos</h3>
+          <h3 className="text-xs font-medium text-tinta-tenue uppercase">Pagos</h3>
           {t.pagos.length === 0 ? (
-            <p className="mt-1 text-sm text-slate-500">Sin pagos registrados.</p>
+            <p className="mt-1 text-sm text-tinta-tenue">Sin pagos registrados.</p>
           ) : (
             <ul className="mt-1">
               {t.pagos.map((p, i) => (
@@ -220,7 +226,7 @@ function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: string }) 
           <dd className="text-right font-medium tabular-nums">{pesos(t.total)}</dd>
         </dl>
         {t.cancelado && (
-          <p className="text-xs text-slate-500">Cancelado: se lista, pero no suma a la venta.</p>
+          <p className="text-xs text-tinta-tenue">Cancelado: se lista, pero no suma a la venta.</p>
         )}
       </div>
     </div>
