@@ -10,7 +10,7 @@ import {
   RegistroProductoDto,
   type RechazoRegistroDto,
 } from './dto/catalogos.dto';
-import { jsonCanonico } from './normalizar';
+import { dinero, jsonCanonico } from './normalizar';
 
 /**
  * La parte PURA de la ingesta de catálogos (F2-230): validar y normalizar cada registro,
@@ -72,7 +72,7 @@ export function columnasDe(catalogo: CatalogoSr): readonly string[] {
   const comunes = ['clave', 'nombre', 'activoPos'];
   switch (catalogo) {
     case 'productos':
-      return [...comunes, 'grupoOrigenSrId'];
+      return [...comunes, 'grupoOrigenSrId', 'precio'];
     case 'clientes':
       return [...comunes, 'telefono', 'correo', 'rfc'];
     default:
@@ -126,6 +126,21 @@ export async function normalizarRegistro(
     };
   }
   const datos = instancia as unknown as Record<string, unknown>;
+  if (typeof datos.precio === 'string') {
+    const precio = precioNormalizado(datos.precio);
+    if (precio === null) {
+      return {
+        ok: false,
+        rechazo: {
+          indice,
+          origenSrId: origen,
+          motivo: `registros.${indice}.precio: no cabe en NUMERIC(12,2) al redondear`,
+          reintentable: false,
+        },
+      };
+    }
+    datos.precio = precio;
+  }
   const contenido: Contenido = {};
   for (const col of columnasDe(catalogo)) {
     const v = datos[col];
@@ -140,6 +155,19 @@ export async function normalizarRegistro(
       hash: hashContenido(contenido),
     },
   };
+}
+
+/**
+ * El precio (ya validado con `DINERO`) a 2 decimales, mitad lejos de cero, o `null` si ya no
+ * cabe en NUMERIC(12,2). Se normaliza ANTES del hash: "89", "89.0000" y "89.00" son el mismo
+ * contenido, y "-0.001" es "0.00" (no "-0.00"): un reenvío no reescribe la fila (F2-145).
+ */
+export function precioNormalizado(texto: string): string | null {
+  const valor = dinero(texto);
+  if (valor === null) {
+    return null;
+  }
+  return valor.isZero() ? '0.00' : valor.toFixed(2);
 }
 
 /** El `origenSrId` del registro si es un texto válido (1–64), aunque el resto sea inválido. */

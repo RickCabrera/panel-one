@@ -169,13 +169,13 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'catalogos.productos',
         texto: 'Productos',
         icono: Package,
-        pendiente: construye('F2-145'),
+        destino: { ruta: '/productos' },
       },
       {
         id: 'catalogos.orquestador',
         texto: 'Orquestador de menú',
         icono: ListTree,
-        pendiente: construye('F2-145'),
+        destino: { ruta: '/menu' },
       },
       {
         id: 'catalogos.grupos-insumos',

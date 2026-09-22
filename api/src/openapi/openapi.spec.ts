@@ -91,6 +91,23 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(paths['/catalogos/productos'])).toContain('PaginaProductosDto');
   });
 
+  it('documenta el orquestador de menú y el precio del contrato de catálogos (F2-145)', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    for (const r of ['/catalogos/menu', '/catalogos/sin-catalogo']) {
+      expect(codigos(paths[r]?.get)).toEqual(['200', '400', '401', '404']);
+    }
+    const parametros = (paths['/catalogos/sin-catalogo']?.get?.parameters ?? []).map(
+      (p) => (p as { name: string }).name,
+    );
+    expect(parametros.sort()).toEqual(['desde', 'empresaId', 'hasta', 'sucursalId']);
+    const esquemas = doc.components?.schemas as Record<string, { properties?: object }>;
+    expect(Object.keys(esquemas.RegistroProductoDto.properties ?? {})).toContain('precio');
+    expect(Object.keys(esquemas.FilaProductoDto.properties ?? {})).toContain('precio');
+    expect(Object.keys(esquemas.ProductoMenuDto.properties ?? {})).toContain('discrepancia');
+  });
+
   it('documenta todos los endpoints (auth, agentes, ingesta, lectura y administración)', async () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
@@ -101,12 +118,14 @@ describe('Contrato OpenAPI', () => {
         '/catalogos/canales',
         '/catalogos/clientes',
         '/catalogos/grupos',
+        '/catalogos/menu',
         '/catalogos/meseros',
         '/catalogos/productos',
         '/catalogos/productos/{id}',
         '/catalogos/productos/{id}/metadata',
         '/catalogos/sincronizacion',
         '/catalogos/sincronizacion/forzar',
+        '/catalogos/sin-catalogo',
         '/alertas/abiertas',
         '/alertas/historial',
         '/alertas/reglas',

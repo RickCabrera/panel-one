@@ -4279,6 +4279,184 @@
         ]
       }
     },
+    "/catalogos/menu": {
+      "get": {
+        "description": "Sólo lectura: el precio lo manda el POS. El mismo producto se reconoce por su clave visible (o, sin clave, por su nombre): supuesto no validado en SR. `discrepancia` compara sólo las filas vigentes con precio. Hasta 5000 filas (`truncado`).",
+        "operationId": "CatalogosController_menu",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa (con una sola no hay precios que comparar). Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MenuDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Orquestador de menú (F2-145): productos activos cruzados entre sucursales, por categoría, con los precios distintos señalados.",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
+    "/catalogos/sin-catalogo": {
+      "get": {
+        "description": "Cruce por NOMBRE (sin distinguir mayúsculas ni espacios de más): el ticket no trae id de producto. Un producto renombrado en el POS dentro del periodo sale con su nombre viejo. Sólo se cruzan las sucursales con una sincronización completa del catálogo de productos; las demás salen en `sucursalesSinCatalogo`. Los cancelados no entran. Hasta 500 renglones.",
+        "operationId": "CatalogosController_sinCatalogo",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa (con una sola no hay precios que comparar). Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal, inclusivo (YYYY-MM-DD). El corte es el de /ventas/*: cada cuenta cae en el día de SU zona horaria.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal, inclusivo (YYYY-MM-DD). El corte es el de /ventas/*: cada cuenta cae en el día de SU zona horaria.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendidosSinCatalogoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Productos vendidos en el periodo que no están en el catálogo de su sucursal (F2-145).",
+        "tags": [
+          "catalogos"
+        ]
+      }
+    },
     "/catalogos/productos/{id}": {
       "get": {
         "operationId": "CatalogosController_producto",
@@ -5345,6 +5523,13 @@
             "nullable": true,
             "example": "G01",
             "description": "El `origenSrId` de su grupo. Sin FK: el grupo puede llegar después."
+          },
+          "precio": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "89.00",
+            "description": "Precio de venta en ESTA sucursal (F2-145), texto decimal con la regla de los importes de `/ingesta/eventos`: hasta 10 enteros y 4 decimales, se redondea a 2 mitad lejos de cero. Lo que al redondear no cabe en NUMERIC(12,2) rechaza el registro. Ausente o nulo = el POS no lo reporta, y se GUARDA nulo (también en una página incremental): el agente manda siempre el precio que lee. Se guarda tal como lo da el POS; no se sabe si trae IVA (esquema-sr §6)."
           }
         },
         "required": [
@@ -7331,6 +7516,12 @@
             "nullable": true,
             "description": "Nombre del grupo en la misma sucursal; nulo si no hay grupo o aún no llegó."
           },
+          "precio": {
+            "type": "string",
+            "nullable": true,
+            "example": "89.00",
+            "description": "Precio en ESA sucursal, tal como lo reporta el POS (texto a 2 decimales; no se sabe si trae IVA). Nulo = el POS no lo reporta."
+          },
           "tieneMetadata": {
             "type": "boolean",
             "description": "Tiene metadata propia (foto, descripción, etiquetas, mín/máx)."
@@ -7349,6 +7540,7 @@
           "updatedAt",
           "grupoOrigenSrId",
           "grupo",
+          "precio",
           "tieneMetadata"
         ]
       },
@@ -7484,6 +7676,297 @@
           "filas"
         ]
       },
+      "SucursalMenuDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "sincronizadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Inicio de la última sincronización COMPLETA del catálogo de productos (UTC). Nulo = nunca: la sucursal no tiene catálogo que mostrar ni que comparar."
+          },
+          "productos": {
+            "type": "number",
+            "description": "Productos activos de esa sucursal en el menú."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "sincronizadoAt",
+          "productos"
+        ]
+      },
+      "PrecioSucursalDto": {
+        "type": "object",
+        "properties": {
+          "productoId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La fila del espejo (para su ficha y metadata)."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "origenSrId": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string",
+            "description": "El nombre en ESA sucursal (puede diferir entre sucursales)."
+          },
+          "precio": {
+            "type": "string",
+            "nullable": true,
+            "example": "95.00",
+            "description": "Nulo = el POS no lo reporta."
+          },
+          "vigente": {
+            "type": "boolean",
+            "description": "false = el POS lo reporta dado de baja: se muestra y no cuenta para la discrepancia."
+          },
+          "tieneMetadata": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "productoId",
+          "sucursalId",
+          "origenSrId",
+          "nombre",
+          "precio",
+          "vigente",
+          "tieneMetadata"
+        ]
+      },
+      "ProductoMenuDto": {
+        "type": "object",
+        "properties": {
+          "llave": {
+            "type": "string",
+            "description": "Llave del cruce entre sucursales (`c:<clave>` o `n:<nombre>`)."
+          },
+          "criterio": {
+            "type": "string",
+            "enum": [
+              "clave",
+              "nombre"
+            ],
+            "description": "Con qué se reconoció el mismo producto en las sucursales: la clave visible del POS o, sin clave, el nombre. Supuesto no validado en SR (esquema-sr §6)."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "nombre": {
+            "type": "string",
+            "description": "El de la primera sucursal (por nombre)."
+          },
+          "grupo": {
+            "type": "string",
+            "nullable": true,
+            "description": "El grupo de la primera sucursal."
+          },
+          "gruposDistintos": {
+            "type": "boolean",
+            "description": "Las sucursales lo tienen en grupos distintos."
+          },
+          "duplicadoEnSucursal": {
+            "type": "boolean",
+            "description": "Dos filas de la MISMA sucursal comparten la llave."
+          },
+          "discrepancia": {
+            "type": "boolean",
+            "description": "Entre las filas vigentes con precio hay más de un precio distinto (comparación decimal exacta)."
+          },
+          "precioMin": {
+            "type": "string",
+            "nullable": true
+          },
+          "precioMax": {
+            "type": "string",
+            "nullable": true
+          },
+          "precios": {
+            "description": "En el orden de `sucursales`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PrecioSucursalDto"
+            }
+          }
+        },
+        "required": [
+          "llave",
+          "criterio",
+          "clave",
+          "nombre",
+          "grupo",
+          "gruposDistintos",
+          "duplicadoEnSucursal",
+          "discrepancia",
+          "precioMin",
+          "precioMax",
+          "precios"
+        ]
+      },
+      "CategoriaMenuDto": {
+        "type": "object",
+        "properties": {
+          "grupo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = sin grupo (va al final)."
+          },
+          "productos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductoMenuDto"
+            }
+          }
+        },
+        "required": [
+          "grupo",
+          "productos"
+        ]
+      },
+      "MenuDto": {
+        "type": "object",
+        "properties": {
+          "sucursales": {
+            "description": "Por nombre: el orden de las columnas.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalMenuDto"
+            }
+          },
+          "categorias": {
+            "description": "Por nombre de grupo; sin grupo al final.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoriaMenuDto"
+            }
+          },
+          "productos": {
+            "type": "number",
+            "description": "Productos distintos (ya cruzados entre sucursales)."
+          },
+          "discrepancias": {
+            "type": "number",
+            "description": "Productos con precio distinto entre sucursales."
+          },
+          "truncado": {
+            "type": "boolean",
+            "description": "true = había más de 5000 filas activas y el menú sólo trae las primeras (por sucursal y origenSrId): las cifras no están completas."
+          }
+        },
+        "required": [
+          "sucursales",
+          "categorias",
+          "productos",
+          "discrepancias",
+          "truncado"
+        ]
+      },
+      "VendidoSinCatalogoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "producto": {
+            "type": "string",
+            "description": "El nombre tal como llegó en el ticket (de sus variantes, la de más importe)."
+          },
+          "variantes": {
+            "type": "number",
+            "description": "Escrituras distintas (mayúsculas, espacios) que se juntaron en este renglón."
+          },
+          "partidas": {
+            "type": "number",
+            "description": "Partidas vendidas en el periodo."
+          },
+          "cantidad": {
+            "type": "string",
+            "example": "3.000",
+            "description": "Σ cantidad, texto a 3 decimales."
+          },
+          "importe": {
+            "type": "string",
+            "example": "267.00",
+            "description": "Σ total de las partidas (antes del descuento de la cuenta), texto a 2 decimales."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "producto",
+          "variantes",
+          "partidas",
+          "cantidad",
+          "importe"
+        ]
+      },
+      "SucursalSinCatalogoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal"
+        ]
+      },
+      "VendidosSinCatalogoDto": {
+        "type": "object",
+        "properties": {
+          "filas": {
+            "description": "Por importe, de mayor a menor.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VendidoSinCatalogoDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Renglones antes del tope."
+          },
+          "truncado": {
+            "type": "boolean",
+            "description": "true = hay más de 500 renglones y sólo vienen los primeros."
+          },
+          "sucursalesSinCatalogo": {
+            "description": "Sucursales del alcance SIN una sincronización completa del catálogo de productos: sus ventas no se cruzan (contra un catálogo ausente o parcial todo saldría \"sin catálogo\").",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalSinCatalogoDto"
+            }
+          }
+        },
+        "required": [
+          "filas",
+          "total",
+          "truncado",
+          "sucursalesSinCatalogo"
+        ]
+      },
       "MetadataProductoDto": {
         "type": "object",
         "properties": {
@@ -7581,6 +8064,12 @@
             "nullable": true,
             "description": "Nombre del grupo en la misma sucursal; nulo si no hay grupo o aún no llegó."
           },
+          "precio": {
+            "type": "string",
+            "nullable": true,
+            "example": "89.00",
+            "description": "Precio en ESA sucursal, tal como lo reporta el POS (texto a 2 decimales; no se sabe si trae IVA). Nulo = el POS no lo reporta."
+          },
           "tieneMetadata": {
             "type": "boolean",
             "description": "Tiene metadata propia (foto, descripción, etiquetas, mín/máx)."
@@ -7609,6 +8098,7 @@
           "updatedAt",
           "grupoOrigenSrId",
           "grupo",
+          "precio",
           "tieneMetadata",
           "metadata"
         ]

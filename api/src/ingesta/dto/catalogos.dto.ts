@@ -18,7 +18,7 @@ import {
   Min,
 } from 'class-validator';
 
-import { ISO_CON_ZONA } from '../normalizar';
+import { DINERO, ISO_CON_ZONA } from '../normalizar';
 
 /**
  * Contrato de la ingesta de catálogos (F2-230): `POST /ingesta/catalogos` (una página),
@@ -116,6 +116,23 @@ export class RegistroProductoDto extends RegistroCatalogoDto {
   @IsString()
   @Length(1, 64)
   grupoOrigenSrId?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    pattern: DINERO.source,
+    example: '89.00',
+    description:
+      'Precio de venta en ESTA sucursal (F2-145), texto decimal con la regla de los importes de ' +
+      '`/ingesta/eventos`: hasta 10 enteros y 4 decimales, se redondea a 2 mitad lejos de cero. ' +
+      'Lo que al redondear no cabe en NUMERIC(12,2) rechaza el registro. Ausente o nulo = el POS no ' +
+      'lo reporta, y se GUARDA nulo (también en una página incremental): el agente manda siempre el ' +
+      'precio que lee. Se guarda tal como lo da el POS; no se sabe si trae IVA (esquema-sr §6).',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(DINERO, { message: '$property debe ser un importe decimal en texto' })
+  precio?: string | null;
 }
 
 export class RegistroClienteDto extends RegistroCatalogoDto {

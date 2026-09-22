@@ -633,6 +633,10 @@ model Producto {
   // producto con un grupo que aún no llegó (o que SR ya no tiene) no se rechaza.
   // La lectura resuelve el nombre por (sucursal, origen). esquema-sr.md §6.
   grupoOrigenSrId  String?  @map("grupo_origen_sr_id")
+  // Precio de venta en ESTA sucursal, tal como lo reporta el POS (F2-145). Nulo = el POS no
+  // lo reporta. DECISION PROVISIONAL (nocturno): un precio por producto y sucursal (sin listas
+  // por horario o área) y sin saber si trae IVA. esquema-sr.md §6.
+  precio           Decimal? @db.Decimal(12, 2)
   activoPos        Boolean? @map("activo_pos")
   hash             String   @db.Char(64)
   activo           Boolean  @default(true)

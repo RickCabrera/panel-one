@@ -36,10 +36,14 @@ import {
   EmpresaQueryDto,
   ForzarSincronizacionDto,
   GuardarMetadataDto,
+  MenuDto,
+  MenuQueryDto,
   PaginaCatalogoLecturaDto,
   PaginaClientesDto,
   PaginaProductosDto,
   SincronizacionSucursalDto,
+  SinCatalogoQueryDto,
+  VendidosSinCatalogoDto,
   type FilaCatalogoDto,
 } from './dto/catalogos.dto';
 
@@ -130,6 +134,44 @@ export class CatalogosController {
     @Query() q: CatalogoQueryDto,
   ): Promise<Pagina<FilaCatalogoDto>> {
     return this.listar(scope, 'canales', q);
+  }
+
+  @Get('menu')
+  @ApiOperation({
+    summary:
+      'Orquestador de menú (F2-145): productos activos cruzados entre sucursales, por categoría, ' +
+      'con los precios distintos señalados.',
+    description:
+      'Sólo lectura: el precio lo manda el POS. El mismo producto se reconoce por su clave visible ' +
+      '(o, sin clave, por su nombre): supuesto no validado en SR. `discrepancia` compara sólo las ' +
+      'filas vigentes con precio. Hasta 5000 filas (`truncado`).',
+  })
+  @ApiOkResponse({ type: MenuDto })
+  menu(@EmpresaScopeActual() scope: EmpresaScope, @Query() q: MenuQueryDto): Promise<MenuDto> {
+    return this.catalogos.menu(scope, q.empresaId, q.sucursalId);
+  }
+
+  @Get('sin-catalogo')
+  @ApiOperation({
+    summary:
+      'Productos vendidos en el periodo que no están en el catálogo de su sucursal (F2-145).',
+    description:
+      'Cruce por NOMBRE (sin distinguir mayúsculas ni espacios de más): el ticket no trae id de ' +
+      'producto. Un producto renombrado en el POS dentro del periodo sale con su nombre viejo. Sólo ' +
+      'se cruzan las sucursales con una sincronización completa del catálogo de productos; las ' +
+      'demás salen en `sucursalesSinCatalogo`. Los cancelados no entran. Hasta 500 renglones.',
+  })
+  @ApiOkResponse({ type: VendidosSinCatalogoDto })
+  sinCatalogo(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: SinCatalogoQueryDto,
+  ): Promise<VendidosSinCatalogoDto> {
+    return this.catalogos.vendidosSinCatalogo(scope, {
+      empresaId: q.empresaId,
+      sucursalId: q.sucursalId,
+      desde: q.desde,
+      hasta: q.hasta,
+    });
   }
 
   @Get('productos/:id')

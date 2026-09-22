@@ -15,7 +15,9 @@ import { Comparativos } from './paginas/Comparativos';
 import { Cuenta } from './paginas/Cuenta';
 import { Inicio } from './paginas/Inicio';
 import { Login } from './paginas/Login';
+import { Menu } from './paginas/Menu';
 import { Mesas } from './paginas/Mesas';
+import { Productos } from './paginas/Productos';
 import { MesasPared } from './paginas/MesasPared';
 import { NoEncontrada } from './paginas/NoEncontrada';
 import { Reportes } from './paginas/Reportes';
@@ -74,6 +76,9 @@ export function Rutas() {
         <Route path="tickets" element={<Tickets />} />
         <Route path="reportes" element={<Reportes />} />
         <Route path="alertas" element={<Alertas />} />
+        <Route path="productos" element={<Productos />} />
+        {/* `/menu` y no `/productos/menu`: el menú lateral marcaría activas las dos. */}
+        <Route path="menu" element={<Menu />} />
         <Route path="cuenta" element={<Cuenta />} />
         <Route
           path="admin"

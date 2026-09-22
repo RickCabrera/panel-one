@@ -462,3 +462,139 @@ export interface BajaReportes {
   diario: boolean;
   semanal: boolean;
 }
+
+// --- Catálogos espejo (F2-230) y orquestador de menú (F2-145) ---------------------
+
+/** `FilaProductoDto` de `GET /catalogos/productos`. */
+export interface FilaProducto {
+  id: string;
+  sucursalId: string;
+  sucursal: string;
+  origenSrId: string;
+  clave: string | null;
+  nombre: string;
+  /** false = desapareció de la última sincronización completa (nunca se borra). */
+  activo: boolean;
+  /** false = baja en el POS; nulo = el POS no lo reporta. */
+  activoPos: boolean | null;
+  vistoAt: string;
+  updatedAt: string;
+  grupoOrigenSrId: string | null;
+  grupo: string | null;
+  /** Texto a 2 decimales, tal como lo reporta el POS; nulo = no lo reporta. */
+  precio: string | null;
+  tieneMetadata: boolean;
+}
+
+/** `PaginaProductosDto`. */
+export interface PaginaProductos {
+  filas: FilaProducto[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+}
+
+/** `MetadataProductoDto`: nuestra, no del POS. */
+export interface MetadataProducto {
+  descripcion: string | null;
+  fotoUrl: string | null;
+  etiquetas: string[];
+  minimo: string | null;
+  maximo: string | null;
+  updatedAt: string;
+}
+
+/** `DetalleProductoDto` de `GET /catalogos/productos/{id}`. */
+export interface DetalleProducto extends FilaProducto {
+  metadata: MetadataProducto | null;
+}
+
+/** `GuardarMetadataDto` de `PUT /catalogos/productos/{id}/metadata` (reemplazo completo). */
+export interface GuardarMetadata {
+  empresaId: string;
+  descripcion: string | null;
+  fotoUrl: string | null;
+  etiquetas: string[];
+  minimo: string | null;
+  maximo: string | null;
+}
+
+export type CatalogoSr = 'grupos' | 'productos' | 'meseros' | 'clientes' | 'areas' | 'canales';
+
+/** `EstadoCatalogoDto`. */
+export interface EstadoCatalogo {
+  catalogo: CatalogoSr;
+  ultimaCompletaAt: string | null;
+  recibidaAt: string | null;
+  total: number | null;
+  rechazados: number | null;
+  desactivados: number | null;
+}
+
+/** `SincronizacionSucursalDto` de `GET /catalogos/sincronizacion`. */
+export interface SincronizacionSucursal {
+  sucursalId: string;
+  sucursal: string;
+  catalogos: EstadoCatalogo[];
+  solicitud: { solicitadaAt: string | null; pendiente: boolean };
+}
+
+/** `SucursalMenuDto`. */
+export interface SucursalMenu {
+  sucursalId: string;
+  sucursal: string;
+  /** Nulo = nunca sincronizó completo el catálogo de productos. */
+  sincronizadoAt: string | null;
+  productos: number;
+}
+
+/** `PrecioSucursalDto`. */
+export interface PrecioSucursal {
+  productoId: string;
+  sucursalId: string;
+  origenSrId: string;
+  nombre: string;
+  precio: string | null;
+  vigente: boolean;
+  tieneMetadata: boolean;
+}
+
+/** `ProductoMenuDto`. */
+export interface ProductoMenu {
+  llave: string;
+  criterio: 'clave' | 'nombre';
+  clave: string | null;
+  nombre: string;
+  grupo: string | null;
+  gruposDistintos: boolean;
+  duplicadoEnSucursal: boolean;
+  discrepancia: boolean;
+  precioMin: string | null;
+  precioMax: string | null;
+  precios: PrecioSucursal[];
+}
+
+/** `MenuDto` de `GET /catalogos/menu`. */
+export interface Menu {
+  sucursales: SucursalMenu[];
+  categorias: { grupo: string | null; productos: ProductoMenu[] }[];
+  productos: number;
+  discrepancias: number;
+  truncado: boolean;
+}
+
+/** `VendidosSinCatalogoDto` de `GET /catalogos/sin-catalogo`. */
+export interface VendidosSinCatalogo {
+  filas: {
+    sucursalId: string;
+    sucursal: string;
+    producto: string;
+    variantes: number;
+    partidas: number;
+    cantidad: string;
+    importe: string;
+  }[];
+  total: number;
+  truncado: boolean;
+  sucursalesSinCatalogo: { sucursalId: string; sucursal: string }[];
+}

@@ -126,6 +126,38 @@ export class GuardarMetadataDto {
   maximo!: string | null;
 }
 
+export class MenuQueryDto {
+  @ApiProperty({ format: 'uuid', description: 'Fuera del alcance del usuario = 404.' })
+  @IsUUID('all')
+  empresaId!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Una sucursal de esa empresa (con una sola no hay precios que comparar). Sin él, todas. ' +
+      'De otra empresa = 404.',
+  })
+  @IsOptional()
+  @IsUUID('all')
+  sucursalId?: string;
+}
+
+const DIA = /^\d{4}-\d{2}-\d{2}$/;
+const DOC_DIA =
+  'Día LOCAL de cada sucursal, inclusivo (YYYY-MM-DD). El corte es el de /ventas/*: cada cuenta ' +
+  'cae en el día de SU zona horaria.';
+
+/** El periodo de /ventas/* sin `alturaAl` (aquí no hay comparativo "a la misma altura"). */
+export class SinCatalogoQueryDto extends MenuQueryDto {
+  @ApiProperty({ example: '2026-09-01', description: DOC_DIA })
+  @Matches(DIA, { message: 'desde debe ser YYYY-MM-DD' })
+  desde!: string;
+
+  @ApiProperty({ example: '2026-09-20', description: DOC_DIA })
+  @Matches(DIA, { message: 'hasta debe ser YYYY-MM-DD' })
+  hasta!: string;
+}
+
 export class ForzarSincronizacionDto {
   @ApiProperty({ format: 'uuid', description: 'Fuera del alcance del usuario = 404.' })
   @IsUUID('all')
@@ -191,6 +223,16 @@ export class FilaProductoDto extends FilaCatalogoDto {
     description: 'Nombre del grupo en la misma sucursal; nulo si no hay grupo o aún no llegó.',
   })
   grupo!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '89.00',
+    description:
+      'Precio en ESA sucursal, tal como lo reporta el POS (texto a 2 decimales; no se sabe si trae ' +
+      'IVA). Nulo = el POS no lo reporta.',
+  })
+  precio!: string | null;
 
   @ApiProperty({ description: 'Tiene metadata propia (foto, descripción, etiquetas, mín/máx).' })
   tieneMetadata!: boolean;
@@ -318,4 +360,192 @@ export class SincronizacionSucursalDto {
 
   @ApiProperty({ type: SolicitudPanelDto })
   solicitud!: SolicitudPanelDto;
+}
+
+// ---------------------------------------------------------------------------
+// orquestador de menú (F2-145)
+// ---------------------------------------------------------------------------
+
+export class SucursalMenuDto {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description:
+      'Inicio de la última sincronización COMPLETA del catálogo de productos (UTC). Nulo = nunca: ' +
+      'la sucursal no tiene catálogo que mostrar ni que comparar.',
+  })
+  sincronizadoAt!: string | null;
+
+  @ApiProperty({ description: 'Productos activos de esa sucursal en el menú.' })
+  productos!: number;
+}
+
+export class PrecioSucursalDto {
+  @ApiProperty({ format: 'uuid', description: 'La fila del espejo (para su ficha y metadata).' })
+  productoId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  origenSrId!: string;
+
+  @ApiProperty({ description: 'El nombre en ESA sucursal (puede diferir entre sucursales).' })
+  nombre!: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '95.00',
+    description: 'Nulo = el POS no lo reporta.',
+  })
+  precio!: string | null;
+
+  @ApiProperty({
+    description:
+      'false = el POS lo reporta dado de baja: se muestra y no cuenta para la discrepancia.',
+  })
+  vigente!: boolean;
+
+  @ApiProperty()
+  tieneMetadata!: boolean;
+}
+
+export class ProductoMenuDto {
+  @ApiProperty({ description: 'Llave del cruce entre sucursales (`c:<clave>` o `n:<nombre>`).' })
+  llave!: string;
+
+  @ApiProperty({
+    enum: ['clave', 'nombre'],
+    description:
+      'Con qué se reconoció el mismo producto en las sucursales: la clave visible del POS o, sin ' +
+      'clave, el nombre. Supuesto no validado en SR (esquema-sr §6).',
+  })
+  criterio!: 'clave' | 'nombre';
+
+  @ApiProperty({ type: String, nullable: true })
+  clave!: string | null;
+
+  @ApiProperty({ description: 'El de la primera sucursal (por nombre).' })
+  nombre!: string;
+
+  @ApiProperty({ type: String, nullable: true, description: 'El grupo de la primera sucursal.' })
+  grupo!: string | null;
+
+  @ApiProperty({ description: 'Las sucursales lo tienen en grupos distintos.' })
+  gruposDistintos!: boolean;
+
+  @ApiProperty({ description: 'Dos filas de la MISMA sucursal comparten la llave.' })
+  duplicadoEnSucursal!: boolean;
+
+  @ApiProperty({
+    description:
+      'Entre las filas vigentes con precio hay más de un precio distinto (comparación decimal exacta).',
+  })
+  discrepancia!: boolean;
+
+  @ApiProperty({ type: String, nullable: true })
+  precioMin!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  precioMax!: string | null;
+
+  @ApiProperty({ type: [PrecioSucursalDto], description: 'En el orden de `sucursales`.' })
+  precios!: PrecioSucursalDto[];
+}
+
+export class CategoriaMenuDto {
+  @ApiProperty({ type: String, nullable: true, description: 'Nulo = sin grupo (va al final).' })
+  grupo!: string | null;
+
+  @ApiProperty({ type: [ProductoMenuDto] })
+  productos!: ProductoMenuDto[];
+}
+
+export class MenuDto {
+  @ApiProperty({ type: [SucursalMenuDto], description: 'Por nombre: el orden de las columnas.' })
+  sucursales!: SucursalMenuDto[];
+
+  @ApiProperty({
+    type: [CategoriaMenuDto],
+    description: 'Por nombre de grupo; sin grupo al final.',
+  })
+  categorias!: CategoriaMenuDto[];
+
+  @ApiProperty({ description: 'Productos distintos (ya cruzados entre sucursales).' })
+  productos!: number;
+
+  @ApiProperty({ description: 'Productos con precio distinto entre sucursales.' })
+  discrepancias!: number;
+
+  @ApiProperty({
+    description:
+      'true = había más de 5000 filas activas y el menú sólo trae las primeras (por sucursal y ' +
+      'origenSrId): las cifras no están completas.',
+  })
+  truncado!: boolean;
+}
+
+export class VendidoSinCatalogoDto {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+
+  @ApiProperty({
+    description: 'El nombre tal como llegó en el ticket (de sus variantes, la de más importe).',
+  })
+  producto!: string;
+
+  @ApiProperty({
+    description: 'Escrituras distintas (mayúsculas, espacios) que se juntaron en este renglón.',
+  })
+  variantes!: number;
+
+  @ApiProperty({ description: 'Partidas vendidas en el periodo.' })
+  partidas!: number;
+
+  @ApiProperty({ example: '3.000', description: 'Σ cantidad, texto a 3 decimales.' })
+  cantidad!: string;
+
+  @ApiProperty({
+    example: '267.00',
+    description: 'Σ total de las partidas (antes del descuento de la cuenta), texto a 2 decimales.',
+  })
+  importe!: string;
+}
+
+export class SucursalSinCatalogoDto {
+  @ApiProperty({ format: 'uuid' })
+  sucursalId!: string;
+
+  @ApiProperty()
+  sucursal!: string;
+}
+
+export class VendidosSinCatalogoDto {
+  @ApiProperty({ type: [VendidoSinCatalogoDto], description: 'Por importe, de mayor a menor.' })
+  filas!: VendidoSinCatalogoDto[];
+
+  @ApiProperty({ description: 'Renglones antes del tope.' })
+  total!: number;
+
+  @ApiProperty({ description: 'true = hay más de 500 renglones y sólo vienen los primeros.' })
+  truncado!: boolean;
+
+  @ApiProperty({
+    type: [SucursalSinCatalogoDto],
+    description:
+      'Sucursales del alcance SIN una sincronización completa del catálogo de productos: sus ventas ' +
+      'no se cruzan (contra un catálogo ausente o parcial todo saldría "sin catálogo").',
+  })
+  sucursalesSinCatalogo!: SucursalSinCatalogoDto[];
 }
