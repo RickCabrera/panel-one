@@ -1140,8 +1140,8 @@ model Insumo {
   // `origen_sr_id` en TEXTO y sin FK, como el grupo del producto (F2-230): el orden en
   // que llegan los catálogos no está garantizado y un insumo cuyo grupo o unidad aún no
   // llegó (o ya no existe en SR) no se rechaza. La lectura resuelve el nombre por
-  // (sucursal, origen). Sin costo: el costo con que se valúa es el promedio POR ALMACÉN
-  // (existencias, F2-121). esquema-sr.md §9.
+  // (sucursal, origen). Sin costo: el costo con que se valúa viaja con las existencias
+  // (F2-121); en SR es por (insumo, empresa), no por almacén (F2-241). esquema-sr.md §9-§10.
   grupoOrigenSrId  String?  @map("grupo_origen_sr_id")
   unidadOrigenSrId String?  @map("unidad_origen_sr_id")
   activoPos        Boolean? @map("activo_pos")

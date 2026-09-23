@@ -569,7 +569,11 @@ describe('Reportes programados por correo (e2e, F2-141)', () => {
 
     it('un token alterado o de otra forma: 404, y no apaga nada', async () => {
       const t = enlace.searchParams.get('t')!;
-      const alterado = t.slice(0, -1) + (t.endsWith('A') ? 'B' : 'A');
+      // Se altera un carácter de la MITAD de la firma, no el último: la firma son 32 bytes en
+      // base64url (43 caracteres) y el último sólo lleva 4 bits útiles, así que cambiar su "A" por
+      // "B" decodificaba a los mismos bytes y el token "alterado" seguía siendo válido (~1/16).
+      const i = t.indexOf('.') + 20;
+      const alterado = t.slice(0, i) + (t[i] === 'A' ? 'B' : 'A') + t.slice(i + 1);
       const r = await baja({ token: alterado, tipo: 'diario' });
       expect(r.status).toBe(404);
       expect((await baja({ token: 'basura' })).status).toBe(404);

@@ -538,9 +538,10 @@ Supuestos y decisiones:
   cancelación que ya ocurrió sólo se anota. Webhook de Facturama: no (no hay dominio ni cuenta).
 - ⚠️ **SUPUESTO — NO VALIDADO (Facturama, F2-190):** `DECISION PROVISIONAL (nocturno)`
   (`cancelacion.ts#SOLICITUD_VENCIDA_MS`): una solicitud AMBIGUA que a los **10 min** el PAC todavía
-  ve vigente se da por NO registrada y se borra. Si Facturama registrara el DELETE más tarde, el CFDI
-  quedaría cancelado ante el SAT y vigente aquí hasta que otra consulta lo vea (la conciliación de
-  F2-110 lo cubriría).
+  ve vigente se da por NO registrada. **Desde F2-110b ya no se borra: queda `sin_confirmar`**
+  (ver "Conciliación con el PAC (F2-110b)" más abajo; lo de "se borra" era el comportamiento de
+  F2-109, corregido aquí en F2-250). Si Facturama registrara el DELETE más tarde, la conciliación
+  re-consulta las `sin_confirmar`.
 - La fecha de cancelación que se anota cuando la resuelve una CONSULTA (el receptor aceptó, venció
   el plazo) es la hora de la consulta, no la del SAT: el GET del PAC no la trae en lo que sabemos
   (F2-190). Con el sondeo cada 15 min puede ir hasta ese tanto después. Cuando la cancelación es
@@ -1376,8 +1377,11 @@ ese registro solo.
   contacto (no se sabe qué guarda SR). `schema.prisma#ProveedorCatalogo`. Si SR no tiene
   proveedores, el lector cierra con `total = 0` (el catálogo queda vacío, no se inventa).
 - ⚠️ **SUPUESTO — el catálogo de insumos no trae costo.** El costo con que se valúa el inventario
-  es el promedio POR ALMACÉN, que viaja con las existencias (F2-121, §10). Si SR tiene además un
-  "último costo" en el insumo, se agrega al contrato cuando se vea.
+  es el costo promedio que viaja con las existencias (F2-121, §10). **Corrección de F2-250:** este
+  bullet decía "promedio POR ALMACÉN"; el metadato de F2-241 (§10, tabla, renglón "Costo promedio")
+  dice que en SR es por **(insumo, empresa)**, y el agente manda el mismo costo en todos los
+  almacenes de una empresa. Si SR tiene además un "último costo" en el insumo, se agrega al
+  contrato cuando se vea.
 - ⚠️ **Sin modelar: presentaciones** (empaques de compra, p. ej. "caja con 24") **y
   productos-receta.** El seed no los genera y no se sabe cómo los guarda SR. Las recetas son de
   F2-125; las presentaciones las busca F2-241 y, si existen, piden su propio espejo y contrato.
@@ -1448,8 +1452,12 @@ Se guarda en `existencias` (estado actual por sucursal, almacén e insumo), `lec
 (la última foto aplicada de cada almacén) y, aparte, `limites_existencia` (mínimo y máximo, que son
 del panel y **nunca se escriben a SR**).
 
-- ⚠️ **SUPUESTO — SR guarda existencia y costo promedio POR ALMACÉN.** Si el costo promedio es por
-  insumo (no por almacén), el lector manda el mismo costo en cada almacén y nada cambia aquí.
+- ⚠️ **SUPUESTO — SR guarda existencia POR ALMACÉN** (`acumuladoinsumos`). **El costo promedio NO es
+  por almacén** (corrección de F2-250, con el metadato de F2-241 de la tabla de arriba): es por
+  (insumo, empresa), y el lector manda el mismo costo en cada almacén de la empresa. En el panel
+  nada cambia: `existencias.costo_promedio` sigue por fila, sólo que repetido entre almacenes. Los
+  comentarios de `schema.prisma#Existencia` y de `existencias.dto.ts` que decían "en este almacén"
+  se corrigieron en F2-250.
 - ⚠️ **SUPUESTO — la foto trae TODAS las filas del almacén, también las que están en 0 o negativas.**
   Lo que ya estaba y no viene **se borra** (es estado, no catálogo; la historia es de los
   movimientos, F2-122). Si SR omite las filas en cero, un artículo agotado desaparecería del panel
@@ -2118,10 +2126,13 @@ instalación de SR 10 (ver el recuadro de abajo). Lo que no aparece ahí sigue s
   `test` lo reporta como "falló el cifrado" y sugiere actualizar o, si la base está en la
   misma PC, `Encrypt=False`. No se sabe qué versión de SQL Server instala cada versión de SR
   (§1 sigue pendiente).
-- ⚠️ **SUPUESTO — en los SQL Express viejos, `NT AUTHORITY\SYSTEM` es sysadmin.** El servicio
-  corre como LocalSystem. Con `Integrated Security=True`, el agente entraría a la base del
-  POS con permisos de todo, justo lo que la regla de solo lectura prohíbe. Por eso la
-  plantilla usa autenticación SQL, y `test` y el log avisan si la cadena usa la de Windows.
+- ⚠️ **SUPUESTO — en los SQL Express viejos, `NT AUTHORITY\SYSTEM` es sysadmin.** El default
+  del servicio desde F1-026 es la cuenta virtual `NT SERVICE\ArkonAgente` (§14.1); el respaldo
+  `instalar.ps1 -CuentaServicio LocalSystem` lo corre como SYSTEM. En ese caso, con
+  `Integrated Security=True`, el agente entraría a la base del POS con permisos de todo, justo
+  lo que la regla de solo lectura prohíbe. (Este bullet decía "el servicio corre como
+  LocalSystem"; se corrigió en F2-250.) Por eso la plantilla usa autenticación SQL, y `test` y
+  el log avisan si la cadena usa la de Windows, con cualquiera de las dos cuentas.
 - ⚠️ **SUPUESTO — el texto de SR vive en `varchar` con collation en español (codepage 1252,
   p. ej. `Modern_Spanish_CI_AS`).** Por eso el agente corre con `InvariantGlobalization=false`
   (`DECISION PROVISIONAL (nocturno)` en `agent/src/ArkonAgente/ArkonAgente.csproj`): en
@@ -2244,6 +2255,11 @@ Supuestos del instalador (⚠️ ninguno visto funcionando):
   convertir la hora local de SR a un instante con zona usando `Sucursal.zona_horaria`
   (la que devuelve `GET /agente/yo`). Ojo con el cambio de horario: México ya no lo usa,
   pero una hora local ambigua sólo la puede resolver el agente, que sabe de qué sucursal es.
+  **Discrepancia registrada en F2-250:** lo que el agente de verdad hace hoy (catálogos F2-240 e
+  inventario F2-241/F2-241b, `DocumentosInventario.Instante`) es convertir con la **zona de Windows
+  de la PC** (`TimeZoneInfo.Local`), no con `Sucursal.zona_horaria` (§10, "Cómo lo lee el agente").
+  Coinciden si la PC del restaurante tiene bien su zona. El lector de cheques (F1-022) todavía no
+  existe; cuando se escriba, decide cuál usa y unifica. ⚠️ Supuesto no validado.
   Se guardan milisegundos; lo que venga más fino (.NET manda 7 decimales) se trunca.
 - ⚠️ **SUPUESTO — los importes de SR llevan hasta 4 decimales** (`money`, §3). El contrato
   pide **texto decimal** (`"125.50"`, nunca número JSON) con hasta 10 enteros y 4
@@ -2404,6 +2420,311 @@ lote (partir por partidas); (7) documentar en §10 si SR guarda la compra sólo 
   reenvío lo reescribe; reenviar lo mismo no toca nada. Los cheques guardados antes de F2-232 tienen
   nulo y un reenvío sin el campo sigue siendo idéntico (no hay reescritura masiva).
 - Uno de más de 64 rechaza sólo ese evento (`rechazados[]`), con un motivo que no repite el valor.
+
+---
+
+## 14. Decisiones provisionales que no tenían entrada (cosecha de F2-250)
+
+La auditoría de cierre de la Ronda 2 (F2-250) cruzó cada marca `DECISION PROVISIONAL
+(nocturno)` del código contra este documento: **25 decisiones** (31 marcas) no tenían entrada.
+Van aquí, agrupadas. **Ninguna está validada**: son supuestos o elecciones conservadoras
+tomadas de noche, y se leen como tales. Las de 14.1 tocan al agente y al POS; las demás son
+decisiones internas del panel (zona, UI, facturación, correo) que se registran aquí porque
+éste es el único lugar donde la siguiente sesión las busca. El índice completo (qué § cubre
+cada marca del código) está al final, en "Índice de decisiones provisionales".
+
+### 14.1 Agente: cuenta del servicio, actualizador, cola y arranque
+
+- ⚠️ **SUPUESTO NO VALIDADO (F1-026) — cuenta del servicio.** El servicio del agente corre por
+  defecto con la **cuenta virtual `NT SERVICE\ArkonAgente`** (menor privilegio: sólo su carpeta
+  `C:\ProgramData\ArkonAgente` y salida HTTPS; al SQL entra con el usuario SQL de `config.json`,
+  nunca con la cuenta de Windows). Marcas en `agent/instalador/instalar.ps1` y
+  `agent/README.md`. **Nunca se ha corrido como servicio** (F1-020b). Si no arranca, el respaldo
+  es `instalar.ps1 -CuentaServicio LocalSystem`; el SID del servicio recibe el permiso de la
+  carpeta en los dos casos. (§11 decía "corre como LocalSystem": corregido en F2-250.)
+- ⚠️ **SUPUESTO NO VALIDADO (F2-143) — cuenta del actualizador.** El servicio **actualizador**
+  corre como **LocalSystem**, porque tiene que detener y arrancar el servicio del agente y
+  escribir en Program Files, cosas que la cuenta virtual no puede
+  (`agent/instalador/funciones-instalador.ps1#Get-ArgumentosScActualizador`, `agent/README.md`).
+  No se ha verificado con elevación (F1-020b). **Nunca se conecta al SQL del POS.**
+- **Elección conservadora (F2-143)** (`Actualizacion/ServicioActualizador.cs`): un proceso
+  `agente` cuyo módulo no se puede inspeccionar **cuenta como corriendo**: no se arranca otro
+  encima. Como SYSTEM, el vigilante debería poder verlos todos; si no, se prefiere no duplicar.
+- **Elección (F1-024)** (`Cola/ColaLocal.cs`): en la cola local **el heartbeat pendiente también
+  se colapsa** (queda sólo el último), igual que el snapshot de mesas, aunque el backlog sólo lo
+  pedía para el snapshot. El API guarda sólo el último estado e ignora un heartbeat tardío, y el
+  contacto del agente sale del lote, no del heartbeat: no se pierde nada. Sin esto, un corte de
+  días acumularía 2 880 heartbeats diarios.
+- ⚠️ **Elección con decisión abierta (F1-020)** (`Worker.cs`): una conexión que **falla al
+  arrancar**, incluido un usuario SQL con permisos de escritura, queda como `Warning` en el log y
+  **el servicio sigue**. Catálogos e inventario verifican el usuario antes de cada lectura (§11) y
+  no leen si puede escribir. ❓ **Decisión abierta para Ricardo** (ficha de F1-022): si el lector
+  de cheques debe negarse igual. Lo conservador, si F1-022 llega sin decidirlo, es NO leer.
+
+### 14.2 Centro de alertas y estado de agentes
+
+- **Valores por defecto (F2-224)** (`api/src/alertas/reglas.ts`): > 10 min sin reportar, mesa
+  abierta > 60 min, cuenta sin imprimir > 30 min (los tres de la ficha) y **caída de venta 30 %**,
+  que la ficha no fija: es una elección conservadora (no avisar por cualquier bache),
+  configurable por empresa. **Severidad fija por tipo**: "sucursal sin reportar" es crítica
+  (deja ciega la vista); las demás, advertencia.
+- **Base mínima (F2-224)** (`reglas.ts#CUENTAS_BASE_MINIMAS`): la caída de venta sólo se evalúa si
+  la base (mismo día de la semana anterior, a la misma altura) tiene **≥ 5 cuentas**.
+- **`actualizacion_fallida` (F2-143)** (`reglas.ts`): abre cuando la racha de fallas de la versión
+  VIGENTE lleva **más de 1 min** (default; rango 1–1440). Advertencia, no crítica: el agente viejo
+  sigue leyendo. Detalle en `docs/actualizacion-agente.md`.
+- **Sucursal que nunca reportó — dos criterios contrarios.** En el centro de alertas
+  (`api/src/alertas/evaluador.ts`, F2-224) una sucursal que **nunca** ha reportado **abre** la
+  alerta crítica `sucursal_sin_reporte` (una sucursal recién dada de alta nace alertada). En el
+  badge de Estado de agentes (`web/src/paginas/admin/reglasAgentes.ts`, F1-061) **no cuenta** (si
+  contara, una sucursal nueva lo dejaría prendido para siempre; en la tabla sí sale como "Sin
+  reporte"). ❓ **Decisión abierta para Ricardo:** unificar (ver backlog, Ronda 3).
+
+### 14.3 Facturación
+
+- ⚠️ **SUPUESTO NO VALIDADO (Facturama, F2-190)** (`api/src/adaptadores/timbrado/timbrado-facturama.ts`):
+  no se sabe si `Complement.TaxStamp.Date` (fecha de timbrado) trae zona. Sin zona se lee como
+  **hora local de la sucursal** (como la fecha del CFDI, Anexo 20), nunca como hora del servidor;
+  con zona se respeta. Si falta o no se puede leer, se usa el reloj del API (como el PAC falso).
+  La `Date` de la lista de CFDI (F2-110b) sigue la misma regla.
+- **Enlaces del portal (F2-105)** (`api/src/facturacion/entrega.ts#TTL_DESCARGA_PORTAL_S`): los
+  enlaces de descarga de la pantalla de éxito del portal **duran 1 h**. El correo ya lleva XML y
+  PDF. Volver a descargar después es la decisión abierta (a)/(b) de F2-105 (backlog, Ronda 3).
+
+### 14.4 Topes de lectura del panel
+
+Topes para no colgar ni la base ni la pestaña: por encima se **pide acotar**, nunca se trunca en
+silencio. Con una operación real de alta rotación (F2-193) hay que ver si alcanzan.
+
+- **Existencias (F2-121)** (`api/src/inventario/existencias.service.ts#MAX_FILAS_EXISTENCIAS`):
+  **50 000 filas** por consulta (sucursales × almacenes × insumos); más pide filtrar por sucursal.
+- **Kardex (F2-122)** (`api/src/inventario/movimientos.service.ts#MAX_MOVIMIENTOS_KARDEX`):
+  **10 000 movimientos** por kardex en el rango; más pide acortar el rango.
+- **Export de tickets (F1-042)** (`web/src/paginas/tickets/exportar.ts#MAX_TICKETS_EXPORT`):
+  **50 000 tickets** por CSV (todo se junta en memoria antes de armar el archivo).
+
+### 14.5 Zonas horarias: "hoy" y el comparable
+
+- **"Hoy" con varias zonas (F1-041)** (`web/src/filtros/periodo.ts#zonaDelPanel`): con sucursales
+  en zonas distintas no hay un solo "hoy"; el panel toma `America/Mexico_City` (zona de
+  presentación). Entre la medianoche de CDMX y la de Tijuana, "Hoy" ya es el día nuevo y Tijuana
+  sale en cero hasta que le llegue venta. ❓ Decisión abierta para Ricardo.
+- **Comparable "a la misma altura" (F2-220)** (`api/src/scope/consulta-ventas.ts#alturaAl`,
+  `web/src/paginas/resumen/comparables.ts`): usa **sólo la HORA local** del instante, no su fecha.
+  Con sucursales en zonas distintas, en la hora en que el día local de una sucursal no es el "hoy"
+  del panel (Tijuana entre 00:00 y 01:00 de CDMX), su base se corta a las 23:xx y el Δ sale muy
+  bajo; con una zona adelantada (Cancún), al revés. Arreglo propuesto: comparar la fecha local con
+  el día de referencia. ❓ Decisión abierta para Ricardo (log de F2-220).
+
+### 14.6 Panel, landing, correo y notificaciones (no son de SR)
+
+- **`agente_estado` con `empresa_id` (F1-010)** (`api/prisma/schema.prisma`, `AgenteEstado`): el
+  backlog lo definía sólo con `sucursal_id`; lleva además `empresa_id` indexado y denormalizado
+  para que el helper de scope no tenga casos especiales. La FK compuesta
+  `(sucursal_id, empresa_id)` impide que se desalinee.
+- **Formas de pago en Tickets (F1-042)** (`web/src/paginas/tickets/formato.ts#formasDePago`): la
+  columna muestra el **texto crudo de SR** (`forma_raw`), no el ENUM del catálogo: es lo que el
+  gerente ve en el POS. El desglose por forma (§4) sí usa el ENUM.
+- **Push sin cifras en alertas (F2-146)** (`api/src/notificaciones/mensajes.ts`): las
+  notificaciones de **alerta no llevan cifras**; el **resumen del día sí lleva la venta** (se ve
+  en la pantalla bloqueada). Detalle en `docs/notificaciones.md`.
+- **Formulario de contacto sin buzón (F2-147)** (`api/src/onboarding/onboarding.config.ts`): en
+  producción sin buzón configurado responde **503** y el resto del API **arranca igual**. El
+  buzón real es F2-191.
+- **Landing sin precios (F2-147)** (`web/landing/index.html`): la sección de precios **no publica
+  cifras**; la cifra la pone Ricardo.
+- **"Entrar al panel" (F2-147)** (`web/vite.landing.config.ts`): lleva a `/login` del mismo
+  origen (`URL_PANEL`); todavía no se sabe si el panel vivirá en otro subdominio.
+- **Hora y zona del reporte programado (F2-141)** (`api/src/reportes/calendario.ts`): sale a las
+  **07:00 locales fijas**, sin configurar por usuario. La **zona de la empresa** es la que
+  comparten más sucursales activas (empate: la primera alfabética; sin sucursales:
+  `America/Mexico_City`). Sólo decide la hora de envío y qué día es "ayer": cada sucursal corta sus
+  cifras en su propia zona.
+- **Tema (F2-211)** (`web/src/tema/tema.ts`): la preferencia de modo oscuro vive en
+  `localStorage`, **por usuario y por navegador**, no en la API: no viaja entre dispositivos.
+
+---
+
+## Índice de decisiones provisionales
+
+Generado en F2-250. **Una fila por cada marca** `DECISION PROVISIONAL` del código (también las
+partidas en dos líneas y las escritas en minúsculas), fuera de `docs/`, `backlog.md` y
+`CLAUDE.md`. La clave es `archivo#n`: la n-ésima marca de ese archivo, en orden. **Tipo** separa
+lo que es conocimiento o supuesto sobre SoftRestaurant y el agente (**SR**) de las decisiones
+internas del panel (**panel**: zona, UI, facturación, correo), para que no parezca que todo es
+del POS. La última columna dice dónde está documentada.
+
+**Se verifica con** `node scripts/auditoria/decisiones-provisionales.mjs` (desde la raíz): falla
+si una marca del código no tiene fila, si sobra una fila o si un § citado no es un encabezado de
+este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo entregable**
+(`--listar` imprime las claves actuales). No está en el CI (ver backlog, Ronda 3).
+
+| Clave | Línea (F2-250) | Tarea | Decisión | Tipo | Dónde |
+|---|---|---|---|---|---|
+| `agent/README.md#1` | 180 | F1-026 | Servicio corre con cuenta virtual `NT SERVICE\ArkonAgente` por defecto; nunca probado como servicio; fallback `-CuentaServicio LocalSystem`. | SR | §11, §14 «Agente: cuenta del servicio» |
+| `agent/README.md#2` | 323 | F1-025 | Sin lector de cheques, "última lectura" = última vez que respondió la sonda, no llegada de ventas. | SR | §1 |
+| `agent/README.md#3` | 431 | F2-143 | El servicio actualizador corre como LocalSystem, sin verificar con elevación (F1-020b). | SR | §11, §14 «Agente: cuenta del servicio» |
+| `agent/instalador/funciones-instalador.ps1#1` | 237 | F2-143 | El servicio actualizador corre como LocalSystem, sin verificar con elevación (F1-020b). | panel | §11, §14 «Agente: cuenta del servicio» |
+| `agent/instalador/instalar.ps1#1` | 248 | F1-026 | Servicio corre con cuenta virtual `NT SERVICE\ArkonAgente` por defecto; nunca probado como servicio; fallback `-CuentaServicio LocalSystem`. | panel | §11, §14 «Agente: cuenta del servicio» |
+| `agent/src/ArkonAgente/Actualizacion/ServicioActualizador.cs#1` | 70 | F2-143 | Un proceso "agente" que no se puede inspeccionar cuenta como corriendo (no arrancar otro encima). | panel | §14 «Agente: cuenta del servicio» |
+| `agent/src/ArkonAgente/ArkonAgente.csproj#1` | 16 | F1-020 | `InvariantGlobalization=false`: SR guarda varchar CP1252 (Modern_Spanish_CI_AS). | SR | §11 |
+| `agent/src/ArkonAgente/Catalogos/MapeoCatalogos.cs#1` | 228 | F2-240 | Producto con varias filas de `productosdetalle` distintas → precio y estado nulos, con aviso. | SR | §6 |
+| `agent/src/ArkonAgente/Catalogos/MapeoCatalogos.cs#2` | 257 | F2-241 | Sin tabla de unidades: unidad = texto distinto de `insumos.unidad`; clave TrimEnd + mayúsculas; DISTINCT con collation binaria. | SR | §9, §12 |
+| `agent/src/ArkonAgente/Catalogos/MapeoCatalogos.cs#3` | 340 | F2-241 | `insumosdetalle` con estados distintos entre empresas → insumo viaja sin estado, con aviso. | SR | §9 |
+| `agent/src/ArkonAgente/Catalogos/MapeoCatalogos.cs#4` | 384 | F2-240/F2-241 | 1 = vigente, 0 = baja en `meseros.visible`, `areasrestaurant.Estatus`, `proveedores.estatus`, `insumosdetalle.estatus`; otro/NULL = nulo con aviso. | SR | §7, §8, §9 |
+| `agent/src/ArkonAgente/Catalogos/SincronizadorCatalogos.cs#1` | 48 | F2-240 | Con usuario que puede escribir (o sin confirmar) no se leen catálogos. | SR | §11 |
+| `agent/src/ArkonAgente/Cola/ColaLocal.cs#1` | 45 | F1-024 | El heartbeat pendiente también se colapsa en la cola (sólo el último), como el snapshot. | SR | §2, §14 «Agente: cuenta del servicio» |
+| `agent/src/ArkonAgente/Cola/ColaLocal.cs#2` | 127 | F1-024 | El heartbeat pendiente también se colapsa en la cola (sólo el último), como el snapshot. | SR | §2, §14 «Agente: cuenta del servicio» |
+| `agent/src/ArkonAgente/Configuracion/CargadorConfiguracion.cs#1` | 113 | F1-061 | El panel marca "desconectado" a 90 s fijos; el agente avisa si `intervaloSegundos` > 30. | SR | §5 |
+| `agent/src/ArkonAgente/Inventario/DocumentosInventario.cs#1` | 97 | F2-241b | Cantidades 4→3 decimales, mitad lejos de cero. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/DocumentosInventario.cs#2` | 104 | F2-241b | Hora de SR → instante con la zona de Windows de la PC; hora ambigua/inexistente = desfase estándar. | SR | §10, §13 |
+| `agent/src/ArkonAgente/Inventario/MapeoCompras.cs#1` | 17 | F2-241b | Cantidad de compra 4→3 decimales con aviso; ≤ 0 viaja y el API la rechaza. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/MapeoCompras.cs#2` | 22 | F2-241b | Almacén por renglón: si todos coinciden viaja ése; si se mezclan, nulo con aviso. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/MapeoExistencias.cs#1` | 36 | F2-241 | Cantidad de existencia 4→3 decimales, mitad lejos de cero; 10 enteros viaja y el API rechaza. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/MapeoExistencias.cs#2` | 41 | F2-241 | Sin costo (sin fila o costos distintos en `insumosdetalle`) → `costoPromedio: null`, el API rechaza ese registro. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/MapeoMovimientos.cs#1` | 18 | F2-241b | Cantidad con signo del trigger, 4→3 decimales con aviso; costo/cantidad NULL viajan null. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/MapeoMovimientos.cs#2` | 32 | F2-241b | Traducción de los 17 conceptos de SR al tipo del panel; lo dudoso → `otro`. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/MapeoRecetas.cs#1` | 20 | F2-241b | `costos` con varias empresas: iguales → una; distintas → no se manda y cuenta como vista. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/SincronizadorInventario.cs#1` | 84 | F2-241b | Movimientos cada 15 min, compras 30, recetas 60. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/SincronizadorInventario.cs#2` | 92 | F2-241b | Ventanas: vivos cursor−3 d (mov.) / −35 d (compras); cancelados −35 d; sin cursor 35 d; cursor topado a ahora+5 min. | SR | §10 |
+| `agent/src/ArkonAgente/Inventario/SincronizadorInventario.cs#3` | 110 | F2-241b | Freno: ≥ 5 desaparecidos y > mitad de la ventana → no encola ni mueve cursor. | SR | §10 |
+| `agent/src/ArkonAgente/SoftRestaurant/SondeoSr.cs#1` | 31 | F1-025 | Sin lector de cheques, "última lectura" = última vez que respondió la sonda, no llegada de ventas. | SR | §1 |
+| `agent/src/ArkonAgente/Sql/Consultas/sr_catalogo_unidades.sql#1` | 7 | F2-241 | Sin tabla de unidades: unidad = texto distinto de `insumos.unidad`; clave TrimEnd + mayúsculas; DISTINCT con collation binaria. | SR | §9, §12 |
+| `agent/src/ArkonAgente/Sql/Consultas/sr_movimientos.sql#1` | 25 | F2-241b | Documento = (clase+número, almacén, concepto); prioridad traspaso > idcompra > invfisico > foliocheque > movto > fecha. | SR | §10 |
+| `agent/src/ArkonAgente/Worker.cs#1` | 193 | F1-020 | Conexión que falla al arrancar (incl. usuario con escritura) = Warning y el servicio sigue; negarse a leer es decisión abierta. | SR | §11, §14 «Agente: cuenta del servicio» |
+| `agent/tests/ArkonAgente.Tests/ArkonAgente.Tests.csproj#1` | 15 | F1-020 | `InvariantGlobalization=false`: SR guarda varchar CP1252 (Modern_Spanish_CI_AS). | SR | §11 |
+| `api/prisma/schema.prisma#1` | 221 | F1-010 | `agente_estado` lleva `empresa_id` denormalizado con FK compuesta, aunque el backlog sólo pedía `sucursal_id`. | panel | §14 «Panel, landing, correo» |
+| `api/prisma/schema.prisma#2` | 327 | F1-030 | Sin CHECK de signo en importes (devoluciones/ajustes podrían venir negativos). | panel | §2 |
+| `api/prisma/schema.prisma#3` | 344 | F1-030 | `folio` y `folio_sr` como texto. | panel | §2 |
+| `api/prisma/schema.prisma#4` | 351 | F1-030 | `cerrado_at` nulo permitido (cancelado sin cierre). | panel | §2 |
+| `api/prisma/schema.prisma#5` | 358 | F1-030 | `comensales` nulo = SR no lo reportó, sin default 0. | panel | §2 |
+| `api/prisma/schema.prisma#6` | 362 | F1-030 | Sin CHECK de signo en importes (devoluciones/ajustes podrían venir negativos). | panel | §2 |
+| `api/prisma/schema.prisma#7` | 374 | F2-232 | El cheque referencia al cliente por el mismo `origenSrId` del catálogo. | panel | §2, §13 |
+| `api/prisma/schema.prisma#8` | 381 | F2-233 | El cheque referencia el área por el mismo `origenSrId` del catálogo. | panel | §2, §13 |
+| `api/prisma/schema.prisma#9` | 421 | F1-030 | `cantidad` de partida NUMERIC(12,3) (venta fraccionada). | panel | §3 |
+| `api/prisma/schema.prisma#10` | 478 | F1-032 | Catálogo de formas de pago por EMPRESA, match exacto, sin CRUD. | panel | §4 |
+| `api/prisma/schema.prisma#11` | 846 | F2-230 | Grupo del producto por texto (`origen_sr_id`), sin FK. | panel | §6 |
+| `api/prisma/schema.prisma#12` | 852 | F2-145 | Un precio por producto y sucursal, sin saber si trae IVA. | panel | §6 |
+| `api/prisma/schema.prisma#13` | 954 | F2-230 | Se supone un catálogo de canal/tipo de servicio en SR (`canales_venta_catalogo`). | panel | §8 |
+| `api/prisma/schema.prisma#14` | 981 | F2-233 | `canal_negocio` enum fijo; agregar canal = migración. | panel | §8 |
+| `api/prisma/schema.prisma#15` | 1139 | F2-120 | Insumo con UN grupo y UNA unidad por texto, sin FK; sin costo porque "el costo es el promedio POR ALMACÉN". | panel | §9, §10 |
+| `api/prisma/schema.prisma#16` | 1163 | F2-120 | Almacenes por sucursal. | panel | §9 |
+| `api/prisma/schema.prisma#17` | 1188 | F2-120 | Proveedores = catálogo del POS por sucursal, sin RFC ni contacto. | panel | §9 |
+| `api/prisma/schema.prisma#18` | 1299 | F2-122 | Un almacén por póliza; póliza que desaparece no se borra (viaja `cancelada`). | panel | §10 |
+| `api/prisma/schema.prisma#19` | 1517 | F2-125 | Receta que deja de llegar no se borra; producto/insumo por texto sin FK. | panel | §10 |
+| `api/prisma/schema.prisma#20` | 1542 | F2-125 | Renglón de receta NUMERIC(12,4); más decimales se rechazan. | panel | §10 |
+| `api/prisma/schema.prisma#21` | 1566 | F2-126 | Compra = documento aparte de su póliza; no se concilian ni suman a la utilidad. | panel | §10 |
+| `api/prisma/schema.prisma#22` | 1641 | F2-126 | Gasto `monto` SIN IVA acreditable. | panel | §10 |
+| `api/prisma/schema.prisma#23` | 1669 | F2-100 | Un emisor (perfil fiscal) por empresa. | panel | §8 |
+| `api/prisma/seed-mesas.ts#1` | 49 | F2-223 | `comandaImpresa` es forma nuestra; regla del seed para generarla. | panel | §5 |
+| `api/prisma/seed-ventas.ts#1` | 428 | F1-031 (ref.) | El seed guarda `forma = otro` imitando la ingesta. | panel | §13 |
+| `api/src/adaptadores/timbrado/timbrado-facturama.ts#1` | 36 | F2-202/F2-104 | `TaxStamp.Date` sin zona = hora LOCAL de la sucursal; con zona se respeta; ilegible → reloj. | panel | §2, §14 «Facturación» |
+| `api/src/adaptadores/timbrado/timbrado-facturama.ts#2` | 40 | F2-109 | `Status: pending` = en cancelación; otro valor o `active` tras DELETE = `ESTADO_DESCONOCIDO`. | panel | §2 |
+| `api/src/adaptadores/timbrado/timbrado-facturama.ts#3` | 271 | F2-110b | `Date` de la lista del PAC = hora local de la sucursal; ilegible → null. | panel | §2 |
+| `api/src/adaptadores/timbrado/timbrado-facturama.ts#4` | 289 | F2-104 | Sólo 429 y 503 = "no disponible"; otros 5xx = ambiguo. | panel | §2 |
+| `api/src/adaptadores/timbrado/timbrado-facturama.ts#5` | 446 | F2-110b | Un 404 de la lista NO es "no la tiene" → `ESTADO_DESCONOCIDO`. | panel | §2 |
+| `api/src/alertas/evaluador.ts#1` | 163 | F2-224 | Sucursal que NUNCA ha reportado = alerta crítica `sucursal_sin_reporte`. | panel | §5, §14 «Centro de alertas y estado de agentes» |
+| `api/src/alertas/reglas.ts#1` | 16 | F2-224 | Defaults: > 10 min sin reportar, mesa > 60, sin imprimir > 30, caída de venta 30 %. | panel | §5, §14 «Centro de alertas y estado de agentes» |
+| `api/src/alertas/reglas.ts#2` | 23 | F2-224 | Severidad fija por tipo (sin reporte = crítica; resto advertencia). | panel | §14 «Centro de alertas y estado de agentes» |
+| `api/src/alertas/reglas.ts#3` | 68 | F2-121 | `bajo_minimo`: umbral en % del mínimo, 1–100, default 100, advertencia. | panel | §10 |
+| `api/src/alertas/reglas.ts#4` | 81 | F2-124 | `traspaso_sin_conciliar`: 48 h, rango 1–720 h, advertencia. | panel | §10 |
+| `api/src/alertas/reglas.ts#5` | 93 | F2-143 | `actualizacion_fallida`: default 1 min, rango 1–1440, advertencia. | panel | §14 «Centro de alertas y estado de agentes» |
+| `api/src/alertas/reglas.ts#6` | 124 | F2-224 | Caída de venta sólo se evalúa con ≥ 5 cuentas en la base comparable. | panel | §14 «Centro de alertas y estado de agentes» |
+| `api/src/catalogos/catalogos.service.ts#1` | 509 | F2-145 | Metadata propia sigue por sucursal; cada precio lleva su `productoId`. | panel | §6 |
+| `api/src/catalogos/menu.ts#1` | 32 | F2-145 | "Mismo producto" entre sucursales = clave visible normalizada; sin clave, nombre. | panel | §6 |
+| `api/src/catalogos/menu.ts#2` | 235 | F2-145 | Vendidos sin catálogo: cruce por NOMBRE. | panel | §6 |
+| `api/src/catalogos/meseros.ts#1` | 188 | F2-231 | Mesero del cheque ↔ espejo por (sucursal, nombre normalizado); consolidación. | panel | §7 |
+| `api/src/facturacion/cancelacion.ts#1` | 26 | F2-109/F2-110b | Solicitud ambigua vista vigente a los 10 min → no registrada; desde F2-110b queda `sin_confirmar` hasta 7 días. | panel | §2 |
+| `api/src/facturacion/cancelacion.ts#2` | 142 | F2-109 | Cancelación 02 y 03 sueltan el ticket por igual. | panel | §2 |
+| `api/src/facturacion/cfdi.service.ts#1` | 42 | F2-104 | `PAC_SIN_RESPUESTA` no se reintenta. | panel | §2 |
+| `api/src/facturacion/cfdi.ts#1` | 14 | F2-104 | IVA 16 % fijo. | panel | §2 |
+| `api/src/facturacion/cfdi.ts#2` | 37 | F2-104 | Base del CFDI = `cheques.total`, no subtotal/impuestos. | panel | §2 |
+| `api/src/facturacion/cfdi.ts#3` | 55 | F2-104 | `tarjeta` → 04 (crédito); `otro` sin clave. | panel | §2, §4 |
+| `api/src/facturacion/codigo.e2e.spec.ts#1` | 212 | F2-101 | Facturable = cerrada, no cancelada, total > 0. | panel | §2 |
+| `api/src/facturacion/codigo.ts#1` | 91 | F2-101 | Facturable = cerrada, no cancelada, total > 0. | panel | §2 |
+| `api/src/facturacion/codigo.ts#2` | 117 | F2-101 | `cancelado` se deriva del cheque y no se guarda. | panel | §2 |
+| `api/src/facturacion/conciliacion.ts#1` | 8 | F2-110b | Plazos: 15 min de edad mínima, 15 min de reclamo, 7 días `sin_confirmar`. | panel | §2 |
+| `api/src/facturacion/conciliacion.ts#2` | 63 | F2-110b | Fecha de confirmación: lista → XML → fecha de la reserva. | panel | §2 |
+| `api/src/facturacion/entrega.ts#1` | 21 | F2-105 | Enlaces de descarga del portal duran 1 h. | panel | §14 «Facturación» |
+| `api/src/facturacion/folios.programador.ts#1` | 33 | F2-110 | Saldo bajo de folios NO va al centro de alertas: correo al admin_global + pestaña Folios. | panel | §2 |
+| `api/src/facturacion/folios.service.ts#1` | 181 | F2-110 | Saldo bajo de folios NO va al centro de alertas: correo al admin_global + pestaña Folios. | panel | §2 |
+| `api/src/facturacion/folios.ts#1` | 10 | F2-110 | Un saldo de folios para toda la plataforma. | panel | §2 |
+| `api/src/facturacion/folios.ts#2` | 38 | F2-110 | Paquete vence al empezar el mismo día un año después (29-feb → 1-mar). | panel | §2 |
+| `api/src/facturacion/global.service.ts#1` | 48 | F2-108 | La global espera a que venzan todos los códigos del periodo. | panel | §2 |
+| `api/src/facturacion/global.service.ts#2` | 294 | F2-109 | Periodo con global cancelada no se re-emite solo. | panel | §2 |
+| `api/src/facturacion/global.ts#1` | 21 | F2-108 | Semana cortada en el cambio de mes (un `Meses` por global). | panel | §2 |
+| `api/src/facturacion/global.ts#2` | 333 | F2-108 | Forma de pago de la global = la de mayor monto; `otro` no cuenta. | panel | §2 |
+| `api/src/facturacion/portal.service.ts#1` | 299 | F2-103 | El portal muestra subtotal/impuestos sólo si suman el total. | panel | §2 |
+| `api/src/facturacion/tablero.service.ts#1` | 66 | F2-108 | La global no suma a lo facturado ni a la tasa. | panel | §2 |
+| `api/src/facturacion/tablero.ts#1` | 12 | F2-106 | Tasa = facturado por EMISIÓN / venta por CIERRE. | panel | §2 |
+| `api/src/finanzas/estado-resultados.service.ts#1` | 131 | F2-126 | Venta neta = Σ `cheques.subtotal` (neto de descuento, sin IVA ni propina). | panel | §2, §10 |
+| `api/src/finanzas/estado-resultados.ts#1` | 10 | F2-126 | Venta neta = Σ `cheques.subtotal` (neto de descuento, sin IVA ni propina). | panel | §2, §10 |
+| `api/src/finanzas/gastos.service.ts#1` | 52 | F2-126 | Gasto sin IVA acreditable. | panel | §10 |
+| `api/src/ingesta/catalogos-ingesta.service.ts#1` | 124 | F2-230 | `total = 0` da de baja todo el catálogo. | SR | §13 |
+| `api/src/ingesta/compras.ts#1` | 230 | F2-126 | Con el mismo `leidoAt` gana la compra que llega después. | SR | §10 |
+| `api/src/ingesta/dto/catalogos.dto.ts#1` | 33 | F2-230 | Largos y obligatoriedad del contrato de catálogos. | SR | §6, §13 |
+| `api/src/ingesta/dto/catalogos.dto.ts#2` | 167 | F2-120 | Insumo con UN grupo y UNA unidad, sin FK; sin costo porque es "el promedio POR ALMACÉN". | SR | §9, §10 |
+| `api/src/ingesta/dto/compras.dto.ts#1` | 32 | F2-126 | Topes 200 compras / 5000 partidas por lote. | SR | §10, §13 |
+| `api/src/ingesta/dto/existencias.dto.ts#1` | 20 | F2-121 | Tope de 5000 registros por foto. | SR | §10 |
+| `api/src/ingesta/dto/ingesta.dto.ts#1` | 185 | F2-232 | `clienteOrigenSrId` = mismo id que el catálogo de clientes. | SR | §2, §13 |
+| `api/src/ingesta/dto/ingesta.dto.ts#2` | 203 | F2-233 | `areaOrigenSrId` = mismo id que el catálogo de áreas. | SR | §2, §13 |
+| `api/src/ingesta/dto/movimientos.dto.ts#1` | 34 | F2-122 | Topes 200 pólizas / 5000 partidas por lote. | SR | §10 |
+| `api/src/ingesta/dto/recetas.dto.ts#1` | 31 | F2-125 | Topes 500 recetas / 5000 renglones por lote. | SR | §13 |
+| `api/src/ingesta/dto/recetas.dto.ts#2` | 40 | F2-125 | Cantidad de receta con 4 decimales (no 3). | SR | §10 |
+| `api/src/ingesta/existencias.ts#1` | 78 | F2-121 | Costo promedio redondeado a 2 antes de valuar. | SR | §10 |
+| `api/src/ingesta/existencias.ts#2` | 165 | F2-121 | Foto vacía vacía el almacén. | SR | §10 |
+| `api/src/ingesta/existencias.ts#3` | 167 | F2-121 | Rechazo sin insumo identificable → la foto no borra ausentes. | SR | §10 |
+| `api/src/ingesta/movimientos.ts#1` | 224 | F2-122 | Póliza con el MISMO `leidoAt`: gana la que llega después (marca partida en dos líneas). | SR | §10 |
+| `api/src/ingesta/normalizar.ts#1` | 47 | F1-031 | Forma de pago siempre `otro` en la ingesta. | SR | §4, §13 |
+| `api/src/ingesta/recetas.ts#1` | 172 | F2-125 | Con el mismo `leidoAt` gana la receta que llega después. | SR | §10 |
+| `api/src/inventario/conteos.service.ts#1` | 425 | F2-123 | "Teórico atrasado" si la foto congelada tenía > 90 min. | panel | §10 |
+| `api/src/inventario/existencias.service.ts#1` | 18 | F2-121 | Tope de 50 000 filas por consulta de Existencias. | panel | §14 «Topes de lectura del panel» |
+| `api/src/inventario/existencias.ts#1` | 80 | F2-121 | Lectura "atrasada" = recibida hace > 90 min. | panel | §10 |
+| `api/src/inventario/movimientos.service.ts#1` | 21 | F2-122 | Tope de 10 000 movimientos por kardex en el rango. | panel | §14 «Topes de lectura del panel» |
+| `api/src/inventario/proyecciones.ts#1` | 9 | F2-127 | Demanda = salidas de consumo, merma y traspaso de salida. | panel | §10 |
+| `api/src/inventario/proyecciones.ts#2` | 58 | F2-127 | El horizonte empieza hoy y lo cuenta completo. | panel | §10 |
+| `api/src/inventario/recetas.service.ts#1` | 65 | F2-125 | Teórico calculado al vuelo, no materializado por día. | panel | §10 |
+| `api/src/inventario/recetas.ts#1` | 227 | F2-125 | Real = −(consumo + merma + ajuste) de pólizas no canceladas. | panel | §10 |
+| `api/src/inventario/recetas.ts#2` | 315 | F2-125 | Costo desde la foto = Σ valor / Σ cantidad de almacenes con cantidad > 0. | panel | §10 |
+| `api/src/inventario/traspasos.ts#1` | 17 | F2-124 | "± 1 día" = 24 h absolutas; cantidad exacta; sin exigir `referencia`. | panel | §10 |
+| `api/src/notificaciones/mensajes.ts#1` | 7 | F2-146 | Alertas push sin cifras; el resumen del día sí lleva la venta (pantalla bloqueada). | panel | §14 «Panel, landing, correo» |
+| `api/src/onboarding/onboarding.config.ts#1` | 8 | F2-147 | Sin buzón en producción el formulario de la landing responde 503 y el api arranca igual. | panel | §14 «Panel, landing, correo» |
+| `api/src/reportes/calendario.ts#1` | 16 | F2-141 | Reporte programado sale a las 07:00 fijas, no configurable. | panel | §14 «Panel, landing, correo» |
+| `api/src/reportes/calendario.ts#2` | 26 | F2-141 | Zona de la empresa = la más común entre sus sucursales activas; empate alfabético; sin sucursales CDMX. | panel | §14 «Panel, landing, correo» |
+| `api/src/scope/consulta-ventas.ts#1` | 67 | F2-107 | Con la 01 pendiente hay dos vigentes; lo facturado cuenta sólo el sustituto. | panel | §2 |
+| `api/src/scope/consulta-ventas.ts#2` | 100 | F2-220 | `alturaAl` usa sólo la HORA local del instante; con zonas distintas el Δ se desalinea. | panel | §2, §14 «Zonas horarias» |
+| `api/src/scope/escritura-conteos.ts#1` | 183 | F2-123 | Almacén sin foto de existencias → 409, no se crea conteo. | panel | §10 |
+| `api/src/scope/escritura-conteos.ts#2` | 264 | F2-123 | Último en llegar gana, por renglón. | panel | §10 |
+| `api/src/scope/escritura-facturacion.ts#1` | 1444 | F2-107 | Refacturación corrige sólo el receptor; importes se copian. | panel | §2 |
+| `api/src/scope/escritura-sucursal.ts#1` | 241 | F2-101 | Falla del código nunca tumba la venta (ROLLBACK TO SAVEPOINT). | panel | §2 |
+| `api/src/scope/escritura-traspasos.ts#1` | 43 | F2-124 | Conciliado se re-verifica 90 días. | panel | §10 |
+| `api/src/scope/escritura-traspasos.ts#2` | 230 | F2-124 | Costo = promedio de la foto de origen al enviar; misma clave de insumo en destino. | panel | §10 |
+| `api/src/scope/scoped-prisma.service.ts#1` | 505 | F2-103 | El portal acepta códigos de cualquier sucursal de su empresa. | panel | §2 |
+| `api/src/ventas/agregados-ventas.service.ts#1` | 33 | F1-032 | `cortesias` siempre null. | panel | §2 |
+| `api/src/ventas/analisis.service.ts#1` | 213 | F2-221 | Monto de un cancelado = su `total` tal como llegó. | panel | §2 |
+| `api/src/ventas/analisis.service.ts#2` | 262 | F2-221 | Lo que no es de ningún producto va en un renglón de diferencia. | panel | §6 |
+| `api/src/ventas/lectura.e2e.spec.ts#1` | 932 | F2-203 | Si llegan cuentas abiertas, el corte no las congela; el export aborta. | panel | §2 |
+| `api/src/ventas/por-area.ts#1` | 16 | F2-233 | El cheque trae el mismo id de área que el catálogo. | panel | §2, §8 |
+| `api/src/ventas/tickets.service.ts#1` | 104 | F2-222 | Orden por folio = largo y luego texto. | panel | §2 |
+| `api/src/ventas/tickets.service.ts#2` | 250 | F2-203 | El corte sólo congela cheques que llegan; uno que cambia mueve el total. | panel | §2 |
+| `web/landing/index.html#1` | 183 | F2-147 | Sin precios definidos: la landing no publica cifra. | panel | §14 «Panel, landing, correo» |
+| `web/src/filtros/periodo.ts#1` | 96 | F1-041 | Con sucursales en zonas distintas, el "hoy" del panel es el de America/Mexico_City. | panel | §14 «Zonas horarias» |
+| `web/src/paginas/AyudaConteos.tsx#1` | 11 | F2-123 | Pasos dentro de SR descritos en genérico (menú no mapeado). | panel | §10 |
+| `web/src/paginas/Canales.tsx#1` | 45 | F2-233 | Canales = enum fijo; mapeo por área de cada sucursal. | panel | §8 |
+| `web/src/paginas/admin/reglasAgentes.ts#1` | 40 | F1-061 | Sucursal que NUNCA ha reportado no cuenta en el badge (sí en la tabla). | panel | §5, §14 «Centro de alertas y estado de agentes» |
+| `web/src/paginas/conteos/borrador.ts#1` | 12 | F2-123 | Gana el último en llegar al servidor; un borrador viejo puede pisar. | panel | §10 |
+| `web/src/paginas/mesas/mesa.ts#1` | 63 | F1-050/F1-051 | Forma provisional de cada mesa del snapshot. | panel | §5 |
+| `web/src/paginas/mesas/mesa.ts#2` | 72 | F2-223 | `partidas[].comandaImpresa` es forma nuestra. | panel | §5 |
+| `web/src/paginas/mesas/mesa.ts#3` | 149 | F1-041/F1-094 | Cada mesa trae `total` (texto o número). | panel | §5 |
+| `web/src/paginas/mesas/reglas.ts#1` | 6 | F1-050 | Intervalo del agente = 30 s fijos (umbral 90 s). | panel | §5 |
+| `web/src/paginas/resumen/comparables.ts#1` | 13 | F2-220 | Referencia a la zona del panel de `filtros/periodo.ts` (misma decisión). | panel | §14 «Zonas horarias» |
+| `web/src/paginas/resumen/comparables.ts#2` | 15 | F2-220 | Con zonas distintas el Δ del comparable no está a la misma altura. | panel | §14 «Zonas horarias» |
+| `web/src/paginas/tickets/Tabla.tsx#1` | 211 | F2-222 | Sólo se recibe la cancelación completa, sin hora. | panel | §2 |
+| `web/src/paginas/tickets/exportar.ts#1` | 9 | F1-042 | Tope de 50 000 tickets por export. | panel | §14 «Topes de lectura del panel» |
+| `web/src/paginas/tickets/exportar.ts#2` | 39 | F2-203 | Si el `total` cambia entre páginas, no se entrega archivo. | panel | §2 |
+| `web/src/paginas/tickets/formato.ts#1` | 62 | F1-042 | La columna de pagos muestra el texto crudo `forma_raw`, no el ENUM. | panel | §4, §14 «Panel, landing, correo» |
+| `web/src/tema/tema.ts#1` | 18 | F2-211 | Preferencia de tema en localStorage por usuario y navegador, no en la API. | panel | §14 «Panel, landing, correo» |
+| `web/vite.landing.config.ts#1` | 16 | F2-147 | `URL_PANEL` por defecto `/login` (mismo origen); no se sabe si habrá subdominio. | panel | §14 «Panel, landing, correo» |
 
 ---
 

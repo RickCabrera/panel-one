@@ -11,6 +11,33 @@ por empresa y sucursal.
 > código lo rompe, el negocio no puede cobrar. El estado propio del agente vive en su
 > SQLite local. Las demás reglas innegociables están en [`CLAUDE.md`](CLAUDE.md).
 
+## Qué hace hoy (cierre de la Ronda 2, F2-250)
+
+El estado real, módulo por módulo, con lo que descansa en supuestos y lo que espera validación
+en campo, está en **[`docs/paridad.md`](docs/paridad.md)**. Léelo antes de enseñar el producto.
+En corto:
+
+- **Panel web**: Inicio, Resumen ejecutivo, Comparativos, Análisis (mesero, producto, hora ×
+  día, área, tiempo de mesa), Tickets con filtros y detalle, Monitor de mesas (y vista de pared,
+  en tiempo real por WebSocket), centro de alertas con campana, reportes programados por correo,
+  catálogos (productos y orquestador de menú, meseros, clientes, áreas y canales, ventas por
+  canal), inventario (existencias, movimientos y kardex, conteos físicos, traspasos, recetas y
+  consumo teórico, compras, gastos y estado de resultados, proyecciones y sugerido de compra),
+  facturación CFDI 4.0 (datos fiscales y CSD, código corto por cheque, portal público de
+  autofactura, emisión, entrega, tablero, sin ticket y refacturación, factura global,
+  cancelación, folios y conciliación con el PAC), administración (empresas, sucursales,
+  usuarios, estado y actualización de agentes, alta guiada), modo oscuro, PWA instalable con
+  notificaciones push y una landing pública.
+- **Agente**: servicio de Windows que detecta la versión de SoftRestaurant, manda heartbeat y
+  diagnóstico, y **lee** catálogos, existencias, movimientos, recetas y compras con una cola
+  local resiliente, más su auto-actualización. **Todavía no lee cheques ni mesas en vivo**
+  (F1-022/F1-023, bloqueadas por F1-090) y **nunca ha leído una SoftRestaurant con datos**
+  (F2-192/F2-193).
+- **Servicios externos** (PAC Facturama, correo Brevo, archivos, push): escritos contra un puerto
+  con dos implementaciones; **todo lo probado es contra la falsa**. Conectar los reales es
+  Diurna (F2-190, F2-191).
+- **Lo que falta** está al final de [`backlog.md`](backlog.md), en "RONDA 3".
+
 ## Arquitectura
 
 ```mermaid
@@ -141,9 +168,12 @@ Qué hace cada uno:
 - **`npx prisma migrate deploy`** aplica las migraciones a la base (no pregunta nada).
   Quien crea migraciones nuevas usa `npx prisma migrate dev`.
 - **`npm run seed`** corre los cinco seeds en su orden: `prisma db seed` (1 admin global,
-  1 empresa demo, 2 sucursales), `seed:ventas` (500 cheques sintéticos, 2 sucursales ×
-  30 días hasta hoy, y los catálogos espejo de F2-230 —grupos, productos, meseros y
-  clientes— por la misma ingesta que usa el agente), `seed:mesas` (mesas abiertas del Monitor, "en vivo" durante
+  1 empresa demo, 2 sucursales), `seed:ventas` (1500 cheques sintéticos, 2 sucursales ×
+  90 días hasta hoy, sin cierres en el futuro; los catálogos espejo —grupos, productos,
+  meseros, clientes, áreas y canales— por la misma ingesta que usa el agente; el inventario
+  completo —insumos, almacenes, existencias, pólizas, conteos, traspasos, recetas, compras y
+  gastos—; y la facturación de ejemplo —perfil fiscal, códigos, CFDI, globales, folios y
+  portales—, todo generado de forma determinista en `api/prisma/seed-maestro/`), `seed:mesas` (mesas abiertas del Monitor, "en vivo" durante
   90 s: para volver a verlas vivas, `npm run seed:mesas` otra vez) y `seed:alertas`
   (14 días de historial CERRADO del centro de alertas, F2-224; las abiertas las abre la
   propia API al arrancar y luego cada `ALERTAS_INTERVALO_S`, 60 s por defecto) y
@@ -232,8 +262,13 @@ cd agent
 dotnet build --configuration Release
 ```
 
-Todavía no lee nada: es el esqueleto del Worker Service. La configuración real
-(`config.json`, instalación con `sc create`, publicación single-file) llega en F1-020.
+Las pruebas: `dotnet test` (desde `agent`). La configuración (`config.json`), el comando de
+diagnóstico `agente test`, el instalador (`agent/instalador/instalar.ps1`, que registra el
+servicio y su actualizador), el script del usuario SQL de solo lectura
+(`crear-usuario-lector.ps1`) y lo que lee de SoftRestaurant están en
+[`agent/README.md`](agent/README.md) y en la guía
+[`docs/instalacion-agente.md`](docs/instalacion-agente.md). Instalar el servicio pide una
+consola de administrador y **todavía no se ha verificado en una máquina real** (F1-020b).
 
 ## Comandos por carril
 
@@ -241,7 +276,7 @@ Todavía no lee nada: es el esqueleto del Worker Service. La configuración real
 |---|---|---|---|---|
 | `/api` | `npm run lint -w @monitor/api` | `npm run typecheck -w @monitor/api` | `npm test -w @monitor/api` | `npm run build -w @monitor/api` |
 | `/web` | `npm run lint -w @monitor/web` | (va dentro del build: `tsc -b`) | `npm test -w @monitor/web` | `npm run build -w @monitor/web` + `npm run check:bundle -w @monitor/web` (tope 400 kB gzip) |
-| `/agent` | `dotnet format` | — | `dotnet test` (desde F1-021) | `dotnet build -c Release` |
+| `/agent` | `dotnet format` | — | `dotnet test` | `dotnet build -c Release` |
 
 Desde la raíz, `npm run lint`, `npm run typecheck`, `npm test` y `npm run build` corren
 el script correspondiente en los workspaces que lo tengan.
@@ -256,12 +291,17 @@ Formato: `npm run format` (prettier). Sólo toca `/api` y `/web`; `scripts/`, `.
 - **`guardia`** — corre desde el commit inicial. Falla si se cuela un centinela del
   orquestador nocturno, un secreto versionado (`.env`, `.pem`, `.key`, `config.json`) o
   si el hook `pre-push` pierde sus finales LF.
-- **`api`**, **`web`**, **`agent`** — activos desde F1-001: lint, typecheck y build.
+- **`api`**, **`web`**, **`agent`** — activos desde F1-001: lint, typecheck y build, y sus
+  tests: `api` con un Postgres 16 de servicio y las migraciones aplicadas (F1-011), `web`
+  (F1-040) y `agent` (`dotnet test`, F1-020). Ya no queda ningún paso comentado.
 
-Los pasos de **test** se encienden con la tarea que los habilita: F1-011 encendió el de
-`api` (con su servicio de postgres) y F1-040 el de `web`. Sigue comentado el de `agent`,
-que enciende F1-021.
 Encender un carril es parte del entregable de la tarea que lo habilita.
+
+**Verificaciones de la auditoría (F2-250), fuera del CI por ahora** (conectarlas es F3-030),
+desde la raíz: `node scripts/auditoria/decisiones-provisionales.mjs` (cada `DECISION
+PROVISIONAL` del código tiene su renglón en el índice de `docs/esquema-sr.md`) y
+`node scripts/auditoria/paridad.mjs` (cada renglón de `docs/paridad.md` apunta a código o a una
+tarea).
 
 ## Notas de dependencias
 

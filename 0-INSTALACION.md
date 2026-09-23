@@ -312,11 +312,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\nocturno-v2.ps1 -Max
 ```
 
 **Lo primero que hay que hacer aparte de la cola:** conseguir acceso a una instalación real
-de SoftRestaurant. **F1-090 es el cuello de botella de toda la Fase 1** y es diurna: mientras
-no cierre, F1-022 y F1-023 no se pueden escribir de verdad, el agente no lee nada real, y
+de SoftRestaurant. **F1-090 sigue siendo el cuello de botella** y es diurna: mientras no
+cierre, F1-022 y F1-023 (el lector de cheques y el de mesas) no se pueden escribir de verdad, y
 todo lo que el proyecto "sabe" del POS son supuestos marcados como tales en
-`docs/esquema-sr.md`. Las 22 tareas de la cola avanzan sin ella — por eso están en ese orden
-— pero la fase no cierra sin ella.
+`docs/esquema-sr.md`.
+
+**Estado al cierre de la Ronda 2 (F2-250, 23/09/2026).** Las colas de la Ronda 1 y de la Ronda 2
+están cerradas; lo que existe y con qué salvedades está en
+[`docs/paridad.md`](docs/paridad.md). Lo que queda es de dos tipos: las **Diurnas** de
+`backlog.md` (necesitan a Ricardo, un servidor, credenciales o un restaurante real) y la
+**RONDA 3** al final del backlog, que **no está autorizada**: mientras Ricardo no la mueva a una
+cola vigente, el orquestador encuentra la cola vacía, deja `COLA_VACIA.txt` y se detiene.
 
 ---
 
@@ -339,8 +345,9 @@ npm run dev
 ```
 
 Con el Postgres de `/infra` arriba (paso 1 del README), eso deja la API en
-`http://localhost:3000` con la empresa demo, sus dos sucursales, 30 días de ventas y mesas
-abiertas. `npm ci` **ya genera el cliente de Prisma** (no hace falta `prisma generate` a
+`http://localhost:3000` con la empresa demo, sus dos sucursales, 90 días de ventas, mesas
+abiertas, catálogos, inventario y facturación de ejemplo (el detalle de cada seed está en el
+README). `npm ci` **ya genera el cliente de Prisma** (no hace falta `prisma generate` a
 mano) y `npm run setup:env` crea `api/.env` sin pisar uno que ya exista.
 
 Después de clonar, **instala el hook** como en el paso 3 de esta guía: la guardia de `main`

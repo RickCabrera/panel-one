@@ -118,10 +118,19 @@ describe('Esquema núcleo (F1-010)', () => {
     it('al crear el admin guarda su contraseña como argon2id verificable', async () => {
       // El admin ya existe (lo creó el beforeAll o un `db seed` local), así que la
       // rama de creación se prueba dentro de una transacción que se revierte.
+      // En una base local con `npm run seed` completo, `seed:reportes` (F2-141) deja
+      // al admin suscrito, y esa FK es Restrict: se borran sus envíos y suscripciones
+      // primero, dentro de la misma transacción, así que también se revierten.
+      const delAdmin = { suscripcion: { usuario: { email: SEED_ADMIN_EMAIL } } };
+      const suscripcionesAntes = await prisma.suscripcionReporte.count({
+        where: delAdmin.suscripcion,
+      });
       const revertir = new Error('revertir');
       let hash = '';
       await expect(
         prisma.$transaction(async (tx) => {
+          await tx.envioReporte.deleteMany({ where: delAdmin });
+          await tx.suscripcionReporte.deleteMany({ where: delAdmin.suscripcion });
           await tx.usuario.delete({ where: { email: SEED_ADMIN_EMAIL } });
           await sembrar(tx, PASSWORD);
           hash = (await tx.usuario.findUniqueOrThrow({ where: { email: SEED_ADMIN_EMAIL } }))
@@ -135,6 +144,9 @@ describe('Esquema núcleo (F1-010)', () => {
       expect(await verify(hash, PASSWORD)).toBe(true);
       expect(await verify(hash, 'no-es-la-contrasena')).toBe(false);
       await expect(prisma.usuario.count({ where: { email: SEED_ADMIN_EMAIL } })).resolves.toBe(1);
+      await expect(prisma.suscripcionReporte.count({ where: delAdmin.suscripcion })).resolves.toBe(
+        suscripcionesAntes,
+      );
     });
   });
 
