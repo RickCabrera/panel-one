@@ -68,6 +68,62 @@ public class VerificacionSqlTests
     }
 
     [Fact]
+    public void Un_GRANT_de_escritura_sobre_una_tabla_que_lee_el_agente_es_FALLA()
+    {
+        var r = VerificacionSql.Evaluar(
+            SoloLectura() with { ObjEscrituraTotal = 3, ObjEscrituraEjemplo = "dbo.productos: UPDATE" }, Conexion, []);
+
+        Assert.False(r.Ok);
+        Assert.Contains("permiso por tabla (dbo.productos: UPDATE y 2 permiso(s) más)", r.Detalle);
+        Assert.Contains("SOLO LECTURA", r.Sugerencia);
+    }
+
+    [Fact]
+    public void Sin_GRANT_por_tabla_el_OK_dice_que_tambien_se_revisaron_las_tablas()
+    {
+        var r = VerificacionSql.Evaluar(SoloLectura(), Conexion, []);
+
+        Assert.Contains("ni sobre las tablas de SoftRestaurant que lee el agente", r.Detalle);
+    }
+
+    [Fact]
+    public void La_fila_del_diagnostico_lee_los_permisos_por_tabla()
+    {
+        var tabla = new System.Data.DataTable();
+        foreach (var c in new[] { "version_producto", "edicion", "base_datos", "login_sql", "obj_escritura_ejemplo" })
+        {
+            tabla.Columns.Add(c, typeof(string));
+        }
+
+        foreach (var c in new[]
+                 {
+                     "es_sysadmin", "es_db_owner", "es_db_datawriter", "es_db_ddladmin", "puede_insert", "puede_update",
+                     "puede_delete", "puede_alter", "puede_create_table", "dbo_puede_insert", "dbo_puede_update",
+                     "dbo_puede_delete", "dbo_puede_alter", "obj_escritura_total",
+                 })
+        {
+            tabla.Columns.Add(c, typeof(int));
+        }
+
+        var fila = tabla.NewRow();
+        fila["version_producto"] = "12.0"; fila["edicion"] = "Express"; fila["base_datos"] = "sr"; fila["login_sql"] = "lector";
+        foreach (System.Data.DataColumn c in tabla.Columns)
+        {
+            if (c.DataType == typeof(int)) fila[c] = 0;
+        }
+
+        fila["obj_escritura_total"] = 1;
+        fila["obj_escritura_ejemplo"] = "dbo.clientes: DELETE";
+        tabla.Rows.Add(fila);
+        using var lector = tabla.CreateDataReader();
+        lector.Read();
+
+        var leida = FilaDiagnostico.Leer(lector);
+
+        Assert.Equal(["permiso por tabla (dbo.clientes: DELETE)"], leida.PermisosDeEscritura());
+    }
+
+    [Fact]
     public void Certificado_no_confiable_en_Windows_en_espanol_sugiere_TrustServerCertificate()
     {
         // Número y texto reales de SqlClient 5.2.3 contra SQL Server 2014 Express (SR 10)

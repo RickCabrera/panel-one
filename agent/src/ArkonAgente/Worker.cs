@@ -1,4 +1,5 @@
 using ArkonAgente.Actualizacion;
+using ArkonAgente.Catalogos;
 using ArkonAgente.Cola;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
@@ -21,7 +22,8 @@ internal sealed record DependenciasWorker(
     string VersionAgente,
     TimeSpan ReintentoConfig,
     Action<int> TerminarProceso,
-    Func<ConfiguracionAgente, ILogger, IRevisorActualizacion>? CrearRevisor = null)
+    Func<ConfiguracionAgente, ILogger, IRevisorActualizacion>? CrearRevisor = null,
+    Func<ConfiguracionAgente, ILogger, ISincronizadorCatalogos>? CrearCatalogos = null)
 {
     public static readonly TimeSpan ReintentoConfigPorDefecto = TimeSpan.FromSeconds(60);
 
@@ -29,7 +31,8 @@ internal sealed record DependenciasWorker(
         new(rutas, CargadorConfiguracion.Cargar, Diagnosticador.VerificacionesPara, DetectarDeVerdad, SondearDeVerdad,
             estadoSr, (config, logger) => CrearEnvioDeVerdad(rutas, config, logger), TimeProvider.System,
             ArmadorHeartbeat.VersionAgente(), ReintentoConfigPorDefecto, TerminarDeVerdad,
-            (config, logger) => CrearRevisorDeVerdad(rutas, config, logger));
+            (config, logger) => CrearRevisorDeVerdad(rutas, config, logger),
+            (config, logger) => SincronizadorCatalogos.DeVerdad(rutas, config, logger));
 
     /// <summary>La auto-actualización real (F2-143): el canal del api y el estado en <c>actualizacion\estado.db</c>.</summary>
     internal static RevisorActualizacion CrearRevisorDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger)
@@ -69,8 +72,8 @@ internal sealed record DependenciasWorker(
 /// El servicio. Carga la config, deja en el log un diagnóstico de las dos
 /// conexiones, detecta la versión de SoftRestaurant y elige el reader (F1-021), y
 /// entra al ciclo cada <c>intervaloSegundos</c>: sonda a SR, heartbeat a la cola
-/// (F1-025) y la cola hacia el API (F1-024). Leer ventas y encolarlas llega en
-/// F1-022 / F1-023.
+/// (F1-025), la cola hacia el API (F1-024) y los catálogos (F2-240). Leer ventas y
+/// encolarlas llega en F1-022 / F1-023.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -93,6 +96,7 @@ internal sealed class Worker : BackgroundService
     private string? _ultimoErrorSondeo;
     private string? _ultimaFallaInterna;
     private string? _ultimaFallaActualizacion;
+    private string? _ultimaFallaCatalogos;
 
     public Worker(ILogger<Worker> logger, DependenciasWorker dependencias)
     {
@@ -204,14 +208,15 @@ internal sealed class Worker : BackgroundService
         // interna, el proceso muere con código 1 y `sc failure` lo levanta.
         using var envio = _dep.CrearEnvio(config, _logger);
         using var revisor = _dep.CrearRevisor?.Invoke(config, _logger);
+        using var catalogos = _dep.CrearCatalogos?.Invoke(config, _logger);
         // El primer ciclo corre al arrancar: lo pendiente de antes de un reinicio sale
         // sin esperar al primer tick, y el panel ve al agente de inmediato.
-        await UnCicloAsync(config, envio, revisor, stoppingToken);
+        await UnCicloAsync(config, envio, revisor, catalogos, stoppingToken);
 
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
-            await UnCicloAsync(config, envio, revisor, stoppingToken);
+            await UnCicloAsync(config, envio, revisor, catalogos, stoppingToken);
         }
     }
 
@@ -219,17 +224,51 @@ internal sealed class Worker : BackgroundService
     /// Un ciclo: consultar SR, encolar el heartbeat y vaciar la cola. El heartbeat se
     /// encola SIEMPRE, antes de enviar: así sale un lote por ciclo aunque no haya cheques,
     /// que es lo que el panel lee como "conectado" (F1-061). F1-022 / F1-023 encolan
-    /// cheques y snapshot aquí, también antes de enviar.
+    /// cheques y snapshot aquí, también antes de enviar. Los catálogos (F2-240) van DESPUÉS del
+    /// heartbeat y del envío: leer seis catálogos puede tardar, y el panel no puede quedarse sin
+    /// reporte mientras tanto.
     /// </summary>
     private async Task UnCicloAsync(
-        ConfiguracionAgente config, ICicloEnvio envio, IRevisorActualizacion? revisor, CancellationToken stoppingToken)
+        ConfiguracionAgente config, ICicloEnvio envio, IRevisorActualizacion? revisor,
+        ISincronizadorCatalogos? catalogos, CancellationToken stoppingToken)
     {
         await ConsultarSrAsync(config, stoppingToken);
         EncolarHeartbeat(envio);
         await envio.CicloAsync(stoppingToken);
+        if (catalogos is not null && _dep.EstadoSr.Reader is { } reader)
+        {
+            await SincronizarCatalogosAsync(catalogos, reader, stoppingToken);
+        }
+
         if (revisor is not null)
         {
             await RevisarActualizacionAsync(revisor, stoppingToken);
+        }
+    }
+
+    /// <summary>
+    /// Los catálogos (F2-240). Como la auto-actualización: una excepción no prevista (disco, SQLite)
+    /// queda en el log una vez por tipo y el ciclo sigue.
+    /// </summary>
+    private async Task SincronizarCatalogosAsync(
+        ISincronizadorCatalogos catalogos, ISoftRestaurantReader reader, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await catalogos.CicloAsync(reader, stoppingToken);
+            _ultimaFallaCatalogos = null;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (ex.GetType().FullName != _ultimaFallaCatalogos)
+            {
+                _ultimaFallaCatalogos = ex.GetType().FullName;
+                _logger.LogError(ex, "Catálogos: falla interna; se reintenta en el siguiente ciclo.");
+            }
         }
     }
 

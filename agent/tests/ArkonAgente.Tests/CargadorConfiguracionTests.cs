@@ -21,6 +21,40 @@ public class CargadorConfiguracionTests
     }
 
     [Fact]
+    public void Hora_de_catalogos_por_defecto_es_las_4_y_se_puede_cambiar()
+    {
+        var porDefecto = CargadorConfiguracion.Interpretar(Datos.Json(), "config.json");
+        Assert.Equal(new TimeOnly(4, 0), porDefecto.Configuracion!.HoraCatalogos);
+        Assert.Null(porDefecto.Configuracion.HoraSincronizacionCatalogos);
+
+        var json = ConHora("\"23:30\"");
+        var r = CargadorConfiguracion.Interpretar(json, "config.json");
+        Assert.True(r.Ok, string.Join("; ", r.Errores));
+        Assert.Empty(r.Avisos); // es un campo conocido
+        Assert.Equal(new TimeOnly(23, 30), r.Configuracion!.HoraCatalogos);
+        Assert.Contains("HoraCatalogos = 23:30", r.Configuracion.ToString());
+    }
+
+    [Theory]
+    [InlineData("\"4:00\"")]
+    [InlineData("\"24:00\"")]
+    [InlineData("\"04:00:00\"")]
+    [InlineData("\"cuatro\"")]
+    [InlineData("400")]
+    public void Hora_de_catalogos_invalida_es_error_claro(string valor)
+    {
+        var json = ConHora(valor);
+
+        var r = CargadorConfiguracion.Interpretar(json, "config.json");
+
+        Assert.False(r.Ok);
+        Assert.Contains(r.Errores, e => e.Contains("'horaSincronizacionCatalogos'") && e.Contains("HH:mm"));
+    }
+
+    private static string ConHora(string valorJson) =>
+        Datos.Json().TrimEnd().TrimEnd('}') + ",\n  \"horaSincronizacionCatalogos\": " + valorJson + "\n}";
+
+    [Fact]
     public void Intervalo_explicito_se_respeta()
     {
         var r = CargadorConfiguracion.Interpretar(Datos.Json(intervalo: "45"), "config.json");

@@ -1,3 +1,5 @@
+using ArkonAgente.Catalogos;
+
 namespace ArkonAgente.SoftRestaurant;
 
 /// <summary>
@@ -6,9 +8,9 @@ namespace ArkonAgente.SoftRestaurant;
 /// (<see cref="SelectorReader"/>).
 /// </summary>
 /// <remarks>
-/// Todavía no tiene métodos de lectura: la lectura de cheques cerrados la agrega
-/// F1-022 y la de cuentas abiertas F1-023, cuando el mapeo de tablas se valide en
-/// F1-090. Toda query que agreguen va en un <c>.sql</c> embebido, con
+/// Los catálogos (F2-240) dicen aquí qué consulta usan. La lectura de cheques cerrados
+/// la agrega F1-022 y la de cuentas abiertas F1-023, cuando el mapeo de tablas se valide
+/// en F1-090. Toda query que agreguen va en un <c>.sql</c> embebido, con
 /// <c>WITH (NOLOCK)</c> y el comando de <c>ConexionSoftRestaurant.CrearComando</c>
 /// (timeout corto).
 /// </remarks>
@@ -19,6 +21,14 @@ internal interface ISoftRestaurantReader
 
     /// <summary>Versión de la base contra la que se eligió.</summary>
     VersionSr Version { get; }
+
+    /// <summary>
+    /// La consulta embebida (<c>Sql/Consultas/&lt;nombre&gt;.sql</c>) que lee
+    /// <paramref name="catalogo"/> en ESTA versión (F2-240). Cuelga del reader para que una
+    /// versión con otro esquema tenga sus propias consultas y pase por
+    /// <see cref="SelectorReader"/> antes de leer nada.
+    /// </summary>
+    string ConsultaCatalogo(CatalogoPanel catalogo);
 }
 
 /// <summary>
@@ -34,4 +44,10 @@ internal sealed class SrV11Reader(VersionSr version) : ISoftRestaurantReader
     public string Nombre => nameof(SrV11Reader);
 
     public VersionSr Version { get; } = version;
+
+    /// <summary>
+    /// ✅ Columnas vistas en SR 10 (2026-09-23, sólo metadatos); ⚠️ en la 11 son SUPUESTO,
+    /// como el resto de este reader. docs/esquema-sr.md §6–§8.
+    /// </summary>
+    public string ConsultaCatalogo(CatalogoPanel catalogo) => "sr_catalogo_" + catalogo.Texto();
 }

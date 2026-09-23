@@ -10,8 +10,15 @@
 -- `agente test` marque FALLA. HAS_PERMS_BY_NAME / IS_ROLEMEMBER pueden devolver
 -- NULL (rol inexistente, sin visibilidad); el codigo trata NULL como "no".
 --
--- LIMITE CONOCIDO: se revisan servidor, base y esquema dbo. Un GRANT sobre una
--- tabla concreta (permiso por objeto) NO se detecta aqui. Ver docs/esquema-sr.md §11.
+-- Permisos POR OBJETO (F2-240): INSERT/UPDATE/DELETE/ALTER sobre cada tabla que
+-- el agente lee (la lista de VALUES de abajo; un test exige que toda tabla de una
+-- consulta sr_*.sql este en ella). HAS_PERMS_BY_NAME de un objeto que no existe da
+-- NULL y no cuenta. obj_escritura_total = cuantos (tabla, permiso) dan 1;
+-- obj_escritura_ejemplo = el primero, para el mensaje.
+--
+-- LIMITE CONOCIDO: un GRANT sobre una tabla que el agente NO lee no se detecta
+-- aqui (no le afecta al agente, pero el usuario ya no seria de solo lectura).
+-- Ver docs/esquema-sr.md §11.
 SELECT
     CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version_producto,
     CAST(SERVERPROPERTY('Edition') AS nvarchar(128))        AS edicion,
@@ -29,4 +36,19 @@ SELECT
     HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'INSERT')            AS dbo_puede_insert,
     HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'UPDATE')            AS dbo_puede_update,
     HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'DELETE')            AS dbo_puede_delete,
-    HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'ALTER')             AS dbo_puede_alter;
+    HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'ALTER')             AS dbo_puede_alter,
+    (SELECT COUNT(*)
+     FROM (VALUES (N'dbo.parametros2'), (N'dbo.cheques'), (N'dbo.cheqdet'), (N'dbo.chequespagos'),
+                 (N'dbo.tempcheques'), (N'dbo.tempcheqdet'), (N'dbo.grupos'), (N'dbo.productos'),
+                 (N'dbo.productosdetalle'), (N'dbo.meseros'), (N'dbo.areasrestaurant'),
+                 (N'dbo.tiposervicio'), (N'dbo.clientes')) AS o(nombre)
+     CROSS JOIN (VALUES (N'INSERT'), (N'UPDATE'), (N'DELETE'), (N'ALTER')) AS p(permiso)
+     WHERE HAS_PERMS_BY_NAME(o.nombre, 'OBJECT', p.permiso) = 1) AS obj_escritura_total,
+    (SELECT TOP (1) o.nombre + N': ' + p.permiso
+     FROM (VALUES (N'dbo.parametros2'), (N'dbo.cheques'), (N'dbo.cheqdet'), (N'dbo.chequespagos'),
+                 (N'dbo.tempcheques'), (N'dbo.tempcheqdet'), (N'dbo.grupos'), (N'dbo.productos'),
+                 (N'dbo.productosdetalle'), (N'dbo.meseros'), (N'dbo.areasrestaurant'),
+                 (N'dbo.tiposervicio'), (N'dbo.clientes')) AS o(nombre)
+     CROSS JOIN (VALUES (N'INSERT'), (N'UPDATE'), (N'DELETE'), (N'ALTER')) AS p(permiso)
+     WHERE HAS_PERMS_BY_NAME(o.nombre, 'OBJECT', p.permiso) = 1
+     ORDER BY o.nombre, p.permiso) AS obj_escritura_ejemplo;

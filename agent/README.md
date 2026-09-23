@@ -64,7 +64,8 @@ Plantilla: [`infra/config.example.json`](../infra/config.example.json).
   "apiUrl": "https://monitor.ejemplo.com",
   "apiKey": "msr_...",
   "connectionString": "Server=.\\SQLEXPRESS;Database=...;User ID=monitor_lector;Password=...;TrustServerCertificate=True",
-  "intervaloSegundos": 30
+  "intervaloSegundos": 30,
+  "horaSincronizacionCatalogos": "04:00"
 }
 ```
 
@@ -81,6 +82,9 @@ Plantilla: [`infra/config.example.json`](../infra/config.example.json).
   El agente agrega por su cuenta `Application Name=ArkonAgente` (para verlo en
   `sp_who2`) y un `Connect Timeout` de 5 s si no se puso uno (tope: 15 s).
 - `intervaloSegundos`: opcional, 30 por defecto, entre 5 y 3600.
+- `horaSincronizacionCatalogos`: opcional, `"04:00"` por defecto. Hora (24 h, `"HH:mm"`) de la
+  sincronización diaria de catálogos (F2-240), **en el reloj de esta PC**, no en la zona de la
+  sucursal del panel.
 
 El archivo acepta comentarios `//` y comas finales. En JSON las barras invertidas se
 escriben dobles: `.\\SQLEXPRESS`.
@@ -129,8 +133,9 @@ Resultado: FALLA la conexión a SQL Server (SoftRestaurant). La otra funciona.
   funciones de sistema (versión, base, login, roles y permisos). No toca ninguna tabla de
   SoftRestaurant. Si el usuario **puede escribir** (sysadmin, db_owner, db_datawriter,
   db_ddladmin, permiso INSERT/UPDATE/DELETE/ALTER/CREATE TABLE sobre la base, o
-  INSERT/UPDATE/DELETE/ALTER sobre el esquema `dbo`), sale **FALLA** aunque la conexión
-  funcione. Límite: un permiso concedido sobre una tabla suelta no se detecta.
+  INSERT/UPDATE/DELETE/ALTER sobre el esquema `dbo` o sobre alguna de las tablas que lee el
+  agente), sale **FALLA** aunque la conexión funcione. Límite: un permiso concedido sobre una
+  tabla que el agente NO lee no se detecta.
 - **API**: `GET {apiUrl}/agente/yo` con el header `X-Api-Key`. Un 401 significa key
   incorrecta o rotada, o sucursal o empresa inactiva (el API no distingue a propósito).
 
@@ -335,6 +340,38 @@ Nunca lleva la API key, la contraseña ni la cadena de conexión: los mensajes d
 "desconectado" a los 90 s fijos, así que con un intervalo mayor la sucursal sale
 desconectada en falso entre ciclo y ciclo (decisión abierta, ver la ficha de F1-061 en
 `backlog.md`).
+
+## Catálogos (F2-240)
+
+El agente manda al panel seis catálogos del POS por el contrato de F2-230
+(`POST {apiUrl}/ingesta/catalogos` y `/cierre`): **grupos, productos (con grupo, precio y estado),
+meseros, áreas, canales (tipos de servicio) y clientes**. Qué tabla y columna de SoftRestaurant es
+cada campo está en `docs/esquema-sr.md` §6–§8. Los cinco de inventario son de F2-241.
+
+- **Cuándo.** La primera vez que arranca con SoftRestaurant detectado; después, una vez al día a
+  partir de `horaSincronizacionCatalogos`; y cuando un admin pulsa "Pedir sincronización" en el
+  panel (el agente lo pregunta a lo más cada minuto y atiende cada petición una vez). El panel la
+  seguirá mostrando "pendiente" hasta que existan los lectores de inventario: es lo esperado.
+- **Sólo lo que cambió.** Cada catálogo leído se compara (SHA-256) con lo último que se mandó: sin
+  cambios, no se encola nada. El forzado del panel manda todo.
+- **Sólo con usuario de solo lectura.** Antes de leer corre `diagnostico.sql`; si el usuario SQL
+  puede escribir (o no se pudo confirmar) **no lee catálogos** y lo dice en el log. Con un login
+  sysadmin, como el de una PC de desarrollo, los catálogos no se sincronizan.
+- **No frena lo demás.** Corre después del heartbeat y del envío de cada ciclo, con su propia cola
+  (tablas `catalogo_*` en el mismo `cola.db`) y su propia espera ante fallas. Un rechazo definitivo
+  del API (400, 409, 413, 500) descarta esa sincronización y el catálogo se vuelve a leer completo
+  a los 15 min.
+- **Datos personales.** Las páginas de clientes (nombre, teléfono, correo, RFC) quedan en `cola.db`
+  hasta 7 días, en esta misma PC. El log nunca escribe esos valores: de un rechazo sólo el índice,
+  el id del POS y el motivo que da el API.
+
+En el log, por catálogo:
+
+```text
+Catálogos: 'productos' leído en SoftRestaurant: 217 registro(s) (217 fila(s)) en 41 ms; encolado en 1 página(s) más su cierre (sincronización 6f0c…).
+Catálogos: 'grupos' leído en SoftRestaurant: 14 registro(s) (14 fila(s)) en 3 ms; sin cambios, no se encola nada.
+Catálogos: 'productos' sincronizado en el panel: 217 activos, 0 dados de baja.
+```
 
 ## Auto-actualización (F2-143)
 
