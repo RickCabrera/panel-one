@@ -261,6 +261,20 @@ public class MapeoMovimientosTests
     }
 
     [Fact]
+    public void La_clave_sale_de_la_columna_documento_del_SQL_y_no_se_recalcula_en_el_agente()
+    {
+        // El SQL es la única fuente de la clave: si el mapeo la recalculara, podría separarse de ella en silencio.
+        var tabla = FixturesDocumentos.Movimientos([new FilaMov(T0, "SPM", "I1", -1m, 1m, "A01", Movto: 3)]);
+        tabla.Rows[0]["documento"] = "X9|A01|SPM";
+
+        var l = MapeoMovimientos.Mapear(tabla.CreateDataReader(), FixturesDocumentos.Zona);
+
+        var d = l.Documentos.Single();
+        Assert.Equal("X9|A01|SPM", d.Clave);
+        Assert.Equal("X9|A01|SPM", FixturesDocumentos.Json(d.Json).GetProperty("origenSrId").GetString());
+    }
+
+    [Fact]
     public void Sin_almacen_no_hay_poliza_pero_cuenta_como_vista()
     {
         var l = Mapear(new FilaMov(T0, "SPV", "I1", -1m, 1m, null, Cheque: 1));
