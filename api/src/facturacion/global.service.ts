@@ -34,7 +34,7 @@ const SCOPE_SISTEMA: EmpresaScope = { tipo: 'global' };
 export const MENSAJE_GLOBAL_INCIERTA =
   'El servicio de timbrado no confirmó a tiempo y la factura global pudo haberse emitido. No la ' +
   'vuelvas a pedir: sus tickets siguen reservados. Revisa en unos minutos (o en el PAC) antes de ' +
-  'reintentar; la conciliación de reservas colgadas es F2-110.';
+  'reintentar.';
 
 const DIAS_PERIODICIDAD: Readonly<Record<PeriodicidadGlobalEnum, string>> = {
   diaria: 'diaria',

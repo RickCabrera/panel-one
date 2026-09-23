@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router';
 
 import { useFiltroAlcance } from '../alertas/consultas';
 import { ErrorApi } from '../api/cliente';
+import { useUsuario } from '../auth/contexto';
 import { useAlcance } from '../filtros/alcance';
 import { usePeriodo } from '../filtros/usePeriodo';
 import type { PerfilFiscal, RegimenFiscal, RespuestaPerfilFiscal } from '../api/tipos';
@@ -27,6 +28,7 @@ import {
 } from './facturacion/reglas';
 import { PortalesAutofactura } from './facturacion/Portales';
 import { FacturaSinTicket } from './facturacion/emision/FacturaSinTicket';
+import { Folios } from './facturacion/folios/Folios';
 import { FacturaGlobal } from './facturacion/global/FacturaGlobal';
 import { TableroFacturacion } from './facturacion/tablero/Tablero';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './inicio/Tarjeta';
@@ -43,20 +45,25 @@ const ERROR_CAMPO = 'text-xs text-peligro';
 const mensajeDe = (e: unknown) => (e instanceof ErrorApi ? e.message : 'Error inesperado.');
 
 /** Las pestañas de Facturación (`?tab=`). Sin `tab` (o uno desconocido), el tablero. */
-export type PestanaFacturacion = 'tablero' | 'manual' | 'global' | 'datos';
+export type PestanaFacturacion = 'tablero' | 'manual' | 'global' | 'datos' | 'folios';
 const PARAM_TAB = 'tab';
-
-function leerPestana(parametros: URLSearchParams): PestanaFacturacion {
-  const tab = parametros.get(PARAM_TAB);
-  return tab === 'datos' || tab === 'manual' || tab === 'global' ? tab : 'tablero';
-}
 
 const PESTANAS: readonly { id: PestanaFacturacion; texto: string }[] = [
   { id: 'tablero', texto: 'Tablero' },
   { id: 'manual', texto: 'Sin ticket' },
   { id: 'global', texto: 'Factura global' },
   { id: 'datos', texto: 'Datos fiscales' },
+  // F2-110: el saldo de folios es de la PLATAFORMA: sólo el admin_global ve (y monta) la pestaña.
+  { id: 'folios', texto: 'Folios' },
 ];
+
+function leerPestana(
+  parametros: URLSearchParams,
+  visibles: readonly PestanaFacturacion[],
+): PestanaFacturacion {
+  const tab = parametros.get(PARAM_TAB) as PestanaFacturacion | null;
+  return tab !== null && visibles.includes(tab) ? tab : 'tablero';
+}
 
 /**
  * Facturación (sólo administradores). Cuatro pestañas:
@@ -70,10 +77,17 @@ const PESTANAS: readonly { id: PestanaFacturacion; texto: string }[] = [
  *   digital (CSD). Del CSD sólo se ve METADATA (número, RFC, vigencia): el .key y su contraseña se
  *   mandan una vez al servidor, que los pasa al PAC sin guardarlos, y aquí se borran del
  *   formulario en cuanto termina el envío. Más los portales de autofactura (F2-103).
+ * - Folios (F2-110, sólo admin_global): el saldo de folios del PAC de toda la plataforma, sus
+ *   paquetes, el aviso y el reporte mensual por empresa.
  */
 export function Facturacion() {
+  const usuario = useUsuario();
   const [parametros, setParametros] = useSearchParams();
-  const pestana = leerPestana(parametros);
+  const pestanas = PESTANAS.filter((p) => p.id !== 'folios' || usuario.rol === 'admin_global');
+  const pestana = leerPestana(
+    parametros,
+    pestanas.map((p) => p.id),
+  );
   const cambiar = (id: PestanaFacturacion) =>
     setParametros((previos) => {
       const nuevos = new URLSearchParams(previos);
@@ -89,7 +103,7 @@ export function Facturacion() {
         aria-label="Facturación"
         className="mb-4 flex gap-1 border-b border-linea"
       >
-        {PESTANAS.map((p) => (
+        {pestanas.map((p) => (
           <button
             key={p.id}
             type="button"
@@ -110,6 +124,7 @@ export function Facturacion() {
       {pestana === 'manual' && <PestanaSinTicket />}
       {pestana === 'global' && <PestanaGlobal />}
       {pestana === 'datos' && <DatosFiscales />}
+      {pestana === 'folios' && <Folios />}
     </Vista>
   );
 }

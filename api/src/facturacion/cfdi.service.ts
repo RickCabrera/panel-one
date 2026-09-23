@@ -77,7 +77,7 @@ export const MENSAJE_EMISION_INCIERTA =
  * 3. CONFIRMAR (CFDI vigente + código facturado + receptor frecuente, en una transacción), o
  *    LIBERAR la reserva si el PAC rechazó sin timbrar. Si el resultado es AMBIGUO (el PAC pudo
  *    timbrar y no lo sabemos), la reserva se QUEDA en `timbrando`: el código dice `en_proceso` y
- *    nadie puede pedir otro CFDI para él. Resolverla consultando al PAC es de F2-110.
+ *    nadie puede pedir otro CFDI para él. Resolverla consultando al PAC es de F2-110b.
  *
  * 4. ENTREGAR (F2-105, `EntregaCfdiService`): archivos, enlaces firmados y correo. Nunca hace
  *    fallar la emisión.
@@ -109,7 +109,10 @@ export class CfdiService implements EmisionPortal {
         csdVigenteHasta: true,
       },
     });
-    return perfil !== null && perfilEmite(perfil, new Date(this.reloj.ahora()));
+    const ahora = new Date(this.reloj.ahora());
+    if (perfil === null || !perfilEmite(perfil, ahora)) return false;
+    // F2-110: sin saldo de folios de la plataforma el portal tampoco ofrece emitir (un booleano).
+    return this.datos.folios(scope).hayFolios(ahora);
   }
 
   async emitir(s: SolicitudFacturaPortal): Promise<FacturaPortal> {
@@ -172,7 +175,7 @@ export class CfdiService implements EmisionPortal {
       );
     } catch (error) {
       // El CFDI YA existe ante el SAT: la reserva se queda en `timbrando` y el UUID (no es
-      // secreto) queda en el log para que alguien la concilie (F2-110).
+      // secreto) queda en el log para que alguien la concilie (F2-110b).
       this.#log.error(
         `CFDI timbrado SIN confirmar: reserva ${reserva.reservaId}, UUID ${timbre.uuid}, ` +
           `idPac ${timbre.idPac}: ${error instanceof Error ? error.message : String(error)}`,

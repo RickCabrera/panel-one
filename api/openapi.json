@@ -11785,7 +11785,7 @@
             }
           },
           "502": {
-            "description": "El PAC no confirmó (pudo emitirse): los tickets siguen reservados (F2-110).",
+            "description": "El PAC no confirmó (pudo emitirse): los tickets siguen reservados hasta conciliarla (F2-110b).",
             "content": {
               "application/json": {
                 "schema": {
@@ -12047,6 +12047,337 @@
           }
         ],
         "summary": "Consulta al PAC la solicitud de cancelación abierta de un CFDI y la resuelve (F2-109).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/folios": {
+      "get": {
+        "description": "Consume un folio cada CFDI vigente o cancelado (ticket, sin ticket, global, sustituto) y cada reserva en emisión. Asignación FIFO por vencimiento; un paquete vence 12 meses después de su compra. Sin ningún paquete registrado, `control = false` y la emisión no se limita.",
+        "operationId": "FoliosController_estado",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoliosDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No es admin_global (la ruta es de la plataforma, no de una empresa).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Saldo de folios del PAC, sus paquetes y el consumo por empresa (F2-110).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/folios/paquetes": {
+      "post": {
+        "description": "Prende el control de folios (y ya no se apaga solo).",
+        "operationId": "FoliosController_alta",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AltaPaqueteFoliosDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaqueteCreadoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cantidad fuera de 1–1,000,000, fecha inválida o futura, nota de más de 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No es admin_global (la ruta es de la plataforma, no de una empresa).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Registra un paquete de folios comprado al PAC (F2-110).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/folios/paquetes/{id}": {
+      "delete": {
+        "operationId": "FoliosController_baja",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Borrado."
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No es admin_global (la ruta es de la plataforma, no de una empresa).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya tiene timbres asignados: borrarlo reescribiría el historial del saldo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Borra un paquete que todavía no tiene timbres asignados (F2-110).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/folios/configuracion": {
+      "put": {
+        "operationId": "FoliosController_configurar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfiguracionFoliosDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoliosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Umbral fuera de 1–100.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No es admin_global (la ruta es de la plataforma, no de una empresa).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Umbral de aviso del saldo de folios, en % de lo vigente (F2-110). Default 20.",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/folios/reporte": {
+      "get": {
+        "description": "CFDI vigentes + cancelados por su fecha de timbrado, con el MES en la zona de la sucursal que emitió. Una fila por empresa y mes con timbres; `totales` trae todos los meses del rango.",
+        "operationId": "FoliosController_reporte",
+        "parameters": [
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Primer mes (AAAA-MM), inclusive.",
+            "schema": {
+              "example": "2026-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Último mes (AAAA-MM), inclusive. Máx. 24 meses.",
+            "schema": {
+              "example": "2026-09",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReporteFoliosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Meses mal formados, al revés o > 24.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No es admin_global (la ruta es de la plataforma, no de una empresa).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Timbres por empresa y mes: la base del recobro en la anualidad (F2-110).",
         "tags": [
           "facturacion"
         ]
@@ -23320,6 +23651,316 @@
           "cfdiId",
           "estado",
           "mensaje"
+        ]
+      },
+      "PaqueteFoliosDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "compradoAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "venceAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Exclusivo: en ese instante ya no ampara nada."
+          },
+          "nota": {
+            "type": "string",
+            "nullable": true
+          },
+          "consumidos": {
+            "type": "number",
+            "description": "Timbres asignados (FIFO por vencimiento)."
+          },
+          "restantes": {
+            "type": "number"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "por_vencer",
+              "agotado",
+              "vencido",
+              "futuro"
+            ]
+          },
+          "diasParaVencer": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "cantidad",
+          "compradoAt",
+          "venceAt",
+          "nota",
+          "consumidos",
+          "restantes",
+          "estado",
+          "diasParaVencer"
+        ]
+      },
+      "ConsumoEmpresaDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "empresa": {
+            "type": "string"
+          },
+          "mesActual": {
+            "type": "number",
+            "description": "Timbres del mes en curso (mes local de cada sucursal)."
+          },
+          "ultimos12Meses": {
+            "type": "number",
+            "description": "Timbres de los 12 meses locales que terminan en el mes en curso."
+          }
+        },
+        "required": [
+          "empresaId",
+          "empresa",
+          "mesActual",
+          "ultimos12Meses"
+        ]
+      },
+      "FoliosDto": {
+        "type": "object",
+        "properties": {
+          "control": {
+            "type": "boolean",
+            "description": "false = nunca se registró un paquete: la emisión no se limita."
+          },
+          "umbralPct": {
+            "type": "number"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "sin_control",
+              "ok",
+              "bajo",
+              "agotado"
+            ]
+          },
+          "disponible": {
+            "type": "number",
+            "description": "Folios que quedan en los paquetes vigentes."
+          },
+          "vigenteTotal": {
+            "type": "number",
+            "description": "Σ de las cantidades de los paquetes vigentes: la base del umbral."
+          },
+          "enEmision": {
+            "type": "number",
+            "description": "Reservas en emisión (`timbrando`), ya descontadas de `disponible`. Una reserva colgada se descuenta hasta que se concilie (F2-110b)."
+          },
+          "sobregiro": {
+            "type": "number",
+            "description": "Timbres que no cupieron en ningún paquete vigente en su momento."
+          },
+          "avisoUmbralAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "paquetes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaqueteFoliosDto"
+            }
+          },
+          "consumoPorEmpresa": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsumoEmpresaDto"
+            }
+          }
+        },
+        "required": [
+          "control",
+          "umbralPct",
+          "estado",
+          "disponible",
+          "vigenteTotal",
+          "enEmision",
+          "sobregiro",
+          "avisoUmbralAt",
+          "paquetes",
+          "consumoPorEmpresa"
+        ]
+      },
+      "AltaPaqueteFoliosDto": {
+        "type": "object",
+        "properties": {
+          "cantidad": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1000000,
+            "example": 1000
+          },
+          "fechaCompra": {
+            "type": "string",
+            "example": "2026-09-01",
+            "description": "Día de compra (AAAA-MM-DD, hora de la Ciudad de México). No puede ser futuro. El paquete vence al empezar el mismo día un año después."
+          },
+          "nota": {
+            "type": "string",
+            "maxLength": 200,
+            "example": "Paquete anual 2026"
+          }
+        },
+        "required": [
+          "cantidad",
+          "fechaCompra"
+        ]
+      },
+      "PaqueteCreadoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "ConfiguracionFoliosDto": {
+        "type": "object",
+        "properties": {
+          "umbralPct": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100,
+            "example": 20
+          }
+        },
+        "required": [
+          "umbralPct"
+        ]
+      },
+      "ConteoMensualDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "empresa": {
+            "type": "string"
+          },
+          "mes": {
+            "type": "string",
+            "example": "2026-09",
+            "description": "Mes local de la sucursal que emitió."
+          },
+          "vigentes": {
+            "type": "number"
+          },
+          "cancelados": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number",
+            "description": "vigentes + cancelados: los folios consumidos."
+          },
+          "ticket": {
+            "type": "number",
+            "description": "Del portal (ticket), sin contar sustitutos."
+          },
+          "manual": {
+            "type": "number",
+            "description": "Sin ticket (captura manual), sin contar sustitutos."
+          },
+          "global": {
+            "type": "number",
+            "description": "Facturas globales."
+          },
+          "sustitutos": {
+            "type": "number",
+            "description": "Sustitutos de una refacturación (relación 04)."
+          }
+        },
+        "required": [
+          "empresaId",
+          "empresa",
+          "mes",
+          "vigentes",
+          "cancelados",
+          "total",
+          "ticket",
+          "manual",
+          "global",
+          "sustitutos"
+        ]
+      },
+      "TotalMesDto": {
+        "type": "object",
+        "properties": {
+          "mes": {
+            "type": "string",
+            "example": "2026-09"
+          },
+          "vigentes": {
+            "type": "number"
+          },
+          "cancelados": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "mes",
+          "vigentes",
+          "cancelados",
+          "total"
+        ]
+      },
+      "ReporteFoliosDto": {
+        "type": "object",
+        "properties": {
+          "desde": {
+            "type": "string"
+          },
+          "hasta": {
+            "type": "string"
+          },
+          "filas": {
+            "description": "Empresa × mes; sin fila = 0 timbres.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConteoMensualDto"
+            }
+          },
+          "totales": {
+            "description": "Un renglón por cada mes del rango.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TotalMesDto"
+            }
+          }
+        },
+        "required": [
+          "desde",
+          "hasta",
+          "filas",
+          "totales"
         ]
       }
     }

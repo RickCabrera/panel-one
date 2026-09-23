@@ -33,6 +33,7 @@ import { CODIGO_EJEMPLO, VIGENCIA_DEFAULT } from '../src/facturacion/codigo';
 import { generarCodigosSeed } from './seed-codigos';
 import { sembrarFacturacion, sembrarPortales } from './seed-facturacion';
 import { sembrarCfdis } from './seed-cfdis';
+import { sembrarFolios } from './seed-folios';
 import { sembrarGlobales, whereGlobalesSeed } from './seed-globales';
 import { crearArchivos } from '../src/adaptadores/adaptadores.module';
 import type { PuertoArchivos } from '../src/adaptadores/archivos/puerto';
@@ -724,6 +725,13 @@ async function main(): Promise<void> {
         );
       }
     }
+    // Paquetes de folios del PAC (F2-110): vencido, por vencer y vigente; prende el control. Van
+    // DESPUÉS de los CFDI y las globales: son lo que el saldo descuenta.
+    const folios = await sembrarFolios(prisma, { ahora });
+    console.log(
+      `Paquetes de folios sembrados (F2-110): ${folios.paquetes} (vencido, por vencer y vigente); ` +
+        'control de folios encendido. Ver Facturación → Folios (admin_global).',
+    );
     // Portales de autofactura (F2-103): enlace y color por sucursal; Centro con logo sintético.
     const portales = await sembrarPortales(prisma, {
       empresaId: op.empresaId,

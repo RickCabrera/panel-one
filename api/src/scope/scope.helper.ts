@@ -98,7 +98,14 @@ export const LLAVE_EMPRESA = {
   CfdiGlobalCodigo: 'empresaId',
   // F2-109: las solicitudes de cancelación de cada CFDI (las escribe SÓLO `EscrituraFacturacion`).
   CfdiCancelacion: 'empresaId',
-} as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
+  // F2-110: modelos de PLATAFORMA (`null`): el saldo de folios es el de la cuenta del PAC, no de una
+  // empresa, así que no llevan `empresa_id` ni índice por empresa. Con scope de empresa no se ve
+  // ninguna fila (`whereEmpresa` devuelve un filtro que no casa con nada) y con scope global, todas.
+  // Los lee SÓLO `LecturaFoliosPlataforma` y los escribe SÓLO `EscrituraFolios`. Un modelo de tenant
+  // NUNCA va con `null`: `scope.helper.spec.ts` exige que la lista sea exactamente ésta.
+  PaqueteFolios: null,
+  ConfiguracionFolios: null,
+} as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId' | null>;
 
 export type WhereGenerico = Record<string, unknown>;
 
@@ -147,7 +154,10 @@ export function whereEmpresa(scope: EmpresaScope, modelo: Prisma.ModelName): Whe
   if (scope.tipo === 'global') {
     return {};
   }
-  return { [LLAVE_EMPRESA[modelo]]: scope.empresaId };
+  const llave = LLAVE_EMPRESA[modelo];
+  // F2-110: una fila de plataforma no es de ninguna empresa: con scope de empresa, ninguna.
+  if (llave === null) return { id: { in: [] } };
+  return { [llave]: scope.empresaId };
 }
 
 /**

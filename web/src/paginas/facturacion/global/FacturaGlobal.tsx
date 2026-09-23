@@ -259,7 +259,7 @@ function Periodos({ empresaId, sucursalId }: { empresaId: string; sucursalId: st
                   <td className="px-2 py-1">{e.etiqueta ?? 'Sin dato'}</td>
                   <td className="px-2 py-1">
                     {e.estado === 'timbrando' ? (
-                      <span title="El PAC no confirmó: sus tickets siguen reservados hasta conciliarla (F2-110).">
+                      <span title="El PAC no confirmó: sus tickets siguen reservados hasta conciliarla.">
                         En emisión (sin confirmar)
                       </span>
                     ) : e.estado === 'vigente' ? (

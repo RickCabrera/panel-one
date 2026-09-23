@@ -150,7 +150,7 @@ export class FacturaGlobalController {
   })
   @ApiBadGatewayResponse({
     type: ErrorDto,
-    description: 'El PAC no confirmó (pudo emitirse): los tickets siguen reservados (F2-110).',
+    description: 'El PAC no confirmó (pudo emitirse): los tickets siguen reservados hasta conciliarla (F2-110b).',
   })
   emitir(
     @Req() req: RequestAutenticado,

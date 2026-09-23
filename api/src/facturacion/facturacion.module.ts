@@ -13,6 +13,9 @@ import { EmisionAdminService } from './emision-admin.service';
 import { EMISION_PORTAL } from './emision-portal';
 import { ArchivosPublicosController, EntregaController } from './entrega.controller';
 import { EntregaCfdiService } from './entrega.service';
+import { FoliosController } from './folios.controller';
+import { FoliosProgramador } from './folios.programador';
+import { FoliosService } from './folios.service';
 import { FacturaGlobalController } from './global.controller';
 import { FacturaGlobalProgramador } from './global.programador';
 import { FacturaGlobalService } from './global.service';
@@ -34,6 +37,7 @@ import { VentasModule } from '../ventas/ventas.module';
  * ticket y refacturación (`EmisionAdminService`), sobre el mismo tramo de emisión. F2-108: la
  * factura global (`FacturaGlobalService`) y su programador de emisión automática. F2-109: la
  * cancelación de CFDI (`CancelacionCfdiService`), que también usa la refacturación, y su sondeo.
+ * F2-110: el control de folios del PAC (`FoliosService`, saldo de PLATAFORMA) y sus avisos.
  */
 @Module({
   imports: [VentasModule],
@@ -48,6 +52,7 @@ import { VentasModule } from '../ventas/ventas.module';
     EmisionAdminController,
     FacturaGlobalController,
     CancelacionController,
+    FoliosController,
   ],
   providers: [
     FacturacionService,
@@ -61,6 +66,8 @@ import { VentasModule } from '../ventas/ventas.module';
     FacturaGlobalProgramador,
     CancelacionCfdiService,
     CancelacionProgramador,
+    FoliosService,
+    FoliosProgramador,
     Espera,
     { provide: EMISION_PORTAL, useExisting: CfdiService },
   ],

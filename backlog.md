@@ -1145,6 +1145,13 @@ escritura contra el POS (test que lo afirma inspeccionando el modo de la conexi�
    OpenAPI al día con todos los endpoints nuevos; `README.md` y `0-INSTALACION.md`
    describiendo el producto que de verdad existe al terminar la ronda.
 
+> **Y además (de F2-110).** ❓ Decisión abierta para Ricardo: el "saldo de folios bajo" NO entró
+> al centro de alertas (`folios_bajo`, nota de F2-224): las alertas son por empresa y sucursal y las
+> ven los clientes, y el saldo es de la PLATAFORMA. Hoy avisa por correo al admin_global y se ve en
+> Facturación → Folios. Si se quiere en la campana, hace falta un centro de alertas de plataforma
+> (sólo admin_global): decidir y, si sí, escribirlo como tarea. Ver esquema-sr §2 "Control de folios
+> (F2-110)".
+
 > **Decisión abierta que dejó F2-140:** Comparativos compara **una empresa a la vez** (la de la
 > cabecera); la dimensión "empresa" de la matriz, para admin_global, no se construyó. Costo de
 > hacerlo en el front: N empresas × 4 consultas (`resumen` y `comparativo-sucursales`, A y B).
@@ -1521,6 +1528,13 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 > decía "nuevo código": se reusa el del ticket), y que la global automática no re-emita un periodo
 > con una global cancelada.
 
+> **Y además (de F2-110).** Contra Facturama: (1) que el saldo de folios es UNO para toda la cuenta
+> multiemisor (no por emisor) y que cancelar no gasta folio; (2) la vigencia real de un paquete
+> (hoy: vence al empezar el mismo día un año después de la compra, en CDMX); (3) si su API expone el
+> saldo y la vigencia: si sí, conciliar el saldo local contra el suyo; (4) qué contesta Facturama al
+> timbrar SIN saldo (hoy el panel bloquea antes, pero con el control apagado el rechazo sería suyo).
+> Supuestos en esquema-sr §2 "Control de folios (F2-110)".
+
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus
 registros DNS y el volumen persistente del servidor.** Cambiar `CORREO_IMPL` y `ARCHIVOS_IMPL`
@@ -1880,7 +1894,7 @@ factura existente en lugar de fallar.
 >    y `cancelado` (este último se deriva de la cuenta). Cada uno trae `mensaje` en español.
 
 ### F2-104 · Emisión de CFDI vía Facturama
-`[x]` **ALCANCE:** sin guardar XML/PDF (F2-105) y sin resolver reservas ambiguas colgadas en `timbrando` (F2-110). **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (tabla de errores del SAT, 429/503 vs 5xx ambiguos, base = total sin propina, IVA 16 %, tarjeta 04; esquema-sr §2 "La emisión del CFDI"). Servicio `CfdiService.emitir(chequeId, receptor)`: construye el JSON de Facturama
+`[x]` **ALCANCE:** sin guardar XML/PDF (F2-105) y sin resolver reservas ambiguas colgadas en `timbrando` (F2-110b). **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (tabla de errores del SAT, 429/503 vs 5xx ambiguos, base = total sin propina, IVA 16 %, tarjeta 04; esquema-sr §2 "La emisión del CFDI"). Servicio `CfdiService.emitir(chequeId, receptor)`: construye el JSON de Facturama
 (emisor = perfil fiscal de la empresa, receptor, concepto único "Consumo de alimentos y
 bebidas" clave SAT `90101500`, unidad `E48`/Servicio, importes desde el cheque, forma de
 pago mapeada del `ChequePago` dominante, método `PUE`, moneda MXN, lugar de expedición = CP
@@ -1916,7 +1930,7 @@ el error crudo; doble click en "emitir" no genera dos CFDI (lock por código).
 >    dejó listo para esto), en la misma operación que el CFDI.
 
 ### F2-105 · Entrega de la factura
-`[x]` **ALCANCE:** sin copia al restaurante (no hay dónde configurar su correo), sin re-descarga de un código ya facturado desde el portal (sigue la decisión abierta (a)/(b) de abajo), sin UI del reintento (F2-106) y sin recuperar del PAC los archivos de un CFDI que no se pudieron guardar (F2-110/F2-191). **PENDIENTE DE VALIDACIÓN REAL:** ver F2-191 (inbox real con Brevo, volumen persistente y backup F1-004). Al timbrar: guardar XML y PDF (obtenidos de Facturama) en disco del VPS bajo
+`[x]` **ALCANCE:** sin copia al restaurante (no hay dónde configurar su correo), sin re-descarga de un código ya facturado desde el portal (sigue la decisión abierta (a)/(b) de abajo), sin UI del reintento (F2-106) y sin recuperar del PAC los archivos de un CFDI que no se pudieron guardar (F2-110b/F2-191). **PENDIENTE DE VALIDACIÓN REAL:** ver F2-191 (inbox real con Brevo, volumen persistente y backup F1-004). Al timbrar: guardar XML y PDF (obtenidos de Facturama) en disco del VPS bajo
 `/data/cfdi/{empresa}/{año}/{mes}/`, servir por endpoint autenticado + token firmado de
 descarga pública temporal para el portal; enviar correo vía Brevo (plantilla con branding de
 la sucursal, XML y PDF adjuntos, copia opcional al restaurante). Registro `CfdiEnvio(cfdi_id,
