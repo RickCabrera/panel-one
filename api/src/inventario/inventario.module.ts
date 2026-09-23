@@ -7,6 +7,8 @@ import { ExistenciasController } from './existencias.controller';
 import { ExistenciasService } from './existencias.service';
 import { MovimientosController } from './movimientos.controller';
 import { MovimientosService } from './movimientos.service';
+import { ProyeccionesController } from './proyecciones.controller';
+import { ProyeccionesService } from './proyecciones.service';
 import { RecetasController } from './recetas.controller';
 import { RecetasService } from './recetas.service';
 import { TraspasosController } from './traspasos.controller';
@@ -18,6 +20,7 @@ import { TraspasosService } from './traspasos.service';
  * contra las pólizas de SR).
  * F2-125: recetas y consumo teórico contra el real (lee ventas por el helper de agregados).
  * Exporta `RecetasService`: el estado de resultados de F2-126 reusa su consumo teórico.
+ * F2-127: proyección de demanda y sugerido de compra (al vuelo, desde pólizas y existencias).
  */
 @Module({
   imports: [VentasModule],
@@ -27,6 +30,7 @@ import { TraspasosService } from './traspasos.service';
     ConteosController,
     TraspasosController,
     RecetasController,
+    ProyeccionesController,
   ],
   providers: [
     ExistenciasService,
@@ -34,6 +38,7 @@ import { TraspasosService } from './traspasos.service';
     ConteosService,
     TraspasosService,
     RecetasService,
+    ProyeccionesService,
   ],
   exports: [RecetasService],
 })
