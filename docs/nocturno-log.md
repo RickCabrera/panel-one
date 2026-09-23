@@ -7510,3 +7510,86 @@ O1 (auditoría en el e2e) atendida.
   `--runInBand` sobre la base SEMBRADA: **2309/2310** (131 suites), cero skips; el único rojo es el preexistente de
   `prisma/esquema.spec.ts` ("al crear el admin…", igual que F2-104…F2-110), así que NO es verde en esta base local.
   /web build y lint limpios; vitest **1235/1235** (100 archivos); check:bundle 321.1 kB gzip.
+
+## 2026-09-23 07:10 — F2-144 · Ventas por canal (delivery y mostrador)
+**Estado:** CERRADA al mergear el PR de `feat/F2-144` (squash a main) con el AC nocturno de la tabla "Cierre
+nocturno de las heredadas" · **ALCANCE RECORTADO:** sin ingesta nueva (ver abajo) · **PENDIENTE DE
+VALIDACIÓN REAL:** ver F2-192 · **Las dos decisiones de canal SIGUEN ABIERTAS para Ricardo.**
+
+**Qué quedó hecho.**
+- **Spike** en `docs/delivery.md`: lo que se sabe (el único dato de canal por cuenta es su área;
+  ningún agente la manda hoy), la **checklist de lo que falta ver** en una SR real (§3: área en la
+  cuenta, tipo de servicio por cuenta, cómo salen Rappi/Uber/DiDi, domicilio propio vs.
+  plataforma, comisión, cuántas áreas por restaurante), la decisión de alcance (§4) y las dos
+  decisiones abiertas (§5). `esquema-sr.md` §8 ya no dice "_(pendiente)_": apunta al spike y
+  lleva los dos supuestos nuevos.
+- **Vista `/canales` "Ventas por canal"** (menú Canales, todos los roles, sólo lectura):
+  periodo A = cabecera, periodo B con el MISMO selector de Comparativos (`b/bdesde/bhasta`,
+  corte `alturaAl`). Tabla por canal: venta, mezcla, cuentas y ticket prom. de A; venta y
+  mezcla de B; Δ venta ($ y %) y Δ mezcla (pp). "Área sin canal" y "Sin clasificar" como
+  renglones propios, fila de total = venta del periodo, cuadre Σ = venta para A y para B, CSV,
+  liga a `/areas` para cambiar el mapeo. Estados vacíos: sin cuentas en A ni B, todo sin
+  clasificar (el porqué y qué hace falta), B sin cuentas, B inválido (A se sigue viendo),
+  sucursal sin catálogo de áreas, error de consulta.
+- **Sin endpoint nuevo:** A y B son `GET /ventas/por-area` (F2-233), misma llave que Áreas y
+  Análisis. OpenAPI sin cambio. `SelectorB` se extrajo de Comparativos a
+  `web/src/paginas/comparativos/SelectorB.tsx` y lo usan las dos vistas.
+
+**Decisiones que tomé y por qué.**
+- **ALCANCE RECORTADO — sin "ingesta de ventas por canal".** La ficha la pedía. No hay nada nuevo
+  que ingerir: el área ya viaja desde F2-233 y agregar un campo "tipo de servicio" al contrato
+  sin haberlo visto en el POS sería adivinar. Si F2-192 encuentra el tipo de servicio por cuenta,
+  es tarea nueva con su contrato (`docs/delivery.md` §5, último párrafo).
+- ❓ **Enum fijo de canales y mapeo por sucursal: NO se cerraron.** La ficha decía "que esta
+  tarea cierra con su spike; no construyas sobre otra forma sin decidir". Sin instalación real
+  no hay dato: se construyó SOBRE la forma existente (lo más conservador, cero migraciones) y
+  ambas quedan como ❓ + `DECISION PROVISIONAL (nocturno)` en `docs/delivery.md` §5,
+  esquema-sr §8, el comentario del enum en `schema.prisma` y el JSDoc de
+  `web/src/paginas/Canales.tsx`. La vista no depende de cómo se decidan.
+- **Δ de mezcla EXACTO** (`canales/reglas.ts#puntosDeMezcla`): `(a/ta − b/tb)` desde centavos con
+  UN redondeo. Restar mezclas ya redondeadas falla por 0.1 pp (1/3 vs 1/6: 16.6 vs 16.7); hay
+  test con ese caso (observación del revisor).
+- Un canal sin cuentas en un periodo = "—" y sin Δ (regla de Comparativos), aunque ese periodo
+  sí tenga venta. Es conservador: podría decirse "0.0 %", pero "sin cuentas" no se pinta en 0.
+- Ticket promedio por canal calculado en el front (centavos, mitad hacia arriba, igual que
+  `/ventas/resumen`); no hay endpoint que lo dé por canal.
+
+**Trampas que encontré.**
+- `construye()` de `layout/menu.ts` quedó sin uso: F2-144 era la ÚLTIMA entrada del menú
+  pendiente con tarea. Se borró; `menu.test.ts` ahora afirma que ninguna pendiente tiene tarea
+  (sólo quedan las de `SIN_TAREA`), y el ejemplo de pendiente en `Sidebar.test.tsx` pasó a
+  "Empresas". Si una tarea futura agrega una entrada pendiente con tarea, hay que reponerlo.
+- En `Canales.test.tsx`, "Áreas y canales" es link dos veces (menú y la intro): buscarlo
+  `within` el párrafo. `ErrorTarjeta` no tiene testid: se busca por `role="alert"`.
+- `npx prettier --check` marca archivos que nadie tocó (fin de línea del checkout en Windows): no
+  es gate; `npm run lint` sí y está limpio.
+- `npm run lint` en `/api` lanzado en paralelo con otro comando corrió el de `/web` (cwd
+  compartido): corre los checks de cada carril en secuencia.
+
+**Qué quedó abierto.**
+- Las dos decisiones (enum, mapeo por sucursal) — para Ricardo; la salida barata si el mapeo
+  por sucursal estorba está en `docs/delivery.md` §5.2.
+- "Plataformas" no sale con el seed (no siembra plataformas); la vista sólo pinta canales con
+  cuentas. Si se quiere verla con datos demo, es cambio del seed (no de esta tarea).
+- Comisiones de plataforma: fuera de alcance hasta saber si el POS las registra.
+- Verificación visual a 390 px: no se hizo (sin arnés de navegador). La tabla va en
+  `overflow-x-auto` y la barra de mezcla se oculta bajo `sm`. Para F2-250.
+
+**Tests.**
+- web nuevos: `canales/reglas.test.ts` (Δ pp exacto con el caso 1/3 vs 1/6, "—" sin cuentas,
+  sin B, ilegible ≠ 0, ticket, total), `canales/csv.test.ts` (filas, vacías, `texto` espiado,
+  importe ilegible, nombre), `Canales.test.tsx` (12: AC Σ = "Venta total" de Inicio, "—",
+  A y B por el mismo endpoint con alcance, otro rango e inválido, estados vacíos, error,
+  3 roles navegan desde el menú). Adaptados: `menu.test.ts`, `Sidebar.test.tsx`,
+  `vista.test.ts`. Suite web: 103 archivos / 1264 tests verdes.
+- api nuevos en `ventas/por-area-seed.e2e.spec.ts` (2): dos periodos con su mezcla = generador y
+  Σ = resumen; con `alturaAl` cada canal = generador cortado a mano (y el corte muerde) y =
+  `/ventas/resumen` con la misma altura.
+- Checks: web `npm run build` limpio, `npm run lint` limpio, `npm test` 1264/1264; api `lint` y
+  `typecheck` limpios, `npx prisma validate` ok (sólo cambió un comentario del enum, sin
+  migración), `npm test` **2312 verdes / 1 rojo PREEXISTENTE**: `prisma/esquema.spec.ts` "al
+  crear el admin guarda su contraseña como argon2id verificable" (el de siempre, FK de la
+  suscripción del seed local; esta rama no toca ese spec ni el seed). No cuenta como verde.
+
+**Qué haría distinto.** Nada grande: el endpoint de F2-233 ya daba todo, la tarea era de vista y
+de spike. Leer primero `comparativos/periodoB.ts` ahorra reinventar el periodo B.

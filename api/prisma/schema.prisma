@@ -842,7 +842,8 @@ model CanalVentaCatalogo {
 
 // Canal de NEGOCIO de un área (F2-233). DECISION PROVISIONAL (nocturno): enum fijo con el
 // conjunto de F2-144; agregar un canal ("para llevar", "eventos") es una migración. Decisión
-// abierta para Ricardo (esquema-sr.md §8).
+// abierta para Ricardo (esquema-sr.md §8). El spike de F2-144 NO la cerró (sin instalación real):
+// sigue abierta; qué tocar para agregar un canal, en docs/delivery.md §5.
 enum CanalNegocio {
   comedor
   mostrador

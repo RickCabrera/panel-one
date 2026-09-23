@@ -92,7 +92,6 @@ describe('las seis secciones de la ficha', () => {
   });
 
   it('las tareas de las pendientes son las de la cola que construyen cada vista', () => {
-    const tarea = (id: string) => porId(id).pendiente?.tarea;
     // F2-140 construyó Comparativos: ya navega.
     expect(porId('principal.comparativos').destino).toEqual({ ruta: '/comparativos' });
     // F2-220 construyó el Resumen: ya navega.
@@ -123,8 +122,11 @@ describe('las seis secciones de la ficha', () => {
     expect(porId('inventario.gastos').destino).toEqual({ ruta: '/gastos' });
     // F2-124 construyó Traspasos: navega.
     expect(porId('inventario.traspasos').destino).toEqual({ ruta: '/traspasos' });
-    expect(tarea('canales.ventas')).toBe('F2-144');
-    expect(porId('canales.ventas').pendiente?.razon).toContain('F2-233');
+    // F2-144 construyó Ventas por canal: navega. Era la última pendiente con tarea: las que
+    // quedan son las de SIN_TAREA.
+    expect(porId('canales.ventas').destino).toEqual({ ruta: '/canales' });
+    expect(porId('canales.ventas').pendiente).toBeUndefined();
+    expect(todas().filter((e) => e.pendiente?.tarea)).toEqual([]);
     // F2-100 construyó los datos fiscales de Facturación: navega (sólo administradores).
     expect(porId('administracion.facturacion').destino).toEqual({ ruta: '/facturacion' });
   });

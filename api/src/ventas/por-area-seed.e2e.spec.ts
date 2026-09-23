@@ -82,6 +82,53 @@ interface PorArea extends Monto {
   sinCanal: Monto;
 }
 
+/** Milisegundos desde la medianoche local de `zona` (para el corte "a la misma altura"). */
+function msDelDia(t: Date, zona: string): number {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: zona,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(t);
+  const v = (tipo: string) => Number(partes.find((p) => p.type === tipo)?.value);
+  return ((v('hour') * 60 + v('minute')) * 60 + v('second')) * 1000 + t.getUTCMilliseconds();
+}
+
+/**
+ * Las ventas del periodo cortadas "a la misma altura" (F2-220), A MANO: las del último día sólo
+ * si cerraron ANTES de la hora local de `alturaAl` en SU sucursal (corte exclusivo).
+ */
+const ventasHastaLaAltura = (desde: string, hasta: string, alturaAl: string) =>
+  ventasDel(desde, hasta).filter((c) => {
+    const zona = ZONA[c.sucursalId];
+    return (
+      diaLocal(c.cerradoAt!, zona) !== hasta ||
+      msDelDia(c.cerradoAt!, zona) < msDelDia(new Date(alturaAl), zona)
+    );
+  });
+
+/** Lo que `/ventas/por-area` debe decir por canal, a mano desde el generador. */
+function canalesEsperados(ventas: ChequeSeed[]) {
+  const porCanal = sumar(ventas, (c) => c.maestro.canal);
+  const total = ventas.reduce((s, c) => s.plus(c.total), new Prisma.Decimal(0));
+  return {
+    venta: total.toFixed(2),
+    cuentas: ventas.length,
+    canales: (['comedor', 'mostrador', 'domicilio'] as const)
+      .filter((canal) => porCanal.has(canal))
+      .map((canal) => ({
+        canal,
+        venta: porCanal.get(canal)!.venta.toFixed(2),
+        cuentas: porCanal.get(canal)!.cuentas,
+      })),
+    sinArea: {
+      venta: (porCanal.get(null)?.venta ?? new Prisma.Decimal(0)).toFixed(2),
+      cuentas: porCanal.get(null)?.cuentas ?? 0,
+    },
+  };
+}
+
 describe('Áreas y canales sobre el seed (e2e, F2-233)', () => {
   const prisma = new PrismaClient();
   let app: NestExpressApplication;
@@ -174,6 +221,36 @@ describe('Áreas y canales sobre el seed (e2e, F2-233)', () => {
     expect(r.areas.filter((a) => a.nombre === 'Terraza').map((a) => a.sucursalId)).toEqual([
       FX.sucursalA1,
     ]);
+  });
+
+  // F2-144 (Ventas por canal): la vista pide A y B al mismo endpoint, y B con `alturaAl` cuando
+  // el periodo comparable se corta a la misma altura. Las dos cosas se prueban contra el generador.
+  it('F2-144: dos periodos distintos, cada uno con su mezcla por canal igual al generador', async () => {
+    const a = { empresaId: FX.empresaA, desde: haceDias(OP.hoy, 13), hasta: haceDias(OP.hoy, 7) };
+    const b = { empresaId: FX.empresaA, desde: haceDias(OP.hoy, 41), hasta: haceDias(OP.hoy, 35) };
+    for (const q of [a, b]) {
+      const r = (await get('/ventas/por-area', q)) as unknown as PorArea;
+      const e = canalesEsperados(ventasDel(q.desde, q.hasta));
+      expect(e.cuentas).toBeGreaterThan(0);
+      expect({ venta: r.venta, cuentas: r.cuentas, canales: r.canales, sinArea: r.sinArea }).toEqual(e);
+      expect(r.sinCanal).toEqual({ venta: '0.00', cuentas: 0 });
+      expect(r.venta).toBe((await get('/ventas/resumen', q)).venta);
+    }
+  });
+
+  it('F2-144: con alturaAl (el B cortado) cada canal cuadra con el generador cortado a mano', async () => {
+    const hasta = haceDias(OP.hoy, 2);
+    const alturaAl = `${OP.hoy}T20:30:00.000Z`; // 14:30 en CDMX, 13:30 en Tijuana
+    const q = { empresaId: FX.empresaA, desde: haceDias(OP.hoy, 8), hasta, alturaAl };
+    const cortadas = ventasHastaLaAltura(q.desde, q.hasta, alturaAl);
+    // El corte muerde: hay cuentas del último día que quedan fuera.
+    expect(cortadas.length).toBeLessThan(ventasDel(q.desde, q.hasta).length);
+    const r = (await get('/ventas/por-area', q)) as unknown as PorArea;
+    expect({ venta: r.venta, cuentas: r.cuentas, canales: r.canales, sinArea: r.sinArea }).toEqual(
+      canalesEsperados(cortadas),
+    );
+    // Y es la misma cifra que `/ventas/resumen` con la misma altura (otro endpoint).
+    expect(r.venta).toBe((await get('/ventas/resumen', q)).venta);
   });
 
   it('con una sucursal (Tijuana, días locales de allá) también cuadra con su resumen', async () => {

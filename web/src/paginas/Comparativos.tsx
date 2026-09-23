@@ -21,14 +21,8 @@ import {
   tasasDe,
   TASA_SIN_LECTURA,
 } from './comparativos/matriz';
-import {
-  escribirB,
-  leerB,
-  MODOS_B,
-  resolverB,
-  type ModoB,
-  type SeleccionB,
-} from './comparativos/periodoB';
+import { escribirB, leerB, resolverB, type SeleccionB } from './comparativos/periodoB';
+import { SelectorB } from './comparativos/SelectorB';
 import { TablaComparativos } from './comparativos/Tabla';
 import { useEstadoResultados } from './finanzas/consultas';
 import { useTablero } from './facturacion/tablero/consultas';
@@ -128,16 +122,6 @@ export function Comparativos() {
   const mesas = useMesasAbiertas(filtro);
 
   const cambiarB = (nueva: SeleccionB) => setParametros((previos) => escribirB(previos, nueva));
-  const elegirModo = (modo: ModoB) =>
-    cambiarB(
-      modo === 'rango'
-        ? {
-            modo,
-            desde: rangoB?.desde ?? rango?.desde ?? '',
-            hasta: rangoB?.hasta ?? rango?.hasta ?? '',
-          }
-        : { modo },
-    );
   const errorB =
     seleccionB.modo === 'rango'
       ? errorDeRango(seleccionB.desde ?? '', seleccionB.hasta ?? '')
@@ -213,44 +197,12 @@ export function Comparativos() {
               )}
             </p>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <label className="flex min-w-0 items-center gap-1">
-                Comparar contra
-                <select
-                  className={CONTROL}
-                  value={seleccionB.modo}
-                  onChange={(e) => elegirModo(e.target.value as ModoB)}
-                >
-                  {MODOS_B.map(({ modo, nombre }) => (
-                    <option key={modo} value={modo}>
-                      {nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {seleccionB.modo === 'rango' && (
-                <>
-                  <label className="flex min-w-0 items-center gap-1">
-                    B desde
-                    <input
-                      type="date"
-                      className={CONTROL}
-                      value={seleccionB.desde ?? ''}
-                      max={seleccionB.hasta || undefined}
-                      onChange={(e) => cambiarB({ ...seleccionB, desde: e.target.value })}
-                    />
-                  </label>
-                  <label className="flex min-w-0 items-center gap-1">
-                    B hasta
-                    <input
-                      type="date"
-                      className={CONTROL}
-                      value={seleccionB.hasta ?? ''}
-                      min={seleccionB.desde || undefined}
-                      onChange={(e) => cambiarB({ ...seleccionB, hasta: e.target.value })}
-                    />
-                  </label>
-                </>
-              )}
+              <SelectorB
+                seleccion={seleccionB}
+                rangoA={rango}
+                rangoB={rangoB}
+                onCambiar={cambiarB}
+              />
               <label className="flex min-w-0 items-center gap-1">
                 Ordenar por
                 <select

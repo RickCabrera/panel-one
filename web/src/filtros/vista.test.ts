@@ -35,6 +35,7 @@ describe('usaPeriodo', () => {
       '/reportes',
       '/clientes',
       '/areas',
+      '/canales',
       '/facturacion',
     ]);
     for (const ruta of [
@@ -51,6 +52,7 @@ describe('usaPeriodo', () => {
       '/reportes//',
       '/clientes',
       '/areas',
+      '/canales',
     ]) {
       expect(usaPeriodo(ruta)).toBe(true);
     }
