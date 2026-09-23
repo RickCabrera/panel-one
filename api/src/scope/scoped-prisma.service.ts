@@ -13,6 +13,7 @@ import { EscrituraExistencias, IngestaExistencias } from './escritura-existencia
 import { IngestaCompras } from './escritura-compras';
 import { EscrituraFacturacion } from './escritura-facturacion';
 import { EscrituraGastos } from './escritura-gastos';
+import { EscrituraFolios, LecturaFoliosPlataforma } from './folios-plataforma';
 import { IngestaMovimientos } from './escritura-movimientos';
 import { IngestaRecetas } from './escritura-recetas';
 import { EscrituraReportes } from './escritura-reportes';
@@ -381,6 +382,19 @@ export class ScopedPrismaService {
    */
   facturacion(scope: EmpresaScope): EscrituraFacturacion {
     return new EscrituraFacturacion(this.#prisma, scope);
+  }
+
+  /**
+   * El control de folios del PAC (F2-110): lecturas de PLATAFORMA. Con cualquier scope sólo
+   * contesta si hay folios (un booleano); las cifras exigen scope global.
+   */
+  folios(scope: EmpresaScope): LecturaFoliosPlataforma {
+    return new LecturaFoliosPlataforma(this.#prisma, scope);
+  }
+
+  /** Las escrituras del control de folios (F2-110). Lanza con un scope que no sea global. */
+  escrituraFolios(scope: EmpresaScope): EscrituraFolios {
+    return new EscrituraFolios(this.#prisma, scope);
   }
 
   /**

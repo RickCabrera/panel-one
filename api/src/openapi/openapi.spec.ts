@@ -177,6 +177,48 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(q)).toContain('sin comodines');
   });
 
+  it('F2-110: control de folios, sólo admin_global (403 por la ruta), con reporte mensual', async () => {
+    const { paths, components } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    const estado = paths['/facturacion/folios']?.get;
+    const alta = paths['/facturacion/folios/paquetes']?.post;
+    const baja = paths['/facturacion/folios/paquetes/{id}']?.delete;
+    const configurar = paths['/facturacion/folios/configuracion']?.put;
+    const reporte = paths['/facturacion/folios/reporte']?.get;
+    for (const op of [estado, alta, baja, configurar, reporte]) {
+      expect(op?.security).toEqual([{ bearer: [] }]);
+      expect(JSON.stringify(op?.responses?.['403'])).toContain('admin_global');
+    }
+    expect(codigos(estado)).toEqual(['200', '401', '403']);
+    expect(codigos(alta)).toEqual(['201', '400', '401', '403']);
+    expect(codigos(baja)).toEqual(['204', '401', '403', '404', '409']);
+    expect(codigos(configurar)).toEqual(['200', '400', '401', '403']);
+    expect(codigos(reporte)).toEqual(['200', '400', '401', '403']);
+    const esquemas = components?.schemas as Record<
+      string,
+      { properties?: Record<string, { enum?: string[] }>; required?: string[] }
+    >;
+    expect(esquemas.FoliosDto.properties?.estado?.enum).toEqual([
+      'sin_control',
+      'ok',
+      'bajo',
+      'agotado',
+    ]);
+    expect(esquemas.AltaPaqueteFoliosDto.required).toEqual(['cantidad', 'fechaCompra']);
+    expect(Object.keys(esquemas.ConteoMensualDto.properties ?? {})).toEqual([
+      'empresaId',
+      'empresa',
+      'mes',
+      'vigentes',
+      'cancelados',
+      'total',
+      'ticket',
+      'manual',
+      'global',
+      'sustitutos',
+    ]);
+  });
+
   it('F2-109: cancelar y consultar la cancelación, de admins, con 404 por alcance y sus fallas del PAC', async () => {
     const { paths, components } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -1026,6 +1068,12 @@ describe('Contrato OpenAPI', () => {
         // F2-109: cancelación de CFDI y la consulta de su solicitud.
         '/facturacion/cfdis/{id}/cancelar',
         '/facturacion/cfdis/{id}/cancelacion/consultar',
+        // F2-110: control de folios del PAC (sólo admin_global).
+        '/facturacion/folios',
+        '/facturacion/folios/configuracion',
+        '/facturacion/folios/paquetes',
+        '/facturacion/folios/paquetes/{id}',
+        '/facturacion/folios/reporte',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',

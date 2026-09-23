@@ -71,7 +71,7 @@ export const MOTIVO_SUSTITUCION = '01' as const;
 export const MENSAJE_PAC_NO_VIGENTE: Readonly<Record<Exclude<EstadoCfdi, 'vigente'>, string>> = {
   cancelado:
     'El PAC reporta esta factura como CANCELADA. No se emitió nada: la cancelación se anotará al ' +
-    'conciliar con el PAC (F2-109/F2-110).',
+    'conciliar con el PAC.',
   en_cancelacion:
     'El PAC reporta una solicitud de cancelación EN PROCESO para esta factura (espera la respuesta ' +
     'del receptor). No se emitió nada: espera a que se resuelva.',

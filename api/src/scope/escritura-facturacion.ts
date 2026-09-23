@@ -49,6 +49,7 @@ import { instanteDesdeLocal } from '../comun/fechas';
 import { MENSAJE_EMISION_NO_DISPONIBLE } from '../facturacion/emision-portal';
 import { normalizarRfc, RFC_GENERICOS } from '../facturacion/sat';
 import type { EmpresaScope } from './empresa-scope';
+import { hayFoliosEnTx } from './folios-plataforma';
 import { encontradoOr404, whereScoped } from './scope.helper';
 
 /**
@@ -228,15 +229,20 @@ export const TIPO_RELACION_SUSTITUCION = '04' as const;
 export const MENSAJE_EMISION_NO_DISPONIBLE_ADMIN =
   'La empresa no puede emitir facturas: falta el perfil fiscal activo o un CSD vigente (ver ' +
   'Facturación → Datos fiscales).';
+/** F2-110: sin saldo de folios del PAC. Textos FIJOS: nunca llevan el saldo ni otra cifra. */
+export const MENSAJE_SIN_FOLIOS_PORTAL =
+  'La facturación en línea no está disponible por el momento. Tus datos no se guardaron: intenta ' +
+  'más tarde o pide tu factura en el restaurante.';
+export const MENSAJE_SIN_FOLIOS_ADMIN =
+  'La plataforma se quedó sin folios de timbrado: no se puede emitir ninguna factura hasta que el ' +
+  'administrador de la plataforma registre un paquete de folios nuevo.';
 export const MENSAJE_YA_CANCELADO = 'Esta factura ya está cancelada: no se puede refacturar.';
 export const MENSAJE_SUSTITUCION_EN_CURSO =
   'Esta factura ya tiene un sustituto en emisión. Si no se confirma en unos minutos, hay una ' +
-  'emisión sin confirmar del PAC: revísala en el PAC antes de volver a intentar (la conciliación ' +
-  'de reservas colgadas es F2-110).';
+  'emisión sin confirmar del PAC: revísala en el PAC antes de volver a intentar.';
 export const MENSAJE_CAPTURA_EN_CURSO =
   'Esta captura ya se está emitiendo. Si no se confirma en unos minutos, hay una emisión sin ' +
-  'confirmar del PAC: revísala en el PAC antes de capturarla de nuevo (la conciliación de ' +
-  'reservas colgadas es F2-110).';
+  'confirmar del PAC: revísala en el PAC antes de capturarla de nuevo.';
 
 /** El 409 de una captura manual cuya llave ya se usó: dice qué CFDI salió de ella. */
 export function conflictoDeSolicitud(previa: {
@@ -780,7 +786,7 @@ export class EscrituraFacturacion {
         if (formaPago === null) throw new UnprocessableEntityException(MENSAJE_SIN_FORMA_PAGO);
 
         const importes = importesDeTotal(codigo.cheque.total);
-        const folio = await this.#siguienteFolio(tx, perfil.id, empresaId);
+        const folio = await this.#tomarFolio(tx, perfil.id, empresaId, ahora, true);
         const { id } = await tx.cfdi.create({
           data: {
             empresaId,
@@ -932,6 +938,29 @@ export class EscrituraFacturacion {
     return perfil;
   }
 
+  /**
+   * F2-110: aparta un folio SÓLO si la plataforma tiene saldo de folios del PAC; si no, 503 con un
+   * texto fijo (sin cifras: el saldo no es de esta empresa) y nada se inserta, no se toma folio y el
+   * PAC no se llama. Orden de candados, el MISMO en las cuatro reservas: los de dominio (código /
+   * CFDI anterior, ya tomados por quien llama) → `configuracion_folios` (candado global, dentro de
+   * `hayFoliosEnTx`) → la fila del perfil (el UPDATE de `#siguienteFolio`). Nadie toma el perfil y
+   * después la configuración: no hay interbloqueo.
+   */
+  async #tomarFolio(
+    tx: Tx,
+    perfilId: string,
+    empresaId: string,
+    ahora: Date,
+    publico: boolean,
+  ): Promise<number> {
+    if (!(await hayFoliosEnTx(tx, ahora))) {
+      throw new ServiceUnavailableException(
+        publico ? MENSAJE_SIN_FOLIOS_PORTAL : MENSAJE_SIN_FOLIOS_ADMIN,
+      );
+    }
+    return this.#siguienteFolio(tx, perfilId, empresaId);
+  }
+
   /** `folio_actual + 1` del perfil: el UPDATE bloquea la fila, así que los folios salen en serie. */
   async #siguienteFolio(tx: Tx, perfilId: string, empresaId: string): Promise<number> {
     const [{ folio_actual: folio }] = await tx.$queryRaw<{ folio_actual: number }[]>`
@@ -983,7 +1012,7 @@ export class EscrituraFacturacion {
         if (previa) throw conflictoDeSolicitud(previa);
         const perfil = await this.#perfilQueEmite(tx, empresaId, ahora);
         const importes = importesDeTotal(pedido.total);
-        const folio = await this.#siguienteFolio(tx, perfil.id, empresaId);
+        const folio = await this.#tomarFolio(tx, perfil.id, empresaId, ahora, false);
         const { id } = await tx.cfdi.create({
           data: {
             empresaId,
@@ -1165,7 +1194,7 @@ export class EscrituraFacturacion {
           throw new ConflictException(MENSAJE_REFACTURAR_CON_CANCELACION);
         }
         const perfil = await this.#perfilQueEmite(tx, empresaId, ahora);
-        const folio = await this.#siguienteFolio(tx, perfil.id, empresaId);
+        const folio = await this.#tomarFolio(tx, perfil.id, empresaId, ahora, false);
         const { id } = await tx.cfdi.create({
           data: {
             empresaId,
@@ -2171,7 +2200,7 @@ export class EscrituraFacturacion {
 
         const tickets = incluidos.map((c) => ({ folio: c.cheque.folio, total: c.cheque.total }));
         const importes = importesGlobal(tickets);
-        const folio = await this.#siguienteFolio(tx, perfil.id, empresaId);
+        const folio = await this.#tomarFolio(tx, perfil.id, empresaId, ahora, false);
         const { id } = await tx.cfdi.create({
           data: {
             empresaId,

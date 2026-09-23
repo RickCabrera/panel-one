@@ -96,9 +96,28 @@ describe('whereEmpresa / whereScoped', () => {
       CfdiEnvio: 'empresaId',
       CfdiGlobalCodigo: 'empresaId',
       CfdiCancelacion: 'empresaId',
+      // F2-110: modelos de PLATAFORMA (sin empresa).
+      PaqueteFolios: null,
+      ConfiguracionFolios: null,
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });
+  });
+
+  it('F2-110: los ÚNICOS modelos de plataforma (llave null) son los del control de folios', () => {
+    const dePlataforma = Object.entries(LLAVE_EMPRESA)
+      .filter(([, llave]) => llave === null)
+      .map(([modelo]) => modelo)
+      .sort();
+    expect(dePlataforma).toEqual(['ConfiguracionFolios', 'PaqueteFolios']);
+  });
+
+  it('F2-110: con scope de empresa, un modelo de plataforma no casa con ninguna fila', () => {
+    expect(whereEmpresa(EMPRESA_A, 'PaqueteFolios')).toEqual({ id: { in: [] } });
+    expect(whereScoped(EMPRESA_A, 'ConfiguracionFolios', { id: 1 })).toEqual({
+      AND: [{ id: 1 }, { id: { in: [] } }],
+    });
+    expect(whereScoped(GLOBAL, 'PaqueteFolios')).toEqual({});
   });
 
   it('para admin_global no agrega filtro', () => {

@@ -579,6 +579,57 @@ Supuestos y decisiones:
   sí trae cancelados (02 y 01) con su solicitud aceptada y el ticket suelto, y unos vigentes con una
   solicitud 02 en proceso o rechazada, para que la tabla muestre todos los estados.
 
+**Control de folios (F2-110).** No lee nada de SR (no hubo hallazgo del POS): son supuestos sobre
+Facturama y decisiones propias, todos por validar en F2-190.
+
+- ⚠️ **SUPUESTO — un saldo de folios para TODA la cuenta.** Facturama multiemisor tiene UN saldo
+  para la cuenta de la plataforma (lo compra el admin_global), no uno por emisor. Por eso el saldo es
+  un dato de PLATAFORMA: `paquetes_folios` y `configuracion_folios` no tienen `empresa_id` ni índice
+  por empresa (en el helper de scope son modelos con llave `null`: con scope de empresa no se ve
+  ninguna fila; sólo `LecturaFoliosPlataforma` y `EscrituraFolios` los tocan, y a un tenant sólo le
+  llega un booleano "hay folios"). `DECISION PROVISIONAL (nocturno)`. Si Facturama cobra por emisor,
+  el modelo cambia.
+- ⚠️ **SUPUESTO — cancelar no gasta folio** (sólo timbrar). Consume: cada CFDI `vigente` o `cancelado`
+  de CUALQUIER origen (ticket, sin ticket, global, sustituto) en su `emitido_at`, y cada reserva en
+  `timbrando` "ahora" (se aparta). Un rechazo del PAC (reserva liberada) no consume. El conteo sale de
+  `cfdis`, nunca de `folio_actual` (un rechazo deja hueco de folio).
+- ⚠️ **SUPUESTO — un paquete vence 12 meses después de la compra.** La fecha de compra se captura como
+  día en la zona de la Ciudad de México (el paquete no es de ninguna sucursal) y el paquete vence al
+  EMPEZAR el mismo día un año después (29-feb → 1-mar). `DECISION PROVISIONAL (nocturno)`
+  (`folios.ts#vigenciaDeCompra`): la lectura conservadora (vence lo antes posible).
+- **FIFO por vencimiento**: los timbres se asignan al paquete activo que vence primero y aún tiene
+  restante. Lo que no cabe en ningún paquete activo es SOBREGIRO (se reporta, no se descuenta); lo
+  anterior al primer paquete no cuenta (el control no existía). Un paquete vencido pierde su restante.
+  Dos paquetes que vencen en el mismo instante no se distinguen: el FIFO los desempata por id.
+- **Bloqueo antes del PAC**: con el control encendido y 0 disponible, las cuatro reservas (portal, sin
+  ticket, sustituto, global) dan 503 con texto fijo SIN cifras, sin tomar folio y sin llamar al PAC.
+  Candado GLOBAL (`configuracion_folios` FOR UPDATE) dentro de la transacción de la reserva, siempre
+  después de los candados de dominio y antes de la fila del perfil: serializa las reservas de TODAS
+  las empresas mientras dura esa transacción corta. El portal tampoco ofrece emitir sin saldo.
+- **Control apagado hasta el primer paquete** (`control_activo`): sin ningún paquete registrado no se
+  limita la emisión y la vista lo dice. Se prende con el primer paquete y ninguna ruta lo apaga; un
+  paquete con timbres asignados no se puede borrar (409: reescribiría el historial).
+  `DECISION PROVISIONAL (nocturno)`.
+- **Umbral**: 20 % por omisión, sobre la suma de las cantidades de los paquetes VIGENTES; "bajo" es
+  estrictamente por debajo. **Vigencia**: aviso a ≤ 30 días del vencimiento, sólo con restante (el
+  mismo criterio que el CSD). Los dos avisos van por correo a los admin_global activos, UNA vez
+  (reclamo en la base; si el correo falla se suelta y se reintenta); el de umbral se re-arma cuando el
+  saldo vuelve a estar bien.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — `folios_bajo` fuera del centro de alertas.** La ficha pedía la
+  regla `folios_bajo` en el centro de alertas (nota de F2-224). No se agregó: las alertas son por
+  empresa Y sucursal (`alertas.sucursal_id NOT NULL`), sus reglas por empresa, y las ven admin_empresa
+  y visor; el saldo es de la plataforma. Meterlo ahí enseñaría el saldo de nuestra cuenta a los
+  clientes o inventaría una sucursal. `DECISION PROVISIONAL (nocturno)`
+  (`folios.service.ts#vueltaAvisos`): aviso por correo al admin_global + la pestaña Facturación →
+  Folios. Si se quiere en la campana, hace falta un centro de alertas de plataforma (nota en F2-250).
+- **Reporte mensual**: vigentes + cancelados por empresa, con el MES de `emitido_at` en la zona de la
+  SUCURSAL que emitió (como el tablero de F2-106), por origen y con los sustitutos aparte. La tarjeta
+  "consumo por empresa" sale de la MISMA consulta (mes en curso y 12 meses locales de cada sucursal).
+- ⚠️ Una reserva colgada en `timbrando` resta saldo hasta que se concilie (F2-110b): el "disponible"
+  puede salir por debajo del real mientras tanto. La vista dice cuántas hay en emisión.
+- Pendiente de F2-190: ¿la API de Facturama expone el saldo y la vigencia de los folios? Si sí,
+  conciliar el saldo local contra el suyo.
+
 ---
 
 ## 3. Partidas de cuentas cerradas

@@ -43,7 +43,11 @@ export type AccionAuditada =
   // F2-109: cancelación de CFDI (solicitud, consulta a mano, y la que el PAC no registró).
   | 'cfdi.cancelacion'
   | 'cfdi.cancelacion_consulta'
-  | 'cfdi.cancelacion_no_procedio';
+  | 'cfdi.cancelacion_no_procedio'
+  // F2-110: el control de folios del PAC (sólo admin_global; recurso de plataforma).
+  | 'folios.paquete_alta'
+  | 'folios.paquete_baja'
+  | 'folios.configurar';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
@@ -61,7 +65,9 @@ export interface EventoAuditoria {
     | 'perfil_fiscal'
     | 'configuracion_facturacion'
     | 'portal_facturacion'
-    | 'cfdi';
+    | 'cfdi'
+    | 'paquete_folios'
+    | 'configuracion_folios';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

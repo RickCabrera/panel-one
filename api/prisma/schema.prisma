@@ -1927,3 +1927,39 @@ model CfdiGlobalCodigo {
   @@index([cfdiId])
   @@map("cfdi_global_codigos")
 }
+
+// ---------------------------------------------------------------------------
+// F2-110 · Control de folios del PAC. Modelos de PLATAFORMA: no son de ninguna empresa (el saldo
+// de folios es el de la cuenta de Facturama multiemisor, que compra el admin_global). Sin
+// `empresa_id` ni índice por empresa: los lee SÓLO `LecturaFoliosPlataforma` y los escribe SÓLO
+// `EscrituraFolios` (`src/scope/folios-plataforma.ts`), con scope global.
+// ---------------------------------------------------------------------------
+
+/// Un paquete de folios comprado al PAC. Vence 12 meses después de la compra (`vence_at`, exclusivo).
+/// CHECKs a mano en la migración: cantidad 1..1000000, vence_at > comprado_at.
+model PaqueteFolios {
+  id              String    @id @default(uuid()) @db.Uuid
+  cantidad        Int
+  compradoAt      DateTime  @map("comprado_at") @db.Timestamptz(3)
+  venceAt         DateTime  @map("vence_at") @db.Timestamptz(3)
+  nota            String?   @db.VarChar(200)
+  // Cuándo se avisó por correo que vence (una vez por paquete).
+  avisoVigenciaAt DateTime? @map("aviso_vigencia_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([venceAt])
+  @@map("paquetes_folios")
+}
+
+/// La configuración del control de folios: UNA fila (`id = 1`, CHECK a mano), creada por la
+/// migración. `control_activo` se prende con el primer paquete y ninguna ruta lo apaga.
+model ConfiguracionFolios {
+  id            Int       @id @db.SmallInt
+  umbralPct     Int       @default(20) @map("umbral_pct")
+  controlActivo Boolean   @default(false) @map("control_activo")
+  // Cuándo se avisó que el saldo cruzó el umbral; se limpia cuando el saldo vuelve a estar bien.
+  avisoUmbralAt DateTime? @map("aviso_umbral_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@map("configuracion_folios")
+}

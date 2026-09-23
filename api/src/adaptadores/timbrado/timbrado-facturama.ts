@@ -41,7 +41,7 @@ import {
  *   qué pasó con la solicitud): `ESTADO_DESCONOCIDO`.
  * - Un timeout, un corte a medio camino o un 5xx que no sea 503 es `PAC_SIN_RESPUESTA`.
  *   OJO en `emitir`: el PAC pudo haber timbrado; reintentar a ciegas puede duplicar un
- *   CFDI. La emisión (F2-104) NO lo reintenta: deja la reserva colgada (F2-110 la resuelve
+ *   CFDI. La emisión (F2-104) NO lo reintenta: deja la reserva colgada (F2-110b la resuelve
  *   consultando). Una falla ANTES de conectar es `PAC_SIN_CONEXION`, y ésa sí se reintenta.
  */
 

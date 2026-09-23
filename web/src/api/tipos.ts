@@ -1955,3 +1955,63 @@ export interface FacturaGlobalEmitida {
   etiqueta: string;
   descargas: { xml: string | null; pdf: string | null };
 }
+
+// ---------------------------------------------------------------------------
+// F2-110 · Control de folios del PAC (sólo admin_global). Cantidades de folios: enteros.
+// ---------------------------------------------------------------------------
+
+export type EstadoSaldoFolios = 'sin_control' | 'ok' | 'bajo' | 'agotado';
+export type EstadoPaqueteFolios = 'vigente' | 'por_vencer' | 'agotado' | 'vencido' | 'futuro';
+
+export interface PaqueteFoliosFila {
+  id: string;
+  cantidad: number;
+  compradoAt: string;
+  /** Exclusivo: en ese instante ya no ampara nada. */
+  venceAt: string;
+  nota: string | null;
+  consumidos: number;
+  restantes: number;
+  estado: EstadoPaqueteFolios;
+  diasParaVencer: number | null;
+}
+
+export interface ConsumoEmpresaFolios {
+  empresaId: string;
+  empresa: string;
+  mesActual: number;
+  ultimos12Meses: number;
+}
+
+export interface EstadoFolios {
+  control: boolean;
+  umbralPct: number;
+  estado: EstadoSaldoFolios;
+  disponible: number;
+  vigenteTotal: number;
+  enEmision: number;
+  sobregiro: number;
+  avisoUmbralAt: string | null;
+  paquetes: PaqueteFoliosFila[];
+  consumoPorEmpresa: ConsumoEmpresaFolios[];
+}
+
+export interface ConteoMensualFolios {
+  empresaId: string;
+  empresa: string;
+  mes: string;
+  vigentes: number;
+  cancelados: number;
+  total: number;
+  ticket: number;
+  manual: number;
+  global: number;
+  sustitutos: number;
+}
+
+export interface ReporteFolios {
+  desde: string;
+  hasta: string;
+  filas: ConteoMensualFolios[];
+  totales: Array<{ mes: string; vigentes: number; cancelados: number; total: number }>;
+}

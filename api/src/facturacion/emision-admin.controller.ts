@@ -50,7 +50,8 @@ const DESC_AMBIGUO =
 @ApiServiceUnavailableResponse({
   type: ErrorDto,
   description:
-    'La empresa no puede emitir (sin perfil fiscal activo o CSD vigente), o el PAC no está disponible.',
+    'La empresa no puede emitir (sin perfil fiscal activo o CSD vigente), la plataforma se quedó ' +
+    'sin folios de timbrado (F2-110; se responde ANTES de llamar al PAC), o el PAC no está disponible.',
 })
 @ApiBadGatewayResponse({ type: ErrorDto, description: DESC_AMBIGUO })
 @ApiUnprocessableEntityResponse({ type: ErrorDto, description: 'El PAC rechazó el CFDI.' })

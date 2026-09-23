@@ -102,6 +102,9 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'compra',
       // F2-101: vigencia de los códigos; se escribe por `facturacion(scope)`.
       'configuracionFacturacion',
+      // F2-110: modelos de PLATAFORMA; con scope de empresa no casan con nada. Se leen y escriben
+      // por `folios(scope)` / `escrituraFolios(scope)`.
+      'configuracionFolios',
       // F2-123: conteos físicos; se escriben por `conteos(scope)`, no por aquí.
       'conteoFisico',
       // F2-202: bandeja del correo falso, filtrada por empresa_id como las demás.
@@ -123,6 +126,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'meseroCatalogo',
       // F2-122: pólizas y movimientos; se escriben por `movimientosDeSucursal(agente)`.
       'movimientoInventario',
+      'paqueteFolios',
       'partidaCompra',
       'partidaConteo',
       // F2-124: traspasos; se escriben por `traspasos(scope)`, no por aquí.
@@ -432,6 +436,67 @@ describe('ScopedPrismaService (contra Postgres)', () => {
           .para(A)
           .cfdiCancelacion.updateMany({ where: { id: otro }, data: { cfdiId: otro } } as never),
       ).rejects.toThrow('no puede escribir cfdiId');
+    });
+  });
+  describe('F2-110: modelos de plataforma (control de folios)', () => {
+    const PAQUETE = 'f2110000-0000-4000-8000-00000000c0de';
+    beforeAll(async () => {
+      await prisma.paqueteFolios.deleteMany({ where: { id: PAQUETE } });
+      await prisma.paqueteFolios.create({
+        data: {
+          id: PAQUETE,
+          cantidad: 10,
+          compradoAt: new Date('2040-01-01T06:00:00Z'),
+          venceAt: new Date('2041-01-01T06:00:00Z'),
+        },
+      });
+    });
+    afterAll(async () => {
+      await prisma.paqueteFolios.deleteMany({ where: { id: PAQUETE } });
+    });
+
+    it('con scope de empresa las lecturas no ven ninguna fila (y no lanzan)', async () => {
+      const datos = servicio.para(A);
+      expect(await datos.paqueteFolios.findMany({ where: { id: PAQUETE } })).toEqual([]);
+      expect(await datos.paqueteFolios.count()).toBe(0);
+      expect(await datos.configuracionFolios.count()).toBe(0);
+      const agregado = await datos.paqueteFolios.aggregate({ _sum: { cantidad: true } });
+      expect(agregado._sum.cantidad).toBeNull();
+      expect(await datos.paqueteFolios.groupBy({ by: ['cantidad'] })).toEqual([]);
+    });
+
+    it('con scope de empresa updateMany no toca ninguna fila (y no lanza)', async () => {
+      const r = await servicio
+        .para(A)
+        .configuracionFolios.updateMany({ where: { id: 1 }, data: { umbralPct: 99 } });
+      expect(r.count).toBe(0);
+      const cfg = await prisma.configuracionFolios.findUniqueOrThrow({ where: { id: 1 } });
+      expect(cfg.umbralPct).not.toBe(99);
+    });
+
+    it('con scope de empresa create/upsert no existen (ni para plataforma)', () => {
+      const datos = servicio.para(A) as unknown as Record<string, Record<string, unknown>>;
+      for (const modelo of ['paqueteFolios', 'configuracionFolios']) {
+        expect(datos[modelo].create).toBeUndefined();
+        expect(datos[modelo].upsert).toBeUndefined();
+        expect(datos[modelo].delete).toBeUndefined();
+      }
+    });
+
+    it('con scope global sí se ven', async () => {
+      expect(await servicio.para(GLOBAL).paqueteFolios.count({ where: { id: PAQUETE } })).toBe(1);
+    });
+
+    it('las cifras y las escrituras de folios exigen scope global: con otro LANZAN', async () => {
+      const ahora = new Date('2040-06-01T00:00:00Z');
+      const lectura = servicio.folios(A);
+      expect(() => lectura.estado(ahora)).toThrow('exige scope global');
+      expect(() => lectura.consumoPorEmpresa(ahora)).toThrow('exige scope global');
+      expect(() => lectura.reporteMensual('2040-01', '2040-02')).toThrow('exige scope global');
+      expect(() => lectura.destinatariosAvisos()).toThrow('exige scope global');
+      expect(() => servicio.escrituraFolios(A)).toThrow('exige scope global');
+      // Lo único que un tenant obtiene: un booleano.
+      expect(typeof (await lectura.hayFolios(ahora))).toBe('boolean');
     });
   });
 });
