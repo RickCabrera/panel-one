@@ -2306,7 +2306,7 @@ aparece señalada; metadata sobrevive re-sync del catálogo.
 > Administración (`POST /catalogos/sincronizacion/forzar`) tampoco tiene vista todavía.
 
 ### F2-146 · PWA con notificaciones
-`[ ]` Convertir la SPA en PWA instalable (manifest, service worker, offline shell para el
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-191 (instalar en Chrome escritorio/Android y push real con la app cerrada). Convertir la SPA en PWA instalable (manifest, service worker, offline shell para el
 layout) con push notifications (web-push, VAPID): alertas configurables por usuario — mesa >
 60 min, sucursal desconectada > 10 min, saldo de folios bajo, resumen de cierre del día.
 
