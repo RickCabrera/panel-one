@@ -13,6 +13,9 @@ import {
   ordenar,
   ORDENES,
   tieneDatos,
+  UTILIDAD_CORTADA,
+  UTILIDAD_SIN_LECTURA,
+  utilidadesDe,
   type FilaOrdenada,
   type Orden,
 } from './comparativos/matriz';
@@ -25,6 +28,7 @@ import {
   type SeleccionB,
 } from './comparativos/periodoB';
 import { TablaComparativos } from './comparativos/Tabla';
+import { useEstadoResultados } from './finanzas/consultas';
 import { useMesasAbiertas, useVentas, type Filtro } from './inicio/consultas';
 import { useAhora } from './mesas/consultas';
 import { Esqueleto, ErrorTarjeta, Tarjeta } from './inicio/Tarjeta';
@@ -38,8 +42,13 @@ const BOTON =
   'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
 
 /** Lo que no se puede pintar todavía, dicho en vez de pintado en cero (regla de Ronda 2). */
-export const NOTA_PENDIENTES =
-  'Tasa de facturación: llega con Facturación (F2-106). Utilidad: llega con Compras, gastos y utilidad (F2-126).';
+export const NOTA_PENDIENTES = 'Tasa de facturación: llega con Facturación (F2-106).';
+
+/** Qué es la columna Utilidad (F2-126) y cuándo no se afirma. */
+export const NOTA_UTILIDAD =
+  'Utilidad: la de operación de "Gastos y utilidad" (venta neta − costo teórico de lo vendido − ' +
+  'gastos). “—” si falta el costo (sin recetas o sin catálogo) o si B se corta a la misma altura; ' +
+  '* = costo incompleto, la utilidad real es menor o igual.';
 
 /**
  * Qué sucursales no reportan (mientras A incluye hoy): su "—" o su cifra baja no quiere decir
@@ -101,6 +110,11 @@ export function Comparativos() {
     comparable?.alturaAl,
     autoB,
   );
+  // Utilidad (F2-126): la MISMA consulta que "Gastos y utilidad" (misma llave). El estado de
+  // resultados es por días completos: un B cortado a la misma altura no se pide y se dice.
+  const cortadaB = comparable?.alturaAl !== undefined;
+  const estadoA = useEstadoResultados(filtro, rango);
+  const estadoB = useEstadoResultados(filtro, cortadaB ? null : rangoB);
   // Misma llave que Inicio y la cabecera: no sale una petición de más.
   const mesas = useMesasAbiertas(filtro);
 
@@ -123,14 +137,26 @@ export function Comparativos() {
   const nombrePeriodo = TIPOS_PERIODO.find((t) => t.tipo === periodo.tipo)?.nombre ?? '';
   const consultas = [resumenA, resumenB, sucA, sucB];
   const fallida = consultas.find((c) => c.isError);
+  // La utilidad no tumba la tabla: si su consulta falla, su columna dice "no se pudo leer".
+  const utilidadLista =
+    (estadoA.data !== undefined || estadoA.isError) &&
+    (cortadaB || estadoB.data !== undefined || estadoB.isError);
   const listas =
     resumenA.data !== undefined &&
     resumenB.data !== undefined &&
     sucA.data !== undefined &&
-    sucB.data !== undefined;
+    sucB.data !== undefined &&
+    utilidadLista;
+
+  const utilA = utilidadesDe(estadoA.isError ? undefined : estadoA.data, UTILIDAD_SIN_LECTURA);
+  const utilB = cortadaB
+    ? utilidadesDe(undefined, UTILIDAD_CORTADA)
+    : utilidadesDe(estadoB.isError ? undefined : estadoB.data, UTILIDAD_SIN_LECTURA);
 
   const ordenadas: FilaOrdenada[] =
-    listas && sucA.data && sucB.data ? ordenar(armarFilas(sucA.data, sucB.data), orden) : [];
+    listas && sucA.data && sucB.data
+      ? ordenar(armarFilas(sucA.data, sucB.data, utilA, utilB), orden)
+      : [];
 
   const exportar = () => {
     if (!rango || !rangoB) return;
@@ -266,8 +292,8 @@ export function Comparativos() {
                 )}
                 <TablaComparativos
                   total={{
-                    a: cifrasDeResumen(resumenA.data),
-                    b: cifrasDeResumen(resumenB.data),
+                    a: cifrasDeResumen(resumenA.data, utilA.total),
+                    b: cifrasDeResumen(resumenB.data, utilB.total),
                   }}
                   etiquetaTotal={sucursal ? `Total (${sucursal.nombre})` : 'Total del alcance'}
                   filas={ordenadas}
@@ -285,6 +311,9 @@ export function Comparativos() {
           <p className="mt-3 text-xs text-tinta-tenue">
             “—”: sin cuentas en ese periodo, o sin base para el Δ (pasa el cursor para ver por qué).
             El comparativo por sucursal no distingue comensales no registrados de cero.
+          </p>
+          <p className="mt-1 text-xs text-tinta-tenue" data-testid="nota-utilidad">
+            {NOTA_UTILIDAD}
           </p>
           <p className="mt-1 text-xs text-tinta-tenue" data-testid="nota-pendientes">
             {NOTA_PENDIENTES}

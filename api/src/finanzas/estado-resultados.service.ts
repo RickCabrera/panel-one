@@ -128,6 +128,8 @@ export class EstadoResultadosService {
         sucursal: s.nombre,
         cuentas: v?.cuentas ?? 0,
         venta: dec(v?.venta),
+        // DECISION PROVISIONAL (nocturno): `cheques.subtotal` = venta neta de descuento, sin IVA
+        // y sin propina. Supuesto NO validado (esquema-sr §2); lo cuadra F2-193 con el contador.
         ventaNeta: dec(v?.subtotal),
         calculada: e?.calculada ?? false,
         motivo: e?.catalogoProductos === false ? 'sin_catalogo_productos' : 'sin_recetas',

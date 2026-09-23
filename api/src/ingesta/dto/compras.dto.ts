@@ -25,7 +25,7 @@ import { CANTIDAD, DINERO, ISO_CON_ZONA } from '../normalizar';
  * `sucursalId` ni `empresaId`: el tenant sale de la API key.
  *
  * Nada de esto se ha visto en una instalación real de SoftRestaurant (docs/esquema-sr.md §10
- * "Compras": supuestos, no hallazgos).
+ * "Compras, gastos y utilidad": supuestos, no hallazgos).
  */
 
 /**

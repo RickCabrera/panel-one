@@ -1404,7 +1404,7 @@ model RenglonReceta {
 // versión, una compra nunca se borra (se reenvía `cancelada`). `total` = Σ importes de sus
 // partidas, SIN IVA, lo calcula el API. Proveedor, almacén e insumo por `origen_sr_id` en texto,
 // sin FK. DECISION PROVISIONAL (nocturno): la compra es un documento APARTE de su póliza de entrada
-// (F2-122); el panel no las concilia ni la suma a la utilidad. esquema-sr.md §10 "Compras".
+// (F2-122); el panel no las concilia ni la suma a la utilidad. esquema-sr.md §10 "Compras, gastos y utilidad".
 model Compra {
   id                   String   @id @default(uuid()) @db.Uuid
   empresaId            String   @map("empresa_id") @db.Uuid

@@ -170,6 +170,13 @@ esta sección.** Todo esto se valida en F1-090 contra los reportes nativos de SR
   incluye la propina.** La propina se reporta aparte (`resumen.propina`). Si el reporte nativo
   de SR incluye la propina en la venta, o aplica los descuentos de otra forma, el panel no va a
   cuadrar: hay que ajustar la definición en `resumen`, no el dato.
+- ⚠️ **SUPUESTO — `cheques.subtotal` es la venta NETA de descuento, SIN IVA y SIN propina**
+  (F2-126). El estado de resultados de "Gastos y utilidad" mide la venta neta como Σ `subtotal` de
+  las cuentas no canceladas, porque el costo (existencias y pólizas) es sin IVA.
+  `DECISION PROVISIONAL (nocturno)` en `api/src/finanzas/estado-resultados.service.ts`. Si en SR el
+  subtotal es ANTES del descuento, la utilidad sale inflada justo por los descuentos; si trae IVA,
+  inflada por el IVA. Se valida en F2-193 contra el cálculo del contador. El seed lo genera así
+  (subtotal = total / 1.16), lo que no es evidencia de SR.
 - ⚠️ **SUPUESTO — el día de una venta es el día LOCAL de la sucursal en que se CERRÓ la cuenta**
   (`cerrado_at` en `Sucursal.zona_horaria`), y la hora de la serie por hora también. Una cuenta
   abierta a las 23:30 y cerrada a las 00:20 cuenta para el día siguiente. Falta confirmar que
@@ -1194,6 +1201,82 @@ sólo avanza `leida_at`. Candado por sucursal (`recetas:<sucursal>`).
   del seed (I060 contenedor, I061 bolsa) se consumen por canal, no por producto: salen "sin
   teórico", y no es un bug.
 
+### Compras, gastos y utilidad (F2-126): `POST /ingesta/compras`, gastos propios y estado de resultados
+
+**Tabla de compras de SR: sin mapear.** Nadie ha visto dónde guarda SoftRestaurant sus compras a
+proveedor ni si esta versión las registra como documento propio o sólo como póliza de entrada. Lo
+busca el lector de F2-241 y lo valida F2-193. Las compras del seed (`api/prisma/seed-maestro/`,
+persistidas por `api/prisma/seed-compras.ts`) son **sintéticas**, no evidencia.
+
+**Contrato.** Lo define `api/src/ingesta/dto/compras.dto.ts` y lo publica `api/openapi.json`. Una
+petición = un **lote de compras** de la sucursal de la API key: `{ leidoAt, compras: [{ origenSrId,
+folio, proveedorOrigenSrId?, almacenOrigenSrId?, fecha, cancelada, partidas: [{ insumoOrigenSrId,
+cantidad, costoUnitario }] }] }`. Se guarda en `compras` (cabecera, upsert por sucursal +
+`origen_sr_id`, con el `hash` de su forma canónica y el `total` que calcula el API) y
+`partidas_compra` (un renglón por partida, en su orden). Mismas reglas que las pólizas de F2-122:
+sobre todo o nada (400), rechazo POR COMPRA (una partida inválida rechaza su compra entera; un
+`origenSrId` repetido en el lote se rechaza en todas sus apariciones; fecha más de 5 min en el futuro
+o total que no cabe en NUMERIC(12,2) también), `leidoAt` decide qué versión es más nueva
+(`obsoletas`), el mismo contenido leído más tarde sólo avanza `leida_at`, reenviada con otras
+partidas las REEMPLAZA. Candado por sucursal (`compras:<sucursal>`). Topes: 200 compras y 5000
+partidas por lote.
+
+- ⚠️ **SUPUESTO — una compra de SR es un DOCUMENTO APARTE de su póliza de entrada** (F2-122, tipo
+  `compra`). `DECISION PROVISIONAL (nocturno)` en `schema.prisma` (modelo `Compra`): el panel NO las
+  concilia. Si SR sólo tiene la póliza, el lector manda la póliza por `/ingesta/movimientos` y
+  además la compra con el mismo id; si tiene un documento de compra con su propia recepción, el
+  lector manda el documento. Decidirlo es de F2-241/F2-193.
+- ⚠️ **SUPUESTO — cantidad en la UNIDAD DEL INSUMO del catálogo, > 0, NUMERIC(12,3); costo por
+  unidad SIN IVA.** El importe lo calcula el API: `round(cantidad × costoUnitario, 2)` con el costo
+  redondeado antes a 2 (la regla de §13); el `total` = Σ importes, sin IVA. Si SR compra en otra
+  unidad (caja de 12) con un factor, el lector convierte o es cambio de contrato. Si SR guarda el
+  costo CON IVA, el total del panel sale inflado 16 %: F2-193.
+- `DECISION PROVISIONAL (nocturno)` — **una compra nunca se borra**: se reenvía `cancelada = true`;
+  una cancelada se ve marcada y no suma.
+- **Proveedor, almacén e insumo sin FK**, por `origenSrId` en texto; el proveedor se busca en el
+  espejo `proveedores_catalogo` de la MISMA sucursal (F2-120). Sin catálogo se muestra "sin catálogo".
+- **Día de una compra** = el día de su `fecha` en la zona de la sucursal.
+- `DECISION PROVISIONAL (nocturno)` — **si la instalación no registra compras**, el panel lo dice
+  ("el agente nunca ha mandado compras de esta sucursal"). La captura manual de compras que menciona
+  la ficha NO se construyó: las compras no entran a la utilidad (abajo), así que su ausencia no
+  cambia el estado de resultados. Si el piloto no registra compras en SR y se quieren ver, es tarea
+  nueva (anotado en F2-193).
+
+**Gastos: dato PROPIO, nunca se escribe a SR.** Categorías por empresa (`categorias_gasto`, nombre
+único sin distinguir mayúsculas ni espacios; inactiva = sin gastos nuevos) y gastos por sucursal
+(`gastos`). `dia` es el día CONTABLE local de la sucursal (DATE); un día futuro en la zona de la
+sucursal se rechaza. Baja lógica (`anulado_at`), anulado no suma.
+
+- `DECISION PROVISIONAL (nocturno)` — **el monto del gasto es SIN IVA acreditable** (la vista lo
+  dice en el formulario). Si el contador trabaja con montos con IVA, la utilidad de operación sale
+  menor de lo que es: F2-193.
+
+**Estado de resultados** (`GET /finanzas/estado-resultados`, puro en
+`api/src/finanzas/estado-resultados.ts`): venta neta − costo de lo vendido = utilidad bruta;
+− gastos = utilidad de operación; márgenes sobre la venta neta.
+
+- **Venta neta** = Σ `cheques.subtotal` de las cuentas NO canceladas, por el helper de agregados
+  (mismo corte por día local de cierre que el resto del panel). Supuesto de §2: neto de descuento,
+  sin IVA, sin propina.
+- **Costo de lo vendido** = el importe del consumo TEÓRICO de F2-125 (ventas × receta × costo de
+  referencia), no las compras ni el consumo real. `DECISION PROVISIONAL (nocturno)`: el teórico es lo
+  que el contador llama costo de ventas "estándar"; el real (con mermas) lo muestra Recetas.
+- **Costo incompleto** (algún insumo con teórico sin costo, o algo vendido que no se pudo explotar:
+  sin receta, sin catálogo, nombre ambiguo) → la utilidad sale marcada `utilidadSobrestimada` (el
+  costo real es mayor o igual). La venta de esos productos se informa (Σ `partidas.total`, CON IVA y
+  antes del descuento de la cuenta: sólo como tamaño del hueco, no entra a nada).
+- **Sucursal con ventas que no se puede calcular** (sin catálogo de productos o sin recetas) → costo
+  y utilidades NULOS con su motivo, nunca un 0 inventado; el total de la empresa es nulo y dice qué
+  sucursales faltan. Sin ventas: costo 0 y utilidad de operación = −gastos, marcada `sinVentas`.
+- **Las compras NO entran a la utilidad**: el costo ya es el consumo; sumarlas sería contar dos
+  veces. Viajan como dato informativo.
+- **Qué prueba el seed y qué no** (`api/prisma/seed-utilidad.spec.ts`): el estado de agosto de dos
+  sucursales cuadra al centavo contra un cálculo a mano desde el universo crudo. La venta neta ahí
+  sólo prueba que nada se pierde en el camino (suma el mismo `subtotal` que sembró el generador); lo
+  que sí prueba es el COSTO: cruza recetas por CLAVE (el servicio por NOMBRE) con su propio promedio
+  de costo. No dice nada de cómo registra SR su venta neta ni su costo: el cuadre contra el contador
+  (±1 %) es de F2-193.
+
 ---
 
 ## 11. Rendimiento y precauciones
@@ -1491,6 +1574,16 @@ NUMERIC(12,4) sin signo — más de 4 decimales se RECHAZA, el lector no redonde
 cuándo leyó; (5) a lo más 500 recetas y 5000 renglones por lote (partir por renglones); (6) el
 orden de los renglones no importa (el API ordena); (7) si SR tiene subrecetas o unidades de receta
 con factor, documentarlo en §10 antes de mandar nada (cambio de contrato).
+
+### Contrato de compras (F2-126): `POST /ingesta/compras`
+
+Lote de compras, cada una con TODAS sus partidas; supuestos y decisiones en §10 "Compras, gastos y
+utilidad". Lo que F2-241 tiene que cumplir: (1) cada compra completa (reenviada con otras partidas
+las REEMPLAZA); (2) `cancelada = true` en vez de dejar de mandarla (el panel no la borra); (3)
+cantidad > 0 en la UNIDAD del insumo del catálogo, NUMERIC(12,3) en texto, y costo por unidad SIN
+IVA en texto con la regla de dinero; (4) proveedor y almacén por su `origenSrId` del espejo de la
+misma sucursal, o nulos; (5) `leidoAt` = cuándo leyó; (6) a lo más 200 compras y 5000 partidas por
+lote (partir por partidas); (7) documentar en §10 si SR guarda la compra sólo como póliza.
 
 ### Campo nuevo del contrato de eventos (F2-233): `datos.areaOrigenSrId` del cheque
 
