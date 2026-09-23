@@ -2,7 +2,7 @@ import { FormaPago, Prisma, PrismaClient } from '@prisma/client';
 
 import { crearFixtures, FX, limpiarFixtures } from '../../test/fixtures-auth';
 import type { PrismaService } from '../prisma/prisma.service';
-import type { DatosCheque, DatosPartida } from './escritura-sucursal';
+import { OperacionesSucursal, type DatosCheque, type DatosPartida } from './escritura-sucursal';
 import { ScopedPrismaService } from './scoped-prisma.service';
 
 // Las escrituras de sucursal de la ingesta (F1-031) contra un Postgres REAL.
@@ -226,5 +226,108 @@ describe('ScopedPrismaService.deSucursal (contra Postgres, F1-031)', () => {
       hace(2).toISOString(),
       hace(1).toISOString(),
     ]);
+  });
+
+  // --------------------------------------------------------------------- F2-101
+  describe('código de facturación (F2-101)', () => {
+    const CIERRE = new Date('2026-09-20T20:00:00.000Z');
+    const fijo = (codigo: string) => () => codigo;
+
+    it('el INSERT es crudo, completo y con ON CONFLICT DO NOTHING, dentro de un SAVEPOINT', async () => {
+      const id = await servicio
+        .deSucursal(A1)
+        .enTransaccion((ops) => ops.guardarCheque('ES-COD-SQL', datosCheque(), [], []));
+      queries.length = 0;
+      const r = await servicio
+        .deSucursal(A1)
+        .enTransaccion((ops) => ops.intentarCodigoFacturacion(id, CIERRE, fijo('SQLAB2345')));
+      expect(r).toEqual({ ok: true, resultado: 'creado' });
+
+      const insert = queries.filter((q) => q.includes('INSERT INTO codigos_facturacion'));
+      expect(insert).toHaveLength(1);
+      const sql = insert[0].replace(/\s+/g, ' ');
+      expect(sql).toContain(
+        '(id, codigo, cheque_id, sucursal_id, empresa_id, estado, expira_at, created_at, updated_at)',
+      );
+      expect(sql).toContain('ON CONFLICT DO NOTHING RETURNING id');
+      // Nada interpolado en el SQL: todo va por parámetros.
+      expect(sql).not.toContain('SQLAB2345');
+      expect(sql).not.toContain(FX.sucursalA1);
+      expect(queries).toContain('SAVEPOINT codigo_facturacion');
+      expect(queries).toContain('RELEASE SAVEPOINT codigo_facturacion');
+
+      const fila = await prisma.codigoFacturacion.findFirstOrThrow({ where: { chequeId: id } });
+      expect(fila).toMatchObject({
+        codigo: 'SQLAB2345',
+        sucursalId: FX.sucursalA1,
+        empresaId: FX.empresaA,
+        estado: 'pendiente',
+      });
+      expect(fila.updatedAt).toBeInstanceOf(Date);
+      expect(fila.expiraAt.toISOString()).toBe('2026-10-01T06:00:00.000Z');
+    });
+
+    it('ya con código: no genera ni escribe nada', async () => {
+      const id = (await prisma.cheque.findFirstOrThrow({ where: { folioSr: 'ES-COD-SQL' } })).id;
+      const generar = jest.fn(() => 'OTRA23456');
+      queries.length = 0;
+      const r = await servicio
+        .deSucursal(A1)
+        .enTransaccion((ops) => ops.intentarCodigoFacturacion(id, CIERRE, generar));
+      expect(r).toEqual({ ok: true, resultado: 'existente' });
+      expect(generar).not.toHaveBeenCalled();
+      expect(queries.filter((q) => q.includes('INSERT'))).toHaveLength(0);
+    });
+
+    it('el cheque de OTRA sucursal (misma empresa) no recibe código: falla dentro del savepoint y la transacción sigue', async () => {
+      const deA2 = await servicio
+        .deSucursal(A2)
+        .enTransaccion((ops) => ops.guardarCheque('ES-COD-A2', datosCheque(), [], []));
+      // Las FK sólo atan la empresa (A1 y A2 son de la misma): lo impide el helper.
+      const r = await servicio.deSucursal(A1).enTransaccion(async (ops) => {
+        const intento = await ops.intentarCodigoFacturacion(deA2, CIERRE, fijo('SQLAB2347'));
+        // Tras el ROLLBACK TO SAVEPOINT la transacción sigue usable.
+        const sigue = await ops.leerCheque('ES-COD-SQL');
+        return { intento, sigue: sigue !== null };
+      });
+      expect(r.intento.ok).toBe(false);
+      expect(String((r.intento as { error: unknown }).error)).toContain('no es de esta sucursal');
+      expect(r.sigue).toBe(true);
+      expect(await prisma.codigoFacturacion.count({ where: { chequeId: deA2 } })).toBe(0);
+    });
+
+    it('si falla el propio ROLLBACK TO SAVEPOINT (conexión caída), ESA excepción se propaga', async () => {
+      const caida = new Prisma.PrismaClientKnownRequestError('conexión cerrada (sintética)', {
+        code: 'P1017',
+        clientVersion: Prisma.prismaVersion.client,
+      });
+      const ejecutadas: string[] = [];
+      const tx = {
+        $executeRaw: (partes: TemplateStringsArray) => {
+          const sql = partes.join('?');
+          ejecutadas.push(sql);
+          return sql.startsWith('ROLLBACK') ? Promise.reject(caida) : Promise.resolve(0);
+        },
+        cheque: {
+          findFirst: () => Promise.reject(new Error('la consulta del cheque falló (sintético)')),
+        },
+      } as unknown as Prisma.TransactionClient;
+      const ops = new OperacionesSucursal(tx, FX.sucursalA1, FX.empresaA);
+      await expect(
+        ops.intentarCodigoFacturacion(FX.inexistente, CIERRE, fijo('SQLAB2345')),
+      ).rejects.toBe(caida);
+      expect(ejecutadas).toEqual([
+        'SAVEPOINT codigo_facturacion',
+        'ROLLBACK TO SAVEPOINT codigo_facturacion',
+      ]);
+    });
+
+    it('chequeId vacío: falla DENTRO del savepoint (no ensancha ningún filtro)', async () => {
+      const r = await servicio
+        .deSucursal(A1)
+        .enTransaccion((ops) => ops.intentarCodigoFacturacion('', CIERRE, fijo('SQLAB2346')));
+      expect(r.ok).toBe(false);
+      expect(String((r as { error: unknown }).error)).toContain('chequeId vacío');
+    });
   });
 });

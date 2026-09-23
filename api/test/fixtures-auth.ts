@@ -84,6 +84,8 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   // Ventas de prueba (F1-030) colgadas de estas sucursales: las FK son Restrict,
   // así que se borran de las hojas hacia arriba antes que las sucursales.
   const deEstas = { where: { empresaId: { in: empresas } } };
+  // Los códigos de facturación (F2-101) cuelgan del cheque y de la sucursal.
+  await prisma.codigoFacturacion.deleteMany(deEstas);
   await prisma.chequePartida.deleteMany(deEstas);
   await prisma.chequePago.deleteMany(deEstas);
   await prisma.cheque.deleteMany(deEstas);

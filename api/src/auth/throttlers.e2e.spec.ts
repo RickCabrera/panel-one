@@ -10,7 +10,9 @@ import { crearFixtures, limpiarFixtures, PASSWORD, USUARIOS } from '../../test/f
 import { UsuariosAdminController } from '../administracion/administracion.controller';
 import { AgenteController } from '../agentes/agente.controller';
 import { AppModule } from '../app.module';
+import { CodigoFacturacionPublicoController } from '../facturacion/codigos.controller';
 import { IngestaController } from '../ingesta/ingesta.controller';
+import { BajaReportesController } from '../reportes/reportes.controller';
 import { configurarApp } from '../configurar-app';
 import { AuthController } from './auth.controller';
 import { CuentaController } from './cuenta.controller';
@@ -179,14 +181,17 @@ describe('Cada ruta con ThrottlerGuard aplica exactamente sus cubos', () => {
     ['POST /auth/refresh', AuthController.prototype.refresh, ['refresh']],
     ['POST /auth/logout', AuthController.prototype.logout, ['refresh']],
     ['POST /cuenta/password', CuentaController.prototype.cambiarPassword, ['login', 'login-hora']],
-    [
-      'POST /usuarios/:id/password',
-      UsuariosAdminController.prototype.resetPassword,
-      ['reset'],
-    ],
+    ['POST /usuarios/:id/password', UsuariosAdminController.prototype.resetPassword, ['reset']],
     // `@AutenticacionAgente()` va en la clase: la metadata vive ahí.
     ['rutas de agente (GET /agente/yo, POST /ingesta/eventos)', AgenteController, ['agente']],
     ['POST /ingesta/eventos', IngestaController, ['agente']],
+    // F2-101: pública; su cubo no gasta el de la baja de reportes, ni al revés.
+    [
+      'GET /facturacion/codigo/:codigo',
+      CodigoFacturacionPublicoController.prototype.consultar,
+      ['codigo-facturacion'],
+    ],
+    ['POST /reportes/baja', BajaReportesController.prototype.baja, ['baja-reportes']],
   ];
 
   it.each(RUTAS)('%s', (_ruta, metodo, propios) => {

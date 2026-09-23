@@ -1460,6 +1460,12 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 >    construyó: hoy la validación es la local (`csd.ts`) más la que haga el PAC al registrar el CSD.
 > 4. **Una empresa, un emisor.** `perfiles_fiscales.empresa_id` es único (DECISION PROVISIONAL). Si
 >    un cliente factura con varias razones sociales en una misma empresa, es tarea aparte.
+>
+> **Y además (de F2-101).** Con el piloto: (1) confirmar que "cerrada" en SR ya es "cobrada" y
+> facturable, y que una cortesía total o una cancelada no se facturan (`esFacturable`, esquema-sr
+> §2); (2) qué hace SR al reabrir o cancelar una cuenta que ya tenía código; (3) que la vigencia
+> por default (fin del mes del cierre, zona de la sucursal) es la que el cliente quiere; (4) el
+> riesgo del `folio_sr` reusado (el código apuntaría a otra cuenta).
 
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus
@@ -1801,6 +1807,23 @@ desde el celular tras escanear el QR.
 **Listo cuando:** flujo completo en sandbox desde un celular en < 2 min; errores de captura
 se marcan campo por campo en español claro; un código ya facturado ofrece re-descargar la
 factura existente en lugar de fallar.
+
+> **Y además (de F2-101).** El código ya existe y se consulta con `GET /facturacion/codigo/:codigo`
+> (pública, 10/min por IP; ver `api/openapi.json`). Lo que F2-101 dejó para aquí:
+> 1. **Desglose subtotal/IVA del paso 1.** La consulta sólo da sucursal, fecha, total y
+>    vencimiento (lo que pedía F2-101), y SÓLO en `pendiente`. Si el portal necesita el desglose,
+>    se agrega a `TicketCodigoDto` (sigue sin folio, mesa, mesero ni partidas) con su test de "no
+>    filtra datos" en `codigo.e2e.spec.ts`.
+> 2. **"Un código ya facturado ofrece re-descargar".** Hoy un `facturado` responde sólo su estado
+>    (`ticket: null`) a propósito: nada del ticket sin demostrar que es tuyo. Cómo se re-descarga
+>    sin filtrar el CFDI de otro (¿por correo al receptor? ¿pidiendo el RFC?) se decide aquí.
+> 3. **El slug de la sucursal** (`/f/:slug`) no se cruza con el código: la consulta es global.
+>    Si el portal de una sucursal no debe aceptar códigos de otra, se valida aquí.
+> 4. **El código en el detalle de Tickets** (F2-222 lo esperaba "cuando F2-101 exista"): agregar
+>    `codigoFacturacion` (y su estado público) a `GET /ventas/tickets/{id}` y mostrarlo en el
+>    panel; es también el respaldo de F2-102 si el ticket no se imprime con el QR.
+> 5. Estados que el portal tiene que explicar: `pendiente`, `facturado`, `en_global`, `expirado`
+>    y `cancelado` (este último se deriva de la cuenta). Cada uno trae `mensaje` en español.
 
 ### F2-104 · Emisión de CFDI vía Facturama
 `[ ]` Servicio `CfdiService.emitir(chequeId, receptor)`: construye el JSON de Facturama

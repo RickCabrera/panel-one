@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
+
 import { Prisma, type FormaPago } from '@prisma/client';
 
 import type { AgenteAutenticado } from '../auth/request-autenticado';
+import { expiracionDe, VIGENCIA_DEFAULT, type VigenciaCodigos } from '../facturacion/codigo';
 import { COLUMNAS_INTOCABLES } from './scope.helper';
 
 /**
@@ -71,6 +74,13 @@ export interface DatosEstado {
   /** Latencia de la consulta a SR del ciclo, en ms (F1-025). `null` = sin medición. */
   latenciaQueryMs: number | null;
 }
+
+/** Intentos de generar un código de facturación que no choque con otro ya guardado (F2-101). */
+export const INTENTOS_CODIGO = 5;
+
+/** Cómo terminó el intento de dar código de facturación a un cheque (F2-101). */
+export type ResultadoCodigo =
+  { ok: true; resultado: 'creado' | 'existente' } | { ok: false; error: unknown };
 
 /** Cuánto histórico de snapshots se conserva además del último (F1-030). */
 export const HISTORICO_SNAPSHOTS_MS = 24 * 60 * 60 * 1000;
@@ -206,6 +216,104 @@ export class OperacionesSucursal {
       where: { ...this.#deLaSucursal, capturadoAt: { lt: limite } },
     });
     return count;
+  }
+
+  /**
+   * El código corto de facturación del cheque `chequeId` de ESTA sucursal (F2-101), AISLADO en un
+   * savepoint de la transacción de la ingesta.
+   *
+   * DECISION PROVISIONAL (nocturno): una falla del código (zona inválida, CHECK de formato, FK,
+   * cinco colisiones seguidas, un bug del generador) NUNCA tumba la venta. Se hace
+   * `ROLLBACK TO SAVEPOINT`, el cheque con sus partidas y pagos se confirma igual y el resultado
+   * dice `ok: false` para que la ingesta lo loguee. El cheque se queda sin código hasta su
+   * siguiente reenvío (el camino de "reenvío idéntico" vuelve a intentarlo). Si falla el propio
+   * `ROLLBACK TO SAVEPOINT` (conexión caída), ESA excepción se propaga: la transacción ya no sirve y
+   * el evento sigue el camino normal de `esTransitorio()`.
+   *
+   * El nombre del savepoint va literal (nada interpolado).
+   */
+  async intentarCodigoFacturacion(
+    chequeId: string,
+    cerradoAt: Date,
+    generar: () => string,
+  ): Promise<ResultadoCodigo> {
+    await this.#tx.$executeRaw`SAVEPOINT codigo_facturacion`;
+    let resultado: 'creado' | 'existente';
+    try {
+      resultado = await this.#asegurarCodigo(chequeId, cerradoAt, generar);
+    } catch (error) {
+      await this.#tx.$executeRaw`ROLLBACK TO SAVEPOINT codigo_facturacion`;
+      return { ok: false, error };
+    }
+    await this.#tx.$executeRaw`RELEASE SAVEPOINT codigo_facturacion`;
+    return { ok: true, resultado };
+  }
+
+  /**
+   * Si el cheque ya tiene código, no hace NADA (el código y su expiración no cambian nunca: un
+   * reenvío deja la base igual). Si no, hasta `INTENTOS_CODIGO` inserciones con
+   * `ON CONFLICT DO NOTHING` sin target: cubre la unique de `codigo` Y la de `cheque_id` sin
+   * abortar la transacción. Sin fila devuelta: si el cheque ya tiene código, otro lote en vuelo
+   * lo creó; si no, fue colisión de código y se prueba otro.
+   */
+  async #asegurarCodigo(
+    chequeId: string,
+    cerradoAt: Date,
+    generar: () => string,
+  ): Promise<'creado' | 'existente'> {
+    const cheque = exigir('chequeId', chequeId);
+    const cierre = exigirFecha('cerradoAt', cerradoAt);
+    // El cheque tiene que ser de ESTA sucursal: las FK sólo atan la empresa.
+    const propio = await this.#tx.cheque.findFirst({
+      where: { ...this.#deLaSucursal, id: cheque },
+      select: { id: true },
+    });
+    if (!propio) throw new Error('Escritura de sucursal: el cheque no es de esta sucursal.');
+    if (await this.#codigoDe(cheque)) return 'existente';
+
+    const expiraAt = expiracionDe(cierre, await this.#zona(), await this.#vigencia());
+    for (let intento = 0; intento < INTENTOS_CODIGO; intento++) {
+      const codigo = generar();
+      const filas = await this.#tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+        INSERT INTO codigos_facturacion
+          (id, codigo, cheque_id, sucursal_id, empresa_id, estado, expira_at, created_at, updated_at)
+        VALUES (${randomUUID()}::uuid, ${codigo}, ${cheque}::uuid, ${this.#sucursalId}::uuid,
+          ${this.#empresaId}::uuid, 'pendiente', ${expiraAt}, now(), now())
+        ON CONFLICT DO NOTHING
+        RETURNING id`);
+      if (filas.length > 0) return 'creado';
+      if (await this.#codigoDe(cheque)) return 'existente';
+    }
+    throw new Error(
+      `No se generó un código de facturación único en ${INTENTOS_CODIGO} intentos (colisiones).`,
+    );
+  }
+
+  #codigoDe(chequeId: string) {
+    return this.#tx.codigoFacturacion.findFirst({
+      where: { ...this.#deLaSucursal, chequeId },
+      select: { id: true },
+    });
+  }
+
+  async #zona(): Promise<string> {
+    const sucursal = await this.#tx.sucursal.findFirstOrThrow({
+      where: { id: this.#sucursalId, empresaId: this.#empresaId },
+      select: { zonaHoraria: true },
+    });
+    return sucursal.zonaHoraria;
+  }
+
+  /** La regla de vigencia de la empresa del agente; sin configuración, fin de mes. */
+  async #vigencia(): Promise<VigenciaCodigos> {
+    const config = await this.#tx.configuracionFacturacion.findFirst({
+      where: { empresaId: this.#empresaId },
+      select: { vigenciaCodigos: true, vigenciaDias: true },
+    });
+    if (!config) return VIGENCIA_DEFAULT;
+    return config.vigenciaCodigos === 'dias'
+      ? { regla: 'dias', dias: config.vigenciaDias ?? Number.NaN }
+      : { regla: 'fin_de_mes' };
   }
 
   leerEstado() {

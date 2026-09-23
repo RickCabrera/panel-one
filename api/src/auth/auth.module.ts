@@ -16,6 +16,7 @@ import {
   OPCIONES_THROTTLER_REFRESH,
   OPCIONES_THROTTLER_RESET,
   OPCIONES_THROTTLER_BAJA,
+  OPCIONES_THROTTLER_CODIGO,
 } from './throttlers';
 import { TokensService } from './tokens.service';
 
@@ -23,12 +24,13 @@ import { TokensService } from './tokens.service';
   imports: [
     // Sin secreto aquí: cada firma/verificación pasa el suyo (access o refresh).
     JwtModule.register({}),
-    // Seis throttlers con nombre, y cada ruta salta los que no son suyos
+    // Siete throttlers con nombre, y cada ruta salta los que no son suyos
     // (`SoloThrottlers(...)` de throttlers.ts):
     // - `login`: 5/min por IP, `POST /auth/login` y `POST /cuenta/password`.
     // - `login-hora`: 30/h por IP, las mismas dos rutas (F2-203).
     // - `reset`: 10/min por IP, `POST /usuarios/:id/password` (F2-203).
     // - `baja-reportes`: 10/min por IP, `POST /reportes/baja` (F2-141).
+    // - `codigo-facturacion`: 10/min por IP, `GET /facturacion/codigo/:codigo` (F2-101).
     // - `refresh`: 30/min por IP, `POST /auth/refresh` (F1-092) y `POST /auth/logout` (F1-093).
     // - `agente`: 120/min por sucursal, las rutas `@AutenticacionAgente()` (F1-012).
     // La IP es `req.ip`: detrás de Caddy sale de `TRUST_PROXY_SALTOS` (configurarApp).
@@ -40,6 +42,7 @@ import { TokensService } from './tokens.service';
         OPCIONES_THROTTLER_REFRESH,
         OPCIONES_THROTTLER_RESET,
         OPCIONES_THROTTLER_BAJA,
+        OPCIONES_THROTTLER_CODIGO,
         OPCIONES_THROTTLER_AGENTE,
       ],
     }),

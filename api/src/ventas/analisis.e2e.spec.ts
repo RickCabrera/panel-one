@@ -379,6 +379,10 @@ describe('Análisis: desgloses por mesero, producto, hora × día y mesa (e2e, F
       ticketPromedio: null,
       cancelados: { cuentas: 1, monto: '12.00' },
     });
+    // F2-101: el código de facturación cuelga del cheque (FK Restrict).
+    await prisma.codigoFacturacion.deleteMany({
+      where: { cheque: { sucursalId: FX.sucursalA1, folioSr: 'ANA-C7' } },
+    });
     await prisma.cheque.delete({
       where: { sucursalId_folioSr: { sucursalId: FX.sucursalA1, folioSr: 'ANA-C7' } },
     });

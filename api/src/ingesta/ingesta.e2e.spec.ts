@@ -143,13 +143,15 @@ describe('POST /ingesta/eventos (e2e, F1-031)', () => {
   async function foto(sucursalId: string) {
     const cheques = await prisma.cheque.findMany({ where: { sucursalId }, orderBy: { id: 'asc' } });
     const ids = cheques.map((c) => c.id);
-    const [partidas, pagos, snapshots, estado] = await Promise.all([
+    const [partidas, pagos, snapshots, estado, codigos] = await Promise.all([
       prisma.chequePartida.findMany({ where: { chequeId: { in: ids } }, orderBy: { id: 'asc' } }),
       prisma.chequePago.findMany({ where: { chequeId: { in: ids } }, orderBy: { id: 'asc' } }),
       prisma.mesaSnapshot.findMany({ where: { sucursalId }, orderBy: { id: 'asc' } }),
       prisma.agenteEstado.findMany({ where: { sucursalId } }),
+      // F2-101: el código de facturación que la ingesta le da a cada cheque facturable.
+      prisma.codigoFacturacion.findMany({ where: { sucursalId }, orderBy: { id: 'asc' } }),
     ]);
-    return JSON.parse(JSON.stringify({ cheques, partidas, pagos, snapshots, estado }));
+    return JSON.parse(JSON.stringify({ cheques, partidas, pagos, snapshots, estado, codigos }));
   }
 
   beforeAll(async () => {
@@ -299,6 +301,14 @@ describe('POST /ingesta/eventos (e2e, F1-031)', () => {
       }
       expect(await foto(FX.sucursalA1)).toEqual(despuesDeUna);
       expect(await prisma.cheque.count({ where: { folioSr: { startsWith: 'IDEM-' } } })).toBe(2);
+      // F2-101: el cerrado tiene código y el cancelado no; la foto de arriba ya fijó que el
+      // código no cambia en los reenvíos.
+      expect(
+        await prisma.codigoFacturacion.count({ where: { cheque: { folioSr: 'IDEM-1' } } }),
+      ).toBe(1);
+      expect(
+        await prisma.codigoFacturacion.count({ where: { cheque: { folioSr: 'IDEM-2' } } }),
+      ).toBe(0);
     });
 
     it('un cheque reenviado CON cambios se reemplaza: partidas y pagos no se acumulan', async () => {
@@ -351,6 +361,8 @@ describe('POST /ingesta/eventos (e2e, F1-031)', () => {
         expect(c).toHaveLength(1);
         expect(await prisma.chequePartida.count({ where: { chequeId: c[0].id } })).toBe(2);
         expect(await prisma.chequePago.count({ where: { chequeId: c[0].id } })).toBe(2);
+        // F2-101: un solo código por cheque, aunque tres lotes lo crearan a la vez.
+        expect(await prisma.codigoFacturacion.count({ where: { chequeId: c[0].id } })).toBe(1);
       }
     });
   });
@@ -566,7 +578,10 @@ describe('POST /ingesta/eventos (e2e, F1-031)', () => {
     ])('latenciaQueryMs %s → evento rechazado sin reintento, estado intacto', async (_n, valor) => {
       const antes = await foto(FX.sucursalA2);
       const r = await lote(KEYS.a2, [
-        eventoHeartbeat('lq-mala', { ultimaLecturaAt: '2026-09-22T11:00:00Z', latenciaQueryMs: valor }),
+        eventoHeartbeat('lq-mala', {
+          ultimaLecturaAt: '2026-09-22T11:00:00Z',
+          latenciaQueryMs: valor,
+        }),
       ]);
       expect(r.procesados).toEqual([]);
       expect(r.rechazados).toEqual([

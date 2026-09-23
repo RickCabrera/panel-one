@@ -89,8 +89,13 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'chequePago',
       'chequePartida',
       'clienteCatalogo',
+      // F2-101: códigos de facturación; los crea la ingesta (`deSucursal(agente)`) y la consulta
+      // pública va por `codigoFacturacionPublico`, no por aquí.
+      'codigoFacturacion',
       // F2-126: compras; se escriben por `comprasDeSucursal(agente)`.
       'compra',
+      // F2-101: vigencia de los códigos; se escribe por `facturacion(scope)`.
+      'configuracionFacturacion',
       // F2-123: conteos físicos; se escriben por `conteos(scope)`, no por aquí.
       'conteoFisico',
       // F2-202: bandeja del correo falso, filtrada por empresa_id como las demás.

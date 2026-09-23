@@ -318,6 +318,38 @@ descubre nada de SR: son supuestos del modelo, sin validar, y se revisan en F1-0
   ucs_basic`): "999" antes de "1000" si los folios son numéricos. Con folios alfanuméricos de
   distinto largo el orden es raro pero estable. `DECISION PROVISIONAL (nocturno)` en el servicio.
 
+**El código corto de facturación (F2-101, tabla `codigos_facturacion`).** Dato NUESTRO, nunca se
+escribe a SR. La ingesta de `POST /ingesta/eventos` le da a cada cheque facturable un código de 9
+caracteres (A–Z y 2–9 sin O, 0, I, 1), en la misma transacción que el cheque pero aislado en un
+savepoint. Lo que eso supone de esta sección, nada visto en una instalación real (F2-190):
+
+- ⚠️ **SUPUESTO — NO VALIDADO (`DECISION PROVISIONAL (nocturno)` en
+  `api/src/facturacion/codigo.ts#esFacturable`): una cuenta es facturable cuando SR la reporta
+  CERRADA (`cerrado_at` no nulo), NO cancelada y con `total > 0`.** Se supone que "cerrada" en SR ya
+  quiere decir "cobrada": si SR cierra cuentas antes de cobrarlas (o las cobra en otro paso), habrá
+  códigos para cuentas sin pagar. Una cortesía total ($0) y una cuenta cancelada no llevan código.
+- ⚠️ **SUPUESTO (`DECISION PROVISIONAL (nocturno)` en `estadoPublico`) — si SR cancela la cuenta
+  DESPUÉS de que tuvo código, la fila del código no cambia**; la consulta pública deriva `cancelado`
+  del cheque y no da datos del ticket. `cancelado` no se guarda: no está en el enum de la ficha
+  (`pendiente`, `facturado`, `en_global`, `expirado`).
+- ⚠️ **SUPUESTO — reapertura.** Si SR reabre una cuenta que ya tenía código (`cerrado_at` vuelve a
+  nulo), el código se queda y sigue sirviendo; su fecha pública es `cerrado_at ?? abierto_at`. El
+  código y su vencimiento se fijan al nacer y NO se recalculan aunque el cierre cambie después.
+- ⚠️ **RIESGO ligado a la decisión abierta "¿SR reinicia folios?" (arriba).** Si SR reusa un
+  `folio_sr`, el upsert pisa el cheque viejo con el nuevo y **el código del ticket viejo queda
+  apuntando a la cuenta nueva**: alguien podría facturar un consumo que no es el suyo. Se resuelve
+  con la misma decisión (llave de idempotencia con fecha o serie).
+- **Vencimiento en la zona de la SUCURSAL:** por default, hasta el fin del mes del cierre (regla
+  típica del SAT); configurable por empresa a "N días" (`configuraciones_facturacion`,
+  `PUT /facturacion/vigencia-codigos`). `expirado` se deriva al leer (`ahora >= expira_at`), sin job.
+- **Falla del código ≠ falla de la venta (`DECISION PROVISIONAL (nocturno)` en
+  `OperacionesSucursal.intentarCodigoFacturacion`).** Cualquier error del código (zona inválida,
+  CHECK, cinco colisiones seguidas) hace `ROLLBACK TO SAVEPOINT`: el cheque se guarda igual y queda
+  SIN código hasta su siguiente reenvío (el reenvío idéntico lo cura). Sólo si falla el propio
+  rollback (conexión caída) el evento se rechaza, reintentable.
+- **Sin backfill.** Los cheques ingeridos antes de la migración `..._codigo_facturacion` sólo
+  reciben código si el agente los vuelve a mandar. Hoy no hay piloto, así que no hay tales cheques
+  fuera del seed (que sí los siembra).
 
 ---
 

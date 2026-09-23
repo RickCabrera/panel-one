@@ -84,6 +84,9 @@ export const LLAVE_EMPRESA = {
   // `EscrituraFacturacion` (con el scope del usuario). Nada de esto se escribe a SR.
   PerfilFiscal: 'empresaId',
   ReceptorFrecuente: 'empresaId',
+  // F2-101: códigos cortos de facturación y la regla de vigencia (dato propio).
+  CodigoFacturacion: 'empresaId',
+  ConfiguracionFacturacion: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;
