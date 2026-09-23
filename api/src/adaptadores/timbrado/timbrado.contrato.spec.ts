@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 
 import { RELOJ_FIJO, solicitudCfdi } from '../../../test/fixtures-cfdi';
 import { solicitudDesdeCheque } from '../../facturacion/cfdi';
+import { solicitudGlobal } from '../../facturacion/global';
 import { MENSAJES_SAT, MENSAJE_RECHAZO_GENERICO } from './errores-sat';
 import type { ClienteHttp, PeticionHttp, RespuestaHttp } from '../http';
 import { ErrorTimbrado } from './puerto';
@@ -471,5 +472,94 @@ describe('Contrato Facturama: sustitución y factura sin ticket (F2-107)', () =>
     const items = (http.peticiones[0].cuerpo as { Items: Array<Record<string, unknown>> }).Items;
     expect(items[0]).not.toHaveProperty('IdentificationNumber');
     expect(items[0]).toMatchObject({ ProductCode: '90101500', UnitCode: 'E48' });
+  });
+});
+
+/**
+ * F2-108 · FACTURA GLOBAL. Snapshot revisado a mano contra la guía de llenado del SAT para el CFDI
+ * global y la documentación pública de Facturama (SUPUESTO NO VALIDADO, F2-190):
+ * - `GlobalInformation: { Periodicity, Months, Year }` = nodo `InformacionGlobal` (04 mensual,
+ *   mes '08', año '2026' como texto);
+ * - `Receiver` público en general: `XAXX010101000`, "PUBLICO EN GENERAL", régimen 616, uso S01 y
+ *   `TaxZipCode` = `ExpeditionPlace` (el CP del emisor);
+ * - un `Item` por ticket: `ProductCode` 01010101, `UnitCode` ACT, "Venta", `IdentificationNumber` =
+ *   folio del ticket, con su IVA.
+ */
+describe('Contrato Facturama: factura global (F2-108)', () => {
+  const solicitud = solicitudGlobal({
+    reservaId: '00000000-0000-4000-8000-000000000108',
+    serie: 'A',
+    folio: 2040,
+    // 1 de septiembre de 2026, 02:00 en CDMX: la global de AGOSTO se emite después de que termina.
+    fecha: new Date('2026-09-01T08:00:00.000Z'),
+    emisor: {
+      rfc: 'EKU9003173C9',
+      razonSocial: 'ESCUELA KEMPER URGATE',
+      regimenFiscal: '601',
+      cp: '06700',
+    },
+    sucursal: { zonaHoraria: 'America/Mexico_City' },
+    informacion: { periodicidad: '04', meses: '08', anio: 2026 },
+    // 116.00 → 100.00 + 16.00; 58.00 → 50.00 + 8.00; 100.01 → 86.22 + 13.79.
+    tickets: [
+      { folio: 'T-0101', total: new Prisma.Decimal('116.00') },
+      { folio: 'T-0102', total: new Prisma.Decimal('58.00') },
+      { folio: 'T-0103', total: new Prisma.Decimal('100.01') },
+    ],
+    formaPago: '01',
+  });
+
+  it('el cuerpo del POST, exacto', async () => {
+    const http = new ClienteQueCaptura(respuestaEmision);
+    await new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir(solicitud);
+    expect(http.peticiones[0]).toMatchSnapshot();
+    const cuerpo = http.peticiones[0].cuerpo as Record<string, unknown> & {
+      Items: Array<Record<string, unknown>>;
+    };
+    expect(cuerpo.GlobalInformation).toEqual({ Periodicity: '04', Months: '08', Year: '2026' });
+    expect(cuerpo.Receiver).toEqual({
+      Rfc: 'XAXX010101000',
+      Name: 'PUBLICO EN GENERAL',
+      CfdiUse: 'S01',
+      FiscalRegime: '616',
+      TaxZipCode: '06700',
+    });
+    expect(cuerpo.ExpeditionPlace).toBe('06700');
+    expect(cuerpo.Date).toBe('2026-09-01T02:00:00');
+    expect(
+      cuerpo.Items.map((i) => [
+        i.ProductCode,
+        i.UnitCode,
+        i.IdentificationNumber,
+        i.Subtotal,
+        i.Total,
+      ]),
+    ).toEqual([
+      ['01010101', 'ACT', 'T-0101', 100, 116],
+      ['01010101', 'ACT', 'T-0102', 50, 58],
+      ['01010101', 'ACT', 'T-0103', 86.22, 100.01],
+    ]);
+  });
+
+  it.each([
+    ['semanal', '02', '09', 2026],
+    ['diaria', '01', '12', 2025],
+  ] as const)('%s: Periodicity %s, Months %s, Year %s', async (_n, periodicidad, meses, anio) => {
+    const http = new ClienteQueCaptura(respuestaEmision);
+    await new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir({
+      ...solicitud,
+      informacionGlobal: { periodicidad, meses, anio },
+    });
+    expect((http.peticiones[0].cuerpo as Record<string, unknown>).GlobalInformation).toEqual({
+      Periodicity: periodicidad,
+      Months: meses,
+      Year: String(anio),
+    });
+  });
+
+  it('un CFDI que NO es global no manda `GlobalInformation`', async () => {
+    const http = new ClienteQueCaptura(respuestaEmision);
+    await new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir(solicitudCfdi());
+    expect(http.peticiones[0].cuerpo).not.toHaveProperty('GlobalInformation');
   });
 });

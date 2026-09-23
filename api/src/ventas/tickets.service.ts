@@ -1,8 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { FormaPago, Prisma } from '@prisma/client';
+import { FormaPago, Prisma, type EstadoEmisionCfdi } from '@prisma/client';
 
 import { Reloj } from '../comun/reloj';
-import { estadoPublico, MENSAJE_ESTADO, type EstadoPublico } from '../facturacion/codigo';
+import {
+  estadoPublico,
+  mensajeEstado,
+  periodoGlobalDe,
+  type EstadoPublico,
+  type GlobalDelCodigo,
+} from '../facturacion/codigo';
 import type { FiltroVentas } from '../scope/consulta-ventas';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import { encontradoOr404 } from '../scope/scope.helper';
@@ -33,6 +39,8 @@ export interface CodigoFacturacionTicket {
   codigo: string;
   estado: EstadoPublico;
   mensaje: string;
+  /** F2-108: el periodo de la factura global, sólo con `en_global`. */
+  periodoGlobal: string | null;
 }
 
 export interface Ticket {
@@ -293,7 +301,19 @@ export class TicketsService {
           // En la MISMA consulta con scope: la FK compuesta (cheque_id, empresa_id) ata el código
           // a la empresa del cheque.
           codigoFacturacion: {
-            select: { codigo: true, estado: true, expiraAt: true, cfdi: { select: { estado: true } } },
+            select: {
+              codigo: true,
+              estado: true,
+              expiraAt: true,
+              cfdi: { select: { estado: true } },
+              // F2-108: la global en la que entró (su estado y su periodo) y la zona para decirlo.
+              global: {
+                select: {
+                  cfdi: { select: { estado: true, globalPeriodicidad: true, globalDesde: true } },
+                },
+              },
+              sucursal: { select: { zonaHoraria: true } },
+            },
           },
         },
       }),
@@ -371,10 +391,20 @@ export class TicketsService {
 }
 
 function codigoDelTicket(
-  codigo: Parameters<typeof estadoPublico>[0] & { codigo: string },
+  codigo: Parameters<typeof estadoPublico>[0] & {
+    codigo: string;
+    global: (GlobalDelCodigo & { cfdi: { estado: EstadoEmisionCfdi } }) | null;
+    sucursal: { zonaHoraria: string };
+  },
   cancelado: boolean,
   ahoraMs: number,
 ): CodigoFacturacionTicket {
   const estado = estadoPublico(codigo, { cancelado }, ahoraMs);
-  return { codigo: codigo.codigo, estado, mensaje: MENSAJE_ESTADO[estado] };
+  const periodoGlobal = periodoGlobalDe(estado, codigo.global, codigo.sucursal.zonaHoraria);
+  return {
+    codigo: codigo.codigo,
+    estado,
+    mensaje: mensajeEstado(estado, periodoGlobal),
+    periodoGlobal,
+  };
 }

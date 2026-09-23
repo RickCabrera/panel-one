@@ -115,6 +115,18 @@ export function peticionEmitir(base: string, s: SolicitudCfdi): PeticionHttp {
             },
           }
         : {}),
+      // F2-108. SUPUESTO NO VALIDADO (F2-190): Facturama recibe el nodo InformacionGlobal como
+      // `GlobalInformation: { Periodicity, Months, Year }` (documentación pública). Sólo va en una
+      // global: los demás CFDI salen igual que antes.
+      ...(s.informacionGlobal
+        ? {
+            GlobalInformation: {
+              Periodicity: s.informacionGlobal.periodicidad,
+              Months: s.informacionGlobal.meses,
+              Year: String(s.informacionGlobal.anio),
+            },
+          }
+        : {}),
       Serie: s.serie,
       Folio: s.folio,
       Date: fechaLocalCfdi(s.fecha, s.zonaHoraria),

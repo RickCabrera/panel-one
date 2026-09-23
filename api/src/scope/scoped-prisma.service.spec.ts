@@ -89,6 +89,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'cfdi',
       // F2-105: envíos por correo de los CFDI; se escriben por `facturacion(scope)`.
       'cfdiEnvio',
+      'cfdiGlobalCodigo',
       'cheque',
       'chequePago',
       'chequePartida',
@@ -412,6 +413,15 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       await expect(
         prisma.chequePartida.findUniqueOrThrow({ where: { id: V.partidaA } }),
       ).resolves.toMatchObject({ chequeId: V.chequeA });
+    });
+
+    it('F2-108: updateMany no puede mover un ticket a otra factura global ni a otro código', async () => {
+      const otro = '00000000-0000-4000-8000-000000000108';
+      for (const data of [{ cfdiId: otro }, { codigoId: otro }]) {
+        await expect(
+          servicio.para(A).cfdiGlobalCodigo.updateMany({ where: { id: otro }, data } as never),
+        ).rejects.toThrow(`no puede escribir ${Object.keys(data)[0]}`);
+      }
     });
   });
 });

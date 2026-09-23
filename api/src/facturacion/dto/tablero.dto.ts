@@ -122,11 +122,20 @@ export class SucursalTableroDto implements SucursalTablero {
   @ApiProperty()
   cuentas!: number;
 
-  @ApiProperty({ example: '1500.00', description: 'CFDI vigentes emitidos en el periodo.' })
+  @ApiProperty({
+    example: '1500.00',
+    description: 'CFDI vigentes emitidos en el periodo a CLIENTES (sin la factura global).',
+  })
   facturado!: string;
 
-  @ApiProperty({ description: 'Cuántos CFDI vigentes.' })
+  @ApiProperty({ description: 'Cuántos CFDI vigentes a clientes.' })
   cfdis!: number;
+
+  @ApiProperty({
+    type: CifrasCfdiDto,
+    description: 'F2-108: facturas globales vigentes de la sucursal emitidas en el periodo.',
+  })
+  global!: CifrasCfdiDto;
 
   @ApiProperty({ type: CifrasCfdiDto })
   cancelados!: CifrasCfdiDto;
@@ -166,9 +175,19 @@ export class TableroFacturacionDto implements TableroFacturacion {
 
   @ApiProperty({
     type: CifrasCfdiDto,
-    description: 'CFDI VIGENTES emitidos en el periodo. Una reserva en `timbrando` nunca cuenta.',
+    description:
+      'CFDI VIGENTES emitidos en el periodo a CLIENTES. Una reserva en `timbrando` nunca cuenta. ' +
+      'F2-108: la factura global NO suma aquí ni en la tasa (va en `global`).',
   })
   facturado!: CifrasCfdiDto;
+
+  @ApiProperty({
+    type: CifrasCfdiDto,
+    description:
+      'F2-108: facturas globales (público en general) VIGENTES emitidas en el periodo. ' +
+      '`facturado` + `global` = todos los CFDI vigentes que cuentan.',
+  })
+  global!: CifrasCfdiDto;
 
   @ApiProperty({
     type: CifrasCfdiDto,
@@ -266,7 +285,11 @@ export class CfdiFilaDto implements CfdiFila {
   @ApiProperty({ description: 'Hay PDF guardado (`GET /facturacion/cfdis/{id}/pdf`).' })
   pdf!: boolean;
 
-  @ApiProperty({ enum: ORIGENES_CFDI, description: 'F2-107: `manual` = factura sin ticket.' })
+  @ApiProperty({
+    enum: ORIGENES_CFDI,
+    description:
+      'F2-107: `manual` = factura sin ticket. F2-108: `global` = factura global a público en general.',
+  })
   origen!: OrigenCfdi;
 
   @ApiProperty({

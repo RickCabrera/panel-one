@@ -9359,7 +9359,8 @@
               "type": "string",
               "enum": [
                 "ticket",
-                "manual"
+                "manual",
+                "global"
               ]
             }
           }
@@ -11339,6 +11340,477 @@
           }
         ],
         "summary": "Refactura un CFDI vigente: sustituto con relación 04 + cancelación motivo 01 (F2-107).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/global/configuracion": {
+      "get": {
+        "operationId": "FacturaGlobalController_configuracion",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionGlobalDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa o la sucursal no existen, están inactivas o no están en tu alcance (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Periodicidad de la factura global y si se emite sola (F2-108).",
+        "tags": [
+          "facturacion"
+        ]
+      },
+      "put": {
+        "description": "Al encender la automática se anota desde cuándo: el programador sólo emite periodos que terminen DESPUÉS (los anteriores se emiten a mano). Default: mensual y manual.",
+        "operationId": "FacturaGlobalController_guardar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardarConfiguracionGlobalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracionGlobalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo mal formado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa o la sucursal no existen, están inactivas o no están en tu alcance (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Guarda la periodicidad de la global y la emisión automática (F2-108).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/global/periodos": {
+      "get": {
+        "description": "Un ticket entra a la global sólo cuando su código ya no se puede autofacturar. Periodos cortados en la zona de la sucursal, desde el 1 de enero del año anterior.",
+        "operationId": "FacturaGlobalController_periodos",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "periodicidad",
+            "required": false,
+            "in": "query",
+            "description": "Sin ella, la configurada en la empresa.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "diaria",
+                "semanal",
+                "mensual"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeriodosGlobalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros mal formados.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa o la sucursal no existen, están inactivas o no están en tu alcance (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Periodos de la sucursal con tickets para la global, y las globales emitidas (F2-108).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/global/periodos/{clave}": {
+      "get": {
+        "operationId": "FacturaGlobalController_vistaPrevia",
+        "parameters": [
+          {
+            "name": "clave",
+            "required": true,
+            "in": "path",
+            "description": "Primer día local del periodo.",
+            "schema": {
+              "example": "2026-08-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "periodicidad",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "diaria",
+                "semanal",
+                "mensual"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VistaPreviaGlobalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "La clave no es inicio de un periodo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa o la sucursal no existen, están inactivas o no están en tu alcance (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Vista previa de la global de un periodo (F2-108).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/global": {
+      "post": {
+        "description": "Público en general (XAXX010101000, 616, S01), un concepto por ticket (01010101, ACT) e InformacionGlobal (periodicidad, meses, año). Los tickets incluidos quedan `en_global` y el portal ya no los factura.",
+        "operationId": "FacturaGlobalController_emitir",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmitirGlobalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacturaGlobalEmitidaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Clave o cuerpo inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa o la sucursal no existen, están inactivas o no están en tu alcance (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El periodo no ha terminado, todavía hay tickets que se pueden autofacturar, o no queda ninguno que incluir (otra global ya los tomó).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Año fuera de plazo, sin forma de pago declarable, o el PAC la rechazó.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "El PAC no confirmó (pudo emitirse): los tickets siguen reservados (F2-110).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Sin perfil fiscal activo o CSD vigente, o el PAC no está disponible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Emite la factura global de un periodo (F2-108).",
         "tags": [
           "facturacion"
         ]
@@ -14055,12 +14527,19 @@
           "mensaje": {
             "type": "string",
             "description": "El mensaje del estado en español, el mismo del portal."
+          },
+          "periodoGlobal": {
+            "type": "string",
+            "nullable": true,
+            "example": "septiembre de 2026",
+            "description": "F2-108: sólo con `en_global`, el periodo de la factura global en la que entró el ticket (en español, cortado en la zona de la sucursal). Nada más de la global sale al público."
           }
         },
         "required": [
           "codigo",
           "estado",
-          "mensaje"
+          "mensaje",
+          "periodoGlobal"
         ]
       },
       "TicketDto": {
@@ -20233,11 +20712,19 @@
           "facturado": {
             "type": "string",
             "example": "1500.00",
-            "description": "CFDI vigentes emitidos en el periodo."
+            "description": "CFDI vigentes emitidos en el periodo a CLIENTES (sin la factura global)."
           },
           "cfdis": {
             "type": "number",
-            "description": "Cuántos CFDI vigentes."
+            "description": "Cuántos CFDI vigentes a clientes."
+          },
+          "global": {
+            "description": "F2-108: facturas globales vigentes de la sucursal emitidas en el periodo.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CifrasCfdiDto"
+              }
+            ]
           },
           "cancelados": {
             "$ref": "#/components/schemas/CifrasCfdiDto"
@@ -20256,6 +20743,7 @@
           "cuentas",
           "facturado",
           "cfdis",
+          "global",
           "cancelados",
           "tasa"
         ]
@@ -20312,7 +20800,15 @@
             "$ref": "#/components/schemas/VentasTableroDto"
           },
           "facturado": {
-            "description": "CFDI VIGENTES emitidos en el periodo. Una reserva en `timbrando` nunca cuenta.",
+            "description": "CFDI VIGENTES emitidos en el periodo a CLIENTES. Una reserva en `timbrando` nunca cuenta. F2-108: la factura global NO suma aquí ni en la tasa (va en `global`).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CifrasCfdiDto"
+              }
+            ]
+          },
+          "global": {
+            "description": "F2-108: facturas globales (público en general) VIGENTES emitidas en el periodo. `facturado` + `global` = todos los CFDI vigentes que cuentan.",
             "allOf": [
               {
                 "$ref": "#/components/schemas/CifrasCfdiDto"
@@ -20366,6 +20862,7 @@
         "required": [
           "ventas",
           "facturado",
+          "global",
           "cancelados",
           "tasa",
           "porFacturar",
@@ -20473,9 +20970,10 @@
             "type": "string",
             "enum": [
               "ticket",
-              "manual"
+              "manual",
+              "global"
             ],
-            "description": "F2-107: `manual` = factura sin ticket."
+            "description": "F2-107: `manual` = factura sin ticket. F2-108: `global` = factura global a público en general."
           },
           "receptor": {
             "description": "Los datos con que se timbró (precargan la refacturación, F2-107).",
@@ -20994,6 +21492,12 @@
             "type": "string",
             "description": "Mensaje en español para mostrar tal cual. Sin datos del ticket."
           },
+          "periodoGlobal": {
+            "type": "string",
+            "nullable": true,
+            "example": "septiembre de 2026",
+            "description": "F2-108: sólo con `en_global`, el periodo de la factura global en la que entró el ticket (en español, cortado en la zona de la sucursal). Nada más de la global sale al público."
+          },
           "ticket": {
             "nullable": true,
             "description": "Datos no sensibles del ticket. SÓLO con `estado = pendiente`; en cualquier otro estado es `null` (ni sucursal, ni fecha, ni total).",
@@ -21009,6 +21513,7 @@
           "codigo",
           "estado",
           "mensaje",
+          "periodoGlobal",
           "ticket"
         ]
       },
@@ -21197,6 +21702,12 @@
             "type": "string",
             "description": "Mensaje en español para mostrar tal cual. Sin datos del ticket."
           },
+          "periodoGlobal": {
+            "type": "string",
+            "nullable": true,
+            "example": "septiembre de 2026",
+            "description": "F2-108: sólo con `en_global`, el periodo de la factura global en la que entró el ticket (en español, cortado en la zona de la sucursal). Nada más de la global sale al público."
+          },
           "ticket": {
             "nullable": true,
             "description": "SÓLO con `estado = pendiente`; en cualquier otro estado es `null`.",
@@ -21212,6 +21723,7 @@
           "codigo",
           "estado",
           "mensaje",
+          "periodoGlobal",
           "ticket"
         ]
       },
@@ -21894,6 +22406,541 @@
           "nuevo",
           "cancelacion",
           "mensaje"
+        ]
+      },
+      "VigenciaGlobalDto": {
+        "type": "object",
+        "properties": {
+          "regla": {
+            "type": "string",
+            "enum": [
+              "fin_de_mes",
+              "dias"
+            ]
+          },
+          "dias": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "regla",
+          "dias"
+        ]
+      },
+      "ConfiguracionGlobalDto": {
+        "type": "object",
+        "properties": {
+          "periodicidad": {
+            "type": "string",
+            "enum": [
+              "diaria",
+              "semanal",
+              "mensual"
+            ]
+          },
+          "automatica": {
+            "type": "boolean"
+          },
+          "automaticaDesde": {
+            "type": "string",
+            "nullable": true,
+            "description": "Desde cuándo emite sola (ISO)."
+          },
+          "vigencia": {
+            "$ref": "#/components/schemas/VigenciaGlobalDto"
+          },
+          "aviso": {
+            "type": "string",
+            "nullable": true,
+            "description": "Aviso en español cuando la vigencia de los códigos RETRASA la global (la global de un periodo espera a que venza el último ticket)."
+          }
+        },
+        "required": [
+          "periodicidad",
+          "automatica",
+          "automaticaDesde",
+          "vigencia",
+          "aviso"
+        ]
+      },
+      "GuardarConfiguracionGlobalDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "periodicidad": {
+            "type": "string",
+            "enum": [
+              "diaria",
+              "semanal",
+              "mensual"
+            ]
+          },
+          "automatica": {
+            "type": "boolean",
+            "description": "true = el programador emite sola la global de cada periodo `lista` que termine DESPUÉS de encenderla (los periodos anteriores se emiten a mano desde la vista previa)."
+          }
+        },
+        "required": [
+          "empresaId",
+          "periodicidad",
+          "automatica"
+        ]
+      },
+      "SucursalGlobalDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City"
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "zonaHoraria"
+        ]
+      },
+      "ResumenPeriodoGlobalDto": {
+        "type": "object",
+        "properties": {
+          "clave": {
+            "type": "string",
+            "example": "2026-08-01",
+            "description": "Primer día local: identifica el periodo."
+          },
+          "ultimoDia": {
+            "type": "string",
+            "example": "2026-08-31",
+            "description": "Último día local (inclusive)."
+          },
+          "periodicidad": {
+            "type": "string",
+            "enum": [
+              "diaria",
+              "semanal",
+              "mensual"
+            ]
+          },
+          "etiqueta": {
+            "type": "string",
+            "example": "agosto de 2026"
+          },
+          "desde": {
+            "type": "string",
+            "description": "Inicio del periodo (ISO, UTC)."
+          },
+          "hasta": {
+            "type": "string",
+            "description": "Fin del periodo, EXCLUSIVO (ISO, UTC)."
+          },
+          "periodicidadSat": {
+            "type": "string",
+            "enum": [
+              "01",
+              "02",
+              "04"
+            ],
+            "description": "c_Periodicidad del CFDI."
+          },
+          "meses": {
+            "type": "string",
+            "example": "08",
+            "description": "c_Meses del CFDI."
+          },
+          "anio": {
+            "type": "number",
+            "example": 2026
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "lista",
+              "esperando",
+              "en_curso",
+              "fuera_de_plazo"
+            ],
+            "description": "`lista` = se puede emitir; `esperando` = terminó, pero hay tickets que el cliente todavía puede facturar; `en_curso` = no ha terminado; `fuera_de_plazo` = el SAT ya no acepta su año."
+          },
+          "tickets": {
+            "type": "number",
+            "description": "Tickets que entrarían a la global (su código ya venció)."
+          },
+          "total": {
+            "type": "string",
+            "example": "12345.60",
+            "description": "Suma de sus totales."
+          },
+          "vigentes": {
+            "type": "number",
+            "description": "Tickets que el cliente todavía puede autofacturar."
+          },
+          "vigentesHasta": {
+            "type": "string",
+            "nullable": true,
+            "description": "Hasta cuándo, el último (ISO)."
+          },
+          "globalesPrevias": {
+            "type": "number",
+            "description": "Globales vigentes (o en emisión) que YA tiene el periodo. > 0 = la siguiente es complementaria (tickets que llegaron tarde); el programador no la emite solo."
+          }
+        },
+        "required": [
+          "clave",
+          "ultimoDia",
+          "periodicidad",
+          "etiqueta",
+          "desde",
+          "hasta",
+          "periodicidadSat",
+          "meses",
+          "anio",
+          "estado",
+          "tickets",
+          "total",
+          "vigentes",
+          "vigentesHasta",
+          "globalesPrevias"
+        ]
+      },
+      "GlobalEmitidaDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uuid": {
+            "type": "string",
+            "nullable": true
+          },
+          "serieFolio": {
+            "type": "string",
+            "example": "A-120"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "timbrando",
+              "vigente",
+              "cancelado"
+            ]
+          },
+          "total": {
+            "type": "string",
+            "example": "12345.60"
+          },
+          "emitidoAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "etiqueta": {
+            "type": "string",
+            "nullable": true,
+            "example": "julio de 2026"
+          },
+          "periodicidad": {
+            "type": "string",
+            "enum": [
+              "diaria",
+              "semanal",
+              "mensual"
+            ],
+            "nullable": true
+          },
+          "tickets": {
+            "type": "number"
+          },
+          "conArchivos": {
+            "type": "boolean",
+            "description": "Tiene XML y PDF guardados."
+          }
+        },
+        "required": [
+          "id",
+          "uuid",
+          "serieFolio",
+          "estado",
+          "total",
+          "emitidoAt",
+          "etiqueta",
+          "periodicidad",
+          "tickets",
+          "conArchivos"
+        ]
+      },
+      "PeriodosGlobalDto": {
+        "type": "object",
+        "properties": {
+          "sucursal": {
+            "$ref": "#/components/schemas/SucursalGlobalDto"
+          },
+          "periodicidad": {
+            "type": "string",
+            "enum": [
+              "diaria",
+              "semanal",
+              "mensual"
+            ]
+          },
+          "periodos": {
+            "description": "Del más reciente al más viejo.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResumenPeriodoGlobalDto"
+            }
+          },
+          "emitidas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GlobalEmitidaDto"
+            }
+          }
+        },
+        "required": [
+          "sucursal",
+          "periodicidad",
+          "periodos",
+          "emitidas"
+        ]
+      },
+      "PeriodoGlobalDto": {
+        "type": "object",
+        "properties": {
+          "clave": {
+            "type": "string",
+            "example": "2026-08-01",
+            "description": "Primer día local: identifica el periodo."
+          },
+          "ultimoDia": {
+            "type": "string",
+            "example": "2026-08-31",
+            "description": "Último día local (inclusive)."
+          },
+          "periodicidad": {
+            "type": "string",
+            "enum": [
+              "diaria",
+              "semanal",
+              "mensual"
+            ]
+          },
+          "etiqueta": {
+            "type": "string",
+            "example": "agosto de 2026"
+          },
+          "desde": {
+            "type": "string",
+            "description": "Inicio del periodo (ISO, UTC)."
+          },
+          "hasta": {
+            "type": "string",
+            "description": "Fin del periodo, EXCLUSIVO (ISO, UTC)."
+          },
+          "periodicidadSat": {
+            "type": "string",
+            "enum": [
+              "01",
+              "02",
+              "04"
+            ],
+            "description": "c_Periodicidad del CFDI."
+          },
+          "meses": {
+            "type": "string",
+            "example": "08",
+            "description": "c_Meses del CFDI."
+          },
+          "anio": {
+            "type": "number",
+            "example": 2026
+          }
+        },
+        "required": [
+          "clave",
+          "ultimoDia",
+          "periodicidad",
+          "etiqueta",
+          "desde",
+          "hasta",
+          "periodicidadSat",
+          "meses",
+          "anio"
+        ]
+      },
+      "TicketGlobalDto": {
+        "type": "object",
+        "properties": {
+          "folio": {
+            "type": "string",
+            "example": "000123"
+          },
+          "cerradoAt": {
+            "type": "string"
+          },
+          "total": {
+            "type": "string",
+            "example": "350.00"
+          }
+        },
+        "required": [
+          "folio",
+          "cerradoAt",
+          "total"
+        ]
+      },
+      "VistaPreviaGlobalDto": {
+        "type": "object",
+        "properties": {
+          "sucursal": {
+            "$ref": "#/components/schemas/SucursalGlobalDto"
+          },
+          "periodo": {
+            "$ref": "#/components/schemas/PeriodoGlobalDto"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "lista",
+              "esperando",
+              "en_curso",
+              "fuera_de_plazo"
+            ]
+          },
+          "tickets": {
+            "description": "Un concepto por ticket en el CFDI.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketGlobalDto"
+            }
+          },
+          "vigentes": {
+            "type": "number",
+            "description": "Tickets del periodo que el cliente todavía puede facturar."
+          },
+          "vigentesHasta": {
+            "type": "string",
+            "nullable": true
+          },
+          "formaPago": {
+            "type": "string",
+            "nullable": true,
+            "example": "01",
+            "description": "c_FormaPago: la de mayor monto entre los pagos. Null = no se puede emitir."
+          },
+          "subtotal": {
+            "type": "string",
+            "nullable": true,
+            "example": "10642.76"
+          },
+          "iva": {
+            "type": "string",
+            "nullable": true,
+            "example": "1702.84"
+          },
+          "total": {
+            "type": "string",
+            "nullable": true,
+            "example": "12345.60"
+          },
+          "globalesPrevias": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "sucursal",
+          "periodo",
+          "estado",
+          "tickets",
+          "vigentes",
+          "vigentesHasta",
+          "formaPago",
+          "subtotal",
+          "iva",
+          "total",
+          "globalesPrevias"
+        ]
+      },
+      "EmitirGlobalDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "periodicidad": {
+            "type": "string",
+            "enum": [
+              "diaria",
+              "semanal",
+              "mensual"
+            ]
+          },
+          "clave": {
+            "type": "string",
+            "example": "2026-08-01",
+            "description": "Primer día local del periodo."
+          }
+        },
+        "required": [
+          "empresaId",
+          "sucursalId",
+          "periodicidad",
+          "clave"
+        ]
+      },
+      "FacturaGlobalEmitidaDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "serieFolio": {
+            "type": "string",
+            "example": "A-120"
+          },
+          "total": {
+            "type": "string",
+            "example": "12345.60"
+          },
+          "tickets": {
+            "type": "number",
+            "description": "Tickets que ampara."
+          },
+          "etiqueta": {
+            "type": "string",
+            "example": "agosto de 2026"
+          },
+          "descargas": {
+            "$ref": "#/components/schemas/DescargasFacturaDto"
+          }
+        },
+        "required": [
+          "id",
+          "uuid",
+          "serieFolio",
+          "total",
+          "tickets",
+          "etiqueta",
+          "descargas"
         ]
       }
     }

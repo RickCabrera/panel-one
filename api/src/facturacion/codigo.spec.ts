@@ -10,6 +10,8 @@ import {
   generarCodigo,
   LONGITUD_CODIGO,
   MENSAJE_ESTADO,
+  mensajeEstado,
+  periodoGlobalDe,
   normalizarCodigo,
   REGEX_CODIGO,
 } from './codigo';
@@ -166,31 +168,56 @@ describe('estadoPublico()', () => {
   const vivo = { cancelado: false };
 
   it('pendiente antes de expira_at; expirado desde expira_at (exclusivo)', () => {
-    expect(estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null }, vivo, antes)).toBe('pendiente');
-    expect(estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null }, vivo, justo)).toBe('expirado');
+    expect(
+      estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null, global: null }, vivo, antes),
+    ).toBe('pendiente');
+    expect(
+      estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null, global: null }, vivo, justo),
+    ).toBe('expirado');
   });
 
   it('expirado guardado es expirado aunque su fecha no haya pasado', () => {
-    expect(estadoPublico({ estado: 'expirado', expiraAt, cfdi: null }, vivo, antes)).toBe('expirado');
+    expect(
+      estadoPublico({ estado: 'expirado', expiraAt, cfdi: null, global: null }, vivo, antes),
+    ).toBe('expirado');
   });
 
   it('facturado y en_global mandan sobre la cancelación y la expiración', () => {
     for (const estado of ['facturado', 'en_global'] as const) {
-      expect(estadoPublico({ estado, expiraAt, cfdi: null }, { cancelado: true }, justo + 1)).toBe(estado);
+      expect(
+        estadoPublico(
+          { estado, expiraAt, cfdi: null, global: null },
+          { cancelado: true },
+          justo + 1,
+        ),
+      ).toBe(estado);
     }
   });
 
   it('cuenta cancelada: cancelado, aun vencido', () => {
-    expect(estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null }, { cancelado: true }, antes)).toBe(
-      'cancelado',
-    );
-    expect(estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null }, { cancelado: true }, justo)).toBe(
-      'cancelado',
-    );
+    expect(
+      estadoPublico(
+        { estado: 'pendiente', expiraAt, cfdi: null, global: null },
+        { cancelado: true },
+        antes,
+      ),
+    ).toBe('cancelado');
+    expect(
+      estadoPublico(
+        { estado: 'pendiente', expiraAt, cfdi: null, global: null },
+        { cancelado: true },
+        justo,
+      ),
+    ).toBe('cancelado');
   });
 
   it('con una reserva de CFDI en timbrado: en_proceso, aun vencido o cancelado (F2-104)', () => {
-    const reserva = { estado: 'pendiente' as const, expiraAt, cfdi: { estado: 'timbrando' as const } };
+    const reserva = {
+      estado: 'pendiente' as const,
+      expiraAt,
+      cfdi: { estado: 'timbrando' as const },
+      global: null,
+    };
     expect(estadoPublico(reserva, vivo, antes)).toBe('en_proceso');
     expect(estadoPublico(reserva, vivo, justo + 1)).toBe('en_proceso');
     expect(estadoPublico(reserva, { cancelado: true }, antes)).toBe('en_proceso');
@@ -199,11 +226,51 @@ describe('estadoPublico()', () => {
   it('un CFDI vigente es facturado aunque el código no lo diga todavía (F2-104)', () => {
     expect(
       estadoPublico(
-        { estado: 'pendiente', expiraAt, cfdi: { estado: 'vigente' } },
+        { estado: 'pendiente', expiraAt, cfdi: { estado: 'vigente' }, global: null },
         { cancelado: true },
         justo + 1,
       ),
     ).toBe('facturado');
+  });
+
+  it('F2-108: dentro de una global en timbrado → en_proceso; ya vigente → en_global', () => {
+    const conGlobal = (estado: 'timbrando' | 'vigente' | 'cancelado') => ({
+      estado: 'pendiente' as const,
+      expiraAt,
+      cfdi: null,
+      global: { cfdi: { estado } },
+    });
+    // Una global sólo toma tickets expirados: se mide después de `expira_at`.
+    expect(estadoPublico(conGlobal('timbrando'), vivo, justo + 1)).toBe('en_proceso');
+    expect(estadoPublico(conGlobal('vigente'), vivo, justo + 1)).toBe('en_global');
+    // Una global cancelada no ampara al ticket: vuelve a decir lo que diría sin ella (F2-109).
+    expect(estadoPublico(conGlobal('cancelado'), vivo, justo + 1)).toBe('expirado');
+    // `en_global` guardado manda, igual que antes.
+    expect(
+      estadoPublico({ ...conGlobal('vigente'), estado: 'en_global' }, { cancelado: true }, antes),
+    ).toBe('en_global');
+  });
+
+  it('F2-108: el mensaje de en_global dice el periodo, cortado en la zona de la sucursal', () => {
+    // 1 de agosto de 2026 00:00 en CDMX = 06:00 UTC.
+    const global = {
+      cfdi: { globalPeriodicidad: '04', globalDesde: new Date('2026-08-01T06:00:00.000Z') },
+    };
+    expect(periodoGlobalDe('en_global', global, 'America/Mexico_City')).toBe('agosto de 2026');
+    // El `desde` de una global es el inicio en la zona de SU sucursal: en Tijuana, 07:00 UTC.
+    const tijuana = {
+      cfdi: { globalPeriodicidad: '04', globalDesde: new Date('2026-08-01T07:00:00.000Z') },
+    };
+    expect(periodoGlobalDe('en_global', tijuana, 'America/Tijuana')).toBe('agosto de 2026');
+    expect(periodoGlobalDe('expirado', global, 'America/Mexico_City')).toBeNull();
+    expect(periodoGlobalDe('en_global', null, 'America/Mexico_City')).toBeNull();
+    expect(mensajeEstado('en_global', 'agosto de 2026')).toBe(
+      'Este ticket se incluyó en la factura global del periodo agosto de 2026 y ya no se puede ' +
+        'facturar aquí. Si necesitas aclararlo, contacta al restaurante.',
+    );
+    // Sin periodo conocido (un en_global guardado sin su global), el texto general.
+    expect(mensajeEstado('en_global', null)).toBe(MENSAJE_ESTADO.en_global);
+    expect(mensajeEstado('pendiente', 'agosto de 2026')).toBe(MENSAJE_ESTADO.pendiente);
   });
 
   it('en_proceso dice qué hacer si la factura no llega (no invita a pedirla otra vez)', () => {

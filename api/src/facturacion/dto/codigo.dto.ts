@@ -58,6 +58,16 @@ export class ConsultaCodigoDto {
   mensaje!: string;
 
   @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'septiembre de 2026',
+    description:
+      'F2-108: sólo con `en_global`, el periodo de la factura global en la que entró el ticket ' +
+      '(en español, cortado en la zona de la sucursal). Nada más de la global sale al público.',
+  })
+  periodoGlobal!: string | null;
+
+  @ApiProperty({
     type: TicketCodigoDto,
     nullable: true,
     description:

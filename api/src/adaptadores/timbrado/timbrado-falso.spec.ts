@@ -25,7 +25,9 @@ function analizarXml(xml: string): Array<{ nombre: string; attrs: Record<string,
     .trim();
   const pila: string[] = [];
   const elementos: Array<{ nombre: string; attrs: Record<string, string> }> = [];
-  const token = /<(\/?)([A-Za-z_][\w:.-]*)((?:\s+[\w:.-]+="[^"<]*")*)\s*(\/?)>|([^<]+)/gy;
+  // Los nombres de atributo aceptan letras con acento: el Anexo 20 tiene `Año` (F2-108).
+  const token =
+    /<(\/?)([A-Za-z_][\w:.-]*)((?:\s+[\w:.\u00C0-\u00FF-]+="[^"<]*")*)\s*(\/?)>|([^<]+)/gy;
   let raices = 0;
   let pos = 0;
   let m: RegExpExecArray | null;
@@ -43,7 +45,7 @@ function analizarXml(xml: string): Array<{ nombre: string; attrs: Record<string,
     }
     if (pila.length === 0) raices += 1;
     const attrs: Record<string, string> = {};
-    for (const a of attrsTxt.matchAll(/([\w:.-]+)="([^"]*)"/g)) {
+    for (const a of attrsTxt.matchAll(/([\w:.À-ÿ-]+)="([^"]*)"/g)) {
       if (/&(?!(amp|lt|gt|quot|apos);)/.test(a[2])) throw new Error(`& suelto en ${a[1]}`);
       if (a[1] in attrs) throw new Error(`atributo repetido ${a[1]}`);
       attrs[a[1]] = a[2]
@@ -380,5 +382,32 @@ describe('PAC falso: sustitución (F2-107)', () => {
     ).rejects.toMatchObject(rechazo);
     await expect(pac.consultarEstado(anterior)).resolves.toMatchObject({ estado: 'vigente' });
     expect(pac.cancelacionDe(anterior.uuid)).toBeUndefined();
+  });
+});
+
+describe('PAC falso: factura global (F2-108)', () => {
+  it('el XML trae InformacionGlobal como PRIMER hijo del Comprobante, bien formado', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const global = await pac.emitir({
+      ...solicitudCfdi(),
+      referencia: 'global-1',
+      receptor: {
+        rfc: 'XAXX010101000',
+        nombre: 'PUBLICO EN GENERAL',
+        usoCfdi: 'S01',
+        regimenFiscal: '616',
+        domicilioFiscal: '06700',
+      },
+      informacionGlobal: { periodicidad: '04', meses: '08', anio: 2026 },
+    });
+    const elementos = analizarXml(global.xml);
+    const nombres = elementos.map((e) => e.nombre);
+    expect(nombres[0]).toBe('cfdi:Comprobante');
+    expect(nombres[1]).toBe('cfdi:InformacionGlobal');
+    expect(elementos[1].attrs).toEqual({ Periodicidad: '04', Meses: '08', Año: '2026' });
+    expect(nombres.indexOf('cfdi:Emisor')).toBeGreaterThan(1);
+    // Sin global, no hay nodo.
+    const normal = await pac.emitir(solicitudCfdi());
+    expect(normal.xml).not.toContain('InformacionGlobal');
   });
 });

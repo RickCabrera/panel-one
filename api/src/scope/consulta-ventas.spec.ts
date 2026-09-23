@@ -359,6 +359,8 @@ describe('alturaAl (F2-220)', () => {
       expect(cuerpo).toContain(
         "(f.estado = 'vigente' AND (n.id IS NULL OR n.estado <> 'vigente')) AS cuenta_facturado",
       );
+      // F2-108: la factura global se marca aparte; `cuenta_facturado` no cambia de significado.
+      expect(cuerpo).toContain("(f.origen::text = 'global') AS es_global");
       expect(cuerpo).toMatch(/WHERE f\.empresa_id = \?::uuid AND f\.empresa_id = \?::uuid\s/);
       // Una reserva `timbrando` NUNCA entra.
       expect(cuerpo).toContain("AND f.estado IN ('vigente', 'cancelado')");

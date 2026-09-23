@@ -292,6 +292,8 @@ export interface CodigoFacturacionTicket {
   codigo: string;
   estado: EstadoCodigoFacturacion;
   mensaje: string;
+  /** F2-108: sólo con `en_global`, el periodo de la factura global ("agosto de 2026"). */
+  periodoGlobal: string | null;
 }
 
 /** `PaginaTicketsDto`. */
@@ -1606,7 +1608,10 @@ export interface PortalPublico {
 export interface ConsultaCodigoPortal {
   codigo: string;
   estado: EstadoCodigoFacturacion;
+  /** Del api, tal cual (F2-108: con `en_global` ya dice el periodo de la global). */
   mensaje: string;
+  /** F2-108: sólo con `en_global`, el periodo de la factura global. */
+  periodoGlobal?: string | null;
   ticket: TicketPortal | null;
 }
 
@@ -1687,6 +1692,8 @@ export interface SucursalTablero {
   cuentas: number;
   facturado: Importe;
   cfdis: number;
+  /** F2-108: la factura global de la sucursal (NO suma en `facturado` ni en la tasa). */
+  global: CifrasCfdi;
   cancelados: CifrasCfdi;
   tasa: string | null;
 }
@@ -1694,7 +1701,10 @@ export interface SucursalTablero {
 /** `TableroFacturacionDto`. Lo facturado va por fecha de EMISIÓN; la venta, por cierre. */
 export interface TableroFacturacion {
   ventas: { venta: Importe; cuentas: number };
+  /** A CLIENTES (F2-108: sin la factura global). */
   facturado: CifrasCfdi;
+  /** F2-108: facturas globales vigentes emitidas en el periodo, aparte. */
+  global: CifrasCfdi;
   cancelados: CifrasCfdi;
   tasa: string | null;
   porFacturar: { cuentas: number; monto: Importe };
@@ -1733,8 +1743,8 @@ export interface CfdiFila {
   motivoCancelacion: string | null;
 }
 
-/** F2-107. */
-export type OrigenCfdi = 'ticket' | 'manual';
+/** F2-107; F2-108 agrega `global` (factura a público en general). */
+export type OrigenCfdi = 'ticket' | 'manual' | 'global';
 
 /** `ReceptorFilaDto` (F2-107): el receptor como se timbró; el correo puede faltar. */
 export interface ReceptorCfdi {
@@ -1815,4 +1825,92 @@ export interface EnvioCfdi {
   intentos: number;
   error: string | null;
   ultimoIntentoAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// F2-108 · Factura global a público en general.
+// ---------------------------------------------------------------------------
+
+export type PeriodicidadGlobal = 'diaria' | 'semanal' | 'mensual';
+export type EstadoPeriodoGlobal = 'lista' | 'esperando' | 'en_curso' | 'fuera_de_plazo';
+
+/** `ConfiguracionGlobalDto`. */
+export interface ConfiguracionGlobal {
+  periodicidad: PeriodicidadGlobal;
+  automatica: boolean;
+  automaticaDesde: string | null;
+  vigencia: { regla: 'fin_de_mes' | 'dias'; dias: number | null };
+  /** Por qué la vigencia de los códigos retrasa la global, o null. */
+  aviso: string | null;
+}
+
+/** `PeriodoGlobalDto`. `hasta` es exclusivo; los instantes en UTC. */
+export interface PeriodoGlobal {
+  clave: string;
+  ultimoDia: string;
+  periodicidad: PeriodicidadGlobal;
+  etiqueta: string;
+  desde: string;
+  hasta: string;
+  periodicidadSat: string;
+  meses: string;
+  anio: number;
+}
+
+/** `ResumenPeriodoGlobalDto`. */
+export interface ResumenPeriodoGlobal extends PeriodoGlobal {
+  estado: EstadoPeriodoGlobal;
+  tickets: number;
+  total: Importe;
+  vigentes: number;
+  vigentesHasta: string | null;
+  globalesPrevias: number;
+}
+
+/** `GlobalEmitidaDto`. */
+export interface GlobalEmitida {
+  id: string;
+  uuid: string | null;
+  serieFolio: string;
+  estado: 'timbrando' | 'vigente' | 'cancelado';
+  total: Importe;
+  emitidoAt: string | null;
+  etiqueta: string | null;
+  periodicidad: PeriodicidadGlobal | null;
+  tickets: number;
+  conArchivos: boolean;
+}
+
+/** `PeriodosGlobalDto`. */
+export interface PeriodosGlobal {
+  sucursal: { id: string; nombre: string; zonaHoraria: string };
+  periodicidad: PeriodicidadGlobal;
+  periodos: ResumenPeriodoGlobal[];
+  emitidas: GlobalEmitida[];
+}
+
+/** `VistaPreviaGlobalDto`. */
+export interface VistaPreviaGlobal {
+  sucursal: { id: string; nombre: string; zonaHoraria: string };
+  periodo: PeriodoGlobal;
+  estado: EstadoPeriodoGlobal;
+  tickets: Array<{ folio: string; cerradoAt: string; total: Importe }>;
+  vigentes: number;
+  vigentesHasta: string | null;
+  formaPago: string | null;
+  subtotal: Importe | null;
+  iva: Importe | null;
+  total: Importe | null;
+  globalesPrevias: number;
+}
+
+/** `FacturaGlobalEmitidaDto`. */
+export interface FacturaGlobalEmitida {
+  id: string;
+  uuid: string;
+  serieFolio: string;
+  total: Importe;
+  tickets: number;
+  etiqueta: string;
+  descargas: { xml: string | null; pdf: string | null };
 }

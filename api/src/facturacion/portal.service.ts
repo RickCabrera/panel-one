@@ -20,7 +20,8 @@ import {
 import {
   esCodigoValido,
   estadoPublico,
-  MENSAJE_ESTADO,
+  mensajeEstado,
+  periodoGlobalDe,
   normalizarCodigo,
   type EstadoPublico,
 } from './codigo';
@@ -110,10 +111,12 @@ export class PortalFacturacionService {
 
   async consultarCodigo(slug: string, texto: string): Promise<ConsultaCodigoPortalDto> {
     const { fila, estado } = await this.#codigo(slug, texto);
+    const periodoGlobal = periodoGlobalDe(estado, fila.global, fila.sucursal.zonaHoraria);
     return {
       codigo: fila.codigo,
       estado,
-      mensaje: MENSAJE_ESTADO[estado],
+      mensaje: mensajeEstado(estado, periodoGlobal),
+      periodoGlobal,
       ticket:
         estado === 'pendiente'
           ? {
@@ -137,10 +140,12 @@ export class PortalFacturacionService {
   async solicitarFactura(slug: string, dto: SolicitarFacturaDto): Promise<FacturaPortal> {
     const { portal, fila, estado } = await this.#codigo(slug, dto.codigo);
     if (estado !== 'pendiente') {
+      // F2-108: un ticket en una global dice de qué periodo, también en el 409.
+      const periodoGlobal = periodoGlobalDe(estado, fila.global, fila.sucursal.zonaHoraria);
       throw new ConflictException({
         statusCode: 409,
         error: 'Conflict',
-        message: MENSAJE_ESTADO[estado],
+        message: mensajeEstado(estado, periodoGlobal),
         estado,
       });
     }

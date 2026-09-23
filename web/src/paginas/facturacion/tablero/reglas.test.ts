@@ -18,6 +18,7 @@ import {
 const TABLERO: TableroFacturacion = {
   ventas: { venta: '3406.78', cuentas: 9 },
   facturado: { monto: '2350.00', cfdis: 4 },
+  global: { monto: '0.00', cfdis: 0 },
   cancelados: { monto: '250.00', cfdis: 1 },
   tasa: '0.6898',
   porFacturar: { cuentas: 2, monto: '273.45' },
@@ -72,6 +73,8 @@ describe('motivoSinFacturas', () => {
     expect(motivoSinFacturas(vacio)).toContain('datos fiscales y un CSD vigente');
     // Sólo cancelados también es "hay facturas": no se esconde lo que pasó.
     expect(motivoSinFacturas({ ...vacio, cancelados: { monto: '10.00', cfdis: 1 } })).toBeNull();
+    // F2-108: sólo una factura global también es "hay facturas".
+    expect(motivoSinFacturas({ ...vacio, global: { monto: '10.00', cfdis: 1 } })).toBeNull();
   });
 });
 

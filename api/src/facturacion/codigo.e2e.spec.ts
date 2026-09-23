@@ -462,6 +462,7 @@ describe('Código corto de facturación (e2e, F2-101)', () => {
         codigo,
         estado: 'pendiente',
         mensaje: 'El ticket se puede facturar.',
+        periodoGlobal: null,
         ticket: {
           sucursal: 'A1',
           fecha: '2026-09-15T20:00:00.000Z',
@@ -492,6 +493,7 @@ describe('Código corto de facturación (e2e, F2-101)', () => {
         codigo,
         estado: 'expirado',
         mensaje: 'El plazo para facturar este ticket ya venció.',
+        periodoGlobal: null,
         ticket: null,
       });
       sinDatos(res.text);
@@ -512,7 +514,7 @@ describe('Código corto de facturación (e2e, F2-101)', () => {
       await prisma.codigoFacturacion.updateMany({ where: { codigo }, data: { estado } });
       const res = await consultar(codigo);
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ codigo, estado, mensaje, ticket: null });
+      expect(res.body).toEqual({ codigo, estado, mensaje, periodoGlobal: null, ticket: null });
       sinDatos(res.text);
     });
 
@@ -527,6 +529,7 @@ describe('Código corto de facturación (e2e, F2-101)', () => {
         codigo: antes.codigo,
         estado: 'cancelado',
         mensaje: 'La cuenta de este ticket fue cancelada y no se puede facturar.',
+        periodoGlobal: null,
         ticket: null,
       });
       sinDatos(res.text);

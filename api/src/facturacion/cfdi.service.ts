@@ -23,6 +23,7 @@ import { perfilEmite, type DatosReceptor, type ReservaCfdi } from '../scope/escr
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import { solicitudDeConsumo } from './cfdi';
 import type { EmisionPortal, FacturaPortal, SolicitudFacturaPortal } from './emision-portal';
+import { solicitudGlobal } from './global';
 import { EntregaCfdiService } from './entrega.service';
 
 /** El punto de espera entre reintentos. Un provider para que los tests no duerman. */
@@ -269,6 +270,21 @@ export class CfdiService implements EmisionPortal {
 }
 
 function solicitudDe(r: ReservaCfdi, receptor: DatosReceptor, fecha: Date): SolicitudCfdi {
+  // F2-108: la factura global lleva un concepto por ticket y su InformacionGlobal; el receptor es
+  // siempre público en general (lo arma `solicitudGlobal`, no quien llama).
+  if (r.global) {
+    return solicitudGlobal({
+      reservaId: r.reservaId,
+      serie: r.serie,
+      folio: r.folio,
+      fecha,
+      emisor: r.emisor,
+      sucursal: r.sucursal,
+      informacion: r.global.informacion,
+      tickets: r.global.tickets,
+      formaPago: r.formaPago,
+    });
+  }
   return solicitudDeConsumo({
     reservaId: r.reservaId,
     serie: r.serie,

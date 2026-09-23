@@ -312,6 +312,7 @@ describe('Tablero de facturación (e2e, F2-106)', () => {
     expect(t.ventas).toEqual({ venta: '3406.78', cuentas: 9 });
     // Vigentes: A1-1, A1-2, A2-1, A2-3. Ni A1-7 (emitido en agosto local), ni B-1, ni la reserva.
     expect(t.facturado).toEqual({ monto: '2350.00', cfdis: 4 });
+    expect(t.global).toEqual({ monto: '0.00', cfdis: 0 });
     expect(t.cancelados).toEqual({ monto: '250.00', cfdis: 1 });
     expect(t.tasa).toBe('0.6898');
     // A1-8 y A2-2 (A1-4 ya venció; A1-6 tiene reserva; A1-3 está facturado).
@@ -324,6 +325,8 @@ describe('Tablero de facturación (e2e, F2-106)', () => {
         cuentas: 6,
         facturado: '1500.00',
         cfdis: 2,
+        // F2-108: esta fixture no tiene factura global.
+        global: { monto: '0.00', cfdis: 0 },
         cancelados: { monto: '250.00', cfdis: 1 },
         tasa: '0.6232',
       },
@@ -334,6 +337,7 @@ describe('Tablero de facturación (e2e, F2-106)', () => {
         cuentas: 3,
         facturado: '850.00',
         cfdis: 2,
+        global: { monto: '0.00', cfdis: 0 },
         cancelados: { monto: '0.00', cfdis: 0 },
         tasa: '0.8500',
       },
@@ -490,7 +494,12 @@ describe('Tablero de facturación (e2e, F2-106)', () => {
 
     const codigos = await prisma.codigoFacturacion.findMany({
       where: { cheque: { folioSr: { startsWith: 'N-' } } },
-      include: { cfdi: { select: { estado: true } }, cheque: true },
+      include: {
+        cfdi: { select: { estado: true } },
+        // F2-108: `estadoPublico` también lee la factura global del ticket (aquí ninguno tiene).
+        global: { select: { cfdi: { select: { estado: true } } } },
+        cheque: true,
+      },
     });
     expect(codigos).toHaveLength(RAMAS.length);
     for (const c of codigos) {

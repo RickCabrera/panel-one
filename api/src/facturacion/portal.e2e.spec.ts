@@ -435,6 +435,7 @@ describe('Portal público de autofactura (e2e, F2-103)', () => {
         codigo: codigos.pend,
         estado: 'pendiente',
         mensaje: 'El ticket se puede facturar.',
+        periodoGlobal: null,
         ticket: {
           sucursal: 'A1',
           fecha: '2026-09-15T20:00:00.000Z',
@@ -500,7 +501,7 @@ describe('Portal público de autofactura (e2e, F2-103)', () => {
       for (const [codigo, estado, mensaje] of esperados) {
         const res = await consultar(SLUG_A1, codigo);
         expect(res.status).toBe(200);
-        expect(res.body).toEqual({ codigo, estado, mensaje, ticket: null });
+        expect(res.body).toEqual({ codigo, estado, mensaje, periodoGlobal: null, ticket: null });
         respuestas.push(res);
       }
       reloj.t = Date.parse(FIN_DE_SEPTIEMBRE);
@@ -682,6 +683,7 @@ describe('Portal público de autofactura (e2e, F2-103)', () => {
       codigo: codigos.pend,
       estado: 'pendiente',
       mensaje: 'El ticket se puede facturar.',
+      periodoGlobal: null,
     });
     expect(porFolio.get('T-POR-FACT')).toMatchObject({ codigo: codigos.fact, estado: 'facturado' });
     // Los de la empresa B no aparecen.

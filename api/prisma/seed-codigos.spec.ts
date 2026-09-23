@@ -66,7 +66,7 @@ describe('generarCodigosSeed()', () => {
     expect(e.sucursalId).toBe(FX.sucursalA1);
     const cheque = cheques.find((c) => c.id === e.chequeId)!;
     // El seed no genera CFDI (F2-106 los siembra): ningún código tiene reserva.
-    expect(estadoPublico({ ...e, cfdi: null }, cheque, AHORA.getTime())).toBe('pendiente');
+    expect(estadoPublico({ ...e, cfdi: null, global: null }, cheque, AHORA.getTime())).toBe('pendiente');
     const posteriores = codigos.filter(
       (c) =>
         c.sucursalId === FX.sucursalA1 &&
@@ -80,7 +80,7 @@ describe('generarCodigosSeed()', () => {
     const porEstado = new Map<string, number>();
     for (const c of codigos) {
       const cheque = cheques.find((x) => x.id === c.chequeId)!;
-      const e = estadoPublico({ ...c, cfdi: null }, cheque, AHORA.getTime());
+      const e = estadoPublico({ ...c, cfdi: null, global: null }, cheque, AHORA.getTime());
       porEstado.set(e, (porEstado.get(e) ?? 0) + 1);
     }
     expect(porEstado.get('pendiente')).toBeGreaterThan(0);

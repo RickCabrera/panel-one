@@ -27,6 +27,7 @@ import {
 } from './facturacion/reglas';
 import { PortalesAutofactura } from './facturacion/Portales';
 import { FacturaSinTicket } from './facturacion/emision/FacturaSinTicket';
+import { FacturaGlobal } from './facturacion/global/FacturaGlobal';
 import { TableroFacturacion } from './facturacion/tablero/Tablero';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './inicio/Tarjeta';
 import { Vista } from './Vista';
@@ -42,26 +43,29 @@ const ERROR_CAMPO = 'text-xs text-peligro';
 const mensajeDe = (e: unknown) => (e instanceof ErrorApi ? e.message : 'Error inesperado.');
 
 /** Las pestañas de Facturación (`?tab=`). Sin `tab` (o uno desconocido), el tablero. */
-export type PestanaFacturacion = 'tablero' | 'manual' | 'datos';
+export type PestanaFacturacion = 'tablero' | 'manual' | 'global' | 'datos';
 const PARAM_TAB = 'tab';
 
 function leerPestana(parametros: URLSearchParams): PestanaFacturacion {
   const tab = parametros.get(PARAM_TAB);
-  return tab === 'datos' || tab === 'manual' ? tab : 'tablero';
+  return tab === 'datos' || tab === 'manual' || tab === 'global' ? tab : 'tablero';
 }
 
 const PESTANAS: readonly { id: PestanaFacturacion; texto: string }[] = [
   { id: 'tablero', texto: 'Tablero' },
   { id: 'manual', texto: 'Sin ticket' },
+  { id: 'global', texto: 'Factura global' },
   { id: 'datos', texto: 'Datos fiscales' },
 ];
 
 /**
- * Facturación (sólo administradores). Tres pestañas:
+ * Facturación (sólo administradores). Cuatro pestañas:
  * - Tablero (F2-106): lo vendido contra lo facturado del periodo y la sucursal de la cabecera, las
  *   facturas emitidas, lo que falta por facturar y los correos por reenviar.
  * - Sin ticket (F2-107): factura por un importe capturado a mano, sin cheque (`origen = manual`).
  *   La refacturación de una factura vigente se hace desde la tabla del Tablero.
+ * - Factura global (F2-108): los tickets que nadie facturó a tiempo, por sucursal y periodo, a
+ *   público en general; configuración, vista previa y emisión.
  * - Datos fiscales (F2-100): con qué datos emite sus facturas la empresa y su certificado de sello
  *   digital (CSD). Del CSD sólo se ve METADATA (número, RFC, vigencia): el .key y su contraseña se
  *   mandan una vez al servidor, que los pasa al PAC sin guardarlos, y aquí se borran del
@@ -104,6 +108,7 @@ export function Facturacion() {
       </div>
       {pestana === 'tablero' && <PestanaTablero />}
       {pestana === 'manual' && <PestanaSinTicket />}
+      {pestana === 'global' && <PestanaGlobal />}
       {pestana === 'datos' && <DatosFiscales />}
     </Vista>
   );
@@ -122,6 +127,11 @@ function PestanaTablero() {
       <TableroFacturacion filtro={filtro} rango={rango} sucursales={sucursales.data ?? []} />
     </>
   );
+}
+
+function PestanaGlobal() {
+  const { empresaId, sucursales } = useAlcance();
+  return <FacturaGlobal empresaId={empresaId} sucursales={sucursales.data ?? []} />;
 }
 
 function PestanaSinTicket() {

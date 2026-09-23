@@ -92,6 +92,51 @@ describe('Contrato OpenAPI', () => {
     }
   });
 
+  it('F2-108: la factura global es de administradores, con 404 y sus 409/422/502/503', async () => {
+    const { paths } = await generarDocumento();
+    const codigos = (op?: { responses?: object; security?: unknown }) =>
+      Object.keys(op?.responses ?? {}).sort();
+    const emitir = paths['/facturacion/global']?.post;
+    expect(emitir?.security).toEqual([{ bearer: [] }]);
+    expect(codigos(emitir)).toEqual([
+      '201',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+      '422',
+      '502',
+      '503',
+    ]);
+    for (const ruta of ['/facturacion/global/periodos', '/facturacion/global/periodos/{clave}']) {
+      expect(codigos(paths[ruta]?.get)).toEqual(['200', '400', '401', '403', '404']);
+    }
+    expect(codigos(paths['/facturacion/global/configuracion']?.get)).toEqual([
+      '200',
+      '401',
+      '403',
+      '404',
+    ]);
+    expect(codigos(paths['/facturacion/global/configuracion']?.put)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
+    // Los tres lectores públicos del código dicen el periodo de la global.
+    const esquemas = JSON.stringify((await generarDocumento()).components?.schemas ?? {});
+    for (const dto of [
+      'ConsultaCodigoDto',
+      'ConsultaCodigoPortalDto',
+      'CodigoFacturacionTicketDto',
+    ]) {
+      expect(esquemas).toContain(`"${dto}"`);
+    }
+    expect(esquemas.match(/"periodoGlobal"/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+
   it('F2-105: la descarga firmada es pública con 404 único y 429; lo demás, con bearer, roles y 404', async () => {
     const { paths } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -925,6 +970,10 @@ describe('Contrato OpenAPI', () => {
         '/facturacion/cfdis/{id}/pdf',
         '/facturacion/cfdis/{id}/xml',
         '/facturacion/envios',
+        '/facturacion/global',
+        '/facturacion/global/configuracion',
+        '/facturacion/global/periodos',
+        '/facturacion/global/periodos/{clave}',
         // F2-106: tablero de facturación (resumen, tabla de CFDI y cuentas por facturar).
         '/facturacion/cfdis',
         '/facturacion/por-facturar',

@@ -54,7 +54,8 @@ import type { EmpresaScope } from './empresa-scope';
  *   emitido_at, mes_local, hora_local, receptor_rfc, receptor_nombre, receptor_regimen,
  *   receptor_cp, receptor_uso, receptor_email, con_xml, con_pdf,
  *   folio_ticket, sucursal_nombre, origen, motivo_cancelacion, sustituye_a_uuid,
- *   sustituido_por_uuid, sustituto_estado, cuenta_facturado)` (F2-106, F2-107): los CFDI EMITIDOS (`vigente` o `cancelado`; una
+ *   sustituido_por_uuid, sustituto_estado, cuenta_facturado, es_global)` (F2-106, F2-107,
+ *   F2-108): los CFDI EMITIDOS (`vigente` o `cancelado`; una
  *   reserva `timbrando` NUNCA entra) cuyo `emitido_at` cae en el rango, cortado en la zona de SU
  *   sucursal como `ventas` (también con `alturaAl`). `mes_local` (`YYYY-MM`) y `hora_local` son los
  *   de la emisión en esa zona. `folio_ticket` es el del cheque (nulo si el CFDI no tiene cheque:
@@ -65,6 +66,9 @@ import type { EmpresaScope } from './empresa-scope';
  *   rango o ser una reserva) y `cuenta_facturado`: `vigente` Y sin un sustituto `vigente`.
  *   DECISION PROVISIONAL (nocturno): mientras la cancelación 01 del anterior sigue pendiente hay
  *   DOS vigentes por la misma venta; lo facturado cuenta sólo el sustituto (`cuenta_facturado`).
+ *   F2-108: `origen` también puede ser `global` (factura a público en general, sin cheque) y
+ *   `es_global` lo dice. `cuenta_facturado` NO cambia de significado (una global vigente también
+ *   cuenta); quien agrega decide si separa la global (el tablero la separa: `es_global`).
  * - `codigos_ventas(cheque_id, empresa_id, sucursal_id, folio, cerrado_at, total, codigo, estado,
  *   expira_at, con_cfdi)` (F2-106): el código de facturación de cada cuenta de `ventas`, con su
  *   estado GUARDADO y `con_cfdi` = tiene un CFDI `vigente` o una reserva `timbrando` (uno
@@ -432,7 +436,8 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
            c.folio AS folio_ticket, s.nombre AS sucursal_nombre,
            f.origen::text AS origen, f.motivo_cancelacion, a.uuid AS sustituye_a_uuid,
            n.uuid AS sustituido_por_uuid, n.estado::text AS sustituto_estado,
-           (f.estado = 'vigente' AND (n.id IS NULL OR n.estado <> 'vigente')) AS cuenta_facturado
+           (f.estado = 'vigente' AND (n.id IS NULL OR n.estado <> 'vigente')) AS cuenta_facturado,
+           (f.origen::text = 'global') AS es_global
     FROM cfdis f
     JOIN sucursales_alcance s ON s.id = f.sucursal_id AND s.empresa_id = f.empresa_id
     LEFT JOIN cheques c ON c.id = f.cheque_id AND c.empresa_id = f.empresa_id

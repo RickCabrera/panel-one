@@ -458,6 +458,55 @@ POS): son emisiones propias sobre el mismo tramo de timbrado del portal. Supuest
   refacturarlos da 409 `no_encontrado`. Los emitidos en la corrida (portal o sin ticket) sí se
   refacturan.
 
+**Factura global (F2-108).** No lee nada nuevo de SR (no hubo hallazgo del POS): es una emisión
+propia sobre los cheques y códigos que ya están en Postgres. Pero TODO lo que decide qué ticket entra
+a qué global descansa en supuestos de SR que siguen sin validar (ver arriba "facturable" y el
+cierre del cheque), y en supuestos del SAT y de Facturama. Supuestos y decisiones:
+
+- ⚠️ **SUPUESTO — NO VALIDADO (Facturama, F2-190):** el nodo `InformacionGlobal` viaja como
+  `GlobalInformation: { Periodicity, Months, Year }` (el año como TEXTO) en el
+  `POST /api-lite/3/cfdis`; el receptor es `XAXX010101000` / "PUBLICO EN GENERAL" / régimen `616` /
+  uso `S01` con `TaxZipCode` = el CP del lugar de expedición; cada ticket es un `Item` con
+  `ProductCode` `01010101`, `UnitCode` `ACT` ("Actividad"), descripción "Venta" e
+  `IdentificationNumber` = el folio del ticket, con su IVA. Sale de la guía de llenado del SAT y de
+  la documentación pública de Facturama; el snapshot del contrato lo fija.
+- `DECISION PROVISIONAL (nocturno)` (`api/src/facturacion/global.ts`): **un ticket entra a la global
+  sólo cuando su código YA NO se puede autofacturar** (expiró, con el mismo juez `estadoPublico` que
+  el portal), y **la global de un periodo espera a que venzan TODOS sus códigos**. Nunca se
+  globaliza algo que el cliente todavía podría facturar. **Choca con el plazo del SAT** para emitir
+  la global (poco después del cierre del periodo) cuando la vigencia es `dias` N o la periodicidad es
+  menor que la vigencia (una global diaria con vigencia a fin de mes espera al fin de mes). La
+  configuración lo avisa (`avisoVigencia`). ❓ Decisión abierta para Ricardo (F2-190).
+- `DECISION PROVISIONAL (nocturno)`: **periodos en la zona de la SUCURSAL**; la global es POR
+  SUCURSAL (cada una con su periodo local), no por empresa. **La semanal va de lunes a domingo
+  CORTADA en el cambio de mes**: una semana que cruza meses son dos periodos, cada uno con su
+  `Meses` (el Anexo 20 pide uno solo). No se ha visto cómo lo hace un contador con SR.
+- `DECISION PROVISIONAL (nocturno)` (`global.ts#formaPagoGlobal`): **forma de pago de la global = la
+  c_FormaPago (efectivo 01, tarjeta 04, transferencia 03) con MAYOR monto sumado entre los pagos de
+  todos sus tickets**; `otro` no cuenta. Si ningún pago tiene clave, 422 sin tomar folio. Un ticket
+  pagado con `otro` SÍ entra (sólo no decide la forma).
+- El SAT sólo acepta en `Año` el año en curso o el anterior: un periodo más viejo sale
+  `fuera_de_plazo` y no se emite (422).
+- Los tickets que entran: código `pendiente`/`expirado` guardado, cuenta cerrada, NO cancelada y con
+  total > 0, SIN CFDI propio `vigente` o `timbrando` (el "Y además (de F2-104)": un ticket con una
+  reserva propia colgada NO entra) y sin otra global. Uno con CFDI propio `cancelado` vuelve a ser
+  facturable, y si ya expiró, entra.
+- `DECISION PROVISIONAL (nocturno)`: **un ticket que llega TARDE** (el agente estuvo desconectado)
+  a un periodo que ya tiene global deja el periodo `lista` como **complementaria**: se puede emitir
+  otra global A MANO (el SAT permite más de una por periodo), la vista previa lo avisa, y la emisión
+  automática NUNCA la emite sola.
+- `DECISION PROVISIONAL (nocturno)` (`api/src/facturacion/tablero.service.ts`): **la global NO suma
+  a lo facturado ni a la tasa de facturación** del tablero: va aparte (`global`). La tasa mide lo que
+  facturaron los CLIENTES; con la global adentro quedaría en ~100 % siempre. `facturado` + `global`
+  = todos los CFDI vigentes que cuentan. `cuenta_facturado` del helper NO cambió de significado; la
+  columna `es_global` es la que separa.
+- La emisión automática está APAGADA por omisión (timbrar gasta folios) y al encenderla sólo emite
+  periodos que terminen DESPUÉS (encenderla no timbra meses viejos de golpe). El backlog pedía
+  `node-cron`; se usó el patrón de programador del repo (setInterval, F2-141/F2-224).
+- Abierto para F2-109: qué pasa con los tickets de una global CANCELADA (hoy siguen amarrados a
+  ella: el único de `cfdi_global_codigos.codigo_id` no los deja entrar a otra) y qué pasa si SR
+  REABRE o CANCELA una cuenta que ya entró a una global (el total guardado en la fila no cambia).
+
 ---
 
 ## 3. Partidas de cuentas cerradas

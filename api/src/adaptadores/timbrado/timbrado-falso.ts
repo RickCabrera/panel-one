@@ -167,6 +167,14 @@ export function xmlCfdiFalso(s: SolicitudCfdi, uuid: string, fechaTimbrado: Date
         LugarExpedicion: s.lugarExpedicion,
       },
     )}>` +
+    // F2-108: InformacionGlobal es el primer nodo hijo del Comprobante (orden del Anexo 20).
+    (s.informacionGlobal
+      ? `<cfdi:InformacionGlobal${atributos({
+          Periodicidad: s.informacionGlobal.periodicidad,
+          Meses: s.informacionGlobal.meses,
+          Año: String(s.informacionGlobal.anio),
+        })}/>`
+      : '') +
     // F2-107: los relacionados van ANTES del Emisor (orden del Anexo 20).
     (s.relacionados
       ? `<cfdi:CfdiRelacionados${atributos({ TipoRelacion: s.relacionados.tipoRelacion })}>` +

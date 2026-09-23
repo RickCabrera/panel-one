@@ -36,7 +36,10 @@ export type AccionAuditada =
   | 'cfdi.reenvio'
   // F2-107: factura sin ticket y refacturación (sustituto 04 + cancelación 01).
   | 'cfdi.manual'
-  | 'cfdi.refacturacion';
+  | 'cfdi.refacturacion'
+  // F2-108: la factura global (emisión manual) y su configuración.
+  | 'cfdi.global'
+  | 'factura_global.configurar';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;

@@ -94,6 +94,8 @@ export const LLAVE_EMPRESA = {
   Cfdi: 'empresaId',
   // F2-105: la entrega por correo de cada CFDI (la escribe SÓLO `EscrituraFacturacion`).
   CfdiEnvio: 'empresaId',
+  // F2-108: los tickets de cada factura global (la escribe SÓLO `EscrituraFacturacion`).
+  CfdiGlobalCodigo: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;
@@ -124,6 +126,9 @@ export const COLUMNAS_INTOCABLES: readonly string[] = [
   'recetaId',
   // F2-126: una partida no se mueve a otra compra.
   'compraId',
+  // F2-108: un ticket no se mueve a otra factura global, ni la fila a otro código.
+  'cfdiId',
+  'codigoId',
   'empresa',
   'sucursal',
   'cheque',
@@ -132,6 +137,7 @@ export const COLUMNAS_INTOCABLES: readonly string[] = [
   'traspaso',
   'receta',
   'compra',
+  'cfdi',
 ];
 
 /** El filtro de tenant de un modelo: `{}` para admin_global, la empresa para los demás. */

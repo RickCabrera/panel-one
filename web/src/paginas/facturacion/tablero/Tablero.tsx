@@ -117,8 +117,12 @@ function Kpi({
 }
 
 export const AYUDA_TASA =
-  'Facturado en el periodo (por fecha de emisión) entre la venta del periodo (por cierre). ' +
-  'Un ticket de otro periodo facturado en éste la puede llevar arriba de 100 %.';
+  'Facturado a clientes en el periodo (por fecha de emisión) entre la venta del periodo (por ' +
+  'cierre). La factura global a público en general NO cuenta. Un ticket de otro periodo ' +
+  'facturado en éste la puede llevar arriba de 100 %.';
+export const AYUDA_GLOBAL =
+  'Facturas globales a público en general emitidas en el periodo: amparan los tickets que ningún ' +
+  'cliente facturó a tiempo. Van aparte de lo facturado y no suman a la tasa.';
 export const SIN_TASA = 'Sin venta en el periodo: no hay tasa de facturación.';
 
 function Resumen({ t }: { t: TableroFacturacion }) {
@@ -126,7 +130,7 @@ function Resumen({ t }: { t: TableroFacturacion }) {
   const motivo = motivoSinFacturas(t);
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <Kpi
           titulo="Ventas del periodo"
           valor={pesos(t.ventas.venta)}
@@ -136,8 +140,15 @@ function Resumen({ t }: { t: TableroFacturacion }) {
         <Kpi
           titulo="Facturado"
           valor={pesos(t.facturado.monto)}
-          detalle={`${facturas(t.facturado.cfdis)} vigentes`}
+          detalle={`${facturas(t.facturado.cfdis)} vigentes a clientes`}
           testId="kpi-facturado"
+        />
+        <Kpi
+          titulo="Factura global"
+          valor={pesos(t.global.monto)}
+          detalle={`${facturas(t.global.cfdis)} a público en general; no suma a la tasa`}
+          testId="kpi-global"
+          ayuda={AYUDA_GLOBAL}
         />
         <Kpi
           titulo="Cancelaciones"
@@ -148,7 +159,7 @@ function Resumen({ t }: { t: TableroFacturacion }) {
         <Kpi
           titulo="Tasa de facturación"
           valor={tasa ?? '—'}
-          detalle={tasa === null ? SIN_TASA : 'facturado / venta'}
+          detalle={tasa === null ? SIN_TASA : 'facturado a clientes / venta'}
           testId="kpi-tasa"
           ayuda={AYUDA_TASA}
         />
@@ -170,10 +181,10 @@ function Resumen({ t }: { t: TableroFacturacion }) {
           <Tarjeta titulo="Venta y facturado por sucursal">
             <GraficaSucursales t={t} />
           </Tarjeta>
-          <Tarjeta titulo="Facturado por mes">
+          <Tarjeta titulo="Facturado a clientes por mes">
             <GraficaSerie puntos={puntosMes(t)} />
           </Tarjeta>
-          <Tarjeta titulo="Facturado por hora de emisión">
+          <Tarjeta titulo="Facturado a clientes por hora de emisión">
             <GraficaSerie puntos={puntosHora(t)} />
           </Tarjeta>
         </div>
@@ -214,6 +225,9 @@ function GraficaSucursales({ t }: { t: TableroFacturacion }) {
           <tr>
             <th className={TH}>Sucursal</th>
             <th className={`${NUM} font-medium`}>Facturado</th>
+            <th className={`${NUM} font-medium`} title={AYUDA_GLOBAL}>
+              Global
+            </th>
             <th className={`${NUM} font-medium`}>Tasa</th>
           </tr>
         </thead>
@@ -222,6 +236,7 @@ function GraficaSucursales({ t }: { t: TableroFacturacion }) {
             <tr key={p.sucursalId} className="border-t border-linea">
               <td className="px-2 py-1">{p.nombre}</td>
               <td className={NUM}>{pesos(p.facturadoTexto)}</td>
+              <td className={NUM}>{pesos(p.globalTexto)}</td>
               <td className={NUM} title={p.tasa === null ? SIN_TASA : AYUDA_TASA}>
                 {tasaTexto(p.tasa) ?? '—'}
               </td>
@@ -376,6 +391,7 @@ function TablaCfdis({
             <option value="">Todas</option>
             <option value="ticket">De ticket</option>
             <option value="manual">Sin ticket (manual)</option>
+            <option value="global">Factura global</option>
           </select>
         </label>
         <button type="submit" className={BOTON}>
@@ -442,6 +458,14 @@ function TablaCfdis({
                                 Manual
                               </span>
                             )}
+                            {c.origen === 'global' && (
+                              <span
+                                className="ml-1 rounded border border-linea-fuerte px-1 text-xs text-tinta-suave"
+                                title="Factura global a público en general de los tickets que nadie facturó (F2-108)."
+                              >
+                                Global
+                              </span>
+                            )}
                           </td>
                           <td className="px-2 py-1 font-mono text-xs">{c.uuid}</td>
                           <td className="px-2 py-1 whitespace-nowrap">
@@ -489,7 +513,9 @@ function TablaCfdis({
                             )}
                           </td>
                           <td className="px-2 py-1 whitespace-nowrap">
+                            {/* Una global no se refactura: su receptor es público en general. */}
                             {c.estado === 'vigente' &&
+                              c.origen !== 'global' &&
                               (c.sustituidoPor === null || c.sustitucionPendiente) && (
                                 <button
                                   type="button"
