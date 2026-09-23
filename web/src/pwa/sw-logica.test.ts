@@ -89,6 +89,9 @@ describe('estrategia por petición', () => {
     ['/api/ventas/resumen', 'GET', 'cors', 'ignorar'],
     ['/api/auth/refresh', 'POST', 'cors', 'ignorar'],
     ['/api/mesas/abiertas', 'GET', 'navigate', 'ignorar'],
+    // F2-147: la respuesta del alta guiada trae las API keys en claro.
+    ['/api/empresas/alta-guiada', 'POST', 'cors', 'ignorar'],
+    ['/api/publico/contacto', 'POST', 'cors', 'ignorar'],
     ['/socket.io/?EIO=4', 'GET', 'cors', 'ignorar'],
     ['/mesas?empresa=x', 'GET', 'navigate', 'armazon'],
     ['/', 'GET', 'navigate', 'armazon'],

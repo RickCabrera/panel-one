@@ -11,7 +11,7 @@ import tema from './eslint/sin-colores.mjs';
 // Igual que en /api: lint sin información de tipos. El gate de tipos de este
 // carril es `npm run build`, que corre `tsc -b` antes de `vite build`.
 export default tseslint.config(
-  { ignores: ['dist/**', 'coverage/**', 'node_modules/**'] },
+  { ignores: ['dist/**', 'dist-landing/**', 'coverage/**', 'node_modules/**'] },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   reactHooks.configs.flat['recommended-latest'],
@@ -34,6 +34,7 @@ export default tseslint.config(
   {
     files: [
       'vite.config.ts',
+      'vite.landing.config.ts',
       'scripts/**/*.mjs',
       'eslint/**/*.mjs',
       'src/test-setup.ts',

@@ -7,12 +7,16 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build -c vite.landing.config.ts",
+    "dev:landing": "vite -c vite.landing.config.ts",
+    "preview:landing": "vite preview -c vite.landing.config.ts",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
     "check:bundle": "node scripts/tamano-bundle.mjs",
     "check:pwa": "node scripts/revisar-pwa.mjs",
+    "check:landing": "node scripts/revisar-landing.mjs",
+    "lighthouse:landing": "node scripts/lighthouse-landing.mjs",
     "iconos:pwa": "node scripts/iconos-pwa.mjs"
   },
   "dependencies": {

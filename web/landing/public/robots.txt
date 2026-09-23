@@ -1,0 +1,3 @@
+# Landing pública (F2-147): se puede indexar. El panel (/login y lo demás) vive detrás de sesión.
+User-agent: *
+Allow: /

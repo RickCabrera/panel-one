@@ -1,5 +1,41 @@
 // Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
+exports[`Contrato Brevo (F2-202) el contacto de la landing (F2-147): lo del visitante va escapado y sin adjuntos 1`] = `
+[
+  {
+    "cuerpo": {
+      "htmlContent": "<!doctype html><html lang="es"><body style="margin:0;padding:0;background:#f9fafb;font-family:Arial,Helvetica,sans-serif;color:#111827;"><div style="max-width:560px;margin:0 auto;background:#ffffff;padding:20px;font-size:14px;line-height:1.5;"><p style="margin:0 0 12px;font-size:16px;font-weight:600;">Nuevo contacto desde la página</p><table role="presentation" style="border-collapse:collapse;font-size:14px;"><tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Nombre</td><td style="padding:4px 0;font-weight:600;">Ana &lt;b&gt;</td></tr><tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Email</td><td style="padding:4px 0;font-weight:600;">ana@ejemplo.test</td></tr><tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Teléfono</td><td style="padding:4px 0;font-weight:600;">—</td></tr><tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Negocio</td><td style="padding:4px 0;font-weight:600;">—</td></tr><tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Sucursales</td><td style="padding:4px 0;font-weight:600;">3</td></tr></table><p style="margin:16px 0 4px;color:#6b7280;">Mensaje</p><p style="margin:0;">Hola<br>quiero una demo</p></div></body></html>",
+      "sender": {
+        "email": "facturas@ejemplo.test",
+        "name": "Monitor SoftRestaurant",
+      },
+      "subject": "Contacto: Ana <b>",
+      "tags": [
+        "contacto-landing",
+      ],
+      "textContent": "Nuevo contacto desde la página
+
+Nombre: Ana <b>
+Email: ana@ejemplo.test
+Teléfono: —
+Negocio: —
+Sucursales: 3
+
+Mensaje:
+Hola
+quiero una demo",
+      "to": [
+        {
+          "email": "ventas@ejemplo.test",
+        },
+      ],
+    },
+    "metodo": "POST",
+    "url": "https://api.brevo.com/v3/smtp/email",
+  },
+]
+`;
+
 exports[`Contrato Brevo (F2-202) envío con destinatario con nombre y dos adjuntos 1`] = `
 [
   {

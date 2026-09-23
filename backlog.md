@@ -1310,6 +1310,13 @@ válido en ambos subdominios; `GET /health` responde `{status:'ok', db:'ok'}`.
 > comprobar que Caddy deja pasar el cuerpo de `DELETE /api/cuenta/notificaciones/dispositivos`,
 > y que `trust proxy` hace que el throttler de `POST /cuenta/notificaciones/prueba` vea la IP
 > real y no la de Caddy (`docs/notificaciones.md`, "Producción").
+>
+> **Y además (de F2-147):** servir la landing (`web/dist-landing/`, lo arma `npm run build`) en el
+> dominio raíz, y pasar `/api` al api **también en ese dominio** (el formulario postea a
+> `/api/publico/contacto` en el mismo origen: no se abre CORS). Si el panel vive en otro
+> subdominio, construir la landing con `URL_PANEL=https://…/login` (a dónde lleva "Entrar al
+> panel"). `trust proxy` también importa aquí: el límite del contacto (3/min, 20/h) es por IP.
+> Correr `npm run lighthouse:landing` contra el dominio real (`docs/onboarding.md`).
 
 ## F1-003 · CI/CD con GitHub Actions
 `[ ]` **Epic 0** · 🔒 **Razón: necesita los secretos SSH del VPS en GitHub Actions.**
@@ -1584,6 +1591,12 @@ y los archivos sobreviven un redespliegue y quedan incluidos en el respaldo de F
 > escritorio y en Android; el armazón abre con DevTools → Offline; y una alerta de sucursal
 > desconectada llega con la app CERRADA. De noche sólo se midió con `PushFalso`, el test de
 > contrato de web-push y `check:pwa` (`docs/notificaciones.md`, "Cómo se probó").
+>
+> **Y además (de F2-147):** el formulario de contacto de la landing sale por el mismo Brevo al
+> buzón de `CONTACTO_DESTINO` (sin ella, en producción responde 503: ver `.env.example`); mandar un
+> mensaje real desde la landing y verlo llegar. Poner `AGENTE_URL_DESCARGA` (https) con el zip del
+> instalador para que el asistente de alta y la lista de arranque lo enlacen (hasta F2-143, que la
+> firma). Los dos están en `docs/onboarding.md`.
 
 ## F2-192 · Validar los lectores de catálogos e inventario contra SoftRestaurant
 `[ ]` **Bloque H** · 🔒 **Razón: necesita el usuario SQL de solo lectura creado (F1-020b) y una

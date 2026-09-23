@@ -178,6 +178,9 @@ jobs:
       - run: npm run check:bundle
       # F2-146: la PWA es instalable (manifest, íconos, sw.js clásico) y el precache cubre el armazón.
       - run: npm run check:pwa
+      # F2-147: la landing (build aparte, dist-landing/): SEO/a11y básicos, secciones, sin
+      # recursos externos y peso. Lighthouse de verdad es local (`npm run lighthouse:landing`).
+      - run: npm run check:landing
       # F1-040: vitest + jsdom, sin red (la API se simula sobre fetch).
       - run: npm test
 
