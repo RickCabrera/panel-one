@@ -1540,7 +1540,7 @@ Recorre el AC original de F2-121, F2-122, F2-125, F2-126 y F2-127 con datos del 
 
 > **Y además (de F2-127).** La proyección se cerró contra el seed: todas las filas cuadran con un
 > cálculo a mano y el insumo ESTABLE del seed (I063, aceite para freír, agregado por F2-127) acierta
-> la semana siguiente con error de 1.0 % y 0.2 %; en los insumos de receta del seed sólo 24 de 69
+> la semana siguiente con error de 1.9 % y 0.8 %; en los insumos de receta del seed sólo 22 de 67
 > caen en ±15 % (demanda de pocas unidades por semana). Con el piloto: (1) proyectar una semana con el
 > reloj una semana atrás y comparar contra lo que de verdad salió, al menos en 5 insumos de alta
 > rotación; (2) ❓ **si SR no deja pólizas de consumo** (la decisión abierta de F2-125), la demanda

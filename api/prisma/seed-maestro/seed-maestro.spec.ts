@@ -308,17 +308,16 @@ describe('insumo de alta reciente (F2-127)', () => {
     }
   });
 
-  it('sus folios CONTINÚAN la secuencia: los del resto del seed no se movieron', () => {
-    // Si I062 entrara a la simulación diaria, su compra desplazaría los folios siguientes. Sus
-    // folios son los ÚLTIMOS de su sucursal aunque su día no lo sea.
+  it('sus pólizas van en su lugar cronológico: el folio sigue el orden de la simulación', () => {
+    // El folio desempata el kardex (F2-122): las pólizas de I062 e I063 se emiten DENTRO de su día,
+    // no al final. Por almacén, en orden de folio, el día nunca retrocede.
     const num = (folio: string) => Number(folio.split('-').pop());
-    for (const s of ['A1', 'A2']) {
-      const pols = u.polizas.filter((p) => p.folio.startsWith(`${s}-POL-`));
-      const suya = pols.find((p) => p.movimientos.some((m) => m.insumo === 'I062'))!;
-      expect(num(suya.folio)).toBe(Math.max(...pols.map((p) => num(p.folio))));
-      const comps = u.compras.filter((c) => c.folio.startsWith(`${s}-OC-`));
-      const oc = comps.find((c) => c.poliza === suya.folio)!;
-      expect(num(oc.folio)).toBe(Math.max(...comps.map((c) => num(c.folio))));
+    for (const a of u.almacenes) {
+      const dias = u.polizas
+        .filter((p) => p.almacen === a.clave)
+        .sort((x, y) => num(x.folio) - num(y.folio))
+        .map((p) => p.dia);
+      expect(dias).toEqual([...dias].sort());
     }
   });
 });

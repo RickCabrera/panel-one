@@ -255,6 +255,108 @@ export function generarInventario(op: {
     return p;
   }
 
+  // Insumos APARTE (F2-127): de alta reciente y de consumo operativo. No entran al estado de la
+  // simulación principal (no los toca su PRNG, ni la merma, ni el traspaso, ni las compras por
+  // proveedor), pero sus pólizas se emiten DENTRO del día, en su lugar cronológico (su compra tras
+  // las compras, su consumo tras el consumo), para que el folio siga el orden de la simulación. Lo
+  // aleatorio del operativo sale de su PROPIO PRNG. Así ningún número del resto cambia; sólo se
+  // recorren los folios posteriores, como al sembrar otro día.
+  interface Aparte {
+    clave: string;
+    e: Estado;
+    /** Alta reciente: el día de su única compra. */
+    alta: { dia: string; cantidad: D } | null;
+    /** Operativo: litros por día de la semana (domingo primero). */
+    base: readonly string[] | null;
+  }
+  const r2 = prng((op.semilla ?? 20260921) + 127);
+  const aparte = new Map<string, Aparte[]>();
+  for (const s of op.sucursales) {
+    for (const i of INSUMOS) {
+      if (i.altaHaceDias === undefined && !i.operativo) continue;
+      const almacen = `${s.clave}-${almacenDeInsumo(i.clave)}`;
+      let x: Aparte;
+      if (i.operativo) {
+        const base = CONSUMO_OPERATIVO[i.clave];
+        if (!base || base.length !== 7) throw new Error(`Insumo operativo sin su base: ${i.clave}`);
+        const promedio = base.reduce((a, q) => a.plus(q), CERO).div(7);
+        x = {
+          clave: i.clave,
+          e: {
+            saldo: CERO,
+            cp: new Dec(i.costo),
+            minimo: redondeoArriba(i.clave, promedio.times(2)),
+            maximo: redondeoArriba(i.clave, promedio.times(7)),
+          },
+          alta: null,
+          base,
+        };
+      } else {
+        const alta = ALTA_RECIENTE[i.clave];
+        if (!alta) throw new Error(`Insumo de alta reciente sin su compra: ${i.clave}`);
+        // Un seed más corto que el alta (specs de pocos días): el alta cae en su primer día.
+        const dia = op.dias[Math.max(0, op.dias.length - 1 - i.altaHaceDias!)];
+        x = {
+          clave: i.clave,
+          e: {
+            saldo: CERO,
+            cp: new Dec(i.costo),
+            minimo: new Dec(alta.minimo),
+            maximo: new Dec(alta.maximo),
+          },
+          alta: { dia, cantidad: new Dec(alta.cantidad) },
+          base: null,
+        };
+      }
+      aparte.set(almacen, [...(aparte.get(almacen) ?? []), x]);
+    }
+  }
+
+  /** Compras de los insumos aparte: el alta en su día; el operativo, con la regla de todos. */
+  function surtirAparte(s: SucursalInventario, tipo: TipoAlmacen, dia: string) {
+    for (const x of aparte.get(`${s.clave}-${tipo}`) ?? []) {
+      let cantidad: D | null = null;
+      if (x.alta) {
+        if (x.alta.dia === dia) cantidad = x.alta.cantidad;
+      } else {
+        const punto = [1, 4].includes(diaSemana(dia))
+          ? x.e.minimo.plus(x.e.maximo).div(2)
+          : x.e.minimo;
+        if (x.e.saldo.lessThan(punto)) {
+          cantidad = cantidadMovible(x.clave, x.e.maximo.minus(x.e.saldo));
+        }
+      }
+      if (cantidad === null) continue;
+      const i = insumo(x.clave);
+      const n = siguiente(folioCompra, s.clave);
+      const folio = `${s.clave}-OC-${String(n).padStart(4, '0')}`;
+      const m = mover(x.e, x.clave, cantidad, new Dec(i.costo));
+      const p = poliza(s, tipo, 'compra', dia, [m], folio)!;
+      compras.push({
+        folio,
+        sucursalId: s.id,
+        almacen: p.almacen,
+        dia,
+        proveedor: grupoInsumo(i.grupo).proveedor,
+        poliza: p.folio,
+        partidas: [{ ...m }],
+        total: m.importe,
+      });
+    }
+  }
+
+  /** Consumo de los operativos: la base de su día de la semana ±4 %, nunca más que el saldo. */
+  function consumirAparte(s: SucursalInventario, tipo: TipoAlmacen, dia: string) {
+    for (const x of aparte.get(`${s.clave}-${tipo}`) ?? []) {
+      if (!x.base) continue;
+      const q = Dec.min(
+        x.e.saldo,
+        cantidadMovible(x.clave, new Dec(x.base[diaSemana(dia)]).times(0.96 + r2() * 0.08)),
+      );
+      if (q.greaterThan(0)) poliza(s, tipo, 'consumo', dia, [mover(x.e, x.clave, q.negated())]);
+    }
+  }
+
   op.dias.forEach((dia, iDia) => {
     const ultimo = iDia === op.dias.length - 1;
     for (const s of op.sucursales) {
@@ -307,6 +409,7 @@ export function generarInventario(op: {
             });
           }
         }
+        surtirAparte(s, tipo, dia);
 
         // 3. Consumo del día: recetas × ventas, más 0–4 % de merma operativa.
         //    Nunca sale más de lo que hay: el kardex no pasa por negativo.
@@ -319,6 +422,7 @@ export function generarInventario(op: {
           if (real.greaterThan(0)) consumos.push(mover(e, clave, real.negated()));
         }
         poliza(s, tipo, 'consumo', dia, consumos);
+        consumirAparte(s, tipo, dia);
 
         // 4. Merma ocasional (caducidad, rotura): 3 % del máximo de un insumo.
         if (r() < 0.12) {
@@ -386,91 +490,9 @@ export function generarInventario(op: {
     }
   });
 
-  // 7. Insumos de consumo operativo (F2-127): su propia simulación, DESPUÉS de todo lo demás, con
-  //    su PROPIO PRNG y folios que continúan la secuencia (lo anterior no cambia). El primer día
-  //    se compra al máximo (no hay inicial); luego, lunes y jueves se surte si bajó del punto
-  //    medio y cualquier otro día sólo bajo el mínimo, como el resto; cada día sale la base de su
-  //    día de la semana ±4 %. Mínimo = 2 días del promedio; máximo = 7.
-  const r2 = prng((op.semilla ?? 20260921) + 127);
-  for (const i of INSUMOS) {
-    if (!i.operativo) continue;
-    const base = CONSUMO_OPERATIVO[i.clave];
-    if (!base || base.length !== 7) throw new Error(`Insumo operativo sin su base: ${i.clave}`);
-    const tipo = almacenDeInsumo(i.clave);
-    const promedio = base.reduce((a, q) => a.plus(q), CERO).div(7);
-    for (const s of op.sucursales) {
-      const e: Estado = {
-        saldo: CERO,
-        cp: new Dec(i.costo),
-        minimo: redondeoArriba(i.clave, promedio.times(2)),
-        maximo: redondeoArriba(i.clave, promedio.times(7)),
-      };
-      estado.get(`${s.clave}-${tipo}`)!.set(i.clave, e);
-      for (const dia of op.dias) {
-        const punto = [1, 4].includes(diaSemana(dia)) ? e.minimo.plus(e.maximo).div(2) : e.minimo;
-        if (e.saldo.lessThan(punto)) {
-          const n = siguiente(folioCompra, s.clave);
-          const folio = `${s.clave}-OC-${String(n).padStart(4, '0')}`;
-          const m = mover(
-            e,
-            i.clave,
-            cantidadMovible(i.clave, e.maximo.minus(e.saldo)),
-            new Dec(i.costo),
-          );
-          const p = poliza(s, tipo, 'compra', dia, [m], folio)!;
-          compras.push({
-            folio,
-            sucursalId: s.id,
-            almacen: p.almacen,
-            dia,
-            proveedor: grupoInsumo(i.grupo).proveedor,
-            poliza: p.folio,
-            partidas: [{ ...m }],
-            total: m.importe,
-          });
-        }
-        const q = Dec.min(
-          e.saldo,
-          cantidadMovible(i.clave, new Dec(base[diaSemana(dia)]).times(0.96 + r2() * 0.08)),
-        );
-        if (q.greaterThan(0)) poliza(s, tipo, 'consumo', dia, [mover(e, i.clave, q.negated())]);
-      }
-    }
-  }
-
-  // 8. Insumos de alta reciente (F2-127): su primera compra el día de su alta, DESPUÉS de todo lo
-  //    demás, con folios que CONTINÚAN la secuencia (los del resto no cambian). Su póliza queda
-  //    fuera de orden cronológico en el arreglo; quien la lea ordena por día.
-  for (const i of INSUMOS) {
-    if (i.altaHaceDias === undefined) continue;
-    const alta = ALTA_RECIENTE[i.clave];
-    if (!alta) throw new Error(`Insumo de alta reciente sin su compra: ${i.clave}`);
-    // Un seed más corto que el alta (specs de pocos días): el alta cae en su primer día.
-    const dia = op.dias[Math.max(0, op.dias.length - 1 - i.altaHaceDias)];
-    const tipo = almacenDeInsumo(i.clave);
-    for (const s of op.sucursales) {
-      const e: Estado = {
-        saldo: CERO,
-        cp: new Dec(i.costo),
-        minimo: new Dec(alta.minimo),
-        maximo: new Dec(alta.maximo),
-      };
-      estado.get(`${s.clave}-${tipo}`)!.set(i.clave, e);
-      const n = siguiente(folioCompra, s.clave);
-      const folio = `${s.clave}-OC-${String(n).padStart(4, '0')}`;
-      const m = mover(e, i.clave, new Dec(alta.cantidad), new Dec(i.costo));
-      const p = poliza(s, tipo, 'compra', dia, [m], folio)!;
-      compras.push({
-        folio,
-        sucursalId: s.id,
-        almacen: p.almacen,
-        dia,
-        proveedor: grupoInsumo(i.grupo).proveedor,
-        poliza: p.folio,
-        partidas: [{ ...m }],
-        total: m.importe,
-      });
-    }
+  // Los insumos aparte (F2-127) entran al estado sólo ahora, para su existencia.
+  for (const [almacen, lista] of aparte) {
+    for (const x of lista) estado.get(almacen)!.set(x.clave, x.e);
   }
 
   const existencias: ExistenciaSeed[] = almacenes.flatMap((a) =>
