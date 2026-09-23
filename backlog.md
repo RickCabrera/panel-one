@@ -2250,7 +2250,7 @@ Rollout gradual por sucursal (flag por sucursal en admin).
 intervención local; hash inválido aborta y alerta; nunca quedan las dos versiones corriendo.
 
 ### F2-144 · Módulo delivery/canales
-`[ ]` Alcance mínimo (equivalente a "Arkhon Delivery"): ingesta de ventas por canal
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-192. **ALCANCE:** sin ingesta nueva (el único dato de canal por cuenta es el área, que ya viaja desde F2-233; ver `docs/delivery.md` §4). ❓ **Las decisiones de canal (enum fijo y mapeo por sucursal) SIGUEN ABIERTAS para Ricardo** (`docs/delivery.md` §5). Alcance mínimo (equivalente a "Arkhon Delivery"): ingesta de ventas por canal
 (mostrador/comedor/domicilio/plataformas si SR las distingue por área o tipo de servicio),
 vista de ventas por canal con comparativo y % de mezcla. **Nota:** el alcance real se define
 viendo qué registra la instalación piloto; esta tarea abre con un spike de 1 día documentado
