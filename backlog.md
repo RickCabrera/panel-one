@@ -1967,7 +1967,7 @@ nuevo y el nuevo timbrado con el UUID relacionado; ambos aparecen correctamente 
 dashboard.
 
 ### F2-108 · Factura global de tickets no facturados
-`[ ]` Job programado (cron en api, `node-cron`) por empresa con periodicidad configurable
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (`GlobalInformation` en el sandbox; esperar a que venzan los códigos vs. el plazo del SAT, semana cortada en el mes, forma de pago dominante, global por sucursal y fuera de la tasa: esquema-sr §2 "Factura global (F2-108)"). Job programado (cron en api, `node-cron`) por empresa con periodicidad configurable
 (diaria/semanal/mensual, default mensual): agrupa cheques con código `pendiente` ya expirado
 del periodo, emite CFDI global a público en general (RFC `XAXX010101000`, un concepto por
 ticket con clave `01010101`, periodicidad/meses/año conforme a regla SAT de CFDI global
