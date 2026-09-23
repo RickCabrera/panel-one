@@ -2302,7 +2302,7 @@ checklist de arranque visible hasta completarse.
 instalar agente en < 10 min de captura.
 
 ### F2-110b · Conciliación de reservas colgadas con el PAC
-`[ ]` **Bloque F** · /api + /web · Resto del corte de F2-110 (ver `docs/nocturno-log.md`, F2-110).
+`[x]` **Bloque F** · /api + /web · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (búsqueda por serie y folio de Facturama, plazos de 15 min y 7 días). Resto del corte de F2-110 (ver `docs/nocturno-log.md`, F2-110).
 
 Un proceso (programado, con el patrón de `cancelacion.programador.ts`, más un disparo manual desde
 el tablero) que CONCILIA contra el PAC lo que la emisión o la cancelación dejaron sin saber:
