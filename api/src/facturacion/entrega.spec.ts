@@ -199,6 +199,16 @@ describe('EntregaCfdiService.entregar (F2-105)', () => {
     ]);
   });
 
+  it('una zona horaria inválida no tumba la entrega: sin archivos, el correo sale igual', async () => {
+    const { servicio, registro } = armar();
+    await expect(servicio.entregar({ ...CFDI, zonaHoraria: 'Zona/Inventada' })).resolves.toEqual({
+      xml: null,
+      pdf: null,
+    });
+    expect(registro.guardados).toEqual([]);
+    expect(registro.correos).toHaveLength(1);
+  });
+
   it('disco Y correo fallan: no lanza (el CFDI ya existe ante el SAT)', async () => {
     const { servicio } = armar({ discoFalla: true, correoFalla: new Error('caído') });
     await expect(servicio.entregar(CFDI)).resolves.toEqual({ xml: null, pdf: null });

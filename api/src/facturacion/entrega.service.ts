@@ -112,8 +112,9 @@ export class EntregaCfdiService {
   ): Promise<{ xmlClave: string; pdfClave: string } | null> {
     const clave = (ext: ExtensionCfdi) =>
       claveArchivoCfdi(c.empresaId, c.uuid, c.fechaTimbrado, c.zonaHoraria, ext);
-    const claves = { xmlClave: clave('xml'), pdfClave: clave('pdf') };
     try {
+      // Dentro del try: una zona horaria inválida en la base tampoco puede tumbar la emisión.
+      const claves = { xmlClave: clave('xml'), pdfClave: clave('pdf') };
       await this.archivos.guardar(claves.xmlClave, xml, 'application/xml');
       await this.archivos.guardar(claves.pdfClave, c.pdf, 'application/pdf');
       await this.#escritura(c.empresaId).registrarArchivosCfdi(

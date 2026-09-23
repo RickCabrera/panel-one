@@ -6789,6 +6789,13 @@ tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-191. Re
   (`peticionDescarga` de Facturama) → F2-110/F2-191. Los CFDI de desarrollo emitidos antes de esta tarea
   tampoco tienen archivos (con el PAC falso no se pueden recuperar).
 - **UI del reintento**: sólo API; la lista de envíos a reintentar la pinta el dashboard (F2-106).
+- **Si falla el REGISTRO del primer envío** (la base, no el puerto: `reclamarEnvioCfdi` truena), no
+  queda fila: el CFDI no sale en `/facturacion/envios` y el reintento da 409 "sin envío". Salida para
+  F2-106/F2-110: que el reintento cree la fila si no existe (sigue mandando SÓLO al correo del CFDI).
+- **F2-109 (cancelación)**: `EntregaCfdiService.#cfdi` sólo excluye `timbrando`; un CFDI `cancelado` se
+  podría reenviar y descargar. Decidir ahí si se bloquea el reintento de uno cancelado.
+- Revisor del entregable: la clave del archivo se calculaba FUERA del `try` de `#guardar` (una zona
+  horaria inválida en la base habría dado 500 después de timbrar). Corregido, con test.
 - **F2-191**: Brevo real con inbox real, volumen persistente en el VPS y que `ARCHIVOS_RAIZ` entre al
   backup de F1-004.
 - `docs/esquema-sr.md` NO se tocó: esta tarea no lee SoftRestaurant, no hubo hallazgo.
