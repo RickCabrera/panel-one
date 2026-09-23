@@ -8087,3 +8087,98 @@ de escribir el plan, como hice aquí. §9 y §10 siguen "sin mapear", pero `rece
 `explosionproductos*`, `costos` y `gruposi` existen en `softrestaurant10` (sólo vi sus nombres). F2-241 puede reusar
 `ColaCatalogos`, `EnviadorCatalogos` y `SincronizadorCatalogos`: los cinco de inventario son el mismo contrato.
 Basta con sumarlos a `CatalogoPanel`, a sus `.sql` y a la lista de `diagnostico.sql`.
+
+## 2026-09-23 13:55 — F2-241 · Lectores de inventario y recetas (CORTADA: parte 1)
+**Estado:** CERRADA con corte (PR de la rama `feat/F2-241`). El resto es **F2-241b** (fila 44b de la cola).
+
+**Dónde se cortó y por qué.** La ficha pedía 6 lectores y 5 contratos de envío. No cabía en una sesión
+con el nivel de revisión que exige el gate, así que el corte se anunció desde el plan y el revisor lo
+aprobó. **Dentro:** los cinco catálogos de inventario, las existencias cada 30 min, `Enlist=false` y
+las guardias de solo lectura. **Fuera (F2-241b):** movimientos (cursor + ventana de relectura,
+traspasos partidos en dos pólizas), recetas (`costos`) y compras (`compras` + `comprasmovtos`).
+**Por dónde retomar:** `docs/esquema-sr.md` §10, tabla "Tablas de SR (F2-241)". Ahí ya está el mapeo
+de `movsinv`, `conceptos` (las 17 filas), `costos`, `compras` y `traspasosalmacen`. Los tres
+contratos restantes son "lote con `leidoAt`", el mismo patrón en los tres: conviene un solo
+enviador genérico para los tres. Copia la forma de `Cola/EnviadorExistencias.cs` (backoff,
+clasificación de respuestas) y la cola de `ColaCatalogos` (FIFO, no la de "una foto por almacén").
+
+**Qué quedó hecho.**
+- **Catálogos.** `CatalogoPanel` pasa a tener 11 valores. Consultas nuevas: `sr_catalogo_unidades`,
+  `sr_catalogo_grupos_insumo`, `sr_catalogo_insumos`, `sr_catalogo_almacenes` y
+  `sr_catalogo_proveedores`. Salen por la misma maquinaria de F2-240, sin tocarla. El forzado del
+  panel ya se atiende completo.
+- **Existencias.**
+  - Consulta `sr_existencias.sql`: `acumuladoinsumos` FULL JOIN `almacen`, más el `costopromedio` de
+    `insumosdetalle` de la empresa del almacén.
+  - Código en `Inventario/`: `MapeoExistencias` (puro), `LectorExistenciasSr` y
+    `SincronizadorExistencias`.
+  - Cola y envío: `Cola/ColaExistencias.cs` guarda UNA foto pendiente por almacén (la nueva reemplaza
+    a la vieja) y `Cola/EnviadorExistencias.cs` las manda.
+  - El worker lo llama después de catálogos, con su propio try/catch.
+- **Solo lectura.** `ConexionSoftRestaurant` fuerza `Enlist=false`. `SoloLecturaTests` revisa el IL
+  del ensamblado:
+  - no hay ningún `BeginTransaction` ni `TransactionScope` fuera de `Microsoft.Data.Sqlite`;
+  - ningún comando de SQL Server se arma fuera de `CrearComando`;
+  - control del test: sí detecta las transacciones del SQLite.
+- `diagnostico.sql` suma 6 tablas a sus dos listas.
+- **Tests:** 484/484 con 0 omitidos (antes 431). Build Release sin warnings.
+- **Mutaciones a mano:** quitar `Enlist` da 2 rojos; `ToEven` en el redondeo da 4 rojos.
+
+**Decisiones que tomé y por qué** (todas `DECISION PROVISIONAL (nocturno)` y anotadas en
+esquema-sr §9/§10):
+- **Unidades** (`MapeoCatalogos.ClaveUnidad`). SR no tiene tabla de unidades: cada texto distinto de
+  `insumos.unidad` es una. La clave es el texto sin espacios a la derecha y EN MAYÚSCULAS, porque la
+  collation es `Modern_Spanish_CI_AS` y para SR "kg" = "KG". Esa MISMA función calcula el
+  `unidadOrigenSrId` del insumo; si no, no cruzan (observación obligatoria del revisor). El SQL hace
+  `DISTINCT ... COLLATE Latin1_General_BIN2` para que SQL Server no elija al azar entre "kg" y "KG".
+  El nombre es la variante ordinal-menor, así el hash es estable.
+- **Existencia redondeada a 3 decimales**, mitad lejos de cero. SR guarda 4 y el contrato admite 3.
+  El log dice cuántas se redondearon.
+- **Costo nulo:** si falta la fila de `insumosdetalle` o hay costos distintos (la tabla no tiene PK),
+  va `costoPromedio: null`. El API rechaza ese registro y conserva la fila anterior: ni $0 inventado
+  ni borrado. Consecuencia: un insumo nuevo sin costo no aparece en el panel.
+- **`estatus` 1/0** para `insumosdetalle` y `proveedores`, como meseros y áreas. No se vio ninguna
+  fila.
+- **Duplicados** (insumo, almacén): viajan sin sumar y con aviso.
+- **Foto de más de 5000 registros:** no se manda, con Error en el log.
+- **Almacén huérfano:** se manda sin costo y con aviso.
+- **Sin hash en existencias:** la foto se manda cada 30 min aunque no cambie, porque también dice
+  "sigo leyendo" (el panel la marca atrasada a los 90 min).
+
+**Trampas que encontré.**
+- **`sqlcmd -E` falla también desde un `.ps1`** ("-E and -U/-P mutually exclusive"), y no hay
+  variables SQLCMD* en el entorno. Lo que sí funciona: un `.ps1` con
+  `System.Data.SqlClient.SqlConnection` ('Server=.\NATIONALSOFT;Database=softrestaurant10;Integrated
+  Security=true') que imprime el lector con `|`. Lo usé sólo para SELECT de metadatos y para correr
+  las consultas nuevas. **Login sysadmin**: no es config de producción.
+- **`python - <<'EOF'` con C# adentro rompió el parser de bash** ("unexpected EOF"). Escribe el
+  script con Write a un `.py` del scratchpad y córrelo con `python archivo.py`.
+- **Las tablas de inventario de la SR local tienen 0 filas.** Todo lo "visto" es metadato. Que
+  `movsinv.cantidad` lleve signo sale de la DEFINICIÓN del trigger `TRG_movsinv_insert`, no de datos.
+- **`acumuladoinsumos` sí es la existencia**: la mantienen triggers sobre `movsinv`. No la
+  recalcules sumando `movsinv`.
+- `git checkout --` sin rutas no revierte nada, sólo lista. Para las mutaciones usé copias `.bak`.
+
+**Qué quedó abierto.**
+- ❓ **Riesgo del heartbeat, sin arreglar** (esquema-sr §11). En el peor caso, con SQL y API
+  degradados y la diaria coincidiendo con existencias, un ciclo tarda unos 5 min y el panel marca
+  "desconectado" a los 90 s. **Tarea candidata nueva** (para F2-250 o para Ricardo): correr
+  catálogos y existencias en una tarea aparte del ciclo del heartbeat.
+- ❓ **Varias empresas en una base de SR:** el agente manda almacenes e insumos de TODAS las empresas.
+  Es la misma decisión abierta de `productosdetalle` (§6), para Ricardo.
+- **La descripción del DTO es inexacta:** `costoPromedio` en `api/src/ingesta/dto/existencias.dto.ts`
+  dice "en este almacén", pero en SR el costo es por (insumo, empresa). No toqué /api. Corregir la
+  descripción y el OpenAPI puede ir en F2-250.
+- ⚠️ **Supuesto:** SR valúa con `costopromedio` y no con `costo` ni `costoestandar`. Lo valida F2-193.
+- **Timeout simulado:** los tests lanzan `TimeoutException`, no una `SqlException` real (Number −2),
+  así que el camino `SqlException` → `ClasificarError` de `SincronizadorExistencias` no tiene test.
+  Nunca se probó con un SQL lento de verdad (`WAITFOR`).
+- **`insumos.idgruposi` se manda sin normalizar mayúsculas.** Si SR trae "abc" y "ABC", el panel no
+  los cruza. Es el mismo patrón que productos → grupos de F2-240.
+- **Límite del escáner de IL:** no ve delegados (`ldftn`) ni reflexión.
+- **Presentaciones** (`insumospresentaciones`, `movtosalmacen*`, `stockinsumos`) y **elaborados**
+  (`insumos.elaborado`) están documentados en §9, sin espejo ni contrato: sería tarea nueva.
+
+**Qué haría distinto.** Mirar primero `sys.sql_modules` (triggers y vistas): ahí salió el hallazgo
+más valioso, el signo de `movsinv` y el origen de `acumuladoinsumos`. Para F2-241b, empezar por el
+enviador genérico de lotes y por el cursor en SQLite, que es lo que exige el "Listo cuando".
