@@ -937,6 +937,87 @@
         ]
       }
     },
+    "/ingesta/compras": {
+      "post": {
+        "description": "Upsert por (sucursal de la API key, `origenSrId`). Idempotente: el mismo lote tres veces deja exactamente los mismos datos. Una compra que cambió REEMPLAZA su cabecera y sus partidas (una corrección no duplica). Una compra guardada con una lectura más nueva que `leidoAt` no se toca (`obsoletas`). Cada compra se valida aparte: una inválida, o con alguna partida inválida, va a `rechazadas` sin tocar lo guardado. Nunca se borra una compra: se anula mandándola `cancelada`. Importes y total SIN IVA, calculados por el API. Registra el contacto del agente.",
+        "operationId": "ComprasIngestaController_recibir",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoteComprasDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoComprasDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sobre inválido: `leidoAt` sin zona o más de 5 min en el futuro, `compras` vacío, no arreglo, con más de 200 o con no-objetos, más de 5000 partidas en total, o un campo de más en el sobre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          },
+          "500": {
+            "description": "Falla determinista: no se guardó nada y reenviar lo mismo va a fallar igual. No reintentar en bucle.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Falla transitoria (base, o el candado lo tiene otro lote de la misma sucursal). No se guardó nada: reenviar igual más tarde.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "Recibe un lote de compras a proveedor del POS, cada una con todas sus partidas.",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
     "/ventas/resumen": {
       "get": {
         "description": "Cache de 15 s por usuario-alcance y filtro.",
@@ -8056,6 +8137,904 @@
           "inventario"
         ]
       }
+    },
+    "/finanzas/estado-resultados": {
+      "get": {
+        "description": "Venta neta (Σ `cheques.subtotal`, sin IVA — supuesto de esquema-sr §2) − costo de lo vendido (consumo teórico de F2-125 a costo) = utilidad bruta; − gastos del panel = utilidad de operación. Costo incompleto (insumo sin costo o producto vendido sin receta) = utilidad marcada `utilidadSobrestimada`. Sucursal con ventas sin catálogo de productos o sin recetas = costo y utilidades nulos con su motivo; el total es nulo si falta alguna. Las compras viajan como dato informativo y NO entran a la utilidad.",
+        "operationId": "FinanzasController_estadoResultados",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-30",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstadoResultadosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Estado de resultados simple por sucursal y total (F2-126).",
+        "tags": [
+          "finanzas"
+        ]
+      }
+    },
+    "/finanzas/compras": {
+      "get": {
+        "description": "Por fecha en la zona de cada sucursal. Resumen por proveedor (sólo no canceladas), la lista (canceladas marcadas, tope 2000 con `truncado`) y el total sin IVA. `sucursales[].comprasRecibidas = 0` = el agente nunca mandó compras de esa sucursal.",
+        "operationId": "FinanzasController_listarCompras",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-30",
+              "type": "string"
+            }
+          },
+          {
+            "name": "proveedorOrigenSrId",
+            "required": false,
+            "in": "query",
+            "description": "El `origenSrId` de un proveedor. Exige `sucursalId` (si no, 400).",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComprasDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Compras a proveedor LEÍDAS de SoftRestaurant en un rango (F2-126).",
+        "tags": [
+          "finanzas"
+        ]
+      }
+    },
+    "/finanzas/compras/{id}": {
+      "get": {
+        "operationId": "FinanzasController_detalleCompra",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompraDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Una compra con sus partidas (insumo, cantidad, costo, importe).",
+        "tags": [
+          "finanzas"
+        ]
+      }
+    },
+    "/finanzas/categorias-gasto": {
+      "get": {
+        "operationId": "FinanzasController_categorias",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoriasGastoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Categorías de gasto de la empresa (activas e inactivas).",
+        "tags": [
+          "finanzas"
+        ]
+      },
+      "post": {
+        "operationId": "FinanzasController_crearCategoria",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearCategoriaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GastoCreadoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): sólo los administradores capturan gastos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya existe una categoría con ese nombre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Crea una categoría de gasto (nombre único en la empresa).",
+        "tags": [
+          "finanzas"
+        ]
+      }
+    },
+    "/finanzas/categorias-gasto/{id}": {
+      "patch": {
+        "operationId": "FinanzasController_cambiarCategoria",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambiarCategoriaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): sólo los administradores capturan gastos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya existe una categoría con ese nombre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Renombra o (des)activa una categoría. Inactiva = sin gastos nuevos.",
+        "tags": [
+          "finanzas"
+        ]
+      }
+    },
+    "/finanzas/gastos": {
+      "get": {
+        "description": "Día CONTABLE local de cada sucursal (inclusivo). Sin anulados salvo `incluirAnulados=true`. Total y desglose por categoría sin anulados. Montos sin IVA acreditable.",
+        "operationId": "FinanzasController_listarGastos",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día `YYYY-MM-DD` en la zona de CADA sucursal: [desde 00:00, hasta+1 00:00) locales. Máximo 366 días.",
+            "schema": {
+              "example": "2026-09-30",
+              "type": "string"
+            }
+          },
+          {
+            "name": "categoriaId",
+            "required": false,
+            "in": "query",
+            "description": "Sólo los de esa categoría de la empresa.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "incluirAnulados",
+            "required": false,
+            "in": "query",
+            "description": "true = incluye los anulados (marcados). Por defecto, no.",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GastosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Gastos de operación capturados en el panel, en un rango de días contables.",
+        "tags": [
+          "finanzas"
+        ]
+      },
+      "post": {
+        "operationId": "FinanzasController_crearGasto",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearGastoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GastoCreadoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): sólo los administradores capturan gastos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Registra un gasto de una sucursal. Dato del panel: nunca se escribe a SR.",
+        "tags": [
+          "finanzas"
+        ]
+      }
+    },
+    "/finanzas/gastos/{id}": {
+      "patch": {
+        "operationId": "FinanzasController_editarGasto",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditarGastoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): sólo los administradores capturan gastos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El gasto está anulado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edita día, categoría, concepto o monto de un gasto vigente.",
+        "tags": [
+          "finanzas"
+        ]
+      }
+    },
+    "/finanzas/gastos/{id}/anular": {
+      "post": {
+        "operationId": "FinanzasController_anularGasto",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): sólo los administradores capturan gastos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, la sucursal no es de esa empresa, o la compra, la categoría o el gasto no son de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El gasto ya estaba anulado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Anula un gasto (baja lógica: se queda marcado y deja de sumar).",
+        "tags": [
+          "finanzas"
+        ]
+      }
     }
   },
   "info": {
@@ -9631,6 +10610,181 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RechazoRecetaDto"
+            }
+          }
+        },
+        "required": [
+          "recibidas",
+          "creadas",
+          "actualizadas",
+          "sinCambios",
+          "obsoletas",
+          "rechazadas"
+        ]
+      },
+      "PartidaCompraDto": {
+        "type": "object",
+        "properties": {
+          "insumoOrigenSrId": {
+            "type": "string",
+            "example": "I001",
+            "description": "El `origenSrId` del insumo en el catálogo `insumos` de esta sucursal (1–64). Sin FK: el catálogo puede llegar después. Puede repetirse dentro de la compra (dos renglones)."
+          },
+          "cantidad": {
+            "type": "string",
+            "pattern": "^-?\\d{1,9}(\\.\\d{1,3})?$",
+            "example": "12.500",
+            "description": "Cantidad comprada en la unidad del insumo, MAYOR QUE 0, texto decimal NUMERIC(12,3) (no se redondea). Una devolución no viaja como partida negativa: SR la cancela o la registra aparte (supuesto, esquema-sr §10)."
+          },
+          "costoUnitario": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "85.40",
+            "description": "Costo por unidad SIN IVA (supuesto, esquema-sr §10), ≥ 0. Hasta 10 enteros y 4 decimales, se redondea a 2 mitad lejos de cero. El importe (cantidad × costo, a 2 decimales) lo calcula el API."
+          }
+        },
+        "required": [
+          "insumoOrigenSrId",
+          "cantidad",
+          "costoUnitario"
+        ]
+      },
+      "CompraDto": {
+        "type": "object",
+        "properties": {
+          "origenSrId": {
+            "type": "string",
+            "example": "9120",
+            "description": "Identidad de la compra en SR (1–64). Llave de la idempotencia junto con la sucursal de la API key. Repetida dentro del lote = se rechazan todas sus apariciones."
+          },
+          "folio": {
+            "type": "string",
+            "example": "OC-0042",
+            "description": "Folio visible del documento (1–64)."
+          },
+          "proveedorOrigenSrId": {
+            "type": "string",
+            "nullable": true,
+            "example": "PR01",
+            "description": "El `origenSrId` del proveedor en `proveedores_catalogo` de esta sucursal (1–64), o nulo si SR no lo registra. Sin FK: sin catálogo se muestra \"sin catálogo\"."
+          },
+          "almacenOrigenSrId": {
+            "type": "string",
+            "nullable": true,
+            "example": "ALM-GEN",
+            "description": "El `origenSrId` del almacén que recibió (1–64), o nulo. Sin FK."
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-22T16:00:00.000Z",
+            "description": "Fecha y hora de la compra en el POS, ISO-8601 con zona. Más de 5 min en el futuro = se rechaza la compra. El día en el panel es el de la zona de la sucursal."
+          },
+          "cancelada": {
+            "type": "boolean",
+            "description": "true = la compra se canceló en SR (o ya no existe): se muestra marcada y NO suma. El panel nunca borra una compra: para anularla se reenvía cancelada."
+          },
+          "partidas": {
+            "description": "TODAS las partidas de la compra, en su orden (el renglón es la posición). Una partida inválida rechaza la compra entera. Reenviarla con otras partidas las REEMPLAZA.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartidaCompraDto"
+            }
+          }
+        },
+        "required": [
+          "origenSrId",
+          "folio",
+          "proveedorOrigenSrId",
+          "almacenOrigenSrId",
+          "fecha",
+          "cancelada",
+          "partidas"
+        ]
+      },
+      "LoteComprasDto": {
+        "type": "object",
+        "properties": {
+          "leidoAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-22T15:30:00.000Z",
+            "description": "El instante en que se LEYÓ el lote en el POS (reloj del agente), ISO-8601 con zona. Una compra guardada con una lectura más nueva no se toca (`obsoletas`). Con el MISMO instante, gana el que llega después. Más de 5 min en el futuro = 400."
+          },
+          "compras": {
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "1 a 200 compras, con 5000 partidas a lo más EN TOTAL (si no, 400).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompraDto"
+            }
+          }
+        },
+        "required": [
+          "leidoAt",
+          "compras"
+        ]
+      },
+      "RechazoCompraDto": {
+        "type": "object",
+        "properties": {
+          "indice": {
+            "type": "number",
+            "example": 3,
+            "description": "Posición de la compra en el lote (desde 0)."
+          },
+          "origenSrId": {
+            "type": "string",
+            "nullable": true,
+            "description": "El `origenSrId` si era válido; nulo si no."
+          },
+          "motivo": {
+            "type": "string",
+            "example": "compras.3.partidas.1.cantidad: debe ser mayor que 0",
+            "description": "Ruta y regla. NUNCA repite el valor."
+          },
+          "reintentable": {
+            "type": "boolean",
+            "description": "Siempre false: reenviarla igual va a fallar igual."
+          }
+        },
+        "required": [
+          "indice",
+          "origenSrId",
+          "motivo",
+          "reintentable"
+        ]
+      },
+      "ResultadoComprasDto": {
+        "type": "object",
+        "properties": {
+          "recibidas": {
+            "type": "number",
+            "description": "Compras en el lote."
+          },
+          "creadas": {
+            "type": "number",
+            "description": "Compras nuevas."
+          },
+          "actualizadas": {
+            "type": "number",
+            "description": "Compras que cambiaron: su cabecera y sus partidas se reescribieron."
+          },
+          "sinCambios": {
+            "type": "number",
+            "description": "Compras iguales a lo guardado: no se tocaron."
+          },
+          "obsoletas": {
+            "type": "number",
+            "description": "Compras cuya versión guardada se leyó DESPUÉS de este lote: no se tocaron (no es error)."
+          },
+          "rechazadas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RechazoCompraDto"
             }
           }
         },
@@ -15578,6 +16732,794 @@
           "sucursales",
           "filas",
           "aparte"
+        ]
+      },
+      "CostoVendidoDto": {
+        "type": "object",
+        "properties": {
+          "importe": {
+            "type": "string",
+            "nullable": true,
+            "example": "31000.00",
+            "description": "Costo de lo vendido = importe del consumo TEÓRICO (F2-125), sin IVA. Nulo = no se pudo calcular (ver `motivo` / `sucursalesSinCalculo`), nunca un 0 inventado."
+          },
+          "completo": {
+            "type": "boolean",
+            "description": "false = falta costo de algo: insumos con teórico sin costo, o productos vendidos que no se pudieron explotar. La utilidad sale SOBRESTIMADA."
+          },
+          "insumosSinCosto": {
+            "type": "number",
+            "description": "Insumos con consumo teórico y sin costo de referencia."
+          },
+          "productosSinCosto": {
+            "type": "number",
+            "description": "Productos vendidos sin receta, sin catálogo o con nombre ambiguo."
+          },
+          "ventaSinCosto": {
+            "type": "string",
+            "example": "1800.00",
+            "description": "Importe de las PARTIDAS de esos productos: CON IVA y ANTES del descuento de la cuenta. Sólo indica cuánto de lo vendido quedó sin costo; no se resta ni se compara con la venta neta."
+          }
+        },
+        "required": [
+          "importe",
+          "completo",
+          "insumosSinCosto",
+          "productosSinCosto",
+          "ventaSinCosto"
+        ]
+      },
+      "EstadoResultadosSucursalDto": {
+        "type": "object",
+        "properties": {
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas no canceladas cerradas en el periodo."
+          },
+          "venta": {
+            "type": "string",
+            "example": "116000.00",
+            "description": "Σ `cheques.total` (con IVA): la misma venta de Inicio y Comparativos."
+          },
+          "ventaNeta": {
+            "type": "string",
+            "example": "100000.00",
+            "description": "Σ `cheques.subtotal`: venta SIN IVA. SUPUESTO no validado: neto de descuento y sin propina (esquema-sr §2)."
+          },
+          "costo": {
+            "$ref": "#/components/schemas/CostoVendidoDto"
+          },
+          "gastos": {
+            "type": "string",
+            "example": "40000.00",
+            "description": "Σ gastos NO anulados con día en el periodo."
+          },
+          "compras": {
+            "type": "string",
+            "example": "35000.00",
+            "description": "Σ compras NO canceladas del periodo. INFORMATIVO: no entra a la utilidad (el costo ya es el consumo)."
+          },
+          "utilidadBruta": {
+            "type": "string",
+            "nullable": true,
+            "example": "69000.00",
+            "description": "Venta neta − costo."
+          },
+          "utilidadOperacion": {
+            "type": "string",
+            "nullable": true,
+            "example": "29000.00",
+            "description": "Utilidad bruta − gastos."
+          },
+          "margenBruto": {
+            "type": "string",
+            "nullable": true,
+            "example": "69.0",
+            "description": "% sobre la venta neta."
+          },
+          "margenOperacion": {
+            "type": "string",
+            "nullable": true,
+            "example": "29.0",
+            "description": "% sobre la venta neta."
+          },
+          "utilidadSobrestimada": {
+            "type": "boolean",
+            "description": "true = el costo está incompleto: la utilidad real es MENOR o igual a la mostrada."
+          },
+          "sinVentas": {
+            "type": "boolean",
+            "description": "true = sin cuentas en el periodo: la utilidad de operación es −gastos. Si la sucursal no reportó, esa cifra no es real."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "sin_catalogo_productos",
+              "sin_recetas"
+            ],
+            "nullable": true,
+            "description": "Por qué el costo es nulo con ventas: sin catálogo de productos o sin recetas."
+          }
+        },
+        "required": [
+          "cuentas",
+          "venta",
+          "ventaNeta",
+          "costo",
+          "gastos",
+          "compras",
+          "utilidadBruta",
+          "utilidadOperacion",
+          "margenBruto",
+          "margenOperacion",
+          "utilidadSobrestimada",
+          "sinVentas",
+          "sucursalId",
+          "sucursal",
+          "motivo"
+        ]
+      },
+      "EstadoResultadosTotalDto": {
+        "type": "object",
+        "properties": {
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas no canceladas cerradas en el periodo."
+          },
+          "venta": {
+            "type": "string",
+            "example": "116000.00",
+            "description": "Σ `cheques.total` (con IVA): la misma venta de Inicio y Comparativos."
+          },
+          "ventaNeta": {
+            "type": "string",
+            "example": "100000.00",
+            "description": "Σ `cheques.subtotal`: venta SIN IVA. SUPUESTO no validado: neto de descuento y sin propina (esquema-sr §2)."
+          },
+          "costo": {
+            "$ref": "#/components/schemas/CostoVendidoDto"
+          },
+          "gastos": {
+            "type": "string",
+            "example": "40000.00",
+            "description": "Σ gastos NO anulados con día en el periodo."
+          },
+          "compras": {
+            "type": "string",
+            "example": "35000.00",
+            "description": "Σ compras NO canceladas del periodo. INFORMATIVO: no entra a la utilidad (el costo ya es el consumo)."
+          },
+          "utilidadBruta": {
+            "type": "string",
+            "nullable": true,
+            "example": "69000.00",
+            "description": "Venta neta − costo."
+          },
+          "utilidadOperacion": {
+            "type": "string",
+            "nullable": true,
+            "example": "29000.00",
+            "description": "Utilidad bruta − gastos."
+          },
+          "margenBruto": {
+            "type": "string",
+            "nullable": true,
+            "example": "69.0",
+            "description": "% sobre la venta neta."
+          },
+          "margenOperacion": {
+            "type": "string",
+            "nullable": true,
+            "example": "29.0",
+            "description": "% sobre la venta neta."
+          },
+          "utilidadSobrestimada": {
+            "type": "boolean",
+            "description": "true = el costo está incompleto: la utilidad real es MENOR o igual a la mostrada."
+          },
+          "sinVentas": {
+            "type": "boolean",
+            "description": "true = sin cuentas en el periodo: la utilidad de operación es −gastos. Si la sucursal no reportó, esa cifra no es real."
+          },
+          "sucursalesSinCalculo": {
+            "description": "Sucursales con ventas y sin costo calculable: por ellas el total es nulo.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "cuentas",
+          "venta",
+          "ventaNeta",
+          "costo",
+          "gastos",
+          "compras",
+          "utilidadBruta",
+          "utilidadOperacion",
+          "margenBruto",
+          "margenOperacion",
+          "utilidadSobrestimada",
+          "sinVentas",
+          "sucursalesSinCalculo"
+        ]
+      },
+      "GastoCategoriaTotalDto": {
+        "type": "object",
+        "properties": {
+          "categoriaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "categoria": {
+            "type": "string"
+          },
+          "monto": {
+            "type": "string",
+            "example": "45000.00"
+          }
+        },
+        "required": [
+          "categoriaId",
+          "categoria",
+          "monto"
+        ]
+      },
+      "EstadoResultadosDto": {
+        "type": "object",
+        "properties": {
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EstadoResultadosSucursalDto"
+            }
+          },
+          "total": {
+            "$ref": "#/components/schemas/EstadoResultadosTotalDto"
+          },
+          "gastosPorCategoria": {
+            "description": "Gastos del periodo por categoría.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GastoCategoriaTotalDto"
+            }
+          }
+        },
+        "required": [
+          "sucursales",
+          "total",
+          "gastosPorCategoria"
+        ]
+      },
+      "SucursalComprasDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "comprasRecibidas": {
+            "type": "number",
+            "description": "Compras que el agente ha mandado de esta sucursal, en total (cualquier fecha). 0 = el lector (F2-241) nunca mandó compras: un periodo vacío no significa \"no se compró\"."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "comprasRecibidas"
+        ]
+      },
+      "ProveedorComprasDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "proveedorOrigenSrId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = la compra no trae proveedor."
+          },
+          "proveedor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nombre del espejo `proveedores_catalogo`; nulo = sin catálogo o sin proveedor."
+          },
+          "compras": {
+            "type": "number",
+            "description": "Compras NO canceladas del periodo."
+          },
+          "total": {
+            "type": "string",
+            "example": "1250.00",
+            "description": "Σ total de esas compras, sin IVA."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "proveedorOrigenSrId",
+          "proveedor",
+          "compras",
+          "total"
+        ]
+      },
+      "CompraResumenDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Instante UTC; se muestra en la zona de la sucursal."
+          },
+          "proveedorOrigenSrId": {
+            "type": "string",
+            "nullable": true
+          },
+          "proveedor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = sin catálogo o sin proveedor."
+          },
+          "almacenOrigenSrId": {
+            "type": "string",
+            "nullable": true
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = sin catálogo o sin almacén."
+          },
+          "total": {
+            "type": "string",
+            "example": "1250.00",
+            "description": "Σ importes de sus partidas, sin IVA."
+          },
+          "partidas": {
+            "type": "number"
+          },
+          "cancelada": {
+            "type": "boolean",
+            "description": "Cancelada en SR: se muestra marcada y NO suma."
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "folio",
+          "fecha",
+          "proveedorOrigenSrId",
+          "proveedor",
+          "almacenOrigenSrId",
+          "almacen",
+          "total",
+          "partidas",
+          "cancelada"
+        ]
+      },
+      "ComprasDto": {
+        "type": "object",
+        "properties": {
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalComprasDto"
+            }
+          },
+          "porProveedor": {
+            "description": "Total desc.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProveedorComprasDto"
+            }
+          },
+          "compras": {
+            "description": "Las compras del periodo (canceladas incluidas, marcadas), más recientes primero.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompraResumenDto"
+            }
+          },
+          "totalCompras": {
+            "type": "number",
+            "description": "Compras del periodo antes del tope (canceladas incluidas)."
+          },
+          "truncado": {
+            "type": "boolean",
+            "description": "true = hubo más de 2000 compras: la lista (y su CSV) va recortada."
+          },
+          "total": {
+            "type": "string",
+            "example": "48000.00",
+            "description": "Σ total de las NO canceladas del periodo."
+          }
+        },
+        "required": [
+          "sucursales",
+          "porProveedor",
+          "compras",
+          "totalCompras",
+          "truncado",
+          "total"
+        ]
+      },
+      "PartidaCompraVistaDto": {
+        "type": "object",
+        "properties": {
+          "renglon": {
+            "type": "number"
+          },
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = sin catálogo."
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true
+          },
+          "cantidad": {
+            "type": "string",
+            "example": "12.500"
+          },
+          "costoUnitario": {
+            "type": "string",
+            "example": "85.40",
+            "description": "Sin IVA."
+          },
+          "importe": {
+            "type": "string",
+            "example": "1067.50"
+          }
+        },
+        "required": [
+          "renglon",
+          "insumoOrigenSrId",
+          "insumo",
+          "unidad",
+          "cantidad",
+          "costoUnitario",
+          "importe"
+        ]
+      },
+      "CompraDetalleDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Instante UTC; se muestra en la zona de la sucursal."
+          },
+          "proveedorOrigenSrId": {
+            "type": "string",
+            "nullable": true
+          },
+          "proveedor": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = sin catálogo o sin proveedor."
+          },
+          "almacenOrigenSrId": {
+            "type": "string",
+            "nullable": true
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo = sin catálogo o sin almacén."
+          },
+          "total": {
+            "type": "string",
+            "example": "1250.00",
+            "description": "Σ importes de sus partidas, sin IVA."
+          },
+          "partidas": {
+            "type": "number"
+          },
+          "cancelada": {
+            "type": "boolean",
+            "description": "Cancelada en SR: se muestra marcada y NO suma."
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "detalle": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartidaCompraVistaDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "folio",
+          "fecha",
+          "proveedorOrigenSrId",
+          "proveedor",
+          "almacenOrigenSrId",
+          "almacen",
+          "total",
+          "partidas",
+          "cancelada",
+          "sucursal",
+          "detalle"
+        ]
+      },
+      "CategoriaGastoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "Inactiva = no admite gastos nuevos; los viejos se siguen viendo."
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "activa"
+        ]
+      },
+      "CategoriasGastoDto": {
+        "type": "object",
+        "properties": {
+          "categorias": {
+            "description": "Por nombre.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoriaGastoDto"
+            }
+          }
+        },
+        "required": [
+          "categorias"
+        ]
+      },
+      "CrearCategoriaDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "Único en la empresa sin distinguir mayúsculas."
+          }
+        },
+        "required": [
+          "empresaId",
+          "nombre"
+        ]
+      },
+      "GastoCreadoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "CambiarCategoriaDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "activa": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "empresaId"
+        ]
+      },
+      "GastoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dia": {
+            "type": "string",
+            "example": "2026-09-10",
+            "description": "Día contable local de la sucursal."
+          },
+          "categoriaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "categoria": {
+            "type": "string"
+          },
+          "concepto": {
+            "type": "string"
+          },
+          "monto": {
+            "type": "string",
+            "example": "8500.00",
+            "description": "Sin IVA acreditable."
+          },
+          "anulado": {
+            "type": "boolean",
+            "description": "Anulado: se muestra marcado y NO suma."
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "dia",
+          "categoriaId",
+          "categoria",
+          "concepto",
+          "monto",
+          "anulado"
+        ]
+      },
+      "GastosDto": {
+        "type": "object",
+        "properties": {
+          "gastos": {
+            "description": "Por día desc. Tope 2000 (ver `truncado`).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GastoDto"
+            }
+          },
+          "truncado": {
+            "type": "boolean",
+            "description": "true = hubo más de 2000: la lista va recortada (los totales no)."
+          },
+          "total": {
+            "type": "string",
+            "example": "120000.00",
+            "description": "Σ de los NO anulados del periodo."
+          },
+          "porCategoria": {
+            "description": "Monto desc. Sin anulados.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GastoCategoriaTotalDto"
+            }
+          }
+        },
+        "required": [
+          "gastos",
+          "truncado",
+          "total",
+          "porCategoria"
+        ]
+      },
+      "CrearGastoDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "De otra empresa = 404."
+          },
+          "categoriaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "De otra empresa = 404; inactiva = 400."
+          },
+          "dia": {
+            "type": "string",
+            "example": "2026-09-10",
+            "description": "Día CONTABLE `YYYY-MM-DD` de la sucursal (no un instante). Posterior a hoy en la zona de la sucursal = 400."
+          },
+          "concepto": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "monto": {
+            "type": "string",
+            "pattern": "^\\d{1,10}(\\.\\d{1,2})?$",
+            "example": "8500.00",
+            "description": "Monto SIN IVA acreditable, > 0, texto con hasta 2 decimales."
+          }
+        },
+        "required": [
+          "empresaId",
+          "sucursalId",
+          "categoriaId",
+          "dia",
+          "concepto",
+          "monto"
+        ]
+      },
+      "EditarGastoDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "categoriaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dia": {
+            "type": "string",
+            "example": "2026-09-10"
+          },
+          "concepto": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "monto": {
+            "type": "string",
+            "pattern": "^\\d{1,10}(\\.\\d{1,2})?$"
+          }
+        },
+        "required": [
+          "empresaId"
         ]
       }
     }

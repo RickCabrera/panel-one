@@ -5,10 +5,16 @@ import {
   armarFilas,
   deltaDe,
   ordenar,
+  sinUtilidad,
+  UTILIDAD_CORTADA,
+  UTILIDAD_SIN_COSTO,
+  UTILIDAD_SIN_LECTURA,
+  utilidadesDe,
   valor,
   type Cifras,
   type FilaComparada,
   type Orden,
+  type Utilidad,
 } from './matriz';
 
 function suc(
@@ -22,9 +28,21 @@ function suc(
   return { sucursalId: id, nombre, venta, cuentas, ticketPromedio: ticket, comensales };
 }
 
-function cif(venta: string, cuentas: number, ticket: string | null, comensales: number): Cifras {
-  return { venta, cuentas, ticketPromedio: ticket, comensales };
+function cif(
+  venta: string,
+  cuentas: number,
+  ticket: string | null,
+  comensales: number,
+  utilidad: Utilidad = sinUtilidad(UTILIDAD_SIN_COSTO),
+): Cifras {
+  return { venta, cuentas, ticketPromedio: ticket, comensales, utilidad };
 }
+
+const util = (importe: string, sobrestimada = false): Utilidad => ({
+  importe,
+  razon: null,
+  sobrestimada,
+});
 
 function fila(id: string, nombre: string, a: Cifras | null, b: Cifras | null): FilaComparada {
   return { id, nombre, a, b };
@@ -185,5 +203,131 @@ describe('ordenar (ranking)', () => {
     );
     expect(ids(r)).toEqual(['n', 'm']);
     expect(posiciones(r)).toEqual([1, null]);
+  });
+});
+
+describe('utilidad (F2-126)', () => {
+  const base = {
+    cuentas: 1,
+    venta: '116.00',
+    ventaNeta: '100.00',
+    costo: {
+      importe: '30.00' as string | null,
+      completo: true,
+      insumosSinCosto: 0,
+      productosSinCosto: 0,
+      ventaSinCosto: '0.00',
+    },
+    gastos: '10.00',
+    compras: '0.00',
+    utilidadBruta: '70.00' as string | null,
+    utilidadOperacion: '60.00' as string | null,
+    margenBruto: '70.0' as string | null,
+    margenOperacion: '60.0' as string | null,
+    utilidadSobrestimada: false,
+    sinVentas: false,
+  };
+  const estado = {
+    sucursales: [
+      { ...base, sucursalId: '1', sucursal: 'Centro', motivo: null },
+      {
+        ...base,
+        sucursalId: '2',
+        sucursal: 'Norte',
+        motivo: 'sin_recetas' as const,
+        costo: { ...base.costo, importe: null, completo: false },
+        utilidadBruta: null,
+        utilidadOperacion: null,
+        margenBruto: null,
+        margenOperacion: null,
+      },
+      {
+        ...base,
+        sucursalId: '3',
+        sucursal: 'Sur',
+        motivo: null,
+        utilidadOperacion: '12.34',
+        utilidadSobrestimada: true,
+      },
+    ],
+    // El total lo manda el API: nulo porque falta Norte. No se suma aquí.
+    total: {
+      ...base,
+      sucursalesSinCalculo: ['Norte'],
+      utilidadBruta: null,
+      utilidadOperacion: null,
+    },
+    gastosPorCategoria: [],
+  };
+
+  it('utilidadesDe toma la de OPERACIÓN por sucursal y la del total, sin sumar', () => {
+    const u = utilidadesDe(estado, UTILIDAD_SIN_LECTURA);
+    expect(u.deSucursal('1')).toEqual({ importe: '60.00', razon: null, sobrestimada: false });
+    expect(u.deSucursal('2')).toEqual(sinUtilidad(UTILIDAD_SIN_COSTO));
+    expect(u.deSucursal('3')).toEqual({ importe: '12.34', razon: null, sobrestimada: true });
+    // Una sucursal que el estado no trae: nula, nunca cero.
+    expect(u.deSucursal('9')).toEqual(sinUtilidad(UTILIDAD_SIN_LECTURA));
+    // Centro y Sur tienen utilidad, pero el total del API es nulo: no se suma aquí.
+    expect(u.total).toEqual(sinUtilidad(UTILIDAD_SIN_COSTO));
+  });
+
+  it('sin estado (falló o B cortado): todas nulas con el porqué que se pase', () => {
+    const u = utilidadesDe(undefined, UTILIDAD_CORTADA);
+    expect(u.deSucursal('1')).toEqual(sinUtilidad(UTILIDAD_CORTADA));
+    expect(u.total).toEqual(sinUtilidad(UTILIDAD_CORTADA));
+  });
+
+  it('armarFilas cuelga la utilidad de cada periodo de su sucursal', () => {
+    const filas = armarFilas(
+      [suc('1', 'Centro', '100.00', 1), suc('2', 'Norte', '50.00', 1)],
+      [suc('1', 'Centro', '80.00', 1)],
+      utilidadesDe(estado, UTILIDAD_SIN_LECTURA),
+      utilidadesDe(undefined, UTILIDAD_CORTADA),
+    );
+    expect(filas.map((f) => [f.id, f.a?.utilidad.importe, f.b?.utilidad.razon ?? null])).toEqual([
+      ['1', '60.00', UTILIDAD_CORTADA],
+      ['2', null, null],
+    ]);
+  });
+
+  it('valor: nula o sin cuentas = sin valor; una negativa sí es valor', () => {
+    expect(valor(cif('10.00', 1, '10.00', 1), 'utilidad')).toBeNull();
+    expect(valor(cif('0.00', 0, null, 0, util('-50.00')), 'utilidad')).toBeNull();
+    expect(valor(cif('10.00', 1, '10.00', 1, util('-50.00')), 'utilidad')).toBe(-5000n);
+  });
+
+  it('deltaDe: nula en A o en B = "—" con el porqué de ese lado; base ≤ 0 = "—"', () => {
+    const c = (u?: Utilidad) => cif('10.00', 1, '10.00', 1, u);
+    expect(
+      deltaDe(fila('1', 'x', c(util('10.00')), c(sinUtilidad(UTILIDAD_CORTADA))), 'utilidad'),
+    ).toEqual({
+      tipo: 'sinBase',
+      razon: `Periodo B: ${UTILIDAD_CORTADA}`,
+    });
+    expect(deltaDe(fila('1', 'x', c(), c(util('10.00'))), 'utilidad')).toEqual({
+      tipo: 'sinBase',
+      razon: `Periodo A: ${UTILIDAD_SIN_COSTO}`,
+    });
+    expect(deltaDe(fila('1', 'x', c(util('10.00')), c(util('-1.00'))), 'utilidad').tipo).toBe(
+      'sinBase',
+    );
+    expect(deltaDe(fila('1', 'x', c(util('150.00')), c(util('100.00'))), 'utilidad')).toEqual({
+      tipo: 'cambio',
+      diferencia: 5000n,
+      porcentaje: '+50.0 %',
+    });
+  });
+
+  it('ranking por utilidad de A: negativas debajo, nulas fuera y sin número', () => {
+    const r = ordenar(
+      [
+        fila('1', 'Centro', cif('1.00', 1, '1.00', 1, util('-5.00')), null),
+        fila('2', 'Norte', cif('1.00', 1, '1.00', 1), null),
+        fila('3', 'Sur', cif('1.00', 1, '1.00', 1, util('7.00')), null),
+      ],
+      'utilidad',
+    );
+    expect(ids(r)).toEqual(['3', '1', '2']);
+    expect(posiciones(r)).toEqual([1, 2, null]);
   });
 });

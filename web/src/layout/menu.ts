@@ -249,13 +249,13 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'inventario.compras',
         texto: 'Compras',
         icono: ShoppingCart,
-        pendiente: construye('F2-126'),
+        destino: { ruta: '/compras' },
       },
       {
         id: 'inventario.gastos',
         texto: 'Gastos y utilidad',
         icono: Wallet,
-        pendiente: construye('F2-126'),
+        destino: { ruta: '/gastos' },
       },
       {
         id: 'inventario.traspasos',

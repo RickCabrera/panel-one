@@ -5994,3 +5994,105 @@ aprobado en el 2.º pase.
 
 **Qué haría distinto.** Pensar desde el principio qué significa "consumo real" si el POS ya explota
 recetas: el revisor lo marcó en el plan y era la pregunta de fondo de la tarea.
+
+## 2026-09-23 03:30 — F2-126 · Compras, gastos y utilidad
+**Estado:** CERRADA (PR #54, mergeada). **PENDIENTE DE VALIDACIÓN REAL** (F2-193, F2-241).
+
+> **Una TERCERA sesión la cerró (2026-09-22 19:10).** La segunda dejó todo hecho, revisado,
+> pusheado y con el PR #54 abierto y el CI en verde, pero murió antes del merge. La tercera, que
+> llegó en frío, no vio la rama al principio y empezó un plan desde cero. Sólo al hacer
+> `git checkout -b` se enteró de que la rama existía. **Si retomas una tarea, antes de planear corre
+> `git branch -a | grep <id>` y `gh pr list --head feat/<id> --state all`.** Esa sesión no tocó
+> código: corrigió este encabezado, esperó el CI y mergeó.
+
+**Cómo llegó esta sesión (léelo).** Una sesión ANTERIOR tomó F2-126, construyó casi todo el api y
+las páginas web, y murió (límite de uso) SIN commitear y SIN dejar nota: su trabajo apareció como
+cambios sueltos en el árbol de **main** (17 modificados + ~20 sin rastrear) y una rama local
+`feat/F2-126` vacía (en el mismo commit que main). No hay constancia de que su plan pasara por el
+revisor. Lo que hice: `git checkout feat/F2-126` (se lleva los cambios), commit "WIP heredado (sin
+revisar)" (5dd29eb, lo absorbe el squash), plan nuevo que describe el diseño heredado + lo que
+faltaba, revisor del plan (APROBADO con 6 observaciones), y terminé. **Lección para el orquestador /
+Ricardo:** una sesión que muere a media construcción debería commitear WIP en su rama antes; si
+encuentras cambios sueltos en main al arrancar, revisa `git branch` y retoma, no los borres.
+
+**Qué quedó hecho.**
+- api (heredado, revisado): modelos `Compra`/`PartidaCompra` (espejo de SR, upsert por
+  `(sucursal_id, origen_sr_id)`, hash, `leida_at`, nunca se borran) y `CategoriaGasto`/`Gasto` (dato
+  propio; `dia` DATE contable local; baja lógica), migración `20260923020000_compras_gastos` con
+  CHECKs a mano. `POST /ingesta/compras` (calcado de movimientos F2-122, candado por sucursal).
+  `/finanzas/*`: compras (lista + detalle), categorías y gastos (CRUD, admin escribe, visor 403 por
+  rol, otra empresa 404) y `GET /finanzas/estado-resultados`.
+- Estado de resultados (puro en `finanzas/estado-resultados.ts`): venta neta (Σ subtotal) − costo
+  teórico F2-125 (reusa `RecetasService.consumoTeorico`) = utilidad bruta; − gastos = operación.
+- Seed: `seed-compras.ts` (por la ingesta) y `seed-gastos.ts` (por el helper de captura).
+- web: `/compras` y `/gastos` ("Gastos y utilidad": tabla, gráfica, 2 CSV, captura).
+- Esta sesión: esquema-sr §2 (supuesto de `subtotal`), §10 "Compras, gastos y utilidad", §13
+  "Contrato de compras"; **columna Utilidad en Comparativos** (el "Y además de F2-140"); tests web de
+  reglas/Gastos/Compras (hechos por un subagente, revisados); aviso de sobrestimada ahora sigue la
+  bandera `utilidadSobrestimada` del API (antes podía callarse); "Y además (de F2-126)" en F2-241 y
+  F2-193 del backlog.
+
+**Decisiones que tomé y por qué.** (todas en esquema-sr §10 "Compras, gastos y utilidad")
+- `DECISION PROVISIONAL` venta neta = Σ `cheques.subtotal` no cancelados (supuesto: neto de
+  descuento, sin IVA, sin propina). `estado-resultados.service.ts`, junto a `ventaNeta`.
+- Costo = consumo TEÓRICO a costo, no compras ni real. Las compras NO entran a la utilidad (doble
+  conteo); viajan informativas.
+- Costo incompleto → `utilidadSobrestimada`; sucursal con ventas sin catálogo/recetas → costo y
+  utilidades NULOS con motivo; total nulo si falta una.
+- Gastos SIN IVA acreditable (`gastos.service.ts`). Compra = documento aparte de su póliza
+  (`schema.prisma`, modelo `Compra`).
+- NO se construyó la "captura manual de compras si la instalación no las registra": decisión
+  abierta en F2-193 (las compras no afectan la utilidad). El `[x]` lleva **ALCANCE** y **PENDIENTE
+  DE VALIDACIÓN REAL**.
+- Comparativos: Utilidad = la de OPERACIÓN; el total es el `total` del API (nunca suma en el front);
+  si B se corta a la misma altura (`alturaAl`, el default "comparable" cuando A incluye hoy) la
+  utilidad de B NO se pide y se dice por qué (el estado es por días completos). Si
+  `/finanzas/estado-resultados` falla, la tabla se ve igual y la columna dice "no se pudo leer".
+  Base de utilidad ≤ 0 → sin Δ %.
+
+**Trampas que encontré.**
+- Los heredocs de bash con comillas simples dentro (textos en español con apóstrofos/`'—'`) revientan
+  con "unexpected EOF": escribe el script python con Write en el scratchpad y córrelo.
+- `npx prettier --write <carpeta>` sólo toca formato, pero git avisa CRLF en archivos que no cambió:
+  revisa `git show --stat` antes de dar por bueno el commit.
+- Comparativos pinta un Δ legítimo "$0.00" (ticket promedio igual en A y B): un test que exija "no
+  $0.00 en toda la tabla" es falso; acótalo a las celdas de utilidad.
+- `.wt-main/` sigue sin rastrear en la raíz. ACCIÓN PARA RICARDO: borrarla. Nunca `git add -A`.
+
+**Qué quedó abierto.**
+- F2-193: validar `subtotal`, costo estándar vs por inventarios, gastos sin IVA, si el piloto
+  registra compras (y si hace falta la captura manual), cuadre ±1 % con el contador.
+- F2-241: el lector de compras (obligaciones en su "Y además").
+- `POST /finanzas/gastos` no es idempotente: doble envío desde dos pestañas o reintento de red = dos
+  gastos (el botón se deshabilita mientras envía). Anotado en F2-193; tarea aparte si molesta.
+- Comparativos hace 2 llamadas a estado-resultados (cada una corre `consumoTeorico`, pesado). Con
+  volumen real, medir; ninguna lectura de finanzas fija `statement_timeout` propio (igual que F2-125).
+- Menores vistos por el subagente de tests, sin tocar: `motivoSinUtilidad` supone "sin recetas" si el
+  API no manda motivo; `vacioCompras` con lista de sucursales vacía dice "ninguna sucursal ha
+  mandado"; en `/gastos` el select de sucursal del formulario y el de la cabecera comparten nombre
+  accesible.
+- Deuda (revisor): los CSV (Comparativos y `estadoACsv` de Gastos y utilidad) exportan una utilidad
+  SOBRESTIMADA como cifra limpia; la salvedad sólo se ve en pantalla. Candidata: columna de bandera.
+- Sigue el test inestable de `reportes.e2e.spec.ts` (ver log de F2-125); si el CI lo pega, re-correr.
+
+**Tests.**
+- api (heredados, verdes): `ingesta/compras.spec.ts`, `ingesta/compras.e2e.spec.ts` (×3 idéntico,
+  paralelo, corrección con menos partidas, lote viejo, rechazo por compra, aislamiento),
+  `finanzas/estado-resultados.spec.ts`, `finanzas/finanzas.e2e.spec.ts` (403 visor, 404 otra
+  empresa, 401, corte local, sobrestimada, nulos, sinVentas), `prisma/seed-utilidad.spec.ts` (agosto
+  A1/A2 al centavo contra cálculo a mano). **Qué prueba y qué no:** la venta neta ahí sólo prueba que
+  nada se pierde (suma el mismo subtotal del generador); lo que vale es el COSTO (cruce por clave vs
+  el servicio por nombre, promedio de costo propio). No es un cuadre contable.
+- Adaptados, no aflojados: `scope.helper.spec`, `scoped-prisma.service.spec`, web `menu.test` y
+  `Sidebar.test` (pendiente de ejemplo → Proyecciones/F2-127), `comparativos/csv.test` (4 columnas
+  más, vacías sin utilidad) y `Comparativos.test` (nota de pendientes sin Utilidad).
+- web nuevos: `finanzas/reglas.test.ts` (34), `Gastos.test.tsx` (13), `Compras.test.tsx` (11),
+  utilidad en `matriz.test.ts` (+6), `csv.test.ts` (+1), `Comparativos.test.tsx` (+4).
+- Números: /api lint, typecheck, `prisma validate` limpios; `migrate diff` DB↔schema vacío; openapi
+  regenerado sin diferencias. Jest 1684/1685 (99 suites): el único rojo es el preexistente
+  `prisma/esquema.spec.ts` (argon2id: FK al borrar el usuario en la base local de dev), igual que
+  F2-120…F2-125 — NO es verde. /web build, lint limpios; vitest 1096/1096; check:bundle 291.2 kB gzip.
+- Revisor: plan APROBADO (1.er pase); entregable APROBADO en el 1.er pase (con observaciones: log en la rama, marcas del [x], CSV sin salvedad).
+
+**Qué haría distinto.** Commitear WIP en la rama cada hora: la sesión anterior perdió su nota y casi
+su trabajo por no hacerlo.

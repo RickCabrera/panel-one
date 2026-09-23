@@ -10,6 +10,7 @@ import {
   type FilaComparada,
   type FilaOrdenada,
   type Metrica,
+  UTILIDAD_SOBRESTIMADA,
 } from './matriz';
 
 const TH = 'px-2 py-1 font-medium';
@@ -30,6 +31,21 @@ function Cifra({ c, m, testId }: { c: Cifras | null; m: Metrica; testId: string 
     contenido = pesos(c.venta);
   } else if (m === 'ticketPromedio') {
     contenido = c.ticketPromedio === null ? '—' : pesos(c.ticketPromedio);
+  } else if (m === 'utilidad') {
+    // F2-126: nula = "—" con su porqué; costo incompleto = cifra con asterisco y la salvedad.
+    if (c.utilidad.importe === null) {
+      contenido = '—';
+      titulo = c.utilidad.razon ?? undefined;
+    } else if (c.utilidad.sobrestimada) {
+      contenido = (
+        <>
+          {pesos(c.utilidad.importe)}*<span className="sr-only"> ({UTILIDAD_SOBRESTIMADA})</span>
+        </>
+      );
+      titulo = UTILIDAD_SOBRESTIMADA;
+    } else {
+      contenido = pesos(c.utilidad.importe);
+    }
   } else if (m === 'cuentas') {
     contenido = c.cuentas;
   } else {

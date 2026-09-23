@@ -17,6 +17,7 @@ import { TraspasosService } from './traspasos.service';
  * F2-122: movimientos, pólizas y kardex. F2-123: conteos físicos (dato propio, nunca a SR). F2-124: traspasos (propios, conciliados
  * contra las pólizas de SR).
  * F2-125: recetas y consumo teórico contra el real (lee ventas por el helper de agregados).
+ * Exporta `RecetasService`: el estado de resultados de F2-126 reusa su consumo teórico.
  */
 @Module({
   imports: [VentasModule],
@@ -34,5 +35,6 @@ import { TraspasosService } from './traspasos.service';
     TraspasosService,
     RecetasService,
   ],
+  exports: [RecetasService],
 })
 export class InventarioModule {}

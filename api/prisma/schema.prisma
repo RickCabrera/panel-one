@@ -48,6 +48,8 @@ model Empresa {
   reglasAlerta         ReglaAlerta[]
   alertaEvaluacion     AlertaEvaluacion?
   suscripcionesReporte SuscripcionReporte[]
+  // F2-126: categorías de gasto (dato del panel).
+  categoriasGasto      CategoriaGasto[]
 
   @@map("empresas")
 }
@@ -106,6 +108,10 @@ model Sucursal {
   // F2-125: recetas leídas de SR (espejo por sucursal).
   recetas               Receta[]
   renglonesReceta       RenglonReceta[]
+  // F2-126: compras leídas de SR (espejo por sucursal) y gastos capturados en el panel.
+  compras               Compra[]
+  partidasCompra        PartidaCompra[]
+  gastos                Gasto[]
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -1390,4 +1396,112 @@ model RenglonReceta {
   @@unique([recetaId, renglon], map: "renglones_receta_receta_renglon_key")
   @@index([empresaId])
   @@map("renglones_receta")
+}
+
+// F2-126. Una compra (documento de compra a proveedor) leída de SR. La escribe SÓLO
+// `IngestaCompras` (clavada a la sucursal del agente), upsert por (sucursal, origen_sr_id), con
+// las mismas reglas que las pólizas de F2-122: `hash` de la forma canónica, `leida_at` decide la
+// versión, una compra nunca se borra (se reenvía `cancelada`). `total` = Σ importes de sus
+// partidas, SIN IVA, lo calcula el API. Proveedor, almacén e insumo por `origen_sr_id` en texto,
+// sin FK. DECISION PROVISIONAL (nocturno): la compra es un documento APARTE de su póliza de entrada
+// (F2-122); el panel no las concilia ni la suma a la utilidad. esquema-sr.md §10 "Compras, gastos y utilidad".
+model Compra {
+  id                   String   @id @default(uuid()) @db.Uuid
+  empresaId            String   @map("empresa_id") @db.Uuid
+  sucursalId           String   @map("sucursal_id") @db.Uuid
+  origenSrId           String   @map("origen_sr_id")
+  folio                String
+  proveedorOrigenSrId  String?  @map("proveedor_origen_sr_id")
+  almacenOrigenSrId    String?  @map("almacen_origen_sr_id")
+  fecha                DateTime @db.Timestamptz(3)
+  cancelada            Boolean
+  total                Decimal  @db.Decimal(12, 2)
+  partidas             Int
+  hash                 String   @db.Char(64)
+  leidaAt              DateTime @map("leida_at") @db.Timestamptz(3)
+  recibidaAt           DateTime @map("recibida_at") @db.Timestamptz(3)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal        @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "compras_sucursal_empresa_fkey")
+  detalle  PartidaCompra[]
+
+  @@unique([sucursalId, origenSrId], map: "compras_sucursal_origen_key")
+  @@unique([id, sucursalId, empresaId], map: "compras_id_sucursal_empresa_key")
+  @@index([empresaId])
+  @@index([sucursalId, fecha])
+  @@map("compras")
+}
+
+// F2-126. Una partida de compra: UN insumo, cantidad > 0 (en la unidad del insumo), costo por
+// unidad SIN IVA e importe = round(cantidad × costo, 2) calculado por el API. La FK compuesta
+// impide colgarla de una compra de otra sucursal o empresa.
+model PartidaCompra {
+  id               String  @id @default(uuid()) @db.Uuid
+  empresaId        String  @map("empresa_id") @db.Uuid
+  sucursalId       String  @map("sucursal_id") @db.Uuid
+  compraId         String  @map("compra_id") @db.Uuid
+  renglon          Int
+  insumoOrigenSrId String  @map("insumo_origen_sr_id")
+  cantidad         Decimal @db.Decimal(12, 3)
+  costoUnitario    Decimal @map("costo_unitario") @db.Decimal(12, 2)
+  importe          Decimal @db.Decimal(12, 2)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "partidas_compra_sucursal_empresa_fkey")
+  compra   Compra   @relation(fields: [compraId, sucursalId, empresaId], references: [id, sucursalId, empresaId], onDelete: Cascade, map: "partidas_compra_compra_fkey")
+
+  @@unique([compraId, renglon], map: "partidas_compra_compra_renglon_key")
+  @@index([empresaId])
+  @@map("partidas_compra")
+}
+
+// F2-126. Categoría de gasto de una empresa: dato NUESTRO, nunca se escribe a SR. `nombre_clave`
+// = el nombre en minúsculas y con los espacios colapsados (lo calcula el API): "Luz" y " luz " son
+// la misma categoría. Inactiva = no admite gastos nuevos, los viejos se siguen mostrando.
+model CategoriaGasto {
+  id          String   @id @default(uuid()) @db.Uuid
+  empresaId   String   @map("empresa_id") @db.Uuid
+  nombre      String
+  nombreClave String   @map("nombre_clave")
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "categorias_gasto_empresa_fkey")
+  gastos  Gasto[]
+
+  @@unique([empresaId, nombreClave], map: "categorias_gasto_empresa_nombre_key")
+  @@unique([id, empresaId], map: "categorias_gasto_id_empresa_key")
+  @@index([empresaId])
+  @@map("categorias_gasto")
+}
+
+// F2-126. Un gasto de operación de una sucursal, capturado en el panel: dato NUESTRO, nunca se
+// escribe a SR. `dia` es el día CONTABLE local de la sucursal (DATE, no un instante: un recibo de
+// luz es de un día, no de una hora). `monto` > 0 SIN IVA acreditable (DECISION PROVISIONAL
+// (nocturno), la vista lo dice). Nunca se borra: se anula (`anulado_at`), y anulado no suma.
+// `folio` opcional, único por sucursal: lo usa el seed para ser idempotente.
+model Gasto {
+  id             String    @id @default(uuid()) @db.Uuid
+  empresaId      String    @map("empresa_id") @db.Uuid
+  sucursalId     String    @map("sucursal_id") @db.Uuid
+  categoriaId    String    @map("categoria_id") @db.Uuid
+  dia            DateTime  @db.Date
+  concepto       String
+  monto          Decimal   @db.Decimal(12, 2)
+  folio          String?
+  creadoPor      String?   @map("creado_por") @db.Uuid
+  creadoAt       DateTime  @map("creado_at") @db.Timestamptz(3)
+  actualizadoPor String?   @map("actualizado_por") @db.Uuid
+  updatedAt      DateTime  @map("updated_at") @db.Timestamptz(3)
+  anuladoPor     String?   @map("anulado_por") @db.Uuid
+  anuladoAt      DateTime? @map("anulado_at") @db.Timestamptz(3)
+
+  sucursal  Sucursal       @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "gastos_sucursal_empresa_fkey")
+  categoria CategoriaGasto @relation(fields: [categoriaId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "gastos_categoria_empresa_fkey")
+
+  @@unique([sucursalId, folio], map: "gastos_sucursal_folio_key")
+  @@index([empresaId])
+  @@index([sucursalId, dia])
+  @@map("gastos")
 }

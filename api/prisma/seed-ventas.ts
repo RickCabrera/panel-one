@@ -26,8 +26,10 @@ import {
   type Canal,
 } from './seed-maestro/catalogos';
 import { sembrarCatalogos } from './seed-catalogos';
+import { sembrarCompras } from './seed-compras';
 import { sembrarConteos } from './seed-conteos';
 import { sembrarExistencias } from './seed-existencias';
+import { sembrarGastos } from './seed-gastos';
 import { sembrarMovimientos } from './seed-movimientos';
 import { sembrarRecetas } from './seed-recetas';
 import { sembrarTraspasos } from './seed-traspasos';
@@ -577,6 +579,29 @@ async function main(): Promise<void> {
       `Traspasos sembrados (F2-124): ${traspasos.creados} creados, ` +
         `${traspasos.conservados} sin cambios, ${traspasos.borrados} de otro reloj rehechos; ` +
         `${traspasos.conciliados} conciliados en esta corrida.`,
+    );
+    // Compras (F2-126): por la misma ingesta del agente. Documento aparte de su póliza `compra`
+    // (F2-122), que ya se sembró arriba y no se toca.
+    const compras = await sembrarCompras(prisma, {
+      empresaId: op.empresaId,
+      sucursales,
+      universo,
+      ahora,
+    });
+    console.log(
+      `Compras sembradas (F2-126): ${compras.compras} con ${compras.partidas} partidas; ` +
+        `${compras.borradas} de otra ventana borradas.`,
+    );
+    // Gastos (F2-126): dato propio, por el helper de escritura de la captura, con sus categorías.
+    const gastos = await sembrarGastos(prisma, {
+      empresaId: op.empresaId,
+      sucursales,
+      universo,
+      ahora,
+    });
+    console.log(
+      `Gastos sembrados (F2-126): ${gastos.gastos} en ${gastos.categorias} categorías nuevas; ` +
+        `${gastos.omitidos} omitidos (categoría inactiva), ${gastos.borrados} de otra ventana borrados.`,
     );
     // El resto del universo todavía no tiene tabla: se genera (y se valida en los
     // specs) para que la tarea que la cree lo persista desde aquí.

@@ -1,4 +1,9 @@
-import type { Resumen, VentaSucursal } from '../../api/tipos';
+import type {
+  EstadoResultados,
+  EstadoResultadosBase,
+  Resumen,
+  VentaSucursal,
+} from '../../api/tipos';
 import { aCentavos } from '../../dinero/dinero';
 import { delta, type Delta } from '../resumen/delta';
 
@@ -11,16 +16,76 @@ import { delta, type Delta } from '../resumen/delta';
  * La regla de "sin datos": una sucursal sin cuentas en un periodo no tiene cifras en ese
  * periodo. Se pinta "—", nunca $0.00 ni 0, y su Δ tampoco existe: "sin datos" no es "cero",
  * así que no se afirma un −100 % ni un +100 %.
+ *
+ * Utilidad (F2-126): la utilidad de OPERACIÓN que manda `GET /finanzas/estado-resultados` (venta
+ * neta − costo teórico − gastos), por sucursal y el `total` para la fila de total (nunca se suma
+ * aquí: el API la deja nula si falta una sucursal). Nula = "—" con su porqué (sin costo de lo
+ * vendido, periodo B cortado a la misma altura, o no se pudo leer), nunca $0.00.
  */
 
-export type Metrica = 'venta' | 'cuentas' | 'ticketPromedio' | 'comensales';
+export type Metrica = 'venta' | 'cuentas' | 'ticketPromedio' | 'comensales' | 'utilidad';
 
 export const METRICAS: readonly { metrica: Metrica; nombre: string; dinero: boolean }[] = [
   { metrica: 'venta', nombre: 'Venta', dinero: true },
   { metrica: 'cuentas', nombre: 'Tickets', dinero: false },
   { metrica: 'ticketPromedio', nombre: 'Ticket promedio', dinero: true },
   { metrica: 'comensales', nombre: 'Comensales', dinero: false },
+  { metrica: 'utilidad', nombre: 'Utilidad', dinero: true },
 ];
+
+/** La utilidad de operación de un periodo, o por qué no la hay. */
+export interface Utilidad {
+  /** `null` = no se puede afirmar; `razon` dice por qué. */
+  importe: string | null;
+  razon: string | null;
+  /** Costo de lo vendido incompleto: la utilidad real es menor o igual. */
+  sobrestimada: boolean;
+}
+
+export const UTILIDAD_SIN_COSTO =
+  'Sin costo de lo vendido (sin recetas o sin catálogo de productos): no hay utilidad.';
+export const UTILIDAD_SIN_LECTURA = 'La utilidad no se pudo leer.';
+export const UTILIDAD_CORTADA =
+  'El periodo B se corta a la misma altura y la utilidad sólo se calcula por días completos.';
+export const UTILIDAD_SOBRESTIMADA =
+  'Costo de lo vendido incompleto: la utilidad real es menor o igual.';
+
+/** Sin estado de resultados: la utilidad no se afirma, con el porqué que se pase. */
+export const sinUtilidad = (razon: string): Utilidad => ({
+  importe: null,
+  razon,
+  sobrestimada: false,
+});
+
+/** La utilidad de una fila del estado de resultados (sucursal o total). */
+export function utilidadDe(r: EstadoResultadosBase): Utilidad {
+  if (r.utilidadOperacion === null) return sinUtilidad(UTILIDAD_SIN_COSTO);
+  return { importe: r.utilidadOperacion, razon: null, sobrestimada: r.utilidadSobrestimada };
+}
+
+/** Las utilidades de un periodo: por sucursal y la del total, tal como las manda el API. */
+export interface UtilidadesPeriodo {
+  deSucursal: (sucursalId: string) => Utilidad;
+  total: Utilidad;
+}
+
+/**
+ * `estado` ausente (no se pidió o falló) = todas nulas con `razon`. Una sucursal que el estado no
+ * trae (no debería pasar) también es nula, nunca cero.
+ */
+export function utilidadesDe(
+  estado: EstadoResultados | undefined,
+  razon: string,
+): UtilidadesPeriodo {
+  if (!estado) return { deSucursal: () => sinUtilidad(razon), total: sinUtilidad(razon) };
+  const porId = new Map(estado.sucursales.map((s) => [s.sucursalId, utilidadDe(s)]));
+  return {
+    deSucursal: (id) => porId.get(id) ?? sinUtilidad(UTILIDAD_SIN_LECTURA),
+    total: utilidadDe(estado.total),
+  };
+}
+
+const SIN_ESTADO: UtilidadesPeriodo = utilidadesDe(undefined, UTILIDAD_SIN_LECTURA);
 
 /** Las cifras de un periodo, tal como las manda la API. */
 export interface Cifras {
@@ -28,6 +93,7 @@ export interface Cifras {
   cuentas: number;
   ticketPromedio: string | null;
   comensales: number;
+  utilidad: Utilidad;
 }
 
 export interface FilaComparada {
@@ -38,21 +104,26 @@ export interface FilaComparada {
   b: Cifras | null;
 }
 
-export function cifrasDeResumen(r: Resumen): Cifras {
+export function cifrasDeResumen(
+  r: Resumen,
+  utilidad: Utilidad = sinUtilidad(UTILIDAD_SIN_LECTURA),
+): Cifras {
   return {
     venta: r.venta,
     cuentas: r.cuentas,
     ticketPromedio: r.ticketPromedio,
     comensales: r.comensales.total,
+    utilidad,
   };
 }
 
-function cifrasDeSucursal(f: VentaSucursal): Cifras {
+function cifrasDeSucursal(f: VentaSucursal, u: UtilidadesPeriodo): Cifras {
   return {
     venta: f.venta,
     cuentas: f.cuentas,
     ticketPromedio: f.ticketPromedio,
     comensales: f.comensales,
+    utilidad: u.deSucursal(f.sucursalId),
   };
 }
 
@@ -63,6 +134,8 @@ function cifrasDeSucursal(f: VentaSucursal): Cifras {
 export function armarFilas(
   a: readonly VentaSucursal[],
   b: readonly VentaSucursal[],
+  ua: UtilidadesPeriodo = SIN_ESTADO,
+  ub: UtilidadesPeriodo = SIN_ESTADO,
 ): FilaComparada[] {
   const deB = new Map(b.map((f) => [f.sucursalId, f]));
   const filas: FilaComparada[] = a.map((f) => {
@@ -70,14 +143,14 @@ export function armarFilas(
     return {
       id: f.sucursalId,
       nombre: f.nombre,
-      a: cifrasDeSucursal(f),
-      b: enB ? cifrasDeSucursal(enB) : null,
+      a: cifrasDeSucursal(f, ua),
+      b: enB ? cifrasDeSucursal(enB, ub) : null,
     };
   });
   const enA = new Set(a.map((f) => f.sucursalId));
   for (const f of b) {
     if (!enA.has(f.sucursalId)) {
-      filas.push({ id: f.sucursalId, nombre: f.nombre, a: null, b: cifrasDeSucursal(f) });
+      filas.push({ id: f.sucursalId, nombre: f.nombre, a: null, b: cifrasDeSucursal(f, ub) });
     }
   }
   return filas;
@@ -103,6 +176,8 @@ export function valor(c: Cifras | null, m: Metrica): bigint | null {
       return c.ticketPromedio === null ? null : aCentavos(c.ticketPromedio);
     case 'comensales':
       return BigInt(c.comensales);
+    case 'utilidad':
+      return c.utilidad.importe === null ? null : aCentavos(c.utilidad.importe);
   }
 }
 
@@ -111,12 +186,28 @@ const RAZON_BASE_CERO: Record<Metrica, string> = {
   cuentas: 'Sin tickets en el periodo B.',
   ticketPromedio: 'Sin ticket promedio en el periodo B.',
   comensales: 'Sin comensales registrados en el periodo B.',
+  utilidad: 'La utilidad de B es cero o negativa: no hay Δ %.',
 };
 
 /** Δ de una métrica de A contra B. Sin datos en cualquiera de los dos: "—" con el porqué. */
 export function deltaDe(fila: Pick<FilaComparada, 'a' | 'b'>, m: Metrica): Delta {
   if (!tieneDatos(fila.a)) return { tipo: 'sinBase', razon: 'Sin cuentas en el periodo A.' };
   if (!tieneDatos(fila.b)) return { tipo: 'sinBase', razon: 'Sin cuentas en el periodo B.' };
+  if (m === 'utilidad') {
+    // Sin utilidad en un lado no hay Δ, y el porqué es el de ese lado (no "importe ilegible").
+    if (fila.a.utilidad.importe === null) {
+      return {
+        tipo: 'sinBase',
+        razon: `Periodo A: ${fila.a.utilidad.razon ?? UTILIDAD_SIN_LECTURA}`,
+      };
+    }
+    if (fila.b.utilidad.importe === null) {
+      return {
+        tipo: 'sinBase',
+        razon: `Periodo B: ${fila.b.utilidad.razon ?? UTILIDAD_SIN_LECTURA}`,
+      };
+    }
+  }
   return delta(valor(fila.a, m), valor(fila.b, m), RAZON_BASE_CERO[m]);
 }
 
@@ -131,6 +222,7 @@ export const ORDENES: readonly { orden: Orden; nombre: string }[] = [
   { orden: 'cuentas', nombre: 'Tickets (A)' },
   { orden: 'ticketPromedio', nombre: 'Ticket promedio (A)' },
   { orden: 'comensales', nombre: 'Comensales (A)' },
+  { orden: 'utilidad', nombre: 'Utilidad (A)' },
   { orden: 'deltaVenta', nombre: 'Δ % de venta' },
 ];
 

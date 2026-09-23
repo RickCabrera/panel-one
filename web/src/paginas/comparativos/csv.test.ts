@@ -2,18 +2,32 @@ import { describe, expect, it } from 'vitest';
 
 import { BOM, ErrorCsv } from '../../csv/csv';
 import { comparativosACsv, ENCABEZADOS_COMPARATIVOS, nombreCsvComparativos } from './csv';
-import { ordenar, type Cifras, type FilaComparada } from './matriz';
+import {
+  ordenar,
+  sinUtilidad,
+  UTILIDAD_SIN_COSTO,
+  type Cifras,
+  type FilaComparada,
+  type Utilidad,
+} from './matriz';
 
 const cif = (
   venta: string,
   cuentas: number,
   ticket: string | null,
   comensales: number,
+  utilidad: Utilidad = sinUtilidad(UTILIDAD_SIN_COSTO),
 ): Cifras => ({
   venta,
   cuentas,
   ticketPromedio: ticket,
   comensales,
+  utilidad,
+});
+const util = (importe: string, sobrestimada = false): Utilidad => ({
+  importe,
+  razon: null,
+  sobrestimada,
 });
 const fila = (id: string, nombre: string, a: Cifras | null, b: Cifras | null): FilaComparada => ({
   id,
@@ -45,6 +59,10 @@ describe('comparativosACsv', () => {
       'Comensales B',
       'Δ Comensales',
       'Δ Comensales %',
+      'Utilidad A',
+      'Utilidad B',
+      'Δ Utilidad',
+      'Δ Utilidad %',
     ]);
   });
 
@@ -61,13 +79,33 @@ describe('comparativosACsv', () => {
     expect(csv.startsWith(BOM)).toBe(true);
     expect(lineas(csv)).toEqual([
       ENCABEZADOS_COMPARATIVOS.join(','),
-      '1,Centro,1100.00,1000.00,100.00,10.0,11,8,3,37.5,100.00,125.00,-25.00,-20.0,20,20,0,0.0',
-      '2,Sur,900.00,1000.00,-100.00,-10.0,9,10,-1,-10.0,100.00,100.00,0.00,0.0,0,10,-10,-100.0',
+      // Utilidad sin costo en los dos periodos: sus cuatro celdas vacías, nunca 0.
+      '1,Centro,1100.00,1000.00,100.00,10.0,11,8,3,37.5,100.00,125.00,-25.00,-20.0,20,20,0,0.0,,,,',
+      '2,Sur,900.00,1000.00,-100.00,-10.0,9,10,-1,-10.0,100.00,100.00,0.00,0.0,0,10,-10,-100.0,,,,',
       // Sin cuentas en A: celdas de A y todos los Δ vacíos, sin posición; el nombre que empieza
       // como fórmula se neutraliza.
-      ",'=Norte,,500.00,,,,5,,,,100.00,,,,0,,",
+      ",'=Norte,,500.00,,,,5,,,,100.00,,,,0,,,,,,",
       '',
     ]);
+  });
+
+  it('utilidad (F2-126): la del API; nula = celda vacía (nunca 0), base ≤ 0 = sin Δ', () => {
+    const c = (u?: Utilidad) => cif('10.00', 1, '10.00', 1, u);
+    const filas = ordenar(
+      [
+        // Sobrestimada: el CSV lleva la cifra (la salvedad se ve en pantalla).
+        fila('1', 'Centro', c(util('250.00', true)), c(util('200.00'))),
+        // Sin costo en A: A vacío y sin Δ.
+        fila('2', 'Norte', c(), c(util('100.00'))),
+        // Base negativa: A y B con cifra, sin Δ.
+        fila('3', 'Sur', c(util('-5.50')), c(util('-10.00'))),
+      ],
+      'utilidad',
+    );
+    const utilidades = lineas(comparativosACsv(filas))
+      .slice(1, 4)
+      .map((l) => l.split(',').slice(-4).join(','));
+    expect(utilidades).toEqual(['250.00,200.00,50.00,25.0', '-5.50,-10.00,,', ',100.00,,']);
   });
 
   it('un importe ilegible detiene el archivo con un mensaje claro', () => {

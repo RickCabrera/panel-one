@@ -120,6 +120,11 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   await prisma.existencia.deleteMany(deEstas);
   await prisma.lecturaExistencias.deleteMany(deEstas);
   await prisma.limiteExistencia.deleteMany(deEstas);
+  // Compras (F2-126): las partidas cuelgan de la compra. Gastos antes que sus categorías.
+  await prisma.partidaCompra.deleteMany(deEstas);
+  await prisma.compra.deleteMany(deEstas);
+  await prisma.gasto.deleteMany(deEstas);
+  await prisma.categoriaGasto.deleteMany(deEstas);
   // Traspasos (F2-124) ANTES de las pólizas: sus espejos las apuntan con ON DELETE RESTRICT.
   await prisma.partidaTraspaso.deleteMany(deEstas);
   await prisma.traspaso.deleteMany(deEstas);

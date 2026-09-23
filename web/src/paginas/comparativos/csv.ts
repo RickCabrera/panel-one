@@ -18,6 +18,7 @@ import {
  * - Sin datos en un periodo = celda VACÍA, nunca 0 ni 0.00. Lo mismo el Δ sin base y la
  *   posición de quien quedó fuera del ranking.
  * - Δ con signo `-` sólo en negativos; Δ % como número sin `%` (`12.3`, `-4.0`, `0.0`).
+ * - Utilidad (F2-126): la de operación del API; sin utilidad = celda vacía, igual que sin datos.
  */
 
 export const ENCABEZADOS_COMPARATIVOS: readonly string[] = [
@@ -45,6 +46,10 @@ function cifra(c: Cifras | null, m: Metrica, sucursal: string): string {
       return importeCsv(c.ticketPromedio, invalido(c.ticketPromedio));
     case 'comensales':
       return String(c.comensales);
+    case 'utilidad':
+      // Sin utilidad (sin costo, cortada o ilegible) = celda VACÍA, nunca 0.
+      if (c.utilidad.importe === null) return '';
+      return importeCsv(c.utilidad.importe, invalido(c.utilidad.importe));
   }
 }
 

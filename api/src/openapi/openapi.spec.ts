@@ -465,6 +465,81 @@ describe('Contrato OpenAPI', () => {
     }
   });
 
+  it('F2-126: compras (lote del agente), gastos con 403 sólo por rol, estado de resultados', async () => {
+    const doc = await generarDocumento();
+    const { paths } = doc;
+    const codigos = (op: { responses?: object } | undefined) =>
+      Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/ingesta/compras']?.post)).toEqual([
+      '200',
+      '400',
+      '401',
+      '429',
+      '500',
+      '503',
+    ]);
+    for (const ruta of [
+      '/finanzas/compras',
+      '/finanzas/compras/{id}',
+      '/finanzas/categorias-gasto',
+      '/finanzas/gastos',
+      '/finanzas/estado-resultados',
+    ]) {
+      expect([ruta, codigos(paths[ruta]?.get)]).toEqual([ruta, ['200', '400', '401', '404']]);
+    }
+    // Escribir gastos: 403 SÓLO por rol (visor); lo ajeno es 404.
+    expect(codigos(paths['/finanzas/gastos']?.post)).toEqual(['201', '400', '401', '403', '404']);
+    expect(codigos(paths['/finanzas/gastos/{id}']?.patch)).toEqual([
+      '204',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+    ]);
+    expect(codigos(paths['/finanzas/gastos/{id}/anular']?.post)).toEqual([
+      '204',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+    ]);
+    const esquemas = doc.components?.schemas as Record<
+      string,
+      {
+        properties?: Record<string, { enum?: string[]; pattern?: string; nullable?: boolean }>;
+        required?: string[];
+      }
+    >;
+    // El lote no lleva tenant: sale de la API key.
+    expect(Object.keys(esquemas.LoteComprasDto.properties ?? {}).sort()).toEqual([
+      'compras',
+      'leidoAt',
+    ]);
+    expect(Object.keys(esquemas.CompraDto.properties ?? {}).sort()).toEqual([
+      'almacenOrigenSrId',
+      'cancelada',
+      'fecha',
+      'folio',
+      'origenSrId',
+      'partidas',
+      'proveedorOrigenSrId',
+    ]);
+    expect(esquemas.CrearGastoDto.properties?.monto?.pattern).toBe(
+      String.raw`^\d{1,10}(\.\d{1,2})?$`,
+    );
+    // Lo que no se puede afirmar viaja nulo, nunca 0.
+    for (const campo of ['utilidadBruta', 'utilidadOperacion', 'margenBruto', 'margenOperacion']) {
+      expect(esquemas.EstadoResultadosTotalDto.properties?.[campo]?.nullable).toBe(true);
+    }
+    expect(esquemas.CostoVendidoDto.properties?.importe?.nullable).toBe(true);
+    expect(esquemas.EstadoResultadosSucursalDto.properties?.motivo?.enum).toEqual([
+      'sin_catalogo_productos',
+      'sin_recetas',
+    ]);
+  });
+
   it('F2-124: contrato de traspasos; el agente no alcanza ninguna de sus rutas; alerta en horas', async () => {
     const doc = await generarDocumento();
     const { paths } = doc;
@@ -602,6 +677,16 @@ describe('Contrato OpenAPI', () => {
         '/ingesta/recetas',
         '/inventario/recetas',
         '/inventario/consumo-teorico',
+        // F2-126: compras (ingesta del agente y lectura), gastos (dato propio) y utilidad.
+        '/ingesta/compras',
+        '/finanzas/compras',
+        '/finanzas/compras/{id}',
+        '/finanzas/categorias-gasto',
+        '/finanzas/categorias-gasto/{id}',
+        '/finanzas/gastos',
+        '/finanzas/gastos/{id}',
+        '/finanzas/gastos/{id}/anular',
+        '/finanzas/estado-resultados',
         '/mesas/abiertas',
         '/sucursales',
         '/sucursales/{id}',

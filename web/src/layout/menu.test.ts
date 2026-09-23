@@ -117,8 +117,9 @@ describe('las seis secciones de la ficha', () => {
     // F2-125 construyó Recetas: navega.
     expect(porId('inventario.recetas').destino).toEqual({ ruta: '/recetas' });
     expect(tarea('inventario.proyecciones')).toBe('F2-127');
-    expect(tarea('inventario.compras')).toBe('F2-126');
-    expect(tarea('inventario.gastos')).toBe('F2-126');
+    // F2-126 construyó Compras y Gastos y utilidad: navegan.
+    expect(porId('inventario.compras').destino).toEqual({ ruta: '/compras' });
+    expect(porId('inventario.gastos').destino).toEqual({ ruta: '/gastos' });
     // F2-124 construyó Traspasos: navega.
     expect(porId('inventario.traspasos').destino).toEqual({ ruta: '/traspasos' });
     expect(tarea('canales.ventas')).toBe('F2-144');

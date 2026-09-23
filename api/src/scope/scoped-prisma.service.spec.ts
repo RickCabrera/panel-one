@@ -83,10 +83,14 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'areaCanal',
       'areaCatalogo',
       'canalVentaCatalogo',
+      // F2-126: categorías de gasto y gastos; se escriben por `gastos(scope)`.
+      'categoriaGasto',
       'cheque',
       'chequePago',
       'chequePartida',
       'clienteCatalogo',
+      // F2-126: compras; se escriben por `comprasDeSucursal(agente)`.
+      'compra',
       // F2-123: conteos físicos; se escriben por `conteos(scope)`, no por aquí.
       'conteoFisico',
       // F2-202: bandeja del correo falso, filtrada por empresa_id como las demás.
@@ -98,6 +102,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // `existencias(scope)`, no por aquí.
       'existencia',
       'formaPagoCatalogo',
+      'gasto',
       'grupoInsumo',
       'grupoProducto',
       'insumo',
@@ -107,6 +112,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'meseroCatalogo',
       // F2-122: pólizas y movimientos; se escriben por `movimientosDeSucursal(agente)`.
       'movimientoInventario',
+      'partidaCompra',
       'partidaConteo',
       // F2-124: traspasos; se escriben por `traspasos(scope)`, no por aquí.
       'partidaTraspaso',

@@ -10,6 +10,8 @@ import { EscrituraAlertas } from './escritura-alertas';
 import { EscrituraCatalogos, IngestaCatalogos } from './escritura-catalogos';
 import { EscrituraConteos } from './escritura-conteos';
 import { EscrituraExistencias, IngestaExistencias } from './escritura-existencias';
+import { IngestaCompras } from './escritura-compras';
+import { EscrituraGastos } from './escritura-gastos';
 import { IngestaMovimientos } from './escritura-movimientos';
 import { IngestaRecetas } from './escritura-recetas';
 import { EscrituraReportes } from './escritura-reportes';
@@ -254,6 +256,22 @@ export class ScopedPrismaService {
    */
   recetasDeSucursal(agente: AgenteAutenticado): IngestaRecetas {
     return new IngestaRecetas(this.#prisma, agente);
+  }
+
+  /**
+   * Compras (F2-126) de la sucursal del agente: un lote bajo el candado de compras de la
+   * sucursal. El panel no escribe compras: sólo las lee con `para(scope)`.
+   */
+  comprasDeSucursal(agente: AgenteAutenticado): IngestaCompras {
+    return new IngestaCompras(this.#prisma, agente);
+  }
+
+  /**
+   * Categorías de gasto y gastos (F2-126), con el scope del usuario. Es dato NUESTRO: nunca se
+   * escribe a SoftRestaurant.
+   */
+  gastos(scope: EmpresaScope): EscrituraGastos {
+    return new EscrituraGastos(this.#prisma, scope);
   }
 
   /**

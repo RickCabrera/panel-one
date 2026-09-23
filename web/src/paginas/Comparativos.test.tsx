@@ -8,6 +8,12 @@ import { Proveedores, Rutas } from '../App';
 import { terminarSesion } from '../auth/sesion';
 import { crearQueryClient } from '../consultas/queryClient';
 import {
+  UTILIDAD_CORTADA,
+  UTILIDAD_SIN_COSTO,
+  UTILIDAD_SIN_LECTURA,
+  UTILIDAD_SOBRESTIMADA,
+} from './comparativos/matriz';
+import {
   EMPRESA_A,
   EMPRESA_B,
   instalarApiFalsa,
@@ -94,6 +100,64 @@ function resumen(
   };
 }
 
+/** Una fila del estado de resultados (F2-126): sólo importa la utilidad de operación. */
+function er(cuentas: number, utilidad: string | null, sobrestimada = false) {
+  return {
+    cuentas,
+    venta: '0.00',
+    ventaNeta: '0.00',
+    costo: {
+      importe: utilidad === null ? null : '0.00',
+      completo: !sobrestimada,
+      insumosSinCosto: sobrestimada ? 1 : 0,
+      productosSinCosto: 0,
+      ventaSinCosto: '0.00',
+    },
+    gastos: '0.00',
+    compras: '0.00',
+    utilidadBruta: utilidad,
+    utilidadOperacion: utilidad,
+    margenBruto: null,
+    margenOperacion: null,
+    utilidadSobrestimada: sobrestimada,
+    sinVentas: cuentas === 0,
+  };
+}
+
+/**
+ * Por `desde|hasta` (el estado de resultados no se corta a la misma altura). Este mes: Centro
+ * con costo incompleto y Tijuana sin recetas, así que el TOTAL del API es nulo aunque Centro
+ * tenga cifra. Mes anterior: Tijuana sin ventas (su −gastos no se pinta: sin cuentas es "—").
+ */
+const ESTADOS: Record<string, { sucursales: unknown[]; total: unknown }> = {
+  '2026-09-01|2026-09-21': {
+    sucursales: [
+      { sucursalId: SUCURSAL_A1.id, sucursal: 'Centro', motivo: null, ...er(60, '9000.00', true) },
+      { sucursalId: A2.id, sucursal: 'Tijuana', motivo: 'sin_recetas', ...er(25, null) },
+    ],
+    total: { sucursalesSinCalculo: ['Tijuana'], ...er(85, null) },
+  },
+  '2026-08-01|2026-08-31': {
+    sucursales: [
+      { sucursalId: SUCURSAL_A1.id, sucursal: 'Centro', motivo: null, ...er(80, '12000.00') },
+      { sucursalId: A2.id, sucursal: 'Tijuana', motivo: null, ...er(0, '-500.00') },
+    ],
+    total: { sucursalesSinCalculo: [], ...er(80, '11500.00') },
+  },
+};
+
+function estadoDe(l: Llamada) {
+  const e = ESTADOS[`${l.query.get('desde')}|${l.query.get('hasta')}`] ?? {
+    sucursales: [],
+    total: { sucursalesSinCalculo: [], ...er(0, '0.00') },
+  };
+  const s = l.query.get('sucursalId');
+  const sucursales = s
+    ? e.sucursales.filter((x) => (x as { sucursalId: string }).sucursalId === s)
+    : e.sucursales;
+  return { sucursales, total: s ? sucursales[0] : e.total, gastosPorCategoria: [] };
+}
+
 const clave = (l: Llamada) =>
   [l.query.get('desde'), l.query.get('hasta'), l.query.get('alturaAl') ?? ''].join('|');
 
@@ -144,6 +208,7 @@ function api(extra: Record<string, Manejador> = {}, datos = SUCURSALES, totales 
       ),
     'GET /ventas/formas-pago': () => json(200, { formas: [], sinCatalogo: [] }),
     'GET /ventas/comparativo-sucursales': (l) => json(200, filasDe(l, datos)),
+    'GET /finanzas/estado-resultados': (l) => json(200, estadoDe(l)),
     'GET /mesas/abiertas': (l) => {
       const s = l.query.get('sucursalId');
       return json(200, s ? MESAS.filter((m) => m.sucursalId === s) : MESAS);
@@ -424,7 +489,9 @@ describe('estados vacíos', () => {
       }
     }
     expect(texto('nota-pendientes')).toContain('F2-106');
-    expect(texto('nota-pendientes')).toContain('F2-126');
+    // F2-126 ya construyó la utilidad: sale de la nota de pendientes y tiene la suya.
+    expect(texto('nota-pendientes')).not.toContain('Utilidad');
+    expect(texto('nota-utilidad')).toContain('Utilidad: la de operación');
   });
 
   it('comensales en 0 con cuentas se pintan como Inicio (0) y avisan que no distinguen', async () => {
@@ -531,6 +598,72 @@ describe('alcance', () => {
   });
 });
 
+describe('utilidad (F2-126)', () => {
+  const titulo = (filaId: string, id: string) =>
+    within(screen.getByTestId(filaId)).getByTestId(id).getAttribute('title') ?? '';
+
+  it('la del estado de resultados; nula = "—" con su porqué; el total es el del API, no una suma', async () => {
+    const a = api();
+    montar(`/comparativos?empresa=${A}&periodo=mes&b=mes-anterior`);
+    await screen.findByTestId('fila-total');
+
+    // Centro: costo incompleto en A → cifra con asterisco y la salvedad.
+    expect(celda(CENTRO, 'utilidad-a')).toBe(`$9,000.00* (${UTILIDAD_SOBRESTIMADA})`);
+    expect(titulo(CENTRO, 'utilidad-a')).toBe(UTILIDAD_SOBRESTIMADA);
+    expect(celda(CENTRO, 'utilidad-b')).toBe('$12,000.00');
+    expect(celda(CENTRO, 'utilidad-delta')).toBe('-25.0 %-$3,000.00');
+    // Tijuana sin recetas en A: "—" con el porqué, nunca $0.00; sin cuentas en B: "—".
+    expect(celda(TIJUANA, 'utilidad-a')).toBe('—');
+    expect(titulo(TIJUANA, 'utilidad-a')).toBe(UTILIDAD_SIN_COSTO);
+    expect(celda(TIJUANA, 'utilidad-b')).toBe('—');
+    expect(celda(TIJUANA, 'utilidad-delta')).toMatch(/^—/);
+    // Total de A: el API lo manda nulo (falta Tijuana) aunque Centro tenga cifra.
+    expect(celda('fila-total', 'utilidad-a')).toBe('—');
+    expect(celda('fila-total', 'utilidad-b')).toBe('$11,500.00');
+    expect(celda('fila-total', 'utilidad-delta')).toContain('Periodo A:');
+    // Una petición por periodo, con la misma llave que "Gastos y utilidad".
+    const estados = a.llamadas.filter((l) => l.ruta === '/finanzas/estado-resultados');
+    expect(estados.map((l) => `${l.query.get('desde')}|${l.query.get('hasta')}`).sort()).toEqual([
+      '2026-08-01|2026-08-31',
+      '2026-09-01|2026-09-21',
+    ]);
+  });
+
+  it('con B cortado a la misma altura, la de B no se pide y se dice por qué', async () => {
+    const a = api();
+    montar(`/comparativos?empresa=${A}&periodo=mes`);
+    await screen.findByTestId('fila-total');
+    expect(celda(CENTRO, 'utilidad-b')).toBe('—');
+    expect(titulo(CENTRO, 'utilidad-b')).toBe(UTILIDAD_CORTADA);
+    expect(celda('fila-total', 'utilidad-b')).toBe('—');
+    expect(celda(CENTRO, 'utilidad-delta')).toContain(`Periodo B: ${UTILIDAD_CORTADA}`);
+    const estados = a.llamadas.filter((l) => l.ruta === '/finanzas/estado-resultados');
+    expect(estados.every((l) => l.query.get('desde') === '2026-09-01')).toBe(true);
+  });
+
+  it('si el estado de resultados falla, la tabla se ve y la utilidad dice que no se pudo leer', async () => {
+    api({ 'GET /finanzas/estado-resultados': () => json(500, { statusCode: 500, message: 'x' }) });
+    montar(`/comparativos?empresa=${A}&periodo=mes&b=mes-anterior`);
+    await screen.findByTestId('fila-total');
+    expect(celda(CENTRO, 'venta-a')).toBe('$30,000.00');
+    expect(celda(CENTRO, 'utilidad-a')).toBe('—');
+    expect(titulo(CENTRO, 'utilidad-a')).toBe(UTILIDAD_SIN_LECTURA);
+    expect(celda(CENTRO, 'utilidad-b')).toBe('—');
+    expect(celda('fila-total', 'utilidad-a')).toBe('—');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('se puede ordenar por la utilidad de A', async () => {
+    const user = userEvent.setup();
+    api();
+    montar(`/comparativos?empresa=${A}&periodo=mes&b=mes-anterior`);
+    await screen.findByTestId('fila-total');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Ordenar por' }), 'utilidad');
+    expect(ordenFilas()).toEqual([CENTRO, TIJUANA]);
+    expect(celda(TIJUANA, 'posicion')).toBe('—');
+  });
+});
+
 describe('export CSV', () => {
   const originales = { crear: URL.createObjectURL, revocar: URL.revokeObjectURL };
   afterEach(() => {
@@ -560,10 +693,12 @@ describe('export CSV', () => {
     expect(nombres).toEqual(['comparativos_2026-09-01_2026-09-21_vs_2026-08-01_2026-08-31.csv']);
     const contenido = new TextDecoder().decode(new Uint8Array(await blobs[0].arrayBuffer()));
     const lineas = contenido.slice(1).split('\r\n');
+    // Utilidad al final: Centro 9000 (sobrestimada; el CSV lleva la cifra) contra 12000; Tijuana
+    // sin costo en A y sin cuentas en B: vacías, nunca 0.
     expect(lineas[1]).toBe(
-      '1,Centro,30000.00,40000.00,-10000.00,-25.0,60,80,-20,-25.0,500.00,500.00,0.00,0.0,150,200,-50,-25.0',
+      '1,Centro,30000.00,40000.00,-10000.00,-25.0,60,80,-20,-25.0,500.00,500.00,0.00,0.0,150,200,-50,-25.0,9000.00,12000.00,-3000.00,-25.0',
     );
-    expect(lineas[2]).toBe('2,Tijuana,10000.00,,,,25,,,,400.00,,,,0,,,');
+    expect(lineas[2]).toBe('2,Tijuana,10000.00,,,,25,,,,400.00,,,,0,,,,,,,');
     expect(lineas).toHaveLength(4);
   });
 });
