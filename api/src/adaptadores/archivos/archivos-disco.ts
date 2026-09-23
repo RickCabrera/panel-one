@@ -15,7 +15,11 @@ export const RAIZ_ARCHIVOS_FALSO = join(tmpdir(), 'monitor-archivos');
  */
 export const SECRETO_ARCHIVOS_FALSO = 'solo-desarrollo-no-usar-firma-de-archivos-falsos';
 
-export const URL_BASE_ARCHIVOS_FALSO = '/archivos';
+/**
+ * Lo que ve el NAVEGADOR: el web habla con el api detrás de `/api` (el proxy lo quita antes de
+ * llegar a Nest, que sirve la descarga en `/archivos`). La real es `ARCHIVOS_URL_BASE`.
+ */
+export const URL_BASE_ARCHIVOS_FALSO = '/api/archivos';
 
 const SEGMENTO = /^[A-Za-z0-9._-]+$/;
 
@@ -35,8 +39,9 @@ function firmar(secreto: string, clave: string, expira: number): string {
 }
 
 /**
- * Verifica una URL firmada por `ArchivosDisco.urlFirmada`. Para el endpoint de
- * descarga que traerá F2-105. Comparación en tiempo constante; vencida = inválida.
+ * Verifica una URL firmada por `ArchivosDisco.urlFirmada` (la usa `verificarUrl`, que es
+ * lo que llama el endpoint de descarga de F2-105). Comparación en tiempo constante;
+ * vencida = inválida.
  */
 export function verificarFirma(
   secreto: string,
@@ -106,5 +111,9 @@ export class ArchivosDisco implements PuertoArchivos {
       firma: firmar(this.secreto, clave, expira),
     });
     return Promise.resolve(`${this.urlBase.replace(/\/+$/, '')}/${clave}?${query}`);
+  }
+
+  verificarUrl(clave: string, expira: number, firma: string): boolean {
+    return verificarFirma(this.secreto, clave, expira, firma, this.reloj.ahora());
   }
 }

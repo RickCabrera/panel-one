@@ -11,6 +11,12 @@ export interface PuertoArchivos {
   leer(clave: string): Promise<Buffer>;
   /** URL de descarga que vence en `ttlSegundos`. */
   urlFirmada(clave: string, ttlSegundos: number): Promise<string>;
+  /**
+   * ¿`expira` y `firma` (los parámetros de una URL de `urlFirmada`) son válidos para `clave` en
+   * este instante? Vencida, alterada o con una clave inválida = false. Lo usa el endpoint de
+   * descarga (F2-105); el secreto se queda dentro del adaptador.
+   */
+  verificarUrl(clave: string, expira: number, firma: string): boolean;
 }
 
 export class ArchivoNoEncontrado extends Error {

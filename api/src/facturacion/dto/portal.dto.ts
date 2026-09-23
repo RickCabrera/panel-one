@@ -181,10 +181,20 @@ export class SolicitarFacturaDto {
 }
 
 export class DescargasFacturaDto {
-  @ApiProperty({ type: String, nullable: true, description: 'Null hasta F2-105.' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Enlace de descarga FIRMADO y temporal (1 h) del XML (F2-105). Null si el archivo no se pudo ' +
+      'guardar: entonces sólo llega por correo.',
+  })
   xml!: string | null;
 
-  @ApiProperty({ type: String, nullable: true, description: 'Null hasta F2-105.' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Como `xml`, para el PDF.',
+  })
   pdf!: string | null;
 }
 

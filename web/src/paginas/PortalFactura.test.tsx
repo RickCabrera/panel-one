@@ -232,53 +232,76 @@ describe('Portal de autofactura (público)', () => {
     expect(falsa.contar('GET', '/facturacion/catalogos-sat')).toBe(0);
   });
 
-  it('flujo completo (emisión encendida): código → datos → confirmar → éxito del contrato', async () => {
-    const user = userEvent.setup();
-    const falsa = api({
-      [`POST /facturacion/portal/${SLUG}/facturas`]: () => json(201, FACTURA),
-    });
-    montar(`/f/${SLUG}?c=7JQRECP3U`);
-    await user.click(await screen.findByRole('button', { name: 'Continuar con mis datos' }));
-    expect(screen.getByRole('heading', { name: 'Tus datos fiscales' })).toBeVisible();
-    await waitFor(() => expect(screen.getByLabelText('Régimen fiscal')).toBeEnabled());
-    // Con un RFC de empresa sólo se ofrecen regímenes de persona moral.
-    await user.type(screen.getByLabelText('RFC'), 'EKU9003173C9');
-    expect(
-      within(screen.getByLabelText('Régimen fiscal'))
-        .getAllByRole('option')
-        .map((o) => o.getAttribute('value')),
-    ).toEqual(['', '601']);
-    await user.clear(screen.getByLabelText('RFC'));
-    await llenarDatos(user);
-    await user.click(screen.getByRole('button', { name: 'Revisar mis datos' }));
+  // F2-105: con los archivos guardados el 201 trae enlaces firmados; si el disco falló, nulos (y
+  // la factura sólo llega por correo).
+  it.each([
+    ['con enlaces de descarga', FACTURA],
+    ['sin archivos guardados', { ...FACTURA, descargas: { xml: null, pdf: null } }],
+  ])(
+    'flujo completo (emisión encendida, %s): código → datos → confirmar → éxito del contrato',
+    async (_caso, factura: FacturaPortal) => {
+      const user = userEvent.setup();
+      const falsa = api({
+        [`POST /facturacion/portal/${SLUG}/facturas`]: () => json(201, factura),
+      });
+      montar(`/f/${SLUG}?c=7JQRECP3U`);
+      await user.click(await screen.findByRole('button', { name: 'Continuar con mis datos' }));
+      expect(screen.getByRole('heading', { name: 'Tus datos fiscales' })).toBeVisible();
+      await waitFor(() => expect(screen.getByLabelText('Régimen fiscal')).toBeEnabled());
+      // Con un RFC de empresa sólo se ofrecen regímenes de persona moral.
+      await user.type(screen.getByLabelText('RFC'), 'EKU9003173C9');
+      expect(
+        within(screen.getByLabelText('Régimen fiscal'))
+          .getAllByRole('option')
+          .map((o) => o.getAttribute('value')),
+      ).toEqual(['', '601']);
+      await user.clear(screen.getByLabelText('RFC'));
+      await llenarDatos(user);
+      await user.click(screen.getByRole('button', { name: 'Revisar mis datos' }));
 
-    expect(screen.getByRole('heading', { name: 'Confirma tu factura' })).toBeVisible();
-    expect(screen.getByLabelText('Tus datos')).toHaveTextContent('RFCEKU9003173C9');
-    expect(screen.getByLabelText('Tus datos')).toHaveTextContent(
-      '601 · General de Ley Personas Morales',
-    );
-    await user.click(screen.getByRole('button', { name: 'Emitir mi factura' }));
+      expect(screen.getByRole('heading', { name: 'Confirma tu factura' })).toBeVisible();
+      expect(screen.getByLabelText('Tus datos')).toHaveTextContent('RFCEKU9003173C9');
+      expect(screen.getByLabelText('Tus datos')).toHaveTextContent(
+        '601 · General de Ley Personas Morales',
+      );
+      await user.click(screen.getByRole('button', { name: 'Emitir mi factura' }));
 
-    expect(
-      await screen.findByRole('heading', { name: '¡Listo! Tu factura se emitió' }),
-    ).toBeVisible();
-    expect(screen.getByText(FACTURA.uuid)).toBeVisible();
-    expect(screen.getByText('A-1024')).toBeVisible();
-    expect(screen.getByText(/Te enviaremos el PDF y el XML a facturas@ejemplo.test/)).toBeVisible();
-    const post = falsa.llamadas.find((l) => l.metodo === 'POST' && l.ruta.endsWith('/facturas'));
-    expect(post?.cuerpo).toEqual({
-      codigo: '7JQRECP3U',
-      receptor: {
-        rfc: 'EKU9003173C9',
-        razonSocial: 'ESCUELA KEMPER URGATE',
-        regimenFiscal: '601',
-        cp: '42501',
-        usoCfdi: 'G03',
-        email: 'facturas@ejemplo.test',
-      },
-    });
-    expect(post?.autorizacion).toBeNull();
-  });
+      expect(
+        await screen.findByRole('heading', { name: '¡Listo! Tu factura se emitió' }),
+      ).toBeVisible();
+      expect(screen.getByText(FACTURA.uuid)).toBeVisible();
+      expect(screen.getByText('A-1024')).toBeVisible();
+      if (factura.descargas.pdf && factura.descargas.xml) {
+        expect(screen.getByRole('link', { name: 'Descargar PDF' })).toHaveAttribute(
+          'href',
+          factura.descargas.pdf,
+        );
+        expect(screen.getByRole('link', { name: 'Descargar XML' })).toHaveAttribute(
+          'href',
+          factura.descargas.xml,
+        );
+        expect(screen.getByText(/También te la enviaremos a facturas@ejemplo.test/)).toBeVisible();
+      } else {
+        expect(screen.queryByRole('link', { name: /Descargar/ })).toBeNull();
+        expect(
+          screen.getByText(/Te enviaremos el PDF y el XML a facturas@ejemplo.test/),
+        ).toBeVisible();
+      }
+      const post = falsa.llamadas.find((l) => l.metodo === 'POST' && l.ruta.endsWith('/facturas'));
+      expect(post?.cuerpo).toEqual({
+        codigo: '7JQRECP3U',
+        receptor: {
+          rfc: 'EKU9003173C9',
+          razonSocial: 'ESCUELA KEMPER URGATE',
+          regimenFiscal: '601',
+          cp: '42501',
+          usoCfdi: 'G03',
+          email: 'facturas@ejemplo.test',
+        },
+      });
+      expect(post?.autorizacion).toBeNull();
+    },
+  );
 
   it('errores de captura: todos a la vez, en español, campo por campo, sin ir al api', async () => {
     const user = userEvent.setup();

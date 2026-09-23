@@ -57,6 +57,7 @@ model Empresa {
   configuracionFacturacion ConfiguracionFacturacion?
   // F2-104: los CFDI emitidos (y las reservas en timbrado).
   cfdis                    Cfdi[]
+  cfdiEnvios               CfdiEnvio[]
 
   @@map("empresas")
 }
@@ -1719,9 +1720,10 @@ model Cfdi {
   estado         EstadoEmisionCfdi @default(timbrando)
   // Fecha de timbrado (UTC). Nula mientras `timbrando`.
   emitidoAt      DateTime?         @map("emitido_at") @db.Timestamptz(3)
-  // Dónde quedan el XML y el PDF: los llena F2-105 (entrega). Nulos hasta entonces.
-  xmlUrl         String?           @map("xml_url")
-  pdfUrl         String?           @map("pdf_url")
+  // CLAVES del XML y el PDF en `PuertoArchivos` (F2-105), no URLs: la URL de descarga se firma
+  // al pedirla y vence. Nulas mientras no se guardaron (reserva, o el disco falló al timbrar).
+  xmlClave       String?           @map("xml_clave")
+  pdfClave       String?           @map("pdf_clave")
   createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime          @map("updated_at") @db.Timestamptz(3)
 
@@ -1730,11 +1732,14 @@ model Cfdi {
   cheque   Cheque             @relation(fields: [chequeId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_cheque_empresa_fkey")
   codigo   CodigoFacturacion? @relation(fields: [codigoId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_codigo_empresa_fkey")
   perfil   PerfilFiscal       @relation(fields: [perfilFiscalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_perfil_empresa_fkey")
+  envios   CfdiEnvio[]
 
   @@unique([codigoId], map: "cfdis_codigo_id_key")
   // Prisma pide la llave completa de la FK en una relación 1-1; equivale al único de arriba.
   @@unique([codigoId, empresaId], map: "cfdis_codigo_id_empresa_id_key")
   @@unique([uuid], map: "cfdis_uuid_key")
+  // Destino de la FK compuesta de `cfdi_envios` (F2-105).
+  @@unique([id, empresaId], map: "cfdis_id_empresa_id_key")
   // Un folio por serie y empresa (los folios los reparte `perfiles_fiscales.folio_actual`).
   @@unique([empresaId, serie, folio], map: "cfdis_empresa_id_serie_folio_key")
   // Tablero de facturación (F2-106): por empresa y fecha de timbrado.
@@ -1742,4 +1747,41 @@ model Cfdi {
   @@index([chequeId])
   @@index([sucursalId])
   @@map("cfdis")
+}
+
+enum EstadoEnvioCfdi {
+  // Reclamado: el correo está saliendo. Uno que se queda aquí más de 10 min (proceso muerto a
+  // media llamada) se puede reintentar a mano (`ENVIO_VENCIDO_MS`).
+  enviando
+  enviado
+  // El puerto de correo falló: queda para reintento manual desde administración.
+  fallido
+
+  @@map("estado_envio_cfdi")
+}
+
+// La entrega por correo de un CFDI (F2-105): una fila por (CFDI, correo). El reintento la
+// actualiza (intentos + 1). El correo sale SIEMPRE al del receptor con que se timbró; nunca a
+// uno que escriba quien pide el reintento. CHECK a mano: `intentos >= 1`.
+model CfdiEnvio {
+  id              String          @id @default(uuid()) @db.Uuid
+  empresaId       String          @map("empresa_id") @db.Uuid
+  cfdiId          String          @map("cfdi_id") @db.Uuid
+  email           String
+  estado          EstadoEnvioCfdi @default(enviando)
+  intentos        Int             @default(1)
+  // Último error del puerto, recortado. Nunca lleva credenciales (el puerto no las pone).
+  error           String?
+  // Id del mensaje que devolvió el puerto de correo.
+  correoId        String?         @map("correo_id")
+  ultimoIntentoAt DateTime        @map("ultimo_intento_at") @db.Timestamptz(3)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime        @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "cfdi_envios_empresa_fkey")
+  cfdi    Cfdi    @relation(fields: [cfdiId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdi_envios_cfdi_empresa_fkey")
+
+  @@unique([cfdiId, email], map: "cfdi_envios_cfdi_id_email_key")
+  @@index([empresaId, estado])
+  @@map("cfdi_envios")
 }

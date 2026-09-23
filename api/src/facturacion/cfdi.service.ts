@@ -23,6 +23,7 @@ import { perfilEmite, type ReservaCfdi } from '../scope/escritura-facturacion';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import { solicitudDesdeCheque } from './cfdi';
 import type { EmisionPortal, FacturaPortal, SolicitudFacturaPortal } from './emision-portal';
+import { EntregaCfdiService } from './entrega.service';
 
 /** El punto de espera entre reintentos. Un provider para que los tests no duerman. */
 @Injectable()
@@ -63,6 +64,9 @@ export const MENSAJE_EMISION_INCIERTA =
  *    timbrar y no lo sabemos), la reserva se QUEDA en `timbrando`: el código dice `en_proceso` y
  *    nadie puede pedir otro CFDI para él. Resolverla consultando al PAC es de F2-110.
  *
+ * 4. ENTREGAR (F2-105, `EntregaCfdiService`): archivos, enlaces firmados y correo. Nunca hace
+ *    fallar la emisión.
+ *
  * El scope es el de la empresa que YA salió de la base (el portal la resuelve por el slug y el
  * código); nada del público elige la empresa.
  */
@@ -75,6 +79,7 @@ export class CfdiService implements EmisionPortal {
     private readonly reloj: Reloj,
     private readonly espera: Espera,
     @Inject(PUERTO_TIMBRADO) private readonly pac: PuertoTimbrado,
+    private readonly entrega: EntregaCfdiService,
   ) {}
 
   async disponible(empresaId: string): Promise<boolean> {
@@ -135,14 +140,26 @@ export class CfdiService implements EmisionPortal {
       throw new BadGatewayException(MENSAJE_EMISION_INCIERTA);
     }
 
-    return {
+    const serieFolio = `${reserva.serie}-${reserva.folio}`;
+    const total = reserva.importes.total.toFixed(2);
+    // F2-105: fuera de toda transacción y sin lanzar (el CFDI ya existe ante el SAT).
+    const descargas = await this.entrega.entregar({
+      empresaId: s.empresaId,
+      cfdiId: reserva.reservaId,
       uuid: timbre.uuid,
-      serieFolio: `${reserva.serie}-${reserva.folio}`,
-      total: reserva.importes.total.toFixed(2),
-      email: s.receptor.email,
-      // F2-105 guarda los archivos y da los enlaces temporales.
-      descargas: { xml: null, pdf: null },
-    };
+      idPac: timbre.idPac,
+      serieFolio,
+      total,
+      fechaTimbrado: timbre.fechaTimbrado,
+      zonaHoraria: reserva.sucursal.zonaHoraria,
+      sucursal: reserva.sucursal.nombre,
+      colorPortal: reserva.sucursal.colorPortal,
+      emisor: reserva.emisor.razonSocial,
+      xml: timbre.xml,
+      pdf: timbre.pdf,
+    });
+
+    return { uuid: timbre.uuid, serieFolio, total, email: s.receptor.email, descargas };
   }
 
   /** Timbra con reintento y backoff SÓLO en lo que es seguro reintentar. */

@@ -84,6 +84,8 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   // Ventas de prueba (F1-030) colgadas de estas sucursales: las FK son Restrict,
   // así que se borran de las hojas hacia arriba antes que las sucursales.
   const deEstas = { where: { empresaId: { in: empresas } } };
+  // Los envíos por correo de un CFDI (F2-105) cuelgan del CFDI.
+  await prisma.cfdiEnvio.deleteMany(deEstas);
   // Los CFDI (F2-104) cuelgan del código, del cheque, de la sucursal y del perfil fiscal.
   await prisma.cfdi.deleteMany(deEstas);
   // Los códigos de facturación (F2-101) cuelgan del cheque y de la sucursal.

@@ -87,6 +87,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'categoriaGasto',
       // F2-104: CFDI emitidos y sus reservas; se escriben por `facturacion(scope)`, no por aquí.
       'cfdi',
+      // F2-105: envíos por correo de los CFDI; se escriben por `facturacion(scope)`.
+      'cfdiEnvio',
       'cheque',
       'chequePago',
       'chequePartida',

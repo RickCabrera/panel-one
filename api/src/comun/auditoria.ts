@@ -31,7 +31,9 @@ export type AccionAuditada =
   | 'portal_facturacion.crear'
   | 'portal_facturacion.editar'
   | 'portal_facturacion.logo'
-  | 'portal_facturacion.quitar_logo';
+  | 'portal_facturacion.quitar_logo'
+  // F2-105: reintento manual del correo de una factura.
+  | 'cfdi.reenvio';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
@@ -48,7 +50,8 @@ export interface EventoAuditoria {
     | 'traspaso'
     | 'perfil_fiscal'
     | 'configuracion_facturacion'
-    | 'portal_facturacion';
+    | 'portal_facturacion'
+    | 'cfdi';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

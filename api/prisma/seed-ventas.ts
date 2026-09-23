@@ -440,6 +440,7 @@ export async function sembrarVentas(
     async (tx) => {
       // Los CFDI (F2-104) y los códigos cuelgan del cheque (FK Restrict): se borran antes que él.
       // Son de cheques SINTÉTICOS del seed, así que sus CFDI sólo pudo emitirlos el PAC falso.
+      await tx.cfdiEnvio.deleteMany({ where: { cfdi: { cheque: sembrados.cheque } } });
       await tx.cfdi.deleteMany({ where: { cheque: sembrados.cheque } });
       await tx.codigoFacturacion.deleteMany({ where: { cheque: sembrados.cheque } });
       await tx.chequePartida.deleteMany({ where: sembrados });

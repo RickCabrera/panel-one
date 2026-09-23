@@ -6,7 +6,7 @@ import type { ReceptorPortal } from './portal';
  * datos del receptor válidos) y no sabe qué hay detrás.
  *
  * Desde F2-104 la implementación es `CfdiService` (`cfdi.service.ts`): reserva con candado por
- * código, timbra por `PUERTO_TIMBRADO` y confirma. Los archivos (XML/PDF) y el correo son de F2-105.
+ * código, timbra por `PUERTO_TIMBRADO` y confirma; F2-105 guarda los archivos y manda el correo.
  */
 export const EMISION_PORTAL = Symbol('EMISION_PORTAL');
 
@@ -28,9 +28,9 @@ export interface FacturaPortal {
   serieFolio: string;
   /** Dinero como texto con 2 decimales. */
   total: string;
-  /** El correo al que se enviará (F2-105). */
+  /** El correo al que se envía (F2-105). */
   email: string;
-  /** Enlaces temporales de descarga; null mientras no existan (F2-105): "te llegará por correo". */
+  /** Enlaces firmados y temporales (F2-105); null si no se pudieron guardar: "te llegará por correo". */
   descargas: { xml: string | null; pdf: string | null };
 }
 

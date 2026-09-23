@@ -314,10 +314,18 @@ describe('Emisión de CFDI por el portal (e2e, F2-104)', () => {
 
     // La fixture del web (su test del flujo) tiene EXACTAMENTE estas llaves y tipos.
     expect(Object.keys(res.body).sort()).toEqual(Object.keys(FIXTURE_WEB).sort());
+    // F2-105: `descargas` son enlaces firmados a `cfdi/{empresa}/{AAAA}/{MM}/{UUID}.{xml|pdf}`.
+    const enlace = (ext: string) =>
+      expect.stringMatching(
+        new RegExp(
+          String.raw`^/api/archivos/cfdi/${FX.empresaA}/\d{4}/\d{2}/${res.body.uuid}\.${ext}\?expira=\d+&firma=[A-Za-z0-9_-]+$`,
+        ),
+      );
     expect(res.body).toEqual({
       ...FIXTURE_WEB,
       uuid: expect.stringMatching(UUID),
       serieFolio: `A-${antes + 1}`,
+      descargas: { xml: enlace('xml'), pdf: enlace('pdf') },
     });
     expect(FIXTURE_WEB.uuid).toMatch(UUID);
     expect(FIXTURE_WEB.serieFolio).toMatch(/^[A-Z0-9]{1,25}-\d+$/);
