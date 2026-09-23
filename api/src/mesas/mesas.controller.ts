@@ -26,7 +26,10 @@ export class MesasController {
     summary: 'Cuentas abiertas: el último snapshot de cada sucursal y la edad del dato.',
     description:
       'Una fila por sucursal en alcance (también las que nunca mandaron snapshot, con ' +
-      '`snapshot: null`). Sin cache: es el dato en vivo.',
+      '`snapshot: null`). Sin cache: es el dato en vivo. Tiempo real (F2-142): el socket ' +
+      '`/socket.io` (auth con el mismo access token) emite `ingesta { sucursalId, mesas, ' +
+      'cheques }` al guardar un lote de esa sucursal; es SÓLO un aviso para volver a pedir ' +
+      'este endpoint (contrato en `docs/tiempo-real.md`).',
   })
   @ApiOkResponse({ type: [MesasSucursalDto] })
   @ApiBadRequestResponse({ type: ErrorDto, description: 'Parámetros inválidos.' })

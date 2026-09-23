@@ -1297,6 +1297,14 @@ incluir `.env.example` completo).
 **Listo cuando:** en el VPS, `docker compose up -d` deja https funcionando con certificado
 válido en ambos subdominios; `GET /health` responde `{status:'ok', db:'ok'}`.
 
+> **Y además (de F2-142):** verificar en el VPS que el socket del monitor sube a WebSocket
+> detrás de Caddy. El navegador lo pide en `/api/socket.io`, y `handle_path /api/*` +
+> `reverse_proxy` debería pasar el upgrade sin config extra. Con DevTools → Network → WS, la
+> conexión debe salir `101 Switching Protocols` y la CSP `connect-src 'self'` no debe
+> bloquearla. Si el upgrade falla, socket.io se queda en long-polling y funciona igual, pero
+> hay que saberlo. Mientras haya **una sola** instancia del api no hace falta el adapter de
+> Redis (`docs/tiempo-real.md`, "Límites conocidos").
+
 ## F1-003 · CI/CD con GitHub Actions
 `[ ]` **Epic 0** · 🔒 **Razón: necesita los secretos SSH del VPS en GitHub Actions.**
 Ricardo genera el par de llaves y pega el secreto; una sesión autónoma no toca llaves de

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AgentesModule } from '../agentes/agentes.module';
 import { GeneradorCodigo } from '../facturacion/codigo';
+import { TiempoRealModule } from '../tiempo-real/tiempo-real.module';
 import { CatalogosIngestaController } from './catalogos-ingesta.controller';
 import { CatalogosIngestaService } from './catalogos-ingesta.service';
 import { ExistenciasIngestaController } from './existencias-ingesta.controller';
@@ -22,7 +23,8 @@ import { IngestaService } from './ingesta.service';
  * la de compras `/ingesta/compras` (F2-126).
  */
 @Module({
-  imports: [AgentesModule],
+  // F2-142: el aviso por socket al terminar un lote.
+  imports: [AgentesModule, TiempoRealModule],
   controllers: [
     IngestaController,
     CatalogosIngestaController,

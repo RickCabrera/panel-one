@@ -20,6 +20,8 @@ import {
 import { enlaceMesas, pedirPantallaCompleta, TEXTO_NADIE_EN_VIVO } from './mesas/pared';
 import { buscarSeleccion, seleccionDe, type Seleccion } from './mesas/seleccion';
 import { nombreMesa } from './mesas/textos';
+import { textoModo } from './mesas/textos';
+import { useEnVivo } from './mesas/tiempoReal';
 import { useCriterioMesas, useMonitorVivo, type MonitorVivo } from './mesas/vivo';
 import { Vista } from './Vista';
 
@@ -47,6 +49,7 @@ export function Mesas() {
       ? { empresaId: empresa.id, sucursalId: sucursal?.id }
       : null;
   const consulta = useMonitorMesas(filtro);
+  const enVivo = useEnVivo(filtro);
   const monitor = useMonitorVivo(consulta.data, consulta.dataUpdatedAt);
 
   // La selección vale sólo en el alcance en que se hizo: al cambiar de empresa o
@@ -79,7 +82,11 @@ export function Mesas() {
   return (
     <Vista titulo="Monitor de Mesas">
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-3 text-sm text-tinta-tenue">
-        <span data-testid="consultado" className="flex items-center gap-2">
+        <span
+          data-testid="consultado"
+          data-modo={enVivo ? 'en-vivo' : 'polling'}
+          className="flex items-center gap-2"
+        >
           <span
             aria-hidden="true"
             className={`inline-block h-2 w-2 rounded-full ${
@@ -89,7 +96,7 @@ export function Mesas() {
           {consulta.isFetching
             ? 'Actualizando…'
             : consulta.dataUpdatedAt > 0
-              ? `Consultado ${horaEn(zona, consulta.dataUpdatedAt)} · cada 20 s`
+              ? `Consultado ${horaEn(zona, consulta.dataUpdatedAt)} · ${textoModo(enVivo)}`
               : 'Sin consultar todavía'}
         </span>
         <button
@@ -229,7 +236,9 @@ function Contenido({
       <Avisos respuesta={respuesta} zona={zona} />
       {monitor.conectadas === 0 ? (
         <p data-testid="sin-vivo" className="mt-6 text-center text-sm text-tinta-tenue">
-          {monitor.estados.length === 0 ? 'No hay sucursales en este alcance.' : TEXTO_NADIE_EN_VIVO}
+          {monitor.estados.length === 0
+            ? 'No hay sucursales en este alcance.'
+            : TEXTO_NADIE_EN_VIVO}
         </p>
       ) : (
         <>

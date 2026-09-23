@@ -4,7 +4,7 @@ import { pedir } from '../../api/cliente';
 import { llaveConAltura, mantenerSiSoloCambiaLaAltura } from '../../consultas/altura';
 import type { FormasPago, MesasSucursal, Resumen, VentaHora } from '../../api/tipos';
 import type { Rango } from '../../filtros/periodo';
-import { POLLING_MS } from '../mesas/reglas';
+import { intervaloMesas, useTiempoRealMesas } from '../mesas/tiempoReal';
 
 /** Cada cuánto se refrescan solas las tarjetas (backlog F1-041). */
 export const AUTO_REFRESCO_MS = 60_000;
@@ -68,8 +68,10 @@ export function useVentas<E extends keyof Endpoints>(
  * como el Monitor, y no cada 60 s (F1-094): la tarjeta aplica el mismo umbral de
  * desconexión (90 s) y con 60 s un snapshot sano de ~35 s lo cruzaría antes del
  * siguiente refresco, y la sucursal parpadearía a "desconectada" cada minuto.
+ * F2-142: con el socket vivo se relee con cada aviso y el polling queda de respaldo.
  */
 export function useMesasAbiertas(filtro: Filtro | null) {
+  const enVivo = useTiempoRealMesas(filtro);
   return useQuery({
     queryKey: ['mesas', 'abiertas', filtro?.empresaId, filtro?.sucursalId ?? null],
     queryFn: ({ signal }) =>
@@ -78,6 +80,6 @@ export function useMesasAbiertas(filtro: Filtro | null) {
         signal,
       }),
     enabled: filtro !== null,
-    refetchInterval: POLLING_MS,
+    refetchInterval: intervaloMesas(enVivo),
   });
 }

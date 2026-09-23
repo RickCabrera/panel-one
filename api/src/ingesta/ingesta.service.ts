@@ -14,6 +14,7 @@ import type {
   EscrituraSucursal,
 } from '../scope/escritura-sucursal';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
+import { AvisosTiempoReal, type CambiosIngesta } from '../tiempo-real/avisos';
 import { chequeCanonico } from './canonico';
 import {
   CabeceraEventoDto,
@@ -90,6 +91,11 @@ export function esTransitorio(err: unknown): boolean {
  * dato de la ingesta y queda fuera de la idempotencia A PROPÓSITO: un reenvío
  * lo mueve, porque el agente sí nos volvió a hablar. Los datos (cheques,
  * partidas, pagos, snapshots, `agente_estado`) siguen idénticos.
+ *
+ * Tiempo real (F2-142): si el lote guardó algún snapshot o cheque, al FINAL (con todas sus
+ * transacciones ya confirmadas) se avisa por el socket. El aviso no escribe nada, así que no
+ * toca la idempotencia (un reenvío avisa otra vez y el panel relee lo mismo), y si falla se
+ * loguea sin cambiar la respuesta.
  */
 @Injectable()
 export class IngestaService {
@@ -99,6 +105,7 @@ export class IngestaService {
     private readonly datos: ScopedPrismaService,
     private readonly reloj: Reloj,
     private readonly generador: GeneradorCodigo,
+    private readonly avisos: AvisosTiempoReal,
   ) {}
 
   async procesarLote(
@@ -108,6 +115,7 @@ export class IngestaService {
     const escritura = this.datos.deSucursal(agente);
     const procesados: string[] = [];
     const rechazados: RechazoDto[] = [];
+    const cambios: CambiosIngesta = { mesas: false, cheques: false };
 
     await this.registrarContacto(escritura, agente);
     for (const [indice, evento] of eventos.entries()) {
@@ -121,6 +129,8 @@ export class IngestaService {
         await this.aplicar(escritura, agente, normalizado.valor);
         // La cabecera validada ya exigió un id de 1..64 caracteres.
         procesados.push(id as string);
+        if (normalizado.valor.tipo === 'snapshot') cambios.mesas = true;
+        if (normalizado.valor.tipo === 'cheque') cambios.cheques = true;
       } catch (err) {
         const reintentable = esTransitorio(err);
         this.log.error(
@@ -137,7 +147,19 @@ export class IngestaService {
         });
       }
     }
+    this.avisar(agente, cambios);
     return { procesados, rechazados };
+  }
+
+  private avisar(agente: AgenteAutenticado, cambios: CambiosIngesta): void {
+    if (!cambios.mesas && !cambios.cheques) return;
+    try {
+      this.avisos.avisarIngesta(agente.empresaId, agente.sucursalId, cambios);
+    } catch (err) {
+      this.log.error(
+        `No se avisó en tiempo real la ingesta de la sucursal ${agente.sucursalId}: ${describir(err)}`,
+      );
+    }
   }
 
   /**
