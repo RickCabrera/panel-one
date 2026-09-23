@@ -14714,7 +14714,7 @@
             "type": "string",
             "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
             "example": "85.40",
-            "description": "Costo promedio por unidad EN ESTE ALMACÉN, sin IVA supuesto (esquema-sr §10). Regla de los importes de `/ingesta/eventos`: hasta 10 enteros y 4 decimales, se redondea a 2 mitad lejos de cero. El valor (cantidad × costo, a 2 decimales) lo calcula el API: si no cabe en NUMERIC(12,2) se rechaza el registro."
+            "description": "Costo promedio por unidad con que se valúa esta fila, sin IVA supuesto. En SR es por insumo y empresa, no por almacén: el agente repite el mismo en cada almacén de la empresa (esquema-sr §10). Regla de los importes de `/ingesta/eventos`: hasta 10 enteros y 4 decimales, se redondea a 2 mitad lejos de cero. El valor (cantidad × costo, a 2 decimales) lo calcula el API: si no cabe en NUMERIC(12,2) se rechaza el registro."
           }
         },
         "required": [

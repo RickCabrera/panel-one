@@ -8294,3 +8294,144 @@ enviador genérico de lotes y por el cursor en SQLite, que es lo que exige el "L
 
 **Qué haría distinto.** Probar el SQL con VALUES sintéticos desde el principio: encontró un bug que los
 tests en C# no podían ver. Y hacer las mutaciones a mano antes del revisor, no después.
+
+## 2026-09-23 16:55 — F2-250 · Cierre de Ronda 2: auditoría de paridad y pendientes
+**Estado:** CERRADA (PR de la rama `feat/F2-250`). Sin corte. **Es la última tarea de la cola
+vigente (RONDA 2): la siguiente sesión nocturna debe encontrar la cola vacía y crear
+`COLA_VACIA.txt`.** La RONDA 3 que dejé al final del backlog **NO está autorizada** y no se toma.
+
+**Qué quedó hecho.**
+- **`docs/paridad.md`** (nuevo): resumen "qué se puede enseñar / qué no se debe prometer",
+  leyenda de estados (con "Contra puerto falso" separado de "Construido"), hallazgos
+  transversales, salud del repo y **254 renglones de capacidades** (una fila por capacidad de
+  cada tarea F2-200 … F2-241b), cada uno con su punto de entrada en el código y, si falta algo,
+  la tarea que lo recoge (`F3-xxx`, `D-xx` o Diurna).
+- **`docs/esquema-sr.md`:**
+  - **§14 nueva** con las **25 decisiones provisionales (31 marcas) que no tenían entrada**,
+    agrupadas (agente, alertas, facturación, topes, zonas, panel). Todas como supuesto o
+    elección, ninguna como hecho.
+  - **"Índice de decisiones provisionales"** al final: **una fila por cada una de las 164 marcas**
+    del código (clave `archivo#n`), con tipo SR/panel y el § que la documenta.
+  - **Cuatro discrepancias corregidas**: costo promedio "por almacén" (§9 y §10; es por insumo y
+    empresa, lo dijo el metadato de F2-241), conversión de horas del agente (§13 decía
+    `Sucursal.zona_horaria`; el agente usa la zona de Windows: anotado como discrepancia y
+    supuesto, el lector de cheques decide), solicitud de cancelación ambigua que "se borra" (§2;
+    desde F2-110b queda `sin_confirmar`) y "el servicio corre como LocalSystem" (§11; el default
+    es la cuenta virtual).
+- **`backlog.md`:**
+  - Al final, **"RONDA 3 — LO QUE FALTA"**: 30 tareas `F3-001` … `F3-030` con su "Listo cuando",
+    orden sugerido, cuáles llevan revisor aparte, **19 decisiones abiertas para Ricardo
+    (`D-01` … `D-19`)** y acciones (`.wt-main/`).
+  - Notas "Y además (cosecha de F2-250)" en F1-002, F2-191 y F1-023, y la nota del bloque H
+    corregida ("CAFETERIA DEMO" → `softrestaurant10`).
+- **Código (sólo lo que la cosecha dejó "para F2-250" y es cerrable sin funcionalidad):**
+  - `api/prisma/esquema.spec.ts`: el rojo LOCAL de "argon2id verificable" (anotado 4 veces en el
+    log desde F2-230). Con `npm run seed` completo, `seed:reportes` deja al admin suscrito y la FK
+    `Restrict` impedía el `delete`. Ahora, dentro de la transacción que se revierte, borra antes
+    `envios_reporte` y `suscripciones_reporte` del admin, y una aserción nueva comprueba que la
+    suscripción sigue ahí después del rollback. No se aflojó nada.
+  - `api/src/reportes/reportes.e2e.spec.ts` "token alterado → 404": el intermitente de F2-141
+    (~1/16), que **salió rojo en mi segunda corrida completa** (2487/2488). El log de F2-146 ya
+    tenía la causa: la firma HMAC son 32 bytes en base64url (43 caracteres) y el último sólo lleva
+    4 bits útiles; si terminaba en `A`, el test lo cambiaba a `B`, que decodifica a los MISMOS
+    bytes → token válido → 200. Ahora altera el carácter 20 de la firma (6 bits útiles), así que
+    nunca da los mismos bytes. La aserción (404 y no apaga nada) no cambió. El archivo pasó 4
+    veces seguidas (22/22).
+  - Comentarios de `schema.prisma#InsumoCatalogo` y `catalogos.dto.ts`, y la descripción de
+    `costoPromedio` en `existencias.dto.ts` (+ `api/openapi.json` regenerado): ya no dicen "por
+    almacén".
+- **`scripts/auditoria/`** (nuevo, NO conectado al CI a propósito; conectarlo es F3-030):
+  - `decisiones-provisionales.mjs`: barre `api web agent infra scripts` (git ls-files) buscando
+    la marca en varias líneas, sin distinguir mayúsculas ni acento; exige una fila por marca en
+    el índice y que cada § citado sea un encabezado del esquema. `--listar` imprime las claves.
+  - `paridad.mjs`: cada renglón de capacidades apunta a una ruta existente o a una tarea con
+    encabezado en el backlog, y ninguna referencia está rota.
+  - **Probados con mutación**: quitar una fila del índice → "sin renglón… exit 1"; un §
+    inexistente → error; una ruta inexistente en paridad → error; un renglón sin ruta ni tarea →
+    error. Restaurados, los dos dan OK.
+- **`README.md`** (sección nueva "Qué hace hoy", seed de 90 días con inventario y facturación,
+  agente, CI y las verificaciones de auditoría) y **`0-INSTALACION.md`** (§7 estado al cierre de
+  la ronda; §8 lo que deja el seed).
+
+**Salidas (comandos exactos, desde la raíz salvo que se diga):**
+- `node scripts/auditoria/decisiones-provisionales.mjs` → `Decisiones provisionales en el código:
+  164` · `Con renglón en el índice: 164/164` · `OK`.
+- `node scripts/auditoria/paridad.mjs` → `Renglones de capacidades en docs/paridad.md: 254` · `OK`.
+- `/api`: `npm run lint` 0 errores · `npm run typecheck` limpio · `npx prisma validate` válido ·
+  `npm test` **2488/2488 (140/140 suites), 0 omitidos** en la base local con `npm run seed` completo. Corridas previas: 2487/2488 (argon2id) y 2487/2488 (token alterado); los dos arreglados arriba.
+  `npx prettier --check` limpio en los archivos tocados.
+- `/web`: `npm run build` limpio · `npm run lint` limpio · `npm test` **1388/1388** en corrida
+  limpia · `npm run check:bundle` **346.6 kB gzip / 400**.
+- `/agent`: `dotnet build --configuration Release` **0 advertencias** · `dotnet test` **544/544,
+  0 omitidos**.
+- `npm audit`: 3 altas = `deepmerge-ts` vía Prisma, la ya justificada en README desde F2-200. **No
+  apliqué `npm audit fix`** (el revisor del plan lo pidió así: un bump de dependencias no es de
+  esta tarea).
+- Skips: `git grep -nE "\b(it|test|describe)\.(skip|todo|only)\(|\bx(it|describe|test)\(|Skip *=|\[Ignore|Explicit" -- api/src api/test web/src agent/tests` → **vacío**. Tampoco hay
+  `skipIf`/`runIf`.
+- OpenAPI: `npm run openapi` (en `/api`) al empezar **no dio deriva**; el único cambio es la
+  descripción de `costoPromedio`. `openapi.spec.ts` lo vigila.
+
+**Decisiones que tomé y por qué.**
+- **Revisor.** Plan: APROBADO CON OBSERVACIONES (9, todas atendidas). Entregable: **BLOQUEADO una
+  vez** porque `paridad.md` marcaba "Construido" capacidades que dependen del POS o del PAC falso
+  (la lectura de insumos desde SR, la emisión de la global, las recetas del agente) y todo el
+  bloque C con cifras de venta, que hoy sólo salen del seed. Corregido: leyenda nueva
+  ("Construido" = lógica propia sin cifras de venta; "Contra seed" = cifras que sólo salen del
+  seed; "Contra puerto falso" incluye simulaciones), 13 renglones a "Contra seed", la global
+  partida en vista previa / emisión, las rutas "Dónde" de las ingestas apuntando al servicio del
+  api y no a la vista, y la nota rota de F2-110b. **Segundo pase: APROBADO CON OBSERVACIONES** (4, todas en paridad.md y aplicadas: precio por sucursal a Supuesto; proyecciones y reporte de diferencias de conteos a Contra seed; reporte mensual de folios a Contra puerto falso; la leyenda ya no llama falso al adaptador de archivos, que es el real de disco).
+- **Desviación consciente del plan:** los scripts de verificación iban a vivir en el scratchpad;
+  quedaron en el repo (`scripts/auditoria/`) porque el "Listo cuando" pide que se pueda
+  verificar y la siguiente sesión no ve el scratchpad (observación 2 del revisor del plan).
+- **La Ronda 3 NO entra a la Cola nocturna.** La autorización del 21/09 cubre sólo la Ronda 2.
+  El revisor del plan estuvo de acuerdo. Por eso la siguiente sesión debe dejar `COLA_VACIA.txt`.
+- **"Cerrar en la sesión" = sólo documentación + el test local.** La ficha dice "ninguna es
+  escribir funcionalidad nueva" y CLAUDE.md "nada de pasada". Todo lo de código de producto
+  (hasta lo chico, como compactar la cola del agente que F2-241b dejó "para F2-250 o nueva") fue
+  a `F3-xxx`. El test de argon2id sí lo cerré: el log lo mandaba explícitamente a F2-250 y el
+  "Listo cuando" exige los tres carriles verdes.
+- **Las decisiones que faltaban van en una §14 nueva, no esparcidas por §1–§13**, para no tocar
+  60 lugares del esquema y para que se vean juntas; el índice dice dónde está cada una.
+- **Índice por ocurrencia (`archivo#n`), no por línea**: las líneas se mueven con cualquier
+  edición; el ordinal dentro del archivo sólo cambia si alguien agrega o quita una marca, y
+  entonces TIENE que tocar el índice. La columna "Línea (F2-250)" es informativa.
+- **La columna "Dónde" de paridad es el punto de entrada de la capacidad**, no la única línea
+  que la implementa. Está dicho en la leyenda.
+- **`paridad.mjs` acepta como tarea cualquier id con encabezado propio en el backlog**
+  (`## F2-190 ·`, `### F3-001 ·`). Las decisiones `D-xx` no son tareas: los renglones que sólo
+  apuntan a una D llevan además una ruta.
+
+**Trampas que encontré.**
+- **Dos tests de /web "fallan" sólo bajo carga** (`Mesas.tiempoReal` "sin socket" con
+  `findByRole` de 1 s, `AltaGuiada` "flujo completo" con el timeout de 5 s): corrí web mientras
+  la suite del api y 4 subagentes trabajaban. En corrida limpia, 1388/1388. Están en F3-001; no
+  toqué sus esperas.
+- **El grep simple de la marca se queda corto:** `api/src/ingesta/movimientos.ts:224` parte
+  "DECISION / PROVISIONAL" en dos líneas, y `web/src/paginas/resumen/comparables.ts:13` la
+  escribe en minúsculas. Son 164, no 162. El script ya lo cubre.
+- **`jest -t "..."` sobre `reportes.e2e.spec.ts` da rojo falso**: el `enlace` lo arma un test
+  anterior del mismo `describe`, que con `-t` se omite. Corre el archivo completo.
+- **Un heredoc de bash con texto largo en español volvió a romperse** ("unexpected EOF") y un
+  `python -` con `\N` en el texto dio `unicodeescape`. Escribe los `.py` con Write.
+- **`sed -i` para mutar y restaurar un `.md`**: guarda copia antes (`cp`) y restaura con `cp`.
+- **Prettier marca "estilo" en archivos del árbol que sólo tienen CRLF** (checkout con
+  autocrlf). `npx prettier --write` sobre lo que tocaste lo arregla y git sólo ve el contenido.
+- `api/.env` no se puede leer desde la sesión (permiso denegado): no hace falta, los tests lo
+  cargan solos.
+
+**Qué quedó abierto.**
+- Todo está en la RONDA 3 del backlog (F3-001 … F3-030) y en las decisiones D-01 … D-19. Lo más
+  serio: **F3-004** (saldo de folios bajo el candado global, crece sin tope), **F3-003** (el
+  agente sin heartbeat hasta 8–9 min en el peor caso), **F3-005** (escrituras genéricas por el
+  helper de scope en modelos de escritor único), **F3-002** (7 vistas sin selector de periodo:
+  hallazgo nuevo de esta auditoría, ningún log lo tenía completo).
+- **`.wt-main/`** sigue en la raíz, sin rastrear y fuera de `.gitignore`. No es de ninguna
+  sesión: lo borra Ricardo. **Nunca `git add -A`** mientras exista.
+- La tabla de paridad se armó a partir de los logs, las líneas `[x]` y el código; **no se
+  revisó ninguna vista en navegador** (eso es F3-019).
+
+**Qué haría distinto.** Repartir la cosecha entre subagentes desde el principio fue lo que la
+hizo caber: uno por mitad del log, uno para cruzar las marcas del código contra el esquema y uno
+para el inventario de paridad. Y no correr la suite de /web al mismo tiempo que la del api: da
+rojos de tiempo que no son reales.

@@ -989,8 +989,9 @@ re-sync de catálogos.
 > **Estas dos tareas leen SoftRestaurant, y sólo leen.** No dependen de F1-090 para
 > construirse: F1-090 valida **ventas y mesas**, que es lo que no se puede mapear sin ventas
 > reales. Los **catálogos** (productos, meseros, áreas, insumos, almacenes, recetas) sí están
-> en la base "CAFETERIA DEMO" que ya existe, y §6, §7, §8, §9 y §10 de `docs/esquema-sr.md`
-> ya los documentan. Lo que estas tareas no pueden hacer de noche es **verificarse contra una
+> en la base local `softrestaurant10` (`.\NATIONALSOFT`), y §6, §7, §8, §9 y §10 de
+> `docs/esquema-sr.md` los documentan **desde metadatos y con tablas vacías** (corrección de
+> F2-250: esta nota decía base "CAFETERIA DEMO", nombre que no aparece en el esquema). Lo que estas tareas no pueden hacer de noche es **verificarse contra una
 > operación real**: eso queda en Diurnas (F2-193).
 
 ### F2-240 · Lector de catálogos de SoftRestaurant
@@ -1332,6 +1333,13 @@ válido en ambos subdominios; `GET /health` responde `{status:'ok', db:'ok'}`.
 > panel"). `trust proxy` también importa aquí: el límite del contacto (3/min, 20/h) es por IP.
 > Correr `npm run lighthouse:landing` contra el dominio real (`docs/onboarding.md`).
 
+> **Y además (cosecha de F2-250, de los logs de F2-200, F2-141 y F2-232):** (1) `prisma` es
+> devDependency: la imagen instala sin `--omit=dev` o genera el cliente en la etapa de build (el
+> `postinstall` de `/api` fallaría con `--omit=dev`); (2) **no** copiar `api/.env` a la imagen;
+> (3) `PANEL_URL` (https) es **obligatoria** con `NODE_ENV=production` o la API no arranca
+> (`api/src/reportes/config.ts`); (4) Caddy sin access log de query strings: la búsqueda de
+> Clientes viaja en `q`.
+
 ## F1-003 · CI/CD con GitHub Actions
 `[ ]` **Epic 0** · 🔒 **Razón: necesita los secretos SSH del VPS en GitHub Actions.**
 Ricardo genera el par de llaves y pega el secreto; una sesión autónoma no toca llaves de
@@ -1460,6 +1468,12 @@ siguiente ciclo; una mesa cerrada desaparece del snapshot y su cheque llega por 
 > pendiente anterior: la cola nunca guarda más de uno sin mandar. Se encola en
 > `Worker.CicloAsync`, antes de `envio.CicloAsync`. Ojo con el tope de 5 MB por lote (medido
 > ya inflado): un snapshot que solo no cabe se rechaza para siempre (413).
+
+> **Y además (cosecha de F2-250, del log de F2-223):** el panel ya pinta las partidas pendientes
+> de imprimir con `partidas[].comandaImpresa` (`api/src/mesas/dto/mesas.dto.ts`), un campo que hoy
+> **ningún agente manda** (supuesto, esquema-sr §5). Esta tarea tiene que encontrar en SR la
+> columna de "comanda impresa" por partida y mandarla; si SR no la tiene, se documenta en §5 y la
+> vista deja de prometerla.
 
 ## F1-091 · Prueba end-to-end piloto
 `[ ]` **Epic 7** · 🔒 **Razón: necesita un restaurante piloto real (o una VM con SR demo
@@ -1620,6 +1634,11 @@ y los archivos sobreviven un redespliegue y quedan incluidos en el respaldo de F
 > con Authenticode y el watchdog verifica la firma antes de instalar? Necesita un certificado de
 > firma de código. `AGENTE_URL_DESCARGA` (el zip del instalador de F2-147) NO se tocó: sigue siendo
 > una variable de entorno.
+
+> **Y además (cosecha de F2-250, del log de F2-141):** los correos de reportes no llevan
+> `List-Unsubscribe` (RFC 8058) porque `PuertoCorreo` no maneja cabeceras; la baja va en el cuerpo.
+> Con Brevo real, comprobar si Gmail o Outlook los mandan a spam por eso y, si sí, agregar la
+> cabecera al puerto y a las dos implementaciones.
 
 ## F2-192 · Validar los lectores de catálogos e inventario contra SoftRestaurant
 `[ ]` **Bloque H** · 🔒 **Razón: necesita el usuario SQL de solo lectura creado (F1-020b) y una
@@ -2467,3 +2486,456 @@ se registra sin tumbar el ciclo; y `SoloLecturaTests` sigue verde con las consul
 > panel NO los concilia), y si el costo de SR trae IVA. Ver `docs/esquema-sr.md` §10 ("Compras,
 > gastos y utilidad") y §13.
 
+---
+
+# RONDA 3 — LO QUE FALTA (cosecha de F2-250)
+
+> **NO AUTORIZADA. Nada de esta sección está en la Cola nocturna.** La autorización del
+> 21/09/2026 cubre "las tareas listadas en la RONDA 2 y sólo ellas". Esta lista es el insumo
+> para que Ricardo arme la Ronda 3: elegir, ordenar y mover a una cola vigente. Hasta entonces,
+> una sesión nocturna que encuentre la cola vacía crea `COLA_VACIA.txt` y termina; **no toma
+> nada de aquí**.
+>
+> Salió de recorrer `docs/nocturno-log.md` de toda la ronda (F2-200 … F2-241b), las
+> `DECISION PROVISIONAL (nocturno)` del código (índice en `docs/esquema-sr.md`) y las notas
+> "Y además" de F2-250. Lo que ya tenía tarea (las Diurnas F2-190 … F2-194, F1-020b, F1-002,
+> F1-022, F1-023…) no se repite aquí: `docs/paridad.md` lo referencia renglón por renglón.
+> Lo que se pudo cerrar en F2-250 (documentación desalineada y el rojo local de
+> `prisma/esquema.spec.ts`) ya se cerró. Los ids son `F3-xxx`; las decisiones, `D-xx`.
+
+## Orden sugerido
+
+1. Riesgos reales: **F3-001**, **F3-003**, **F3-004**, **F3-005**, **F3-002**.
+2. Datos e ingesta: F3-006, F3-007, F3-008, F3-009, F3-010, F3-011, F3-012.
+3. Endurecimiento: F3-013, F3-014, F3-015, F3-016, F3-017, F3-021, F3-022.
+4. Demo y pulido: F3-018, F3-019, F3-020, F3-023, F3-030.
+5. Condicionadas al mundo real: F3-024, F3-025.
+6. Baja prioridad: F3-026 … F3-029.
+
+Las que tocan la lectura de SoftRestaurant, el scope multiempresa, los agregados o la
+idempotencia de la ingesta llevan **revisor aparte** en cualquier modo (CLAUDE.md, Modo rápido):
+F3-003, F3-005, F3-006, F3-007, F3-008, F3-011, F3-012, F3-014, F3-024, F3-025.
+
+---
+
+### F3-001 · Tests estables: fuera las intermitencias
+`[ ]` /api + /web
+
+Los tests que fallan a veces enseñan a ignorar el rojo. (F2-250 ya cerró dos: el rojo local de
+`prisma/esquema.spec.ts` y el de `reportes.e2e` "token alterado → 404".) La lista que queda:
+`reportes.e2e` "el martes: el diario cuadra" (depende del reloj real del evaluador de
+alertas), `alertas.e2e` AC1 (orden del historial o reloj real), `seed-alertas.spec` en la suite
+completa; en /web `Mesas.rendimiento` "tres pulsos", `Mesas.tiempoReal` "sin socket" y
+`AltaGuiada` "flujo completo", que fallan bajo carga por esperas por defecto (1 s y 5 s; visto en
+F2-250). También las suites que paginan sobre filas con el mismo instante y las de emisión con
+relojes fijos que dan 503 "sin folios" sobre una base re-sembrada.
+
+**Listo cuando:** la causa de cada una queda escrita en el log y el arreglo no afloja ninguna
+aserción (se inyecta el reloj, se fija el orden, se arregla la alteración del token; una espera
+más larga sólo si se justifica por qué no es un bug); la suite completa de /api corre 10 veces
+seguidas con `--runInBand` sin un rojo sobre una base con `npm run seed` completo, y la de /web
+10 veces, también con otra suite corriendo en paralelo; cero skips.
+
+### F3-002 · El selector de periodo en todas las vistas que lo usan
+`[ ]` /web
+
+`/menu`, `/meseros`, `/movimientos`, `/traspasos`, `/recetas`, `/compras` y `/gastos` leen
+`usePeriodo()` pero no están en `VISTAS_CON_PERIODO` (`web/src/filtros/vista.ts`): la cabecera no
+les pinta el selector y el periodo sólo se cambia editando la URL.
+
+**Listo cuando:** las siete están en la lista y `vista.test.ts` fija la lista exacta; un test
+recorre `web/src/paginas/*.tsx` y falla si una página llama a `usePeriodo()` sin estar en la
+lista, o si una ruta de la lista no lo usa; en `/meseros` y `/gastos` la cabecera tiene
+exactamente un grupo "Periodo" (test).
+
+### F3-003 · Las lecturas pesadas del agente, fuera del ciclo del heartbeat
+`[ ]` /agent · revisor aparte (lectura de SR)
+
+Catálogos (F2-240), existencias (F2-241) e inventario (F2-241b) corren dentro del mismo ciclo que
+el heartbeat y el envío. Con SQL o API lentos, el peor caso teórico ya ronda 8–9 min sin
+heartbeat y el panel marca la sucursal desconectada (esquema-sr §11). Pasarlas a una tarea
+aparte con su propio candado.
+
+**Listo cuando:** un test con SQL y API falsos que tardan el peor caso (conexión 5+5 s, HTTP
+30 s) muestra heartbeats consecutivos separados ≤ intervalo + 5 s durante un ciclo completo de
+catálogos, existencias e inventario; dos disparos de la tarea pesada no corren en paralelo; las
+guardias de solo lectura (`SoloLecturaTests`, NOLOCK, timeouts) siguen verdes; §11 actualizado;
+`dotnet build -c Release` sin warnings y `dotnet test` verde.
+
+### F3-004 · Saldo de folios con costo acotado
+`[ ]` /api · revisor aparte
+
+`conteosPorCubo` (F2-110) recorre todos los timbres de la plataforma en cada reserva, bajo el
+candado global. Hoy tarda ~110 ms; crece sin tope, y cuando pase del timeout fallará toda
+emisión de toda empresa. Congelar lo consumido de los paquetes ya vencidos (o llevar un contador
+por paquete conciliado contra `cfdis`).
+
+**Listo cuando:** con 500 000 CFDI sintéticos en paquetes vencidos, el saldo de una reserva se
+calcula bajo 200 ms (medido en un test); saldo, reporte mensual y FIFO dan las mismas cifras que
+hoy en `folios.e2e.spec.ts` (escritas a mano); con saldo 0 la reserva sigue bloqueándose antes
+del PAC.
+
+### F3-005 · El helper de scope no deja escribir por la vía genérica lo que tiene escritor dedicado
+`[ ]` /api · revisor aparte (scope multiempresa)
+
+`para(scope).X.updateMany/create/deleteMany` sigue abierto para modelos que `LLAVE_EMPRESA`
+declara de escritor único: `Alerta` (se escribiría sin el candado), `Cheque`, los espejos de
+catálogos, existencias, pólizas, recetas, compras. La baja pública de reportes
+(`SuscripcionReporte`) queda como excepción explícita.
+
+**Listo cuando:** `para(scope).alerta.updateMany(...)` lanza error, y lo mismo cada modelo de la
+lista (test parametrizado); un modelo nuevo sin clasificar (dedicado o genérico) rompe
+`typecheck` o un test, como ya pasa con `LLAVE_EMPRESA`; la suite completa sigue verde sin tocar
+ninguna escritura existente.
+
+### F3-006 · Normalizar mesero y mesa en la ingesta
+`[ ]` /api · revisor aparte (idempotencia de la ingesta)
+
+Recortar `mesero` y `mesa` del cheque (y del snapshot de mesas) y guardar nulo si quedan vacíos,
+como ya se hace con `clienteOrigenSrId` y `areaOrigenSrId`. El valor normalizado entra a
+`chequeCanonico`.
+
+**Listo cuando:** e2e de ingesta: `'  Ana  '` se guarda `'Ana'`, `''` y `'   '` nulos; reenviar
+×3 el mismo lote deja la misma foto; reenviar `'Ana '` después de `'Ana'` no reescribe el cheque;
+en Análisis y `/meseros` un mesero `'  '` cuenta en "Sin mesero"; OpenAPI y esquema-sr §2/§7 al
+día.
+
+### F3-007 · El comparable "a la misma altura" con la fecha local de cada sucursal
+`[ ]` /api + /web · revisor aparte (agregados y scope)
+
+Con sucursales en zonas distintas, el comparable del Resumen usa sólo la hora local y sesga el Δ
+cerca de la medianoche (esquema-sr §14.5). Arreglo que propuso el revisor en F2-220: en la zona
+de cada sucursal, comparar la FECHA local con el último día del rango (posterior → día completo;
+anterior → corte a las 00:00; igual → corte a la hora local).
+
+**Listo cuando:** e2e con Tijuana y CDMX: a las 00:30 CDMX la base de Tijuana es su día completo
+anterior, no uno cortado a las 22:30; con una zona adelantada se corta a las 00:00; sin
+`alturaAl` el SQL no cambia (snapshot); desaparecen las `DECISION PROVISIONAL` de
+`consulta-ventas.ts` y `comparables.ts` y el índice del esquema se actualiza.
+
+### F3-008 · Test: un reenvío con cambios no mueve `created_at`
+`[ ]` /api · revisor aparte (idempotencia)
+
+El corte por recepción del export (F2-203) depende de que `cheques.created_at` no cambie al
+reenviar un cheque con cambios. Lo garantiza `sinIntocables`, pero ningún test lo afirma.
+
+**Listo cuando:** en `ingesta.e2e.spec.ts`, reenviar un cheque con partidas, pagos y `cancelado`
+distintos deja `createdAt` idéntico y mueve `updatedAt`; quitar `createdAt` de los intocables
+(mutación a mano) hace fallar el test.
+
+### F3-009 · `ANALYZE` tras un lote grande de la ingesta
+`[ ]` /api
+
+Tras una carga masiva y antes del autovacuum, los filtros de Tickets tardan segundos (2.7 s
+medidos en F2-222 con estadísticas de tabla vacía). Correr `ANALYZE` de cheques, partidas y pagos
+cuando un lote o una ventana de lotes supere un umbral, fuera de la transacción y con debounce.
+
+**Listo cuando:** un e2e que siembra N cheques por la ingesta sobre tablas recién vacías deja la
+mediana de "tres filtros" de `GET /ventas/tickets` bajo 1 s sin `ANALYZE` manual; un lote chico
+no lo dispara (test); umbral y debounce documentados.
+
+### F3-010 · Presupuesto de rendimiento con volumen sintético y `statement_timeout`
+`[ ]` /api
+
+Un seed de volumen (1 año, 10 sucursales, ~10× las cuentas del seed) que no toca el seed normal,
+para medir Movimientos, kardex, Recetas y consumo teórico, estado de resultados, Comparativos,
+Proyecciones, la captura de un conteo de 500 renglones y `arranque()`. Las lecturas de
+inventario y finanzas no tienen `statement_timeout` propio.
+
+**Listo cuando:** un script (p. ej. `npm run perf:inventario`) reporta el p95 de cada endpoint
+sobre el volumen; ninguno pasa de 2 s o queda documentado por qué; toda lectura de `inventario/`
+y `finanzas/` tiene `statement_timeout` y un test lo afirma; un conteo de 500 renglones se
+captura en un e2e.
+
+### F3-011 · Cola de inventario compacta en el agente
+`[ ]` /agent · revisor aparte (lectura de SR e idempotencia)
+
+Si un documento cambia N veces con el API caído, `ColaInventario` encola N versiones. Compactar
+por (tipo, clave) al encolar. Y cerrar el borde: un lote descartado con una ausencia seguido de
+más de 3 días sin lectura buena ya no reenvía la cancelación.
+
+**Listo cuando:** un documento que cambia 5 veces con el API caído deja 1 versión en
+`inventario_lotes`; la cancelación se reenvía aunque la siguiente lectura buena llegue a los 4
+días (test); la transacción única por lectura queda intacta; `dotnet test` verde.
+
+### F3-012 · Higiene del lector de catálogos
+`[ ]` /agent · revisor aparte (lectura de SR)
+
+El aviso de "varias empresas" sale diario por producto; se loguea `idcliente`; un forzado se
+marca atendido aunque un catálogo siga esperando su envío anterior; `insumos.idgruposi` (y
+productos → grupos) cruza sensible a mayúsculas.
+
+**Listo cuando:** tests de `SincronizadorCatalogosTests` y `MapeoCatalogosTests`: "abc"/"ABC"
+cruzan; dos sincronizaciones sin cambios = cero avisos repetidos; ningún `idcliente` en el log
+capturado; el forzado queda pendiente mientras haya envío anterior; esquema-sr §9/§12 al día.
+
+### F3-013 · Endurecer el gateway de tiempo real
+`[ ]` /api (+ /web opcional)
+
+Sin límite de frecuencia en `suscribir`, sin tope de sockets por usuario, y un logout no corta
+los sockets abiertos (viven hasta ≤ 15 min). Opcional: que el aviso `cheques` refresque también
+Ventas e Inicio, no sólo mesas.
+
+**Listo cuando:** en `tiempo-real.e2e.spec.ts`: N+1 `suscribir` en la ventana se rechaza sin
+cambiar de sala; el socket N+1 del mismo usuario se rechaza; el logout desconecta un socket de
+otra pestaña en < 2 s; `docs/tiempo-real.md` "Límites conocidos" al día.
+
+### F3-014 · Endurecer las notificaciones push
+`[ ]` /api · revisor aparte (scope)
+
+Los "Límites conocidos" de `docs/notificaciones.md`: cola `#pendiente` sin tope, sin purga de
+`envios_push_resumen`, sesiones muertas en el conteo de navegadores, avisos sin agrupar para
+admin_global, resumen que no dice qué sucursal faltó, throttle de prueba sólo por IP. Y el filtro
+de destinatarios (`notificaciones.service.ts`) vive fuera del helper de scope.
+
+**Listo cuando:** cada límite queda resuelto o "aceptado" con su razón en el doc; tests del tope
+de la cola, de la purga (reloj falso) y del resumen con una sucursal sin datos; el filtro de
+destinatarios vive en `api/src/scope/` con su spec; e2e existentes verdes.
+
+### F3-015 · Huecos de la entrega y los avisos de CFDI
+`[ ]` /api (+ /web mínimo)
+
+(a) el reintento de envío da 409 "sin envío" si falló el registro del primero: que cree la fila;
+(b) el aviso por correo de una cancelación que falla queda `aviso_error` y nada más: reintento;
+(c) la copia al correo del restaurante del AC original de F2-105 (dónde se configura).
+
+**Listo cuando:** e2e: (a) CFDI vigente sin fila de envío → reintento 200 y una sola fila
+`enviado`; (b) un aviso fallido se reintenta y deja marca de éxito, sin duplicar el correo con dos
+vueltas simultáneas; (c) con la copia configurada el correo sale con copia al restaurante, sin
+ella igual que hoy; OpenAPI al día.
+
+### F3-016 · Avisos de facturación que hoy no avisan
+`[ ]` /api (+ /web)
+
+(a) CSD por vencer o vencido: hoy sólo se ve en la vista (el log de F2-100 lo mandaba a F2-110,
+que no lo hizo); (b) la global automática que falla (422/503) deja un log cada hora sin fin. Si
+Ricardo decide **D-02** (centro de alertas de plataforma), va aquí.
+
+**Listo cuando:** con reloj falso, un CSD a 29 días genera un solo aviso por periodo (dos vueltas
+simultáneas = un correo) y uno vencido otro; un periodo de global que falla 3 vueltas seguidas
+genera un aviso y no más hasta que cambie; e2e con correo que captura y `PushFalso`.
+
+### F3-017 · Captura de gastos idempotente
+`[ ]` /api + /web
+
+`POST /finanzas/gastos` no es idempotente: un doble envío crea dos gastos. Mismo patrón que la
+factura sin ticket (F2-107): `solicitudId` del formulario, único por empresa.
+
+**Listo cuando:** dos POST con la misma llave (en serie y simultáneos) dejan un gasto y la
+segunda respuesta dice cuál; el web repite la llave en un reintento y la cambia en "capturar
+otro"; OpenAPI al día; e2e y test web.
+
+### F3-018 · Modo demo completo
+`[ ]` /api
+
+En la demo no se puede refacturar ni cancelar un CFDI sembrado (el PAC falso no lo conoce: 409
+`no_encontrado`), y el canal "plataformas" sale vacío en `/canales`.
+
+**Listo cuando:** con el seed y `PAC_IMPL=falso`, refacturar y cancelar un CFDI sembrado da 201
+y cambia su estado (e2e); `/ventas/por-area` del seed trae venta en `plataformas` y Σ = venta
+(test); el seed sigue determinista e idempotente.
+
+### F3-019 · Revisión visual en navegador de las vistas de la Ronda 2
+`[ ]` /web (+ CI)
+
+Sólo F2-203, F2-210, F2-211 y F2-212 se midieron en Chrome real. Faltan Resumen, Comparativos,
+Análisis, Tickets con filtros, Mesas y `/mesas/pared`, Alertas, Reportes por correo, Áreas y
+canales, `/canales`, inventario, facturación y el portal `/f/:slug`, a 390, 820 y 1280 px y en
+los dos temas; la cabecera a 390 px (~310 px de alto con el rango abierto); el reloj de Mesas con
+60 mesas; una sucursal en otra zona horaria.
+
+**Listo cuando:** un arnés headless (p. ej. Playwright) contra el build y el api con seed corre
+local y en CI; cada vista carga sin errores de consola y sin scroll horizontal a 390 px
+(afirmado); las capturas quedan como artefacto; cada defecto queda arreglado con su test o
+escrito como tarea; la cabecera a 390 px en 2 filas o menos (o justificado). No sustituye la
+prueba en un celular real de F2-190/F2-193.
+
+### F3-020 · Pulido del panel
+`[ ]` /web (+ /api si entran los filtros de nulos)
+
+Título "Monitor de mesas" igual que el menú; en el riel de iconos, la razón de una entrada
+pendiente visible con teclado; KPI "Cuentas sin imprimir" clicable; enlace del mesero de Análisis
+a Tickets y a su ficha en `/meseros`; el indicador en vivo dice "No se pudo consultar" cuando
+fallan las empresas; una sola queryKey de mesas abiertas; filtros "Sin mesero"/"Sin mesa" en
+Tickets; `theme-color` por tema; columna "Utilidad sobrestimada" en el CSV de Comparativos y
+"Origen" en el del tablero de facturación; `motivoSinUtilidad` no supone "sin recetas";
+nombres accesibles distintos a los dos selects de sucursal de `/gastos`.
+
+**Listo cuando:** cada punto tiene su test (título = texto del menú; razón visible con foco; clic
+en el KPI → `?estado=sin-imprimir`; el enlace lleva mesero y periodo; con empresas en error el
+indicador no dice "Consultando…"; una sola definición de la queryKey; `meta[name=theme-color]`
+cambia con el tema; columnas nuevas en los tests de CSV); `build`, `lint` y `test` limpios; si
+entran los filtros de nulos, OpenAPI al día.
+
+### F3-021 · Higiene de los envíos de reportes por correo
+`[ ]` /api
+
+Una suscripción huérfana (el usuario ya no ve la empresa) deja un `descartado` diario para
+siempre; un envío que se queda en `enviando` nunca se resuelve. Nunca se reenvía ("mejor perder
+un correo que mandarlo dos veces").
+
+**Listo cuando:** e2e: tres días sin acceso apagan la suscripción (con auditoría) y no generan
+más filas; un `enviando` de hace más de X min pasa a `descartado` sin mandar correo; uno reciente
+no se toca; dos vueltas simultáneas del barrido no se pisan.
+
+### F3-022 · Throttle de login por cuenta
+`[ ]` /api
+
+`/auth/login` y `/cuenta/password` limitan sólo por IP. Un ataque distribuido contra una cuenta
+no se frena. Cubo por email normalizado (p. ej. 10 fallos / 15 min), sin enumeración.
+
+**Listo cuando:** e2e: el intento 11 contra la misma cuenta desde IPs distintas da 429; una
+cuenta inexistente se comporta igual; un login exitoso no consume el cubo de fallos (o se
+documenta); el test de metadata de cubos por ruta queda al día.
+
+### F3-023 · Sin destello de tema al cargar
+`[ ]` /web + /infra
+
+Con "oscuro" elegido y el sistema en claro se ve blanco un instante: la CSP (`style-src 'self'`,
+sin script inline) impide aplicar el tema antes del JS. Script inline mínimo con su hash en la
+CSP de Caddy, generado en el build.
+
+**Listo cuando:** un test de build verifica que el hash de la CSP coincide con el script; con el
+storage roto el script no lanza; en Chrome con "Slow 3G" no hay frame blanco en oscuro (captura en
+el PR); la CSP no gana `'unsafe-inline'`.
+
+### F3-024 · Estaciones: espejo, contrato y lector
+`[ ]` /api + /agent + /web · revisor aparte (lectura de SR) · conviene después de F2-192
+
+SR tiene estaciones (`dbo.estaciones`, `cheques.estacion`; metadatos vistos en F2-240, esquema-sr
+§8). Falta el catálogo espejo por el camino de F2-230, su lector, `datos.estacionOrigenSrId` en
+el contrato de eventos (lo llenará F1-022) y el desglose en Áreas y canales.
+
+**Listo cuando:** el catálogo viaja con hash y cierre como los otros once (tests del agente con
+fixtures: vacío, acentos, NULL; `WITH (NOLOCK)`; `SoloLecturaTests` verde); el espejo es
+idempotente (×3) con aislamiento A/B en el e2e; el campo del evento es opcional (omitido = nulo)
+con su test; Σ estaciones + "sin estación" = venta; la vista dice "sin datos de estación" en vez
+de 0; OpenAPI y §8/§13 al día.
+
+### F3-025 · Presentaciones de compra e insumos elaborados
+`[ ]` /api + /agent · revisor aparte · **condicionada: sólo si F2-192 confirma que la instalación los usa**
+
+`insumospresentaciones`, `stockinsumos` e `insumos.elaborado` están documentados en esquema-sr §9
+sin espejo ni contrato. Habilitan redondear el sugerido de compra al empaque (F2-127) y saber qué
+insumos son subrecetas (F2-125).
+
+**Listo cuando:** F2-192 confirma su uso; entonces, ingesta ×3 idéntica con aislamiento, lector
+con fixtures y `SoloLecturaTests` verde, y `/proyecciones` redondea hacia arriba a la
+presentación cuando existe (test con factor 12; sin presentación, igual que hoy); §9 pasa de "sin
+espejo" a contrato; OpenAPI al día. Sin la confirmación, no se toma.
+
+### F3-026 · El export de Tickets detecta cambios de importe durante la descarga (baja)
+`[ ]` /api + /web
+
+El corte por recepción congela lo que LLEGA, no lo que CAMBIA: un importe corregido de un ticket
+ya bajado no se detecta (un test de `exportar.test.ts` fija hoy ese límite).
+
+**Listo cuando:** e2e: si un ticket exportado cambia de importe a media descarga, el export
+aborta o avisa con el conteo de cambiados; el test del límite se ADAPTA al comportamiento nuevo
+(no se borra); OpenAPI al día.
+
+### F3-027 · Precisión de Resumen y Comparativos (baja)
+`[ ]` /api + /web
+
+`productos=` opcional en `GET /ventas/top-productos` para que el Δ del top 5 del Resumen tenga su
+base real aunque esté fuera del top 50; `cuentasConComensales` por fila en
+`comparativo-sucursales` para distinguir "no se registraron" de "cero" por sucursal.
+
+**Listo cuando:** e2e: un producto fuera del top 50 de la base muestra su Δ real; una sucursal
+con comensales nulos muestra "—" (no 0 ni −100 %) en Comparativos y su CSV; Inicio sigue
+cuadrando; OpenAPI al día.
+
+### F3-028 · Robustez menor de los endpoints de catálogos (baja)
+`[ ]` /api
+
+Dos PUT simultáneos de canal de área o de metadata dan 500 por P2002; el truncado del menú a
+5000 filas puede sacar una sucursal entera sin decirlo; `insumos()`/`productos()` declaran un
+tipo genérico.
+
+**Listo cuando:** dos PUT concurrentes dan 200+200 o 200+409, nunca 500 (e2e con `Promise.all`);
+con el tope bajado en el test, `truncado` trae `sucursalesIncompletas` y la vista lo muestra;
+`typecheck` limpio con los tipos reales.
+
+### F3-029 · El PUT de reglas de alertas no retiene candado y conexiones mientras observa (baja)
+`[ ]` /api · revisor aparte
+
+El PUT observa (N conexiones por sucursal y zona) dentro de la transacción que tiene el candado;
+con pool chico y varios PUT a la vez se agota y los ticks reciben 55P03.
+
+**Listo cuando:** e2e con `connection_limit` bajo: 5 PUT simultáneos sin P2024 ni 500; los tests
+de orden invertido de `alertas.e2e.spec.ts` siguen verdes; un PUT sigue recalculando sin esperar
+al tick.
+
+### F3-030 · Las verificaciones de la auditoría, en el CI
+`[ ]` /infra (CI)
+
+F2-250 dejó `scripts/auditoria/decisiones-provisionales.mjs` (cada `DECISION PROVISIONAL` del
+código tiene su renglón en el índice de `docs/esquema-sr.md`) y `scripts/auditoria/paridad.mjs`
+(cada renglón de `docs/paridad.md` apunta a código o a una tarea). No se conectaron al CI a
+propósito: F2-250 no agregaba gates.
+
+**Listo cuando:** el job `guardia` de `.github/workflows/ci.yml` corre los dos y falla si
+alguno falla; un PR que agrega una `DECISION PROVISIONAL` sin su renglón sale rojo (probado en
+una rama de prueba y anotado en el log); el README lo menciona en "El CI".
+
+---
+
+## Decisiones abiertas para Ricardo
+
+No son código hasta que se decidan. Cada una dice dónde está documentada; al decidir, se
+escribe como tarea (o se descarta) y se borra de aquí.
+
+- **D-01 · Cuatro entradas del menú sin tarea** (Empresas, Sucursales, Insumos, Grupos de
+  insumos; `SIN_TAREA` en `web/src/layout/menu.ts`): ¿vistas de consulta propias o se quitan?
+- **D-02 · Saldo de folios bajo en la campana.** Las alertas son por empresa y las ven los
+  clientes; el saldo es de la plataforma. Hoy avisa por correo al admin_global. ¿Centro de
+  alertas de plataforma (sólo admin_global)? Si sí, entra en F3-016. Esquema-sr §2 "Control de
+  folios (F2-110)".
+- **D-03 · Comparativos entre empresas** (admin_global): hoy compara una empresa a la vez. En el
+  front costaría N empresas × 4 consultas; la alternativa es un endpoint agregado en `/ventas/*`.
+- **D-04 · Re-descargar una factura desde el portal** con un código ya facturado: (a) o (b) de
+  la ficha de F2-105. Hoy los enlaces de éxito duran 1 h (esquema-sr §14.3).
+- **D-05 · Tres huecos de la conciliación con el PAC** (F2-110b): una reserva LIBERADA que el PAC
+  lista después no se detecta; una cancelación hecha fuera del sistema (portal de Facturama) no se
+  detecta; una reserva que se confirma aunque el PAC la reporta cancelada sólo sale en
+  `requierenRevision`, sin marca en base. ¿Alguno amerita tarea? Esquema-sr §2 "Conciliación con
+  el PAC (F2-110b)".
+- **D-06 · Inventario del agente** (esquema-sr §10/§11): el freno con borrado legítimo deja
+  recetas borradas sin `renglones: []` (¿comando que acepte la desaparición, o umbral propio para
+  recetas?); el heap de `movsinv` puede dar timeout permanente (¿subir el timeout sólo ahí, leer
+  por tramos o fuera de hora pico?); una cancelación de más de 35 días no llega si la fila
+  conserva la fecha original.
+- **D-07 · Landing:** precios y capturas reales (hoy "por confirmar" y SVG ilustrativos,
+  `docs/onboarding.md`).
+- **D-08 · Push del resumen del día con montos** en la pantalla bloqueada (hoy sí lleva la
+  venta; las alertas no llevan cifras; esquema-sr §14.6, `docs/notificaciones.md`).
+- **D-09 · Canales:** enum fijo y mapeo por sucursal o por empresa; ingesta de canal por cuenta
+  (`docs/delivery.md` §4–§5, esquema-sr §8).
+- **D-10 · Datos que el contrato de ingesta no trae:** cortesías, hora de la cancelación y
+  descuentos por partida (esquema-sr §2 y §3). Se resuelven con F1-022/F1-090, pero hay que
+  decidir cómo se muestran mientras tanto.
+- **D-11 · El visor y los datos de contacto de clientes** (esquema-sr §8).
+- **D-12 · Facturación, reglas de negocio:** cuenta ya globalizada que SR reabre o cancela;
+  periodicidades quincenal y bimestral de la global; generar códigos para cheques anteriores
+  (backfill); correo del portal dentro de la petición o en segundo plano (esquema-sr §2).
+- **D-13 · Hora del reporte programado:** 07:00 fija y zona mayoritaria de la empresa, o
+  configurable por usuario (esquema-sr §14.6).
+- **D-14 · Mejoras de inventario que ninguna ficha pidió:** CSV de existencias y de movimientos,
+  enlace Existencias → kardex y → nuevo conteo, reabrir un conteo cerrado, editar cantidades al
+  recibir un traspaso, alerta de "variación alta" de recetas, orden de compra editable con
+  proveedor sugerido. Elegir cuáles; cada una elegida se escribe con su "Listo cuando".
+- **D-15 · Sucursal que nunca reportó:** el centro de alertas la alerta y el badge de Estado de
+  agentes no la cuenta. Unificar (esquema-sr §14.2).
+- **D-16 · "Hoy" con sucursales en varias zonas:** el panel toma CDMX (esquema-sr §14.5).
+- **D-17 · Lector de cheques con un usuario SQL que puede escribir:** ¿se niega a leer como
+  catálogos e inventario? Lo conservador es que sí (esquema-sr §14.1). Decidir antes de F1-022.
+- **D-18 · Metadata de producto por sucursal o por empresa** (esquema-sr §6).
+- **D-19 · Errores en la conciliación de traspasos:** tragarlos (hoy) o propagarlos (log de
+  F2-124, esquema-sr §10 "Traspasos").
+
+## Acciones para Ricardo (no son tareas)
+
+- **Borrar `.wt-main/`** de la raíz del repo: es un árbol de trabajo viejo, sin rastrear y fuera
+  de `.gitignore`. Lo repiten varios logs; ninguna sesión lo borra porque no es suyo.
+- **Aceptada, sin acción:** la vulnerabilidad alta de `deepmerge-ts` (vía Prisma); se revisa
+  cuando una versión estable de Prisma suba el pin (`README.md`, "Notas de dependencias").

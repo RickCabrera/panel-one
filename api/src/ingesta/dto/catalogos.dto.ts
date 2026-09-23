@@ -166,8 +166,8 @@ export class RegistroClienteDto extends RegistroCatalogoDto {
 /**
  * Un insumo del inventario (F2-120). DECISION PROVISIONAL (nocturno): un insumo tiene UN grupo
  * y UNA unidad, por su `origenSrId` y sin FK (pueden llegar después); no lleva costo (el costo
- * con que se valúa es el promedio POR ALMACÉN, de existencias, F2-121). Nada de esto se ha
- * visto en SR: docs/esquema-sr.md §9.
+ * con que se valúa viaja con las existencias, F2-121; en SR es por insumo y empresa, no por
+ * almacén, F2-241). Nada de esto se ha visto en SR: docs/esquema-sr.md §9-§10.
  */
 export class RegistroInsumoDto extends RegistroCatalogoDto {
   @ApiPropertyOptional({
