@@ -51,6 +51,7 @@ import {
   IMPORTE_FILTRO,
   ORDENES_TICKETS,
   type Canceladas,
+  type CodigoFacturacionTicket,
   type Direccion,
   type OrdenTickets,
   type PagoTicket,
@@ -58,6 +59,7 @@ import {
   type PartidaTicket,
   type Ticket,
 } from '../tickets.service';
+import type { EstadoPublico } from '../../facturacion/codigo';
 
 // ---------------------------------------------------------------------------
 // Query
@@ -526,6 +528,20 @@ export class PagoTicketDto implements PagoTicket {
   monto!: string;
 }
 
+export class CodigoFacturacionTicketDto implements CodigoFacturacionTicket {
+  @ApiProperty({ example: '7JQRECP3U' })
+  codigo!: string;
+
+  @ApiProperty({
+    enum: ['pendiente', 'facturado', 'en_global', 'expirado', 'cancelado'],
+    description: 'El estado PÚBLICO, el mismo que ve el portal de autofactura.',
+  })
+  estado!: EstadoPublico;
+
+  @ApiProperty({ description: 'El mensaje del estado en español, el mismo del portal.' })
+  mensaje!: string;
+}
+
 export class TicketDto implements Ticket {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -578,6 +594,15 @@ export class TicketDto implements Ticket {
 
   @ApiProperty({ type: [PagoTicketDto] })
   pagos!: PagoTicketDto[];
+
+  @ApiProperty({
+    type: CodigoFacturacionTicketDto,
+    nullable: true,
+    description:
+      'El código de facturación de la cuenta (F2-103), para dictarlo si el ticket no trae el QR. ' +
+      'Null = la cuenta no tiene código (no facturable, o llegó antes de F2-101).',
+  })
+  codigoFacturacion!: CodigoFacturacionTicketDto | null;
 }
 
 export class PaginaTicketsDto implements PaginaTickets {
@@ -940,7 +965,8 @@ export class VentaPorAreaDto implements VentaPorArea {
 
   @ApiProperty({
     type: [VentaCanalDto],
-    description: 'Sólo los canales con cuentas, en orden fijo. Σ canales + sinCanal + sinArea = venta.',
+    description:
+      'Sólo los canales con cuentas, en orden fijo. Σ canales + sinCanal + sinArea = venta.',
   })
   canales!: VentaCanalDto[];
 

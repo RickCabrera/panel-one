@@ -4,10 +4,13 @@ import {
   DIAS_VIGENCIA_SEED,
   NO_CERTIFICADO_SEED,
   RECEPTORES_SEED,
+  logoSintetico,
   RFC_SEED,
   sembrarFacturacion,
+  sembrarPortales,
   vigenciaSeed,
 } from './seed-facturacion';
+import { tipoDeLogo } from '../src/facturacion/portal';
 
 // Seed de datos fiscales (F2-100) sobre una empresa SINTÉTICA propia de este spec (no la demo),
 // que se crea y se borra aquí. Escribe por el helper del panel, que abre sus propias
@@ -16,11 +19,18 @@ import {
 const EMPRESA = 'f2100000-0000-4000-8000-000000000501';
 const HOY = '2026-09-22';
 const AHORA = new Date('2026-09-22T18:00:00.000Z');
+const SUCURSALES = ['f2100000-0000-4000-8000-000000000511', 'f2100000-0000-4000-8000-000000000512'];
+const PORTALES = [
+  { sucursalId: SUCURSALES[0], slug: 'seed-f2103-uno', color: '#0f766e', conLogo: true },
+  { sucursalId: SUCURSALES[1], slug: 'seed-f2103-dos', color: '#9333ea', conLogo: false },
+];
 
 describe('seed de datos fiscales (F2-100)', () => {
   const prisma = new PrismaClient();
 
   const limpiar = async () => {
+    await prisma.portalFacturacion.deleteMany({ where: { empresaId: EMPRESA } });
+    await prisma.sucursal.deleteMany({ where: { empresaId: EMPRESA } });
     await prisma.receptorFrecuente.deleteMany({ where: { empresaId: EMPRESA } });
     await prisma.perfilFiscal.deleteMany({ where: { empresaId: EMPRESA } });
     await prisma.empresa.deleteMany({ where: { id: EMPRESA } });
@@ -29,6 +39,9 @@ describe('seed de datos fiscales (F2-100)', () => {
   beforeAll(async () => {
     await limpiar();
     await prisma.empresa.create({ data: { id: EMPRESA, nombre: 'Seed fiscal F2-100' } });
+    for (const [i, id] of SUCURSALES.entries()) {
+      await prisma.sucursal.create({ data: { id, empresaId: EMPRESA, nombre: `S${i + 1}` } });
+    }
   });
   afterAll(async () => {
     await limpiar();
@@ -105,6 +118,53 @@ describe('seed de datos fiscales (F2-100)', () => {
     expect((await foto()).perfil).toMatchObject({
       rfc: 'XIA190128J61',
       csdNoCertificado: '00001000000999999999',
+    });
+  });
+
+  describe('portales de autofactura (F2-103)', () => {
+    const fotoPortales = () =>
+      prisma.portalFacturacion.findMany({
+        where: { empresaId: EMPRESA },
+        orderBy: { slug: 'asc' },
+        omit: { createdAt: true },
+      });
+
+    it('el logo sintético es un PNG válido, determinista y bajo el tope', () => {
+      const logo = logoSintetico('#0f766e');
+      expect(tipoDeLogo(logo)).toBe('image/png');
+      expect(logo.equals(logoSintetico('#0f766e'))).toBe(true);
+      expect(logo.equals(logoSintetico('#9333ea'))).toBe(false);
+      expect(logo.length).toBeLessThan(2048);
+    });
+
+    it('un portal por sucursal, con logo sólo donde se pide; dos corridas = mismos datos', async () => {
+      expect(
+        await sembrarPortales(prisma, { empresaId: EMPRESA, portales: PORTALES, ahora: AHORA }),
+      ).toEqual({
+        sembrados: 2,
+        respetados: 0,
+      });
+      const primera = await fotoPortales();
+      expect(primera.map((p) => [p.slug, p.color, p.logoTipo, p.actualizadoPor])).toEqual([
+        ['seed-f2103-dos', '#9333ea', null, null],
+        ['seed-f2103-uno', '#0f766e', 'image/png', null],
+      ]);
+      await sembrarPortales(prisma, { empresaId: EMPRESA, portales: PORTALES, ahora: AHORA });
+      expect(await fotoPortales()).toEqual(primera);
+    });
+
+    it('el panel manda: un portal editado por una persona no se pisa', async () => {
+      await prisma.portalFacturacion.updateMany({
+        where: { sucursalId: SUCURSALES[0] },
+        data: { slug: 'editado-f2103', actualizadoPor: 'f2100000-0000-4000-8000-000000000999' },
+      });
+      expect(
+        await sembrarPortales(prisma, { empresaId: EMPRESA, portales: PORTALES, ahora: AHORA }),
+      ).toEqual({
+        sembrados: 1,
+        respetados: 1,
+      });
+      expect((await fotoPortales()).map((p) => p.slug)).toContain('editado-f2103');
     });
   });
 });

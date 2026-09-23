@@ -106,3 +106,31 @@ export function aBase64(bytes: ArrayBuffer): string {
   }
   return btoa(binario);
 }
+
+// --- F2-103: el portal de autofactura de cada sucursal ------------------------------------
+
+/** Tope del logo del portal (el api repite la regla con sus bytes). */
+export const MAX_BYTES_LOGO = 200 * 1024;
+const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** Sugerencia de enlace a partir del nombre: "Sucursal Centro" → "centro". */
+export function sugerirSlug(nombre: string): string {
+  const base = nombre
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\bsucursal\b/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+  return base.length >= 3 ? base : `${base}-portal`.replace(/^-/, '');
+}
+
+/** El mismo formato que exige el api (y un CHECK de la base). */
+export function errorSlug(slug: string): string | null {
+  if (slug.length < 3 || slug.length > 40 || !SLUG.test(slug)) {
+    return 'De 3 a 40 caracteres: minúsculas, números y guiones entre palabras.';
+  }
+  return null;
+}

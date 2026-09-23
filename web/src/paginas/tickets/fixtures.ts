@@ -44,6 +44,7 @@ export function ticket(parcial: Partial<Ticket> = {}): Ticket {
       { formaRaw: 'EFECTIVO', forma: 'efectivo', monto: '600.00' },
       { formaRaw: 'TARJETA DE CREDITO', forma: 'tarjeta', monto: '610.00' },
     ],
+    codigoFacturacion: null,
     ...parcial,
   };
 }

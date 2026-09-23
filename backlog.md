@@ -1841,6 +1841,26 @@ sandbox/producción por variable de entorno.
 descargado pasa el validador estructural; un RFC inexistente devuelve el mensaje amable, no
 el error crudo; doble click en "emitir" no genera dos CFDI (lock por código).
 
+> **Y además (de F2-103).** El portal ya existe y ya llama a la emisión, pero hoy la emisión
+> contesta **503**: `POST /facturacion/portal/{slug}/facturas` valida todo lo del portal (slug,
+> código de la empresa, estado, receptor campo por campo) y delega en el puerto `EMISION_PORTAL`
+> (`api/src/facturacion/emision-portal.ts`), cuya única implementación es `EmisionNoDisponible`.
+> Lo que esta tarea tiene que hacer con eso:
+> 1. **Cambiar el provider** de `EMISION_PORTAL` (en `FacturacionModule`) por uno sobre
+>    `CfdiService.emitir`. La solicitud ya trae `codigoId` (para el candado por código), `chequeId`,
+>    `sucursalId`, `empresaId` y el receptor validado con el RFC normalizado.
+> 2. **`disponible(empresaId)` de verdad**: perfil fiscal activo, CSD cargado y vigente, y el PAC
+>    configurado. Hoy es `false` siempre y el portal, por eso, no pide datos fiscales.
+> 3. **Responder el 201 del contrato fijo** `FacturaPortalDto` (`uuid`, `serieFolio`, `total`,
+>    `email`, `descargas: { xml, pdf }` con nulos hasta F2-105). El web ya lo consume; quitar del
+>    OpenAPI el "HOY RESPONDE 503" y el "Hoy ningún camino lo produce".
+> 4. **Una prueba de punta a punta por el POST del portal**: 201 → el código pasa a `facturado` →
+>    un segundo POST da 409 con `estado: facturado`; y doble clic simultáneo = un solo CFDI.
+> 5. **El test web del flujo completo** (`PortalFactura.test.tsx`) usa hoy un 201 INVENTADO: que
+>    use la forma real que devuelve el api (p. ej. una fixture compartida con el e2e).
+> 6. **Guardar el receptor frecuente** al emitir (`EscrituraFacturacion.guardarReceptor`, que F2-100
+>    dejó listo para esto), en la misma operación que el CFDI.
+
 ### F2-105 · Entrega de la factura
 `[ ]` Al timbrar: guardar XML y PDF (obtenidos de Facturama) en disco del VPS bajo
 `/data/cfdi/{empresa}/{año}/{mes}/`, servir por endpoint autenticado + token firmado de
@@ -1852,6 +1872,18 @@ email, estado, intento, error)` con reintento manual desde admin.
 Brevo falla, el portal sigue ofreciendo la descarga directa y el envío queda marcado para
 reintento; los archivos sobreviven un redeploy (volumen persistente + incluidos en backup
 F1-004).
+
+> **Y además (de F2-103).** Dos cosas del portal esperan aquí:
+> 1. **`descargas.xml` / `descargas.pdf`** de `FacturaPortalDto` (hoy nulos): los enlaces con token
+>    firmado de descarga temporal. La pantalla de éxito del portal ya los muestra si vienen; si no,
+>    dice "te enviaremos el PDF y el XML a …".
+> 2. **"Un código ya facturado ofrece re-descargar"** (AC nocturno de F2-103, que F2-103 NO cumplió:
+>    no había CFDI ni archivos). Hoy un `facturado` dice "Si no recibiste tu factura o necesitas otra
+>    copia, pídela en el restaurante con tu ticket" (`QUE_HACER` en `web/src/paginas/portal/
+>    reglas.ts`) y el api no da ningún dato del ticket ni del receptor. ❓ **Decisión abierta para
+>    Ricardo:** cómo se re-descarga sin filtrar el CFDI de otro: (a) reenviarlo SÓLO al correo con
+>    que se emitió (nunca a uno que escriba quien pregunta), o (b) pedir el RFC receptor exacto y
+>    entonces dar el enlace temporal. La opción conservadora es (a).
 
 ### F2-106 · Dashboard de facturación
 `[ ]` Réplica funcional del dashboard de facturación de Arkhon: filtros (sucursal, rango de

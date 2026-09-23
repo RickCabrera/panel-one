@@ -22,6 +22,7 @@ import {
   textoDias,
   type FormPerfil,
 } from './facturacion/reglas';
+import { PortalesAutofactura } from './facturacion/Portales';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './inicio/Tarjeta';
 import { Vista } from './Vista';
 
@@ -70,6 +71,11 @@ export function Facturacion() {
             />
           )}
         </SegunEstado>
+      )}
+      {empresaId !== null && (
+        <div className="mt-4">
+          <PortalesAutofactura empresaId={empresaId} />
+        </div>
       )}
     </Vista>
   );

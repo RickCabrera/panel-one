@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
+import { Reloj } from '../comun/reloj';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import type { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import type { AgregadosVentasService } from './agregados-ventas.service';
@@ -48,6 +49,7 @@ describe('TicketsService.listar(): importes', () => {
   const servicio = new TicketsService(
     { consulta } as unknown as AgregadosVentasService,
     {} as ScopedPrismaService,
+    new Reloj(),
   );
   const scope: EmpresaScope = { tipo: 'global' };
   const filtro = {

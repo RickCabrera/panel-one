@@ -68,6 +68,16 @@ export interface DatosReceptor {
   email: string | null;
 }
 
+/** El enlace y la marca del portal de autofactura de una sucursal (F2-103), ya validados. */
+export interface DatosPortal {
+  slug: string;
+  color: string;
+  activo: boolean;
+}
+
+export const MENSAJE_SLUG_OCUPADO =
+  'Ese enlace ya lo usa otro portal. Elige otro (p. ej. agrega el nombre de la ciudad).';
+
 /** Vacía la metadata del CSD: la del RFC anterior ya no aplica. */
 const SIN_CSD = {
   facturamaOrgId: null,
@@ -255,6 +265,88 @@ export class EscrituraFacturacion {
         select: { id: true },
       });
       return id;
+    });
+  }
+
+  async #sucursal(tx: Tx, sucursalId: string) {
+    return encontradoOr404(
+      await tx.sucursal.findFirst({
+        where: whereScoped(this.#scope, 'Sucursal', { id: exigir('sucursalId', sucursalId) }),
+        select: { id: true, empresaId: true },
+      }),
+    );
+  }
+
+  /**
+   * Crea o edita el portal de autofactura de una sucursal (F2-103). La sucursal se verifica con el
+   * scope ANTES que nada (404); el slug es único GLOBAL (409 si otro portal, de cualquier empresa,
+   * ya lo usa: los slugs son URLs públicas, así que el 409 no revela nada que no se vea en la web).
+   */
+  async guardarPortal(
+    sucursalId: string,
+    datos: DatosPortal,
+    /** Null sólo desde el seed: así sabe después que nadie lo ha editado. */
+    actorId: string | null,
+    ahora: Date,
+  ): Promise<{ creado: boolean }> {
+    try {
+      return await this.#enTransaccion(async (tx) => {
+        const sucursal = await this.#sucursal(tx, sucursalId);
+        const { count } = await tx.portalFacturacion.updateMany({
+          where: { sucursalId: sucursal.id, empresaId: sucursal.empresaId },
+          data: { ...datos, actualizadoPor: actorId, updatedAt: ahora },
+        });
+        if (count === 1) return { creado: false };
+        await tx.portalFacturacion.create({
+          data: {
+            sucursalId: sucursal.id,
+            empresaId: sucursal.empresaId,
+            ...datos,
+            actualizadoPor: actorId,
+            updatedAt: ahora,
+          },
+          select: { sucursalId: true },
+        });
+        return { creado: true };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const campos = (error.meta?.target ?? []) as string[] | string;
+        if (String(campos).includes('slug')) throw new ConflictException(MENSAJE_SLUG_OCUPADO);
+        throw new ConflictException(
+          'Otro administrador acaba de guardar el portal de esta sucursal. Recarga.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Pone (o quita, con `null`) el logo del portal de la sucursal. 404 si la sucursal no está en
+   * el alcance; 409 si todavía no tiene portal (primero se guarda su enlace).
+   */
+  async guardarLogoPortal(
+    sucursalId: string,
+    logo: { bytes: Buffer; tipo: string } | null,
+    actorId: string | null,
+    ahora: Date,
+  ): Promise<void> {
+    await this.#enTransaccion(async (tx) => {
+      const sucursal = await this.#sucursal(tx, sucursalId);
+      const { count } = await tx.portalFacturacion.updateMany({
+        where: { sucursalId: sucursal.id, empresaId: sucursal.empresaId },
+        data: {
+          logo: logo ? new Uint8Array(logo.bytes) : null,
+          logoTipo: logo?.tipo ?? null,
+          actualizadoPor: actorId,
+          updatedAt: ahora,
+        },
+      });
+      if (count !== 1) {
+        throw new ConflictException(
+          'Esta sucursal todavía no tiene portal: guarda primero su enlace y su color.',
+        );
+      }
     });
   }
 

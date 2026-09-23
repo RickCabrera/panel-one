@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { FormaPago, Prisma } from '@prisma/client';
 
+import { Reloj } from '../comun/reloj';
+import { estadoPublico, MENSAJE_ESTADO, type EstadoPublico } from '../facturacion/codigo';
 import type { FiltroVentas } from '../scope/consulta-ventas';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import { encontradoOr404 } from '../scope/scope.helper';
@@ -22,6 +24,17 @@ export interface PagoTicket {
   monto: string;
 }
 
+/**
+ * El código de facturación del ticket (F2-103, el "Y además" 4 de F2-101): lo que la caja le
+ * dicta al cliente si el ticket no se imprimió con el QR (respaldo de F2-102). `estado` es el
+ * PÚBLICO (el mismo que ve el portal): `cancelado` y `expirado` se derivan al leer.
+ */
+export interface CodigoFacturacionTicket {
+  codigo: string;
+  estado: EstadoPublico;
+  mensaje: string;
+}
+
 export interface Ticket {
   id: string;
   sucursalId: string;
@@ -39,6 +52,8 @@ export interface Ticket {
   total: string;
   partidas: PartidaTicket[];
   pagos: PagoTicket[];
+  /** Null = la cuenta no tiene código (no es facturable o llegó antes de F2-101). */
+  codigoFacturacion: CodigoFacturacionTicket | null;
 }
 
 export interface PaginaTickets {
@@ -205,6 +220,7 @@ export class TicketsService {
   constructor(
     private readonly agregados: AgregadosVentasService,
     private readonly datos: ScopedPrismaService,
+    private readonly reloj: Reloj,
   ) {}
 
   async listar(
@@ -271,7 +287,13 @@ export class TicketsService {
     const [cheques, catalogo] = await Promise.all([
       datos.cheque.findMany({
         where: { id: { in: ids }, empresaId: filtro.empresaId },
-        include: { partidas: { orderBy: { orden: 'asc' } }, pagos: { orderBy: { id: 'asc' } } },
+        include: {
+          partidas: { orderBy: { orden: 'asc' } },
+          pagos: { orderBy: { id: 'asc' } },
+          // En la MISMA consulta con scope: la FK compuesta (cheque_id, empresa_id) ata el código
+          // a la empresa del cheque.
+          codigoFacturacion: { select: { codigo: true, estado: true, expiraAt: true } },
+        },
       }),
       datos.formaPagoCatalogo.findMany({
         where: { empresaId: filtro.empresaId },
@@ -279,6 +301,7 @@ export class TicketsService {
       }),
     ]);
     const formas = new Map(catalogo.map((c) => [c.formaRaw, c.forma]));
+    const ahora = this.reloj.ahora();
     const porId = new Map(cheques.map((c) => [c.id, c]));
     const items = ids.map((id) => {
       const c = porId.get(id);
@@ -315,6 +338,9 @@ export class TicketsService {
           forma: formas.get(g.formaRaw) ?? FormaPago.otro,
           monto: pesos(g.monto),
         })),
+        codigoFacturacion: c.codigoFacturacion
+          ? codigoDelTicket(c.codigoFacturacion, c.cancelado, ahora)
+          : null,
       };
     });
     return { items, ...base };
@@ -340,4 +366,13 @@ export class TicketsService {
       AND t.sucursal_id = ${cliente.sucursalId}::uuid
       AND t.cliente_origen_sr_id = ${cliente.origenSrId})`;
   }
+}
+
+function codigoDelTicket(
+  codigo: { codigo: string; estado: Parameters<typeof estadoPublico>[0]['estado']; expiraAt: Date },
+  cancelado: boolean,
+  ahoraMs: number,
+): CodigoFacturacionTicket {
+  const estado = estadoPublico(codigo, { cancelado }, ahoraMs);
+  return { codigo: codigo.codigo, estado, mensaje: MENSAJE_ESTADO[estado] };
 }

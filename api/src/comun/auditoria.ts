@@ -26,7 +26,12 @@ export type AccionAuditada =
   | 'traspaso.cancelar'
   | 'perfil_fiscal.editar'
   | 'perfil_fiscal.cargar_csd'
-  | 'vigencia_codigos.editar';
+  | 'vigencia_codigos.editar'
+  // F2-103: el portal de autofactura de una sucursal.
+  | 'portal_facturacion.crear'
+  | 'portal_facturacion.editar'
+  | 'portal_facturacion.logo'
+  | 'portal_facturacion.quitar_logo';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
@@ -42,7 +47,8 @@ export interface EventoAuditoria {
     | 'conteo'
     | 'traspaso'
     | 'perfil_fiscal'
-    | 'configuracion_facturacion';
+    | 'configuracion_facturacion'
+    | 'portal_facturacion';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

@@ -4,9 +4,11 @@ import type { RegimenFiscal } from '../../api/tipos';
 import {
   aBase64,
   erroresPerfil,
+  errorSlug,
   estadoVigencia,
   fechaLarga,
   regimenesPara,
+  sugerirSlug,
   textoDias,
   tipoPersona,
 } from './reglas';
@@ -99,5 +101,31 @@ describe('datos fiscales', () => {
     const bytes = new Uint8Array([0, 1, 2, 250, 255, 128]);
     expect(aBase64(bytes.buffer)).toBe('AAEC+v+A');
     expect(aBase64(new ArrayBuffer(0))).toBe('');
+  });
+});
+
+describe('portal de autofactura: el enlace (F2-103)', () => {
+  it('sugiere un enlace válido a partir del nombre de la sucursal', () => {
+    expect(sugerirSlug('Sucursal Centro')).toBe('centro');
+    expect(sugerirSlug('Plaza Satélite Norte')).toBe('plaza-satelite-norte');
+    expect(sugerirSlug('Sucursal 2')).toBe('2-portal');
+    for (const n of ['Sucursal Centro', 'Plaza Satélite Norte', 'Sucursal 2', 'Ñ']) {
+      expect(errorSlug(sugerirSlug(n))).toBeNull();
+    }
+  });
+
+  it('el formato es el del api', () => {
+    expect(errorSlug('demo-centro')).toBeNull();
+    for (const malo of [
+      'ab',
+      'Demo',
+      'demo_centro',
+      '-demo',
+      'demo-',
+      'demo--centro',
+      'x'.repeat(41),
+    ]) {
+      expect(errorSlug(malo)).not.toBeNull();
+    }
   });
 });

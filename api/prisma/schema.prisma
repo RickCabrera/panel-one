@@ -119,6 +119,8 @@ model Sucursal {
   gastos                Gasto[]
   // F2-101: códigos cortos de facturación de los cheques de la sucursal.
   codigosFacturacion    CodigoFacturacion[]
+  // F2-103: el portal público de autofactura de la sucursal (slug y marca).
+  portalFacturacion     PortalFacturacion?
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -1631,4 +1633,37 @@ model ConfiguracionFacturacion {
   empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "configuraciones_facturacion_empresa_fkey")
 
   @@map("configuraciones_facturacion")
+}
+
+// ---------------------------------------------------------------------------
+// F2-103 · Portal público de autofactura. Dato NUESTRO: nunca se escribe a SR.
+// ---------------------------------------------------------------------------
+
+/**
+ * El portal `/f/:slug` de una sucursal: su enlace público y su marca (color y logo). Uno por
+ * sucursal. CHECKs a mano en la migración `..._portal_facturacion`: formato y largo del slug,
+ * color `#rrggbb` en minúsculas, tipo y tamaño del logo (PNG/JPEG/WebP, <= 200 KB) y logo con su
+ * tipo o ninguno de los dos.
+ */
+model PortalFacturacion {
+  sucursalId     String   @id @map("sucursal_id") @db.Uuid
+  empresaId      String   @map("empresa_id") @db.Uuid
+  // Único GLOBAL: la ruta pública busca sin tenant.
+  slug           String
+  color          String   @db.Char(7)
+  logo           Bytes?
+  logoTipo       String?  @map("logo_tipo")
+  activo         Boolean  @default(true)
+  // Null = lo sembró el seed (nadie lo ha editado): el seed puede reponerlo.
+  actualizadoPor String?  @map("actualizado_por") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "portales_facturacion_sucursal_empresa_fkey")
+
+  @@unique([slug], map: "portales_facturacion_slug_key")
+  // Prisma pide la llave completa de la FK en una relación 1-1; `sucursal_id` ya es la PK.
+  @@unique([sucursalId, empresaId], map: "portales_facturacion_sucursal_id_empresa_id_key")
+  @@index([empresaId])
+  @@map("portales_facturacion")
 }

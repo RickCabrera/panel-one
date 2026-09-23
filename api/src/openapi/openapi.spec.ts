@@ -90,6 +90,62 @@ describe('Contrato OpenAPI', () => {
     }
   });
 
+  it('F2-103: el portal es público y con 429; el POST dice que hoy es 503; admin con roles y 404', async () => {
+    const { paths, components } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    for (const ruta of [
+      '/facturacion/catalogos-sat',
+      '/facturacion/portal/{slug}',
+      '/facturacion/portal/{slug}/logo',
+      '/facturacion/portal/{slug}/codigo/{codigo}',
+    ]) {
+      expect(paths[ruta]?.get?.security).toBeUndefined();
+      expect(codigos(paths[ruta]?.get)).toContain('429');
+    }
+    const post = paths['/facturacion/portal/{slug}/facturas']?.post;
+    expect(post?.security).toBeUndefined();
+    expect(codigos(post)).toEqual(['201', '400', '404', '409', '429', '503']);
+    // El contrato no promete un 201 como si ya pasara (F2-104 conecta la emisión).
+    expect(post?.description).toContain('HOY RESPONDE 503');
+    expect(JSON.stringify(post?.responses?.['201'])).toContain('Hoy ningún camino lo produce');
+    expect(codigos(paths['/facturacion/portales']?.get)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
+    expect(codigos(paths['/facturacion/portales/{sucursalId}']?.put)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+    ]);
+    expect(paths['/facturacion/portales']?.get?.security).toEqual([{ bearer: [] }]);
+    // Lo público del portal NUNCA expone folio, mesa, mesero, partidas, pagos ni ids.
+    const esquemas = components?.schemas as Record<string, object>;
+    const texto = JSON.stringify([
+      esquemas.PortalPublicoDto,
+      esquemas.ConsultaCodigoPortalDto,
+      esquemas.TicketPortalDto,
+      esquemas.DesgloseTicketDto,
+    ]);
+    for (const prohibido of [
+      'folio',
+      'mesa',
+      'partidas',
+      'pagos',
+      'mesero',
+      'empresaId',
+      'sucursalId',
+      'chequeId',
+    ]) {
+      expect(texto).not.toContain(`"${prohibido}"`);
+    }
+  });
+
   it('catálogos espejo (F2-230): agente con API key y reintentos claros; panel con 404 y roles', async () => {
     const { paths } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -775,6 +831,15 @@ describe('Contrato OpenAPI', () => {
         // F2-101: consulta pública del código de facturación y vigencia por empresa.
         '/facturacion/codigo/{codigo}',
         '/facturacion/vigencia-codigos',
+        // F2-103: portal público de autofactura y su configuración por sucursal.
+        '/facturacion/catalogos-sat',
+        '/facturacion/portal/{slug}',
+        '/facturacion/portal/{slug}/logo',
+        '/facturacion/portal/{slug}/codigo/{codigo}',
+        '/facturacion/portal/{slug}/facturas',
+        '/facturacion/portales',
+        '/facturacion/portales/{sucursalId}',
+        '/facturacion/portales/{sucursalId}/logo',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',

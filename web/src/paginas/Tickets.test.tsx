@@ -219,6 +219,43 @@ describe('Vista Tickets: la tabla', () => {
     expect(screen.queryByRole('region', { name: 'Detalle del folio 1001' })).toBeNull();
   });
 
+  it('F2-103: el detalle muestra el código de facturación y su estado; sin código, dice por qué', async () => {
+    const user = userEvent.setup();
+    apiTickets([
+      ticket({
+        codigoFacturacion: {
+          codigo: '7JQRECP3U',
+          estado: 'pendiente',
+          mensaje: 'El ticket se puede facturar.',
+        },
+      }),
+      ticket({
+        id: '0000000a-0000-4000-8000-000000000002',
+        folio: '1002',
+        codigoFacturacion: {
+          codigo: 'ABCDEFGH2',
+          estado: 'facturado',
+          mensaje: 'Este ticket ya fue facturado.',
+        },
+      }),
+      ticket({ id: '0000000a-0000-4000-8000-000000000003', folio: '1003' }),
+    ]);
+    montar(`/tickets?empresa=${A}`);
+
+    await user.click(await screen.findByRole('button', { name: 'Ver detalle del folio 1001' }));
+    expect(screen.getByRole('region', { name: 'Detalle del folio 1001' })).toHaveTextContent(
+      'Código de facturación7JQRECP3U · Se puede facturar',
+    );
+    await user.click(screen.getByRole('button', { name: 'Ver detalle del folio 1002' }));
+    expect(screen.getByRole('region', { name: 'Detalle del folio 1002' })).toHaveTextContent(
+      'ABCDEFGH2 · Ya facturadoEste ticket ya fue facturado.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Ver detalle del folio 1003' }));
+    expect(screen.getByRole('region', { name: 'Detalle del folio 1003' })).toHaveTextContent(
+      'Sin código: la cuenta no es facturable',
+    );
+  });
+
   it('sin tickets: mensaje claro y el export deshabilitado', async () => {
     apiTickets([]);
     montar(`/tickets?empresa=${A}`);

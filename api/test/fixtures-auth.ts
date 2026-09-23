@@ -86,6 +86,8 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   const deEstas = { where: { empresaId: { in: empresas } } };
   // Los códigos de facturación (F2-101) cuelgan del cheque y de la sucursal.
   await prisma.codigoFacturacion.deleteMany(deEstas);
+  // El portal de autofactura (F2-103) cuelga de la sucursal.
+  await prisma.portalFacturacion.deleteMany(deEstas);
   await prisma.chequePartida.deleteMany(deEstas);
   await prisma.chequePago.deleteMany(deEstas);
   await prisma.cheque.deleteMany(deEstas);

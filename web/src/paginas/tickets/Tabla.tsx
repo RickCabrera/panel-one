@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 
-import type { Sucursal, Ticket } from '../../api/tipos';
+import type { EstadoCodigoFacturacion, Sucursal, Ticket } from '../../api/tipos';
 import { pesos } from '../../dinero/dinero';
 import { siguienteOrden, type Orden, type OrdenTickets } from '../../filtros/tickets';
 import {
@@ -235,6 +235,43 @@ function Cancelacion({ ticket: t, sucursal }: { ticket: Ticket; sucursal: Sucurs
   );
 }
 
+const ETIQUETA_ESTADO_CODIGO: Record<EstadoCodigoFacturacion, string> = {
+  pendiente: 'Se puede facturar',
+  facturado: 'Ya facturado',
+  en_global: 'En la factura global',
+  expirado: 'Plazo vencido',
+  cancelado: 'Cuenta cancelada',
+};
+
+/**
+ * El código de facturación del ticket (F2-103): lo que la caja le dicta al cliente si el ticket
+ * no salió con el QR (respaldo de F2-102). Sin código, se dice por qué puede faltar.
+ */
+function CodigoFacturacion({ ticket: t }: { ticket: Ticket }) {
+  const c = t.codigoFacturacion;
+  return (
+    <div>
+      <h3 className="text-xs font-medium text-tinta-tenue uppercase">Código de facturación</h3>
+      {c === null ? (
+        <p className="mt-1 text-sm text-tinta-tenue">
+          Sin código: la cuenta no es facturable (cancelada o en $0) o llegó antes de que existieran
+          los códigos.
+        </p>
+      ) : (
+        <p className="mt-1 text-sm">
+          <span className="font-mono text-base font-medium tracking-wider text-tinta">
+            {c.codigo}
+          </span>{' '}
+          <span className="text-xs text-tinta-tenue">· {ETIQUETA_ESTADO_CODIGO[c.estado]}</span>
+          {c.estado !== 'pendiente' && (
+            <span className="block text-xs text-tinta-tenue">{c.mensaje}</span>
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** La fila expandida: partidas con modificadores, pagos y el desglose del ticket. */
 function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: Sucursal | undefined }) {
   const tiempo = tiempoMesa(t);
@@ -302,6 +339,7 @@ function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: Sucursal |
             </ul>
           )}
         </div>
+        <CodigoFacturacion ticket={t} />
         <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm">
           <dt className="md:hidden">Sucursal</dt>
           <dd className="text-right md:hidden">{sucursal?.nombre ?? SIN_DATO}</dd>
