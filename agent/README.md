@@ -395,6 +395,30 @@ Existencias: leídas en SoftRestaurant en 35 ms: 3 almacén(es), 412 registro(s)
 Existencias: foto del almacén 2 aplicada en el panel: 140 registro(s), 0 nuevo(s), 12 con cambios, 0 borrado(s), 0 rechazado(s).
 ```
 
+## Movimientos, compras y recetas (F2-241b)
+
+El agente manda al panel las pólizas de inventario (`movsinv` y `movsinvcancelados`, cada 15 min), las
+compras a proveedor (`compras` + `comprasmovtos`, cada 30 min) y las recetas (`costos`, cada 60 min), por
+`POST {apiUrl}/ingesta/movimientos`, `/ingesta/compras` y `/ingesta/recetas`. Cómo se arma cada documento
+y cada supuesto está en `docs/esquema-sr.md` §10.
+
+- **Cursor en `cola.db`**, nunca en la base del POS: la lectura sigue donde se quedó aunque se reinicie el
+  servicio, y relee los últimos 3 días (movimientos) o 35 (compras y cancelaciones) para ver correcciones.
+- **Documentos completos.** Una póliza, compra o receta viaja con todos sus renglones o no viaja; sólo se
+  manda lo nuevo o cambiado. Lo que desaparece de SR se manda cancelado (o la receta vacía) una vez.
+- **Si una lectura falla** (timeout incluido) no se manda nada y se reintenta a los 15 min. Si de pronto
+  "desaparece" más de la mitad de lo ya mandado (¿base restaurada?), el agente se frena y lo deja en el
+  log como Error: ver "freno de desapariciones" en `docs/esquema-sr.md` §10 para destrabarlo.
+- **Su propia cola** (`inventario_lotes` e `inventario_documentos` en `cola.db`). Un rechazo definitivo del
+  API (400, 413, 500) descarta el lote y sus documentos se vuelven a mandar en la siguiente lectura.
+- **Riesgo conocido:** `movsinv` no tiene índices en SR; en una base muy grande la consulta puede no
+  caber en los 5 s de timeout y fallar siempre (§11 de `docs/esquema-sr.md`).
+
+```text
+Movimientos: leídos en SoftRestaurant en 120 ms: 38 documento(s) (211 fila(s)); encolados 3 en 1 lote(s), 0 que ya no están en SR.
+Inventario: lote de movimientos aplicado en el panel: 3 recibido(s), 1 nuevo(s), 2 con cambios, 0 sin cambios, 0 ya más nuevo(s) en el panel, 0 rechazado(s).
+```
+
 ## Auto-actualización (F2-143)
 
 El diseño completo, las garantías y los límites están en

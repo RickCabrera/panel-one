@@ -81,6 +81,21 @@ public class SoloLecturaTests
         Assert.All(comandos, l => Assert.Equal("ConexionSoftRestaurant.CrearComando", l.Desde));
     }
 
+    [Fact]
+    public void Nadie_lee_ni_convierte_a_double_o_float_el_dinero_ni_las_cantidades_del_POS()
+    {
+        // F2-241b: dinero y cantidades de SR viajan en decimal; un double los redondea en silencio.
+        var llamadas = LlamadasDelAgente().ToList();
+        bool EsFlotante((MethodBase Llamado, string Desde) l) =>
+            l.Llamado.Name is "GetDouble" or "GetFloat" or "GetSqlDouble" or "GetSqlSingle"
+            || (l.Llamado.DeclaringType == typeof(Convert) && l.Llamado.Name is "ToDouble" or "ToSingle");
+
+        // Control: el escáner sí ve las conversiones a decimal de los mapeos.
+        Assert.Contains(llamadas, l => l.Llamado.DeclaringType == typeof(Convert) && l.Llamado.Name == "ToDecimal"
+                                       && l.Desde.StartsWith("ApoyoMapeo.", StringComparison.Ordinal));
+        Assert.Empty(llamadas.Where(EsFlotante).Select(l => $"{l.Desde} llama {l.Llamado.DeclaringType?.Name}.{l.Llamado.Name}"));
+    }
+
     /// <summary>
     /// Cada <c>call</c>/<c>callvirt</c>/<c>newobj</c> del IL de TODOS los métodos del agente (tipos
     /// anidados y máquinas de estado de <c>async</c> incluidos), con el método que la hace. El

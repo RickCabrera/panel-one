@@ -42,7 +42,9 @@ SELECT
                  (N'dbo.tempcheques'), (N'dbo.tempcheqdet'), (N'dbo.grupos'), (N'dbo.productos'),
                  (N'dbo.productosdetalle'), (N'dbo.meseros'), (N'dbo.areasrestaurant'),
                  (N'dbo.tiposervicio'), (N'dbo.clientes'), (N'dbo.insumos'), (N'dbo.insumosdetalle'),
-                 (N'dbo.gruposi'), (N'dbo.almacen'), (N'dbo.proveedores'), (N'dbo.acumuladoinsumos')) AS o(nombre)
+                 (N'dbo.gruposi'), (N'dbo.almacen'), (N'dbo.proveedores'), (N'dbo.acumuladoinsumos'),
+                 (N'dbo.movsinv'), (N'dbo.movsinvcancelados'), (N'dbo.compras'), (N'dbo.comprasmovtos'),
+                 (N'dbo.costos')) AS o(nombre)
      CROSS JOIN (VALUES (N'INSERT'), (N'UPDATE'), (N'DELETE'), (N'ALTER')) AS p(permiso)
      WHERE HAS_PERMS_BY_NAME(o.nombre, 'OBJECT', p.permiso) = 1) AS obj_escritura_total,
     (SELECT TOP (1) o.nombre + N': ' + p.permiso
@@ -50,7 +52,9 @@ SELECT
                  (N'dbo.tempcheques'), (N'dbo.tempcheqdet'), (N'dbo.grupos'), (N'dbo.productos'),
                  (N'dbo.productosdetalle'), (N'dbo.meseros'), (N'dbo.areasrestaurant'),
                  (N'dbo.tiposervicio'), (N'dbo.clientes'), (N'dbo.insumos'), (N'dbo.insumosdetalle'),
-                 (N'dbo.gruposi'), (N'dbo.almacen'), (N'dbo.proveedores'), (N'dbo.acumuladoinsumos')) AS o(nombre)
+                 (N'dbo.gruposi'), (N'dbo.almacen'), (N'dbo.proveedores'), (N'dbo.acumuladoinsumos'),
+                 (N'dbo.movsinv'), (N'dbo.movsinvcancelados'), (N'dbo.compras'), (N'dbo.comprasmovtos'),
+                 (N'dbo.costos')) AS o(nombre)
      CROSS JOIN (VALUES (N'INSERT'), (N'UPDATE'), (N'DELETE'), (N'ALTER')) AS p(permiso)
      WHERE HAS_PERMS_BY_NAME(o.nombre, 'OBJECT', p.permiso) = 1
      ORDER BY o.nombre, p.permiso) AS obj_escritura_ejemplo;

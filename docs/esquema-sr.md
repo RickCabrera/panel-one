@@ -1400,8 +1400,8 @@ ese registro solo.
 
 **Tablas de SR (F2-241): ✅ vistas en SR 10 local, SÓLO metadatos y definición de triggers**
 (2026-09-23; todas con **0 filas** en esa base, así que ningún valor ni signo se ha visto en datos).
-El lector de existencias está hecho (F2-241); los de movimientos, recetas y compras son de **F2-241b**
-y arrancan de este mapeo. Todo lo valida F2-193 contra una operación real.
+Los lectores están hechos: existencias (F2-241) y movimientos, compras y recetas (F2-241b, ver "Cómo lo
+lee el agente" en cada subsección). Todo lo valida F2-193 contra una operación real.
 
 | Qué | Tabla de SR (✅ metadato) | Notas |
 |---|---|---|
@@ -1410,8 +1410,31 @@ y arrancan de este mapeo. Todo lo valida F2-193 contra una operación real.
 | Movimientos | `movsinv` (**SIN PK**: `fecha` datetime, `foliocheque`, `movto`, `idcompra`, `traspaso`, `invfisico`, `idconcepto` → conceptos, `idinsumo`, `costo` money, `cantidad` numeric(14,4), `idalmacen`, `idturno`, `presentaciondestino`, `idpedido`) y `movsinvcancelados` (misma forma); `foliosalmacen` (PK `folio` bigint, `idalmacen`, `folioalmacen`, `foliomovto`, `fecha`, `cancelado`, `nota`) | ✅ Por el trigger, **`cantidad` viaja CON SIGNO** (la existencia es su suma). ⚠️ SUPUESTOS para F2-241b: el documento/póliza es `movto` (o `foliosalmacen`); una venta deja `foliocheque`, una compra `idcompra`, un traspaso `traspaso`, un conteo `invfisico`; lo cancelado se MUEVE a `movsinvcancelados` (y el trigger de DELETE revierte la existencia). Sin PK ni rowversion: el cursor incremental tendrá que ser por `fecha` con ventana de relectura. |
 | Conceptos | `conceptos` (PK `idconcepto` varchar(5), `descripcion`, `tipo` numeric(1), `autorizacion`, `visible`) — **17 filas vistas** | `tipo` 1 = entrada: ECA/EPL entrada por cancelación, EDA entrada almacén, EPA ajuste, EPC compra, EPD devolución, EPP producción, ETA traspaso. `tipo` 2 = salida: CP comida de personal, SALM salida almacén, SPA ajuste, SPC cancelación, SPD desperdicio, SPM merma, SPP producción, SPV venta, STA traspaso. Es la base para traducir al enum del panel en F2-241b (`tipoSr` = `idconcepto`). |
 | Recetas | **`costos`** (**SIN PK**: `idproducto` → productos, `idinsumo` → insumos, `cantidad` numeric(12,4), `idempresa`) | ⚠️ SUPUESTO: es la explosión de insumos por producto (FK a productos e insumos, cantidad con 4 decimales = la del contrato). `recetasalmacenes` (producto, área, almacén, empresa, insumo) dice de qué almacén descarga cada área. `explosionproductos*` son corridas de explosión para órdenes de compra, no la receta. |
-| Compras | `compras` (PK `idcompra` bigint, `folio`, `fechaaplicacion`, `idproveedor` → proveedores, `cancelado` bit, `subtotal`, impuestos, `total`, `polizagenerada` bit, …) + `comprasmovtos` (`idcompra`, `idinsumo`, `costo` money, impuestos por renglón, `importesinimpuestos`, `importeconimpuestos`, `cantidad` numeric(14,4), **`idalmacen` POR RENGLÓN**) | ✅ SR tiene la compra como **documento propio** (responde a F2-126), con `idcompra` también en `movsinv`. El contrato lleva UN almacén por compra: con renglones de varios almacenes, F2-241b manda `almacenOrigenSrId` nulo o parte la compra (decisión de F2-241b). ⚠️ SUPUESTO: `comprasmovtos.costo` es sin impuestos (existe `importesinimpuestos` aparte). |
+| Compras | `compras` (PK `idcompra` bigint, `folio`, `fechaaplicacion`, `idproveedor` → proveedores, `cancelado` bit, `subtotal`, impuestos, `total`, `polizagenerada` bit, …) + `comprasmovtos` (`idcompra`, `idinsumo`, `costo` money, impuestos por renglón, `importesinimpuestos`, `importeconimpuestos`, `cantidad` numeric(14,4), **`idalmacen` POR RENGLÓN**) | ✅ SR tiene la compra como **documento propio** (responde a F2-126), con `idcompra` también en `movsinv`. El contrato lleva UN almacén por compra: con renglones de varios almacenes, F2-241b manda `almacenOrigenSrId` **nulo, con aviso** (`DECISION PROVISIONAL`: no se parte la compra ni se elige uno). ⚠️ SUPUESTO: `comprasmovtos.costo` es sin impuestos (existe `importesinimpuestos` aparte). |
 | Traspasos | `traspasosalmacen` (PK `folio`, `fecha`, `almacenorigen`, `almacendestino`, `cancelado`, `idempresaorigen`, `idempresadestino`, `nota`) | ✅ UN documento con origen y destino (responde a F2-124: el agente lo parte en DOS pólizas). Las columnas `idempresaorigen/destino` sugieren que SR puede traspasar **entre empresas** de la misma base. |
+
+**Más metadatos vistos en F2-241b (2026-09-23, `sys.columns`, `sys.indexes`, `sys.sql_modules`; las seis tablas
+con 0 filas):**
+- ✅ `movsinv` y `movsinvcancelados` son **HEAPS SIN NINGÚN ÍNDICE** (ni PK ni índice sobre `fecha`): toda
+  lectura por fecha es un table scan de las dos tablas (riesgo en §11). `costos` y `comprasmovtos` tampoco
+  tienen índice; `compras` (PK `idcompra`, identity), `traspasosalmacen` (PK `folio`) y `foliosalmacen`
+  (PK `folio`) sí.
+- ✅ **Ningún módulo T-SQL** (trigger, procedimiento, vista) toca `movsinvcancelados`, `foliosalmacen`,
+  `traspasosalmacen`, `comprasmovtos` ni `costos`: los llena la aplicación de SR, no la base. Los únicos
+  triggers de inventario son los tres de `movsinv` (arriba). Por eso cómo se cancela una póliza (¿se MUEVE
+  la fila a `movsinvcancelados`? ¿con qué `fecha`?) no se puede leer en la base: sigue siendo SUPUESTO.
+- ✅ `movsinv` y `movsinvcancelados` no son idénticas: `idpedido` es numeric(8,2) en una y bigint en la otra
+  (el agente no la lee).
+- ✅ `compras` trae además `referencia`, `descuento` numeric(5,2), `foliofactura`, `idcompracentral`;
+  `comprasmovtos` trae `descuento` numeric(5,2) por renglón, impuestos por renglón e `idordencompra`.
+- ✅ **Traspaso (responde a la nota de F2-124):** `traspasosalmacen` es UN documento con almacén origen y
+  destino y columnas `idempresaorigen`/`idempresadestino`: en una misma base SR traspasa entre almacenes
+  (y entre empresas de la base). Si dos sucursales del panel comparten base de SR, el MISMO agente ve las
+  dos mitades. Un traspaso entre sucursales con bases DISTINTAS (¿`enviadoacentral`/`foliocentral` de una
+  central?) **no está mapeado**: F2-193. Sin almacenes compartidos vistos (no hay filas).
+- ❓ **Orden de los folios (nota de F2-122):** los números de documento son numéricos (`numeric(8,0)`) y
+  viajan sin ceros a la izquierda, así que el desempate del kardex por folio COMO TEXTO pone "10" antes
+  que "9" en la misma fecha (el riesgo ya descrito en "Movimientos y pólizas"; el saldo final no cambia).
 
 Lo que sigue son los contratos que el panel ya acepta (existencias F2-121, movimientos F2-122,
 recetas F2-125, compras F2-126) y los supuestos con que se construyeron.
@@ -1557,6 +1580,68 @@ El panel las muestra en `/movimientos` (línea de tiempo, detalle de póliza y k
   (`prisma/seed-movimientos.spec.ts`): eso prueba que la ingesta y el kardex **conservan** lo que
   simuló el seed maestro. No prueba que SR registre así sus movimientos: el cuadre real es de F2-193.
 
+**Cómo lo lee el agente (F2-241b, `sr_movimientos.sql`, `Inventario/MapeoMovimientos.cs`,
+`Inventario/SincronizadorInventario.cs`, `Cola/ColaInventario.cs`, `Cola/EnviadorInventario.cs`):**
+
+- ⚠️ **SUPUESTO / `DECISION PROVISIONAL (nocturno)` — la póliza es (clase + número, almacén, concepto).**
+  SR no tiene cabecera de póliza en `movsinv`: la clase sale de la primera columna distinta de NULL y de 0
+  en este orden: `traspaso` (T) > `idcompra` (C) > `invfisico` (F) > `foliocheque` (V) > `movto` (M); sin
+  ninguna, (S) = la `fecha` exacta. `origenSrId` = `T45|A01|STA` (≤ 64; más largo no se trunca: no se manda
+  y va Error). `folio` = el número (S: la fecha, estilo 121). `referencia` = "Traspaso 45" / "Compra 7" /
+  "Inventario físico 3" / "Cheque 889" / "Movimiento 12" (S: nula). Nadie ha visto una fila de `movsinv`
+  con datos: F2-193 valida si `movto`/`foliosalmacen` es de verdad el documento. La clave la calcula el
+  SQL (un solo lugar); la agrupación se probó en SQL Server con filas sintéticas en un `VALUES` (sólo
+  SELECT), nunca con datos reales.
+- **Un almacén por póliza** porque el almacén es parte de la clave: un traspaso sale en DOS pólizas
+  (`STA` en el origen, `ETA` en el destino) con la misma `referencia` — responde a (1) de F2-124. Si SR
+  cancela el traspaso y sus filas pasan a `movsinvcancelados`, las dos viajan `cancelada=true` ((3)).
+- ⚠️ **SUPUESTO / `DECISION PROVISIONAL (nocturno)` — concepto → tipo:** EPC→`compra`; SPV, CP→`consumo`;
+  SPM, SPD→`merma`; EPA, SPA→`ajuste`; STA→`traspaso_salida`; ETA→`traspaso_entrada`; ECA, EPL, SPC,
+  EPD, EDA, SALM, EPP, SPP y cualquier otro→`otro` (cancelaciones, devoluciones, entradas/salidas
+  genéricas y producción no se adivinan). `tipoSr` = el `idconcepto`. F2-192 valida.
+- **Póliza COMPLETA o nada.** La consulta elige DOCUMENTOS (los que tienen una fila viva con `fecha >=
+  @desde` o una cancelada con `fecha >= @desdecanceladas`) y trae TODAS sus filas, también las anteriores
+  a la ventana (CTE `documentos` → `elegidos`). Filtrar por fila mandaría pólizas a medias que, al
+  reemplazar, borrarían partidas del kardex (bloqueo del revisor en el plan). Una guardia de
+  `ConsultasEmbebidasTests` lo fija.
+- **`fecha`** = la MÍNIMA de sus filas; ⚠️ SUPUESTO: `movsinv.fecha` es la hora real del movimiento, no una
+  fecha capturada (si se captura, un movimiento con fecha anterior a la ventana no se lee nunca). Hora de
+  SR → instante con la zona de Windows de la PC del agente (`DECISION PROVISIONAL`, la misma de catálogos:
+  es el reloj del POS, el mismo del `capturadoAt` de las existencias — (6) de F2-122); hora ambigua o
+  inexistente = desfase estándar.
+- **Partidas** ordenadas (insumo, cantidad, costo) para un hash estable; cantidad CON SIGNO de 4→3
+  decimales mitad lejos de cero (como existencias, con aviso); costo `money` en texto; costo, cantidad o
+  insumo NULL viajan `null` y el API rechaza ESA póliza sola (no se inventa $0). Partida en 0 viaja "0".
+- **Cancelada:** todas sus filas en `movsinvcancelados` → `cancelada=true`. Una clave con filas vivas Y
+  canceladas → viajan las vivas, `cancelada=false`, con aviso (no se inventa una cancelación parcial).
+- **Cursor** (SQLite del agente, `agente_marcas`: `movimientos.cursor`) = la fecha de SR más nueva vista,
+  topada en "ahora en SR + 5 min" (una fecha futura tecleada no congela la lectura; se avisa). Sobrevive
+  reinicios. `DECISION PROVISIONAL (nocturno)`: vivos desde `cursor − 3 días` (ventana de relectura);
+  cancelados desde `cursor − 35 días`; sin cursor, los últimos 35 días (no se recorre toda la historia:
+  el kardex de lo anterior no se reconstruye y su cuadre sale con diferencia hasta F2-193). Cada 15 min;
+  una falla no encola nada ni mueve el cursor y se reintenta a los 15.
+- **Qué se manda:** sólo lo nuevo o cambiado (hash SHA-256 del JSON contra `inventario_documentos`).
+  Una póliza guardada cuya fecha MÁS NUEVA está en la ventana de vivos y ya no vino → se manda su última
+  versión con `cancelada=true`, una vez ((5) de F2-122). Lo que sale de la ventana de 35 días se purga del
+  estado. Lotes ≤ 200 pólizas y ≤ 5000 partidas EN TOTAL; una póliza de más de 5000 no se manda (Error).
+- ❓ **DECISIÓN ABIERTA para Ricardo — cancelaciones viejas.** No se sabe si la fila cancelada conserva la
+  `fecha` original. Si la conserva, una póliza cancelada más de 35 días después de hecha nunca llega
+  cancelada y el panel la sigue sumando. Si SR borra filas sin moverlas y fuera de la ventana de 3 días, el
+  agente tampoco se entera. F2-193 lo mide.
+- `DECISION PROVISIONAL (nocturno)` — **freno de desapariciones:** si en una lectura desaparecen ≥ 5
+  documentos y son más de la mitad de los guardados en la ventana, NO se encola nada ni se mueve el cursor
+  (Error en el log): puede ser una base restaurada o una cadena apuntando a otra base. **Si fue legítimo**
+  (se borró de verdad), ese tipo se queda detenido: se destraba con el servicio detenido, borrando del
+  `cola.db` del agente las filas de `inventario_documentos` de ese tipo — el agente reenvía lo que SR
+  tenga y las desaparecidas se quedan en el panel como estaban. Aplica también a compras y recetas.
+  ❓ **DECISIÓN ABIERTA para Ricardo:** destrabar así NO avisa al panel de lo borrado. Con recetas es grave:
+  las recetas borradas nunca reciben `renglones: []` y el consumo teórico sigue calculándose con ellas, lo
+  que choca con la obligación (2) de F2-125. Opciones: un comando del agente que acepte la desaparición
+  (manda las ausentes y sigue), o subir el umbral para recetas. Hoy sólo queda el Error en el log.
+- **Descarte:** un lote que el API no aceptará nunca (400/413/500) se saca de la cola y sus documentos
+  quedan con `hash = NULL` en el estado: la siguiente lectura los reenvía, o reenvía su versión cancelada
+  si ya no están. Un rechazo POR DOCUMENTO (200 con `rechazadas`) no se reenvía hasta que cambie en SR.
+
 ### Conteos físicos (F2-123): dato PROPIO, nunca se escribe a SR
 
 Un conteo físico **no se lee de SoftRestaurant ni se escribe en él**: se crea y se captura en el
@@ -1697,6 +1782,24 @@ sólo avanza `leida_at`. Candado por sucursal (`recetas:<sucursal>`).
 - ⚠️ **SUPUESTO — una partida cancelada dentro de una cuenta viva no llega** en el contrato de
   cheques (§3). Si SR la guarda con cantidad y el lector la manda, se sumaría al teórico.
 
+**Cómo lo lee el agente (F2-241b, `sr_recetas.sql`, `Inventario/MapeoRecetas.cs`):** `dbo.costos` completa
+cada 60 min (`DECISION PROVISIONAL`), una receta por `idproducto` con todos sus renglones ordenados; sólo se
+manda la nueva o cambiada. Respuestas a la nota de F2-125:
+- ✅ **Dónde:** `costos` (producto, insumo, cantidad numeric(12,4), empresa). ⚠️ SUPUESTO: la cantidad está en
+  la unidad del insumo y es por UNA unidad vendida: `costos` no trae unidad de receta ni factor (✅ en
+  metadatos), así que no hay nada que convertir.
+- **Subrecetas:** `costos` no las distingue; `insumos.elaborado` (§9) sugiere elaborados. Un renglón que
+  apunte a un elaborado viaja como insumo (el panel no lo explota): SUPUESTO, F2-193.
+- **Modificadores y paquetes:** nada en `costos` los menciona; si SR los explota por otro lado, el teórico
+  se queda corto (supuesto ya escrito arriba).
+- **Receta que SR ya no tiene** → `renglones: []` una vez ((2) de F2-125). Un producto que nunca tuvo receta
+  no se manda; un insumo sin receta no genera nada.
+- `DECISION PROVISIONAL (nocturno)` — **varias empresas:** si un producto tiene renglones en varias
+  `idempresa` y son IGUALES viaja uno; si difieren, esa receta NO se manda (aviso) y cuenta como vista (el
+  panel conserva la que tenía, nunca se le manda vacía). Mismo criterio que `productosdetalle` (§6).
+- La cantidad viaja tal cual (cabe exacta en NUMERIC(12,4)); nula o negativa viaja y el API rechaza esa
+  receta (aviso).
+
 **El cálculo** (`api/src/inventario/recetas.ts` y `recetas.service.ts`, `GET /inventario/consumo-teorico`):
 
 - **Teórico** = Σ (cantidad vendida × cantidad del renglón), por sucursal e insumo, con las partidas
@@ -1785,6 +1888,26 @@ partidas por lote.
   la ficha NO se construyó: las compras no entran a la utilidad (abajo), así que su ausencia no
   cambia el estado de resultados. Si el piloto no registra compras en SR y se quieren ver, es tarea
   nueva (anotado en F2-193).
+
+**Cómo lo lee el agente (F2-241b, `sr_compras.sql`, `Inventario/MapeoCompras.cs`):** `compras` LEFT JOIN
+`comprasmovtos` con `fechaaplicacion >= cursor − 35 días` (o sin fecha), cada 30 min, con el mismo cursor
+topado, hash, ausentes, freno y descarte que los movimientos. Respuestas a la nota de F2-126:
+- ✅ **Documento propio:** SR tiene la compra como documento (`compras`) y además deja filas en `movsinv`
+  con `idcompra` (la póliza `compra`, concepto EPC). El agente manda LAS DOS: el documento por
+  `/ingesta/compras` (id = `idcompra`) y la póliza por `/ingesta/movimientos` (id `C<idcompra>|<almacén>|EPC`).
+  El panel no las concilia (supuesto de arriba).
+- ⚠️ **SUPUESTO — costo sin IVA y SIN aplicar descuento:** viaja `comprasmovtos.costo`; existen
+  `importesinimpuestos` e impuestos por renglón, así que se supone que `costo` no trae IVA. Un `descuento`
+  distinto de 0 (cabecera o renglón) se avisa en el log y NO se aplica. F2-193.
+- `DECISION PROVISIONAL (nocturno)` — **almacén por renglón:** si todos los renglones traen el mismo
+  `idalmacen` viaja ése; si se mezclan viaja nulo (no se parte la compra ni se elige uno), con aviso.
+- `cancelada` = `compras.cancelado`; una compra que desaparece viaja cancelada una vez. `folio` vacío → el
+  `idcompra`; proveedor vacío → nulo. Sin `fechaaplicacion` no se manda (aviso) y cuenta como vista.
+  Cantidad 4→3 decimales (aviso); nula, 0 o negativa viaja y el API rechaza esa compra (aviso).
+- ⚠️ **SUPUESTO — `fechaaplicacion` es la fecha en que se registró la compra y no se fecha hacia atrás.**
+  Si se puede capturar con una fecha anterior a `cursor − 35 días`, esa compra no se lee nunca; y una
+  compra cancelada más de 35 días después de su `fechaaplicacion` nunca llega cancelada (el panel la sigue
+  mostrando). ❓ Misma decisión abierta que las cancelaciones viejas de movimientos. F2-193.
 
 **Gastos: dato PROPIO, nunca se escribe a SR.** Categorías por empresa (`categorias_gasto`, nombre
 único sin distinguir mayúsculas ni espacios; inactiva = sin gastos nuevos) y gastos por sucursal
@@ -1898,6 +2021,20 @@ validado**: depende de cómo registre SR sus salidas, que nadie ha visto (F2-193
   catálogos y existencias en una tarea aparte del ciclo del heartbeat (tarea nueva). El timeout real
   de 5 s por comando nunca se ha probado contra un SQL lento de verdad (p. ej. con `WAITFOR`): los
   tests simulan la excepción.
+- ⚠️ **Movimientos sin índice (F2-241b), riesgo ABIERTO para Ricardo.** `movsinv` y `movsinvcancelados` son
+  heaps sin ningún índice. Cada lectura de movimientos (cada 15 min) recorre las dos tablas completas, y
+  con el CTE que elige documentos, **dos veces cada una**. El filtro por fecha no abarata ese recorrido. En
+  una base con años de movimientos, o tras un apagado largo, la consulta puede no caber en los 5 s y fallar
+  en TODOS los ciclos: la única señal es un Error en el log del agente ("no se pudieron leer…"). Un índice
+  propio no se puede (es escribir en el POS). Opciones para decidir con el piloto (F2-193): subir el
+  timeout sólo para esta consulta, leer por tramos o espaciarla fuera de horas pico.
+  `comprasmovtos` y `costos` tampoco tienen índice: la lectura de compras (cada 30 min) recorre
+  `comprasmovtos` completa en el LEFT JOIN, y la de recetas (cada 60 min) recorre `costos`; son tablas
+  más chicas que `movsinv`, pero el mismo riesgo aplica si crecen.
+- ⚠️ **Peor caso del ciclo con F2-241b:** a lo de arriba se suman, para movimientos, compras y recetas,
+  permisos + consulta (20 s c/u cuando vencen juntos) y hasta 5 envíos de lotes (30 s c/u): unos **3.5 min
+  más** en el peor caso teórico (≈ 8–9 min en total si todo vence a la vez con SQL y API degradados). Mismo
+  arreglo pendiente: sacar las lecturas del ciclo del heartbeat (tarea nueva, nota en el log de F2-241b).
 - **El agente nunca abre transacciones contra el POS** (F2-241): la conexión sale con
   `ApplicationIntent=ReadOnly` y `Enlist=false` (no se une a una transacción ambiental aunque el
   técnico ponga `Enlist=true`), todo comando sale de `CrearComando` sin transacción, y `SoloLecturaTests`

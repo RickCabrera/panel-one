@@ -8182,3 +8182,115 @@ esquema-sr §9/§10):
 **Qué haría distinto.** Mirar primero `sys.sql_modules` (triggers y vistas): ahí salió el hallazgo
 más valioso, el signo de `movsinv` y el origen de `acumuladoinsumos`. Para F2-241b, empezar por el
 enviador genérico de lotes y por el cursor en SQLite, que es lo que exige el "Listo cuando".
+
+## 2026-09-23 — F2-241b · Lectores de movimientos, recetas y compras
+**Estado:** CERRADA (PR de la rama `feat/F2-241b`). Sin corte: entraron los tres lectores.
+
+**Qué quedó hecho.**
+- **Consultas** (`agent/src/ArkonAgente/Sql/Consultas/`):
+  - `sr_movimientos.sql`: `movsinv` UNION ALL `movsinvcancelados`. Un CTE calcula la clave del documento y
+    otro elige los documentos con alguna fila en la ventana; después trae TODAS sus filas.
+  - `sr_compras.sql`: `compras` LEFT JOIN `comprasmovtos`.
+  - `sr_recetas.sql`: `costos` completa.
+  - Las tres son solo SELECT, con `WITH (NOLOCK)`, y salen por `CrearComando`. La ventana va en parámetros
+    `SqlDbType.DateTime`. Las 5 tablas nuevas están en las dos listas de `diagnostico.sql`.
+- **Mapeos puros:** `Inventario/MapeoMovimientos.cs`, `MapeoCompras.cs` y `MapeoRecetas.cs`, con apoyo en
+  `DocumentosInventario.cs`. Cada documento sale con su JSON y su "variante ausente" (cancelada, o receta vacía).
+- **Lector:** `Inventario/LectorDocumentos.cs`.
+- **Sincronizador:** `Inventario/SincronizadorInventario.cs`, uno por tipo más uno que los agrupa. Hace
+  cursor, ventana, hash, ausentes, freno y lotes.
+- **Cola:** `Cola/ColaInventario.cs`, con las tablas `inventario_lotes` e `inventario_documentos` y una
+  transacción única por lectura. El envío está en `Cola/EnviadorInventario.cs`.
+- **Worker:** `CrearInventario`, que corre después de existencias con su propio try/catch.
+- **Guardias nuevas:**
+  - `sr_movimientos` elige por documento, no por fila (`ConsultasEmbebidasTests`).
+  - Ningún `GetDouble`, `GetFloat` ni `Convert.ToDouble` en el IL (`SoloLecturaTests`).
+- **Tests:** 544/544, 0 omitidos (antes 484), en Debug y en Release. Build Release sin warnings.
+  Revisor: plan BLOQUEADO una vez (B1 póliza a medias, B2 cursor sin tope) y luego aprobado; entregable
+  aprobado con observaciones, todas atendidas (test de que la clave viene del SQL, §10/§11, este log).
+- **Docs:** `docs/esquema-sr.md` §10 ("Más metadatos vistos en F2-241b" y un "Cómo lo lee el agente" en
+  movimientos, recetas y compras) y §11 (riesgo del heap sin índice y peor caso del ciclo). Además,
+  `agent/README.md`.
+
+**Decisiones que tomé y por qué** (todas `DECISION PROVISIONAL (nocturno)`, en código y en §10):
+- **Qué es una póliza:** (clase + número, almacén, concepto). La clase es la primera columna no nula ni 0,
+  en este orden: traspaso T > idcompra C > invfisico F > foliocheque V > movto M. Si no hay ninguna, es S con
+  la fecha exacta en estilo **121**.
+  - La clave la calcula SOLO el SQL; el agente usa la columna `documento`.
+  - Con el almacén dentro de la clave, un traspaso sale solo en dos pólizas.
+- **Concepto → tipo:** tabla fija de 17 conceptos. Lo dudoso va a `otro`.
+- **Ventanas** (el cursor vive en `agente_marcas`, en hora de SR):
+  - vivos: `cursor − 3 d`;
+  - cancelados de movimientos y todas las compras: `cursor − 35 d`;
+  - primera lectura: los últimos 35 d;
+  - el cursor se topa en ahoraSr + 5 min.
+- **Ausencias y purga:** la ausencia se evalúa por la fecha MÁXIMA del documento (`fecha_ventana`) dentro de
+  la ventana de vivos. La purga ocurre al salir de la de 35 días.
+- **Freno:** ≥ 5 desaparecidos y > 50 % de los guardados en la ventana. En ese caso no se encola nada y el
+  cursor no se mueve.
+- **Descarte 400/413/500:** el lote sale de la cola y sus documentos quedan con `hash = NULL` en el estado,
+  no se borran. Así una cancelación no se pierde.
+- **Intervalos:** 15 min movimientos, 30 compras, 60 recetas. El reintento tras una falla es a los 15 min.
+- **Compras:**
+  - almacén mezclado → nulo;
+  - descuento: se avisa y no se aplica;
+  - sin fecha: no se manda y cuenta como vista.
+- **Recetas con varias empresas:** si son iguales, se manda una; si difieren, no se manda y cuenta como
+  vista.
+- **Cantidades:** de 4 a 3 decimales, igual que existencias. La receta va tal cual, con 4.
+- **Zona:** `TimeZoneInfo.Local`, la misma que usan los catálogos.
+- **Errores y avisos por documento:** van al log sólo cuando cambian (observación del revisor).
+
+**Trampas que encontré.**
+- **Bloqueo del revisor en el plan, que se habría colado:** filtrar `movsinv` fila por fila con
+  `fecha >= @desde` manda pólizas A MEDIAS en el borde de la ventana, y el panel REEMPLAZA las partidas.
+  Por eso existe el CTE `elegidos`. Además, un cursor sin tope se congela con una sola fecha 2099.
+- **`CONVERT(varchar(23), fecha, 126)` omite los milisegundos cuando son 0.** El fixture de C# siempre los
+  ponía, así que el test pasaba y el SQL real daba otra clave. Lo vi al correr el CTE en SQL Server
+  sustituyendo las tablas por un `VALUES` sintético (solo SELECT, sin tablas temporales). Es una buena
+  forma de probar SQL contra la base local vacía **sin escribir nada**.
+- **Un test pasaba por el motivo equivocado:** el del descarte buscaba la última petición, y la última era
+  la misma que respondió 400. Lo destapó la mutación a mano. Siempre cuenta las peticiones ANTES del
+  cambio.
+- `WITH (NOLOCK)` sobre una referencia a un CTE es válido en SQL Server, y la guardia de NOLOCK lo exige.
+- Un heredoc de bash con texto largo en español volvió a romperse ("unexpected EOF"). Escribe los `.py`
+  con Write y córrelos con `python archivo.py`.
+- `movsinv` y `movsinvcancelados` son HEAPS sin ningún índice. Ningún trigger ni SP toca
+  `movsinvcancelados`: lo mueve la aplicación de SR.
+
+**Qué quedó abierto.**
+- ❓ **Para Ricardo:**
+  - ¿La fila cancelada conserva la fecha original? Si la conserva, una cancelación de más de 35 días no
+    llega.
+  - Riesgo de timeout permanente con un `movsinv` grande: el heap se recorre 2 veces por tabla cada
+    15 min (§11). La única señal es un Error en el log. Opciones: subir el timeout sólo para esta consulta,
+    leer por tramos o hacerlo fuera de hora pico.
+- **La agrupación en pólizas no se ha visto con datos reales.** Sólo compila contra la base vacía y se
+  probó con un VALUES sintético. Los tests usan un lector falso que imita la regla del SQL. La valida
+  F2-193/F2-192.
+- **Timeout:** probado SIMULADO (TimeoutException y una SqlException Number −2 armada por reflexión).
+  Nunca contra un SQL lento real.
+- **Historia inicial de 35 días:** el kardex anterior a eso no se reconstruye, y el cuadre contra la
+  existencia sale con diferencia hasta F2-193.
+- **Tarea candidata (ya anotada en F2-241):** sacar catálogos, existencias e inventario del ciclo del
+  heartbeat. El peor caso teórico ya es de unos 8–9 min.
+- ❓ **Freno con borrado legítimo:** se destraba a mano borrando `inventario_documentos` de ese tipo (§10),
+  pero así las recetas borradas NUNCA reciben `renglones: []` y el teórico sigue usándolas (choca con (2)
+  de F2-125). Decisión abierta para Ricardo en §10: un comando que acepte la desaparición, o un umbral
+  distinto para recetas.
+- ❓ **Compras:** se supone que `fechaaplicacion` no se fecha hacia atrás. Si se puede, una compra con fecha
+  anterior a `cursor − 35 d` no se lee nunca, y una cancelación de más de 35 días no llega (§10).
+- **Pendiente: versiones acumuladas en la cola.** Si un documento cambia N veces con el API caído, se
+  encolan N versiones y se mandan todas en orden. El resultado final es correcto por `leidoAt`, pero lo
+  limpio sería compactar por clave al encolar (descartar la versión vieja sin enviar). Tarea chica, para
+  F2-250 o nueva.
+- **Borde conocido:** si se descarta un lote con una póliza ausente y pasan más de 3 días antes de la
+  siguiente lectura buena, la cancelación ya no se reenvía (la ausencia sólo se evalúa en la ventana de
+  vivos).
+- `comprasmovtos` y `costos` tampoco tienen índice: sus lecturas también recorren las tablas completas
+  (§11).
+- Las consultas locales se corrieron con el login de Windows (sysadmin) SÓLO con SELECT, porque
+  `monitor_lector` no existe en esta máquina (F1-020b).
+
+**Qué haría distinto.** Probar el SQL con VALUES sintéticos desde el principio: encontró un bug que los
+tests en C# no podían ver. Y hacer las mutaciones a mano antes del revisor, no después.

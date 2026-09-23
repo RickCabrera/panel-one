@@ -34,7 +34,7 @@ public partial class ConsultasEmbebidasTests
                      "diagnostico", "sr_estructura", "sr_version", "sr_sondeo", "sr_catalogo_grupos", "sr_catalogo_productos",
                      "sr_catalogo_meseros", "sr_catalogo_areas", "sr_catalogo_canales", "sr_catalogo_clientes",
                      "sr_catalogo_unidades", "sr_catalogo_grupos_insumo", "sr_catalogo_insumos", "sr_catalogo_almacenes",
-                     "sr_catalogo_proveedores", "sr_existencias",
+                     "sr_catalogo_proveedores", "sr_existencias", "sr_movimientos", "sr_compras", "sr_recetas",
                  })
         {
             Assert.Contains(esperada, nombres);
@@ -135,6 +135,10 @@ public partial class ConsultasEmbebidasTests
 
         Assert.Contains(leidas, l => l.Tabla == "productosdetalle");
         Assert.Contains(leidas, l => l.Tabla == "acumuladoinsumos"); // F2-241
+        foreach (var tabla in new[] { "movsinv", "movsinvcancelados", "compras", "comprasmovtos", "costos" }) // F2-241b
+        {
+            Assert.Contains(leidas, l => l.Tabla == tabla);
+        }
         Assert.Empty(leidas.Where(l => !revisadas.Contains(l.Tabla)).Select(l => $"{l.Consulta}.sql lee dbo.{l.Tabla}"));
     }
 
@@ -162,6 +166,21 @@ public partial class ConsultasEmbebidasTests
         var insumos = SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_catalogo_insumos"));
         Assert.DoesNotContain("costo", insumos, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("*", insumos);
+    }
+
+    [Fact]
+    public void Los_movimientos_se_eligen_por_DOCUMENTO_y_se_traen_completos_nunca_fila_por_fila()
+    {
+        // F2-241b: filtrar fila por fila mandaría pólizas a medias y el panel, que las REEMPLAZA,
+        // borraría partidas del kardex. La ventana sólo puede aparecer en el CTE que elige documentos.
+        var sql = Regex.Replace(SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_movimientos")), @"\s+", " ");
+        Assert.Contains("elegidos AS ( SELECT DISTINCT e.documento FROM documentos AS e WITH (NOLOCK) WHERE", sql);
+        Assert.Contains("INNER JOIN elegidos AS k WITH (NOLOCK) ON k.documento = d.documento", sql);
+        Assert.Single(Regex.Matches(sql, @"@desde\b"));
+        Assert.Single(Regex.Matches(sql, @"@desdecanceladas\b"));
+        var final = sql[sql.LastIndexOf("SELECT d.cancelado", StringComparison.Ordinal)..];
+        Assert.DoesNotContain("WHERE", final);
+        Assert.DoesNotContain("@desde", final);
     }
 
     [Fact]
