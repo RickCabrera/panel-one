@@ -7512,7 +7512,7 @@ O1 (auditoría en el e2e) atendida.
   /web build y lint limpios; vitest **1235/1235** (100 archivos); check:bundle 321.1 kB gzip.
 
 ## 2026-09-23 07:10 — F2-144 · Ventas por canal (delivery y mostrador)
-**Estado:** CERRADA (PR de `feat/F2-144`, squash a main) con el AC nocturno de la tabla "Cierre
+**Estado:** CERRADA al mergear el PR de `feat/F2-144` (squash a main) con el AC nocturno de la tabla "Cierre
 nocturno de las heredadas" · **ALCANCE RECORTADO:** sin ingesta nueva (ver abajo) · **PENDIENTE DE
 VALIDACIÓN REAL:** ver F2-192 · **Las dos decisiones de canal SIGUEN ABIERTAS para Ricardo.**
 
