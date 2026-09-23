@@ -1773,7 +1773,7 @@ nada; la vista muestra vigencia del certificado y alerta si vence en < 30 días.
 > ficha y su test (un RFC de otra empresa no liga; un cliente sin RFC no liga con nada).
 
 ### F2-101 · Código corto de facturación por cheque
-`[ ]` Al ingerir un cheque cerrado (hook en F1-031), generar `CodigoFacturacion(codigo único
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (qué es facturable, reapertura/cancelación posterior, vigencia default y `folio_sr` reusado; §2 de esquema-sr). Al ingerir un cheque cerrado (hook en F1-031), generar `CodigoFacturacion(codigo único
 9 chars A-Z0-9 sin ambiguos [O,0,I,1], cheque_id, sucursal_id, estado ENUM[pendiente,
 facturado, en_global, expirado], expira_at)`. Vigencia configurable por empresa (default:
 fin del mes de emisión, regla típica SAT para factura del periodo). Endpoint
