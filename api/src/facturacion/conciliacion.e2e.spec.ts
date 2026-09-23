@@ -338,6 +338,9 @@ describe('Conciliación con el PAC (e2e, F2-110b)', () => {
     expect(lote.status).toBe(200);
   }, 120_000);
 
+  // Un espía que no se restauró porque su test falló antes no contamina a los siguientes.
+  afterEach(() => jest.restoreAllMocks());
+
   afterAll(async () => {
     await app?.close();
     await prisma.paqueteFolios.deleteMany({ where: { id: PAQUETE_2033 } });
@@ -367,7 +370,6 @@ describe('Conciliación con el PAC (e2e, F2-110b)', () => {
         },
       ],
     ]);
-    auditoria.mockRestore();
   });
 
   describe('AC1 · origen ticket (portal)', () => {
@@ -774,8 +776,7 @@ describe('Conciliación con el PAC (e2e, F2-110b)', () => {
       // La 01 la pidió el SISTEMA: no queda auditada como si la hubiera pedido una persona; sólo el
       // disparo de la vuelta, con su actor.
       expect(auditoria.mock.calls.map(([, e]) => e.accion)).toEqual(['facturacion.conciliacion']);
-      auditoria.mockRestore();
-      expect(pac.cancelaciones).toHaveLength(deletes + 1);
+        expect(pac.cancelaciones).toHaveLength(deletes + 1);
       expect(pac.cancelaciones.at(-1)).toMatchObject({ uuid: anterior.uuid, motivo: '01' });
       expect(await prisma.cfdi.findUniqueOrThrow({ where: { id: anterior.id } })).toMatchObject({
         estado: 'cancelado',
