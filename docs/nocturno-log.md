@@ -7412,3 +7412,101 @@ reserva colgada RESTA saldo de folios (cuenta "en emisión"): el "disponible" pu
 **Qué haría distinto.** Decidir el corte (y escribirlo en el plan) antes de leer todo el código de facturación: las
 notas "Y además" acumuladas de cinco tareas eran una tarea entera por sí solas. Y diseñar el e2e de un dato GLOBAL
 desde el principio en un rango de fechas donde no vive nada más (2031+): así las cifras a mano no dependen de la base.
+
+## 2026-09-23 06:40 — F2-110b · Conciliación de reservas colgadas con el PAC
+**Estado:** CERRADA (PR de `feat/F2-110b`, squash a main) · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (la
+búsqueda por serie y folio de Facturama es un supuesto). Revisor: plan BLOQUEADO 1 vez (B1: liberar tras UNA búsqueda
+vacía podía duplicar un CFDI ante el SAT si Facturama no filtra o pagina; B2: una `sin_confirmar` cruzada con una
+solicitud nueva podía dar dos aceptadas y dos avisos) y aprobado a la segunda. Entregable BLOQUEADO 1 vez (B1: un
+404 de la búsqueda contaba como "no la tiene": si la ruta supuesta no existe, TODA reserva ambigua se liberaría a
+los 30 min y se duplicaría el CFDI ante el SAT → ahora 404 = `ESTADO_DESCONOCIDO`) y aprobado a la segunda, con
+O1 (auditoría en el e2e) atendida.
+
+**Qué quedó hecho.**
+- Puerto: `buscarPorFolio({ rfcEmisor, serie, folio, zonaHoraria })` y `descargarArchivos(ref)`. Facturama:
+  `GET /api-lite/cfdis?type=issuedLite&rfcIssuer&serie&folioStart&folioEnd&status=all`; SÓLO un 200 con `[]` =
+  null (un 404 también es desconocido: ver abajo); cualquier fila ajena, dos filas, sin Uuid, Status raro o cuerpo no-arreglo = `ESTADO_DESCONOCIDO`
+  reintentable. Test de contrato + 2 snapshots nuevos. PAC falso: guarda cada emisión por `rfc|serie|folio`,
+  `programarSinRespuesta(timbra)` (un solo uso: la siguiente `emitir` contesta `PAC_SIN_RESPUESTA`, timbrando o no),
+  `cancelarEnPac(uuid)` (cancelación registrada tarde), `descargarArchivos` determinista.
+- Migración `20260930010000_conciliacion_pac`: `cfdis.conciliacion_at` (candado/rotación), `cfdis.conciliacion_vacia_at`
+  (campo Prisma `busquedaVaciaAt`: se llamó así para no realinear todo el modelo con `prisma format`), valor
+  `sin_confirmar` en `estado_cancelacion_cfdi`, índices parciales `(updated_at) WHERE timbrando` y
+  `(id) WHERE vigente AND (xml_clave IS NULL OR pdf_clave IS NULL)`. `migrate diff` vacío.
+- `EscrituraFacturacion`: lecturas con el scope de quien llama (`reservasPorConciliar`, `vigentesSinArchivos`,
+  `sustitucionesPendientes`, `solicitudesSinConfirmar`) y escrituras condicionales con la empresa del elemento
+  (`reclamarConciliacion`, `anotarBusquedaVacia`, `liberarReservaSinTimbre`, que exige la búsqueda vacía de hace
+  ≥15 min EN EL WHERE). `confirmarCfdi` ahora bloquea la fila `FOR UPDATE` y exige conteo 1 (si no, 404 y rollback).
+- `ConciliacionPacService.vuelta(scope)`: 1) reservas (los 4 orígenes por el mismo `confirmarCfdi`/liberar; al
+  confirmar descarga y ENTREGA: archivos + el correo que nunca salió); 2) `sin_confirmar`
+  (`CancelacionCfdiService.revisarSinConfirmar`); 3) refacturaciones con la 01 pendiente (`solicitar(scope, null…)`,
+  que consulta antes de cancelar); 4) vigentes sin archivos. `ConciliacionProgramador` (`CONCILIACION_INTERVALO_S`,
+  900, apagado en test, en `.env.example`). `POST /facturacion/conciliacion` (admins; admin_empresa sólo su
+  empresa; auditoría `facturacion.conciliacion`). OpenAPI regenerado.
+- Web: tarjeta "Conciliación con el PAC" al final del tablero de Facturación (botón "Conciliar ahora", resultado en
+  frases con `textoConciliacion`; si se revisó algo que sigue igual NO dice "nada pendiente"); `sin_confirmar` en
+  `tipos.ts` y en `emision/cancelacion.ts` (se puede volver a cancelar; su texto lo explica).
+- Docs: esquema-sr §2 "Conciliación con el PAC (F2-110b)"; backlog: "Y además (de F2-110b)" en F2-190 y F2-250.
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` `api/src/facturacion/conciliacion.ts` (cabecera): edad mínima 15 min, reclamo
+  15 min (también es la separación mínima de las dos búsquedas vacías), ventana `sin_confirmar` 7 días.
+- `DECISION PROVISIONAL (nocturno)` `timbrado-facturama.ts#buscarPorFolio`: un 404 NO es "vacío" (una ruta de lista
+  contesta `[]`); lo trato como desconocido para no liberar a ciegas si la ruta supuesta está mal (F2-190).
+- `DECISION PROVISIONAL (nocturno)` `conciliacion.ts#fechaDeConfirmacion`: fecha del PAC → `FechaTimbrado` del XML
+  → la de la reserva. `timbrado-facturama.ts#cfdiDeLista`: `Date` de la lista en hora LOCAL de la sucursal.
+- **Cambio de comportamiento de F2-109:** una `solicitando` vencida que el PAC ve vigente ya NO se borra: queda
+  `sin_confirmar` (no abierta; se puede volver a pedir). Al abrir una solicitud nueva (bajo el candado del CFDI) y
+  al aceptar cualquiera se borran las `sin_confirmar` del CFDI; desde `sin_confirmar` sobre un CFDI no vigente se
+  borra sin efectos. La API de "Actualizar estado" sigue contestando `no_procedio` (mismo contrato).
+- Confirmar un CFDI que el PAC ya reporta cancelado: se confirma (existe ante el SAT) y se reporta en
+  `requierenRevision`; no se inventa una solicitud (nota F2-250).
+- No se barren todos los vigentes contra el PAC (costo por vuelta): sólo las `sin_confirmar` (nota F2-250).
+- Refacturación con 01 pendiente: no se reintenta si el receptor RECHAZÓ una 01, ni con abierta/`sin_confirmar`.
+
+**Trampas que encontré.**
+- **El heredoc de bash se rompe** con código TS que trae `${…}` y backticks dentro de un script Python: escribe el
+  script con la herramienta de archivos y córrelo con `python archivo.py`.
+- `npx prettier --write src/adaptadores/timbrado/*.ts` re-formateó 5 archivos AJENOS (el repo no está 100 %
+  prettier-limpio). Revertidos. Pasa a prettier SÓLO los archivos que tocaste.
+- Una mutación que quitaba el borrado de `sin_confirmar` en `abrirCancelacion` SOBREVIVÍA en mi suite: el otro
+  guardia (borrar al aceptar) la tapaba. Se agregó el test "abrir una solicitud nueva descarta la `sin_confirmar`
+  aunque la nueva NO proceda" (y el e2e de F2-109 adaptado también la mata). Haz mutaciones: los guardias dobles
+  esconden huecos de cobertura.
+- La liberación tiene doble red (la regla pura y el WHERE de `liberarReservaSinTimbre`): mutar sólo la regla no
+  libera, pero 18 tests truenan por la cuenta del resumen.
+- La suite nueva vive en MARZO 2033 con su propio paquete de folios (id fijo `f2110b00-…-f1`, se borra en `afterAll`):
+  con la base sembrada el control está prendido y sin paquete en 2033 toda reserva daría 503. Si la suite muere sin
+  `afterAll`, borra ese paquete a mano.
+
+**Qué quedó abierto.**
+- F2-190: validar la búsqueda por folio real, cuánto tarda Facturama en listar y en registrar un DELETE.
+- F2-250: reserva liberada que aparece después; cancelación hecha fuera del sistema; confirmado-pero-cancelado sólo
+  se reporta (no queda marcado en base).
+- Sin prueba visual en navegador: la tarjeta se probó con testing-library contra el router real.
+
+**Tests.**
+- e2e nuevo `conciliacion.e2e.spec.ts` (23, app real + Postgres + PAC falso + reloj falso, fixtures propias):
+  401/403; ticket timbró (+AC8 borde 14:59.999/15:00, +AC6 saldo) y no timbró (una búsqueda vacía NO libera, la
+  segunda a los 15 min sí; +AC6); vacía-luego-aparece; manual timbró/no; sustituto timbró (y la 01 se cierra en la
+  misma vuelta) / no; global no timbró (tickets amarrados → sueltos) / timbró (`en_global`); AC2 tarde → cancelado
+  con fecha y un aviso; B2 (nueva solicitud: una aceptada y un aviso; nueva que no procede descarta la
+  `sin_confirmar`; CFDI ya cancelado: descartada sin aviso); ventana 7 días; AC3 (se cierra sola con edad; ya
+  cancelada en el PAC sólo se anota, sin DELETE); AC4 archivos (sin volver a mandar correo); AC5 dos vueltas
+  simultáneas confirman/liberan una vez (búsqueda contada 1); `requierenRevision`; alcance (admin_empresa no ve a B;
+  el programador sí); `confirmarCfdi` doble a la vez (uno gana, el otro 404).
+- Unitarios: `conciliacion.spec.ts` (11: plazos y bordes, lector del TFD con borde de mes CDMX/Tijuana, prioridad
+  de fechas, receptor, intervalo), `timbrado-falso.spec` +6, contrato +18 (AC7; incluye 404 = desconocido),
+  `openapi.spec` +1.
+- Adaptados al comportamiento nuevo (no aflojados): `cancelacion.e2e` ("AMBIGUO…": tras `no_procedio` la solicitud
+  queda `['sin_confirmar']` y la fila dice `sin_confirmar`, en vez de `[]`; lo demás igual), `openapi.spec` (enum
+  de `CancelacionFilaDto` + la ruta nueva), web `cancelacion.test` (+`sin_confirmar`).
+- La auditoría la prueba el e2e con un espía sobre `Auditoria.registrar`: el disparo manual registra
+  `facturacion.conciliacion` con su actor, y la 01 que pide el sistema en AC3 no deja registro.
+- Los pasos 3 y 4 comparten `conciliacion_at`: un CFDI en los dos casos se resuelve en vueltas distintas (15 min).
+- Mutación a mano: liberar con la PRIMERA búsqueda vacía → 18 rojos; no borrar la `sin_confirmar` al abrir otra →
+  7 rojos (entre esta suite y la de F2-109).
+- Números: /api lint, typecheck, `prisma validate` limpios; `migrate diff` vacío; openapi regenerado. Jest completo
+  `--runInBand` sobre la base SEMBRADA: **2309/2310** (131 suites), cero skips; el único rojo es el preexistente de
+  `prisma/esquema.spec.ts` ("al crear el admin…", igual que F2-104…F2-110), así que NO es verde en esta base local.
+  /web build y lint limpios; vitest **1235/1235** (100 archivos); check:bundle 321.1 kB gzip.
