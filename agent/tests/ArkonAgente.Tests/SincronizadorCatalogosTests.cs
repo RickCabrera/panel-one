@@ -19,6 +19,11 @@ internal sealed class LectorFalso : ILectorCatalogos
         [CatalogoPanel.Areas] = () => FixturesSr.Areas(("01", "Terraza", true)),
         [CatalogoPanel.Canales] = () => FixturesSr.Canales(),
         [CatalogoPanel.Clientes] = () => FixturesSr.Clientes(),
+        [CatalogoPanel.Unidades] = () => FixturesSr.Unidades("kg", "PZA"),
+        [CatalogoPanel.GruposInsumo] = () => FixturesSr.GruposInsumo(("GI1", "Lácteos")),
+        [CatalogoPanel.Insumos] = () => FixturesSr.Insumos(("I001", "Leche entera", "GI1", "kg", 1)),
+        [CatalogoPanel.Almacenes] = () => FixturesSr.Almacenes(("1", "Almacén general"), ("2", "Barra")),
+        [CatalogoPanel.Proveedores] = () => FixturesSr.Proveedores(),
     };
 
     public HashSet<CatalogoPanel> Fallan { get; } = [];
@@ -101,19 +106,27 @@ public class SincronizadorCatalogosTests : IDisposable
         _reloj.Avanzar(new DateTimeOffset(_reloj.Ahora.UtcDateTime.Date.AddDays(1).AddHours(hora), TimeSpan.Zero) - _reloj.Ahora);
 
     [Fact]
-    public async Task La_primera_vez_lee_y_manda_los_seis_catalogos_y_el_log_dice_filas_y_tiempo()
+    public async Task La_primera_vez_lee_y_manda_los_once_catalogos_y_el_log_dice_filas_y_tiempo()
     {
         await CicloYVaciar();
 
         Assert.All(CatalogosPanel.Todos, c => Assert.Equal(1, _lector.LecturasDe(c)));
         var cierres = _api.Envios.Where(p => p.EsCierre).ToDictionary(p => p.Catalogo!, p => p.Cuerpo!.Value.GetProperty("total").GetInt32());
         Assert.Equal(
-            new Dictionary<string, int> { ["grupos"] = 2, ["productos"] = 2, ["meseros"] = 1, ["areas"] = 1, ["canales"] = 0, ["clientes"] = 0 },
+            new Dictionary<string, int>
+            {
+                ["grupos"] = 2, ["productos"] = 2, ["meseros"] = 1, ["areas"] = 1, ["canales"] = 0, ["clientes"] = 0,
+                ["unidades"] = 2, ["grupos_insumo"] = 1, ["insumos"] = 1, ["almacenes"] = 2, ["proveedores"] = 0,
+            },
             cierres);
         // Un catálogo vacío en el POS sólo manda el cierre con total = 0 (sin página vacía).
-        Assert.DoesNotContain(_api.Envios, p => p.EsPagina && p.Catalogo is "canales" or "clientes");
-        // Los cinco de inventario (F2-241) no se tocan: nunca un total = 0 inventado.
+        Assert.DoesNotContain(_api.Envios, p => p.EsPagina && p.Catalogo is "canales" or "clientes" or "proveedores");
         Assert.All(_api.Envios, p => Assert.Contains(p.Catalogo, CatalogosPanel.Todos.Select(c => c.Texto())));
+        // El insumo apunta a la MISMA clave de unidad que manda el catálogo de unidades (F2-241).
+        var insumo = _api.Envios.Single(p => p.EsPagina && p.Catalogo == "insumos").Cuerpo!.Value.GetProperty("registros")[0];
+        var unidades = _api.Envios.Single(p => p.EsPagina && p.Catalogo == "unidades").Cuerpo!.Value.GetProperty("registros")
+            .EnumerateArray().Select(r => r.GetProperty("origenSrId").GetString()).ToList();
+        Assert.Contains(insumo.GetProperty("unidadOrigenSrId").GetString(), unidades);
         Assert.Contains(_log.De(LogLevel.Information), m =>
             m.Contains("'productos' leído en SoftRestaurant: 2 registro(s) (2 fila(s)) en 7 ms") && m.Contains("encolado"));
         Assert.Contains(_log.De(LogLevel.Information), m => m.Contains("corrida primera sincronización terminada"));
@@ -132,8 +145,8 @@ public class SincronizadorCatalogosTests : IDisposable
         Assert.All(CatalogosPanel.Todos, c => Assert.Equal(2, _lector.LecturasDe(c))); // sí volvió a leer
         Assert.Equal(0, _cola.ContarPendientes()); // pero no encoló nada
         Assert.Equal(enviosAntes, _api.Envios.Count);
-        Assert.Equal(6, _log.De(LogLevel.Information).Count(m => m.Contains("sin cambios, no se encola nada")));
-        Assert.Contains(_log.De(LogLevel.Information), m => m.Contains("corrida diaria terminada") && m.Contains("6 sin cambios"));
+        Assert.Equal(11, _log.De(LogLevel.Information).Count(m => m.Contains("sin cambios, no se encola nada")));
+        Assert.Contains(_log.De(LogLevel.Information), m => m.Contains("corrida diaria terminada") && m.Contains("11 sin cambios"));
     }
 
     [Fact]
@@ -182,10 +195,10 @@ public class SincronizadorCatalogosTests : IDisposable
         await CicloYVaciar();
 
         var forzados = _api.Envios.Skip(enviosAntes).ToList();
-        Assert.Equal(6, forzados.Count(p => p.EsCierre));
+        Assert.Equal(11, forzados.Count(p => p.EsCierre)); // los once, inventario incluido (F2-241)
         Assert.Contains(_log.De(LogLevel.Information), m => m.Contains("corrida forzada desde el panel"));
 
-        // El panel lo sigue viendo pendiente (faltan los de inventario, F2-241): no se cicla.
+        // Si el panel lo sigue viendo pendiente (p. ej. un catálogo que falló), no se cicla.
         var lecturas = _lector.Total;
         _reloj.Avanzar(TimeSpan.FromMinutes(5));
         await Ciclos(20);
@@ -196,7 +209,7 @@ public class SincronizadorCatalogosTests : IDisposable
         _api.Solicitud = ("2026-09-21T13:00:00.000Z", true);
         _reloj.Avanzar(TimeSpan.FromMinutes(2));
         await Ciclos();
-        Assert.Equal(lecturas + 6, _lector.Total);
+        Assert.Equal(lecturas + 11, _lector.Total);
     }
 
     [Fact]
@@ -269,7 +282,7 @@ public class SincronizadorCatalogosTests : IDisposable
 
         _lector.Permisos = new PermisosLectura(true, null);
         await Ciclos(12);
-        Assert.Equal(6, _lector.Total);
+        Assert.Equal(11, _lector.Total);
     }
 
     [Fact]

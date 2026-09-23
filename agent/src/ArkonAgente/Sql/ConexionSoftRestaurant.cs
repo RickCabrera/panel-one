@@ -17,6 +17,9 @@ namespace ArkonAgente.Sql;
 /// seguridad</b>: el que impide escribir es el usuario de solo lectura.</item>
 /// <item><c>Connect Timeout</c> corto (5 s por defecto, 15 s de tope): el agente
 /// no se queda colgado esperando a un servidor apagado.</item>
+/// <item><c>Enlist=false</c> (F2-241): la conexión nunca se une a una transacción ambiental
+/// (<c>TransactionScope</c>). El agente no abre transacciones contra el POS; un test lo
+/// vigila en el IL del ensamblado (<c>SoloLecturaTests</c>).</item>
 /// </list>
 /// Lo que NO se toca: <c>Encrypt</c> / <c>TrustServerCertificate</c> ni las
 /// credenciales. Ver docs/esquema-sr.md §11 (supuestos de conexión).
@@ -39,6 +42,7 @@ internal sealed class ConexionSoftRestaurant
         {
             ApplicationName = NombreAplicacion,
             ApplicationIntent = ApplicationIntent.ReadOnly,
+            Enlist = false,
         };
 
         _constructor.ConnectTimeout = TieneTimeoutExplicito(cadenaDeConfig)

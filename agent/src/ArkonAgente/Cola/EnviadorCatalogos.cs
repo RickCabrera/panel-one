@@ -342,7 +342,7 @@ internal sealed class EnviadorCatalogos : IDisposable
         _ultimaFalla = null;
     }
 
-    private static ByteArrayContent Gzip(string json)
+    internal static ByteArrayContent Gzip(string json)
     {
         using var memoria = new MemoryStream();
         using (var gzip = new GZipStream(memoria, CompressionLevel.Optimal, leaveOpen: true))

@@ -33,6 +33,8 @@ public partial class ConsultasEmbebidasTests
                  {
                      "diagnostico", "sr_estructura", "sr_version", "sr_sondeo", "sr_catalogo_grupos", "sr_catalogo_productos",
                      "sr_catalogo_meseros", "sr_catalogo_areas", "sr_catalogo_canales", "sr_catalogo_clientes",
+                     "sr_catalogo_unidades", "sr_catalogo_grupos_insumo", "sr_catalogo_insumos", "sr_catalogo_almacenes",
+                     "sr_catalogo_proveedores", "sr_existencias",
                  })
         {
             Assert.Contains(esperada, nombres);
@@ -132,6 +134,7 @@ public partial class ConsultasEmbebidasTests
             .ToList();
 
         Assert.Contains(leidas, l => l.Tabla == "productosdetalle");
+        Assert.Contains(leidas, l => l.Tabla == "acumuladoinsumos"); // F2-241
         Assert.Empty(leidas.Where(l => !revisadas.Contains(l.Tabla)).Select(l => $"{l.Consulta}.sql lee dbo.{l.Tabla}"));
     }
 
@@ -147,6 +150,18 @@ public partial class ConsultasEmbebidasTests
         {
             Assert.DoesNotContain(prohibida, clientes, StringComparison.OrdinalIgnoreCase);
         }
+
+        // F2-241: el proveedor sólo lleva id, nombre y estado; nada de RFC, contacto ni datos bancarios.
+        var proveedores = SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_catalogo_proveedores"));
+        foreach (var prohibida in new[] { "rfc", "razonsocial", "direccion", "telefono", "email", "nombrebanco", "nocuenta", "cuentaclave", "*" })
+        {
+            Assert.DoesNotContain(prohibida, proveedores, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // El catálogo de insumos no lleva costo: el contrato lo rechaza (va con las existencias).
+        var insumos = SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_catalogo_insumos"));
+        Assert.DoesNotContain("costo", insumos, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("*", insumos);
     }
 
     [Fact]

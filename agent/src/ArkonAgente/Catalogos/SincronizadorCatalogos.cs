@@ -19,18 +19,19 @@ internal interface ISincronizadorCatalogos : IDisposable
 }
 
 /// <summary>
-/// La sincronización de catálogos del POS hacia el panel (F2-240), sobre el contrato de F2-230.
+/// La sincronización de catálogos del POS hacia el panel (F2-240; los de inventario, F2-241), sobre el
+/// contrato de F2-230.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Cuándo lee.</b> Una corrida COMPLETA de los seis catálogos (<see cref="CatalogosPanel.Todos"/>):
+/// <b>Cuándo lee.</b> Una corrida COMPLETA de los once catálogos (<see cref="CatalogosPanel.Todos"/>):
 /// (a) la primera vez (no hay marca de sincronización diaria); (b) una vez al día, pasada
 /// <see cref="ConfiguracionAgente.HoraCatalogos"/> en el reloj de ESTA PC; (c) forzada desde el panel:
 /// <c>GET /ingesta/catalogos/solicitud</c> (a lo más cada <see cref="IntervaloSolicitud"/>) dice
 /// <c>pendiente</c> con un <c>solicitadaAt</c> que no se ha atendido. Cada <c>solicitadaAt</c> se
-/// atiende UNA vez y se recuerda en el SQLite: el panel lo seguirá viendo pendiente mientras no
-/// existan los lectores de inventario (F2-241), y el agente ni se cicla ni cierra esos cinco
-/// catálogos con <c>total = 0</c> (nota de F2-120). Fuera de una corrida, sólo se relee un catálogo
+/// atiende UNA vez y se recuerda en el SQLite: si algún catálogo falló, el panel lo sigue viendo
+/// pendiente hasta que ese catálogo cierre, y el agente ni se cicla ni lo cierra con <c>total = 0</c>
+/// para apagarlo (nota de F2-120). Fuera de una corrida, sólo se relee un catálogo
 /// que falló, cuando vence su reintento (<see cref="EsperaReintento"/>).
 /// </para>
 /// <para>

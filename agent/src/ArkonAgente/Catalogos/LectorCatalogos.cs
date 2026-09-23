@@ -38,7 +38,15 @@ internal interface ILectorCatalogos
 /// </summary>
 internal sealed class LectorCatalogosSr(ConexionSoftRestaurant conexion, ISoftRestaurantReader reader) : ILectorCatalogos
 {
-    public async Task<PermisosLectura> RevisarPermisosAsync(CancellationToken cancelacion)
+    public Task<PermisosLectura> RevisarPermisosAsync(CancellationToken cancelacion) =>
+        RevisarPermisosAsync(conexion, cancelacion);
+
+    /// <summary>
+    /// La revisión de <c>diagnostico.sql</c>, compartida con el lector de existencias (F2-241): el
+    /// mismo criterio para cualquier lectura de tablas del POS.
+    /// </summary>
+    internal static async Task<PermisosLectura> RevisarPermisosAsync(
+        ConexionSoftRestaurant conexion, CancellationToken cancelacion)
     {
         try
         {

@@ -7,9 +7,8 @@ using System.Text.Json;
 namespace ArkonAgente.Catalogos;
 
 /// <summary>
-/// Los catálogos de F2-230 que lee este agente (F2-240). Los cinco de inventario
-/// (unidades, grupos_insumo, insumos, almacenes, proveedores) son de F2-241: no se leen
-/// ni se cierran aquí, y nunca con <c>total = 0</c> (eso daría de baja todo en el panel).
+/// Los ONCE catálogos del contrato de F2-230: los seis de venta (F2-240) y los cinco de
+/// inventario de F2-120 (F2-241). Con los once se atiende por completo un forzado del panel.
 /// </summary>
 internal enum CatalogoPanel
 {
@@ -19,15 +18,25 @@ internal enum CatalogoPanel
     Areas,
     Canales,
     Clientes,
+    Unidades,
+    GruposInsumo,
+    Insumos,
+    Almacenes,
+    Proveedores,
 }
 
 internal static class CatalogosPanel
 {
-    /// <summary>En este orden se leen: el grupo llega antes que el producto que lo usa.</summary>
+    /// <summary>
+    /// En este orden se leen: el grupo llega antes que el producto que lo usa, y la unidad y el
+    /// grupo de insumo antes que el insumo (el panel no exige el orden: no hay FK).
+    /// </summary>
     public static readonly IReadOnlyList<CatalogoPanel> Todos =
     [
         CatalogoPanel.Grupos, CatalogoPanel.Productos, CatalogoPanel.Meseros,
         CatalogoPanel.Areas, CatalogoPanel.Canales, CatalogoPanel.Clientes,
+        CatalogoPanel.Unidades, CatalogoPanel.GruposInsumo, CatalogoPanel.Insumos,
+        CatalogoPanel.Almacenes, CatalogoPanel.Proveedores,
     ];
 
     /// <summary>El valor del enum <c>CatalogoSr</c> del contrato.</summary>
@@ -39,6 +48,11 @@ internal static class CatalogosPanel
         CatalogoPanel.Areas => "areas",
         CatalogoPanel.Canales => "canales",
         CatalogoPanel.Clientes => "clientes",
+        CatalogoPanel.Unidades => "unidades",
+        CatalogoPanel.GruposInsumo => "grupos_insumo",
+        CatalogoPanel.Insumos => "insumos",
+        CatalogoPanel.Almacenes => "almacenes",
+        CatalogoPanel.Proveedores => "proveedores",
         _ => throw new ArgumentOutOfRangeException(nameof(catalogo), catalogo, null),
     };
 
@@ -109,6 +123,14 @@ internal static class MapeoCatalogos
         {
             registros = MapearProductos(lector, columnas, avisos, ref filas);
         }
+        else if (catalogo == CatalogoPanel.Insumos)
+        {
+            registros = MapearInsumos(lector, columnas, avisos, ref filas);
+        }
+        else if (catalogo == CatalogoPanel.Unidades)
+        {
+            registros = MapearUnidades(lector, columnas, ref filas);
+        }
         else
         {
             registros = [];
@@ -133,6 +155,10 @@ internal static class MapeoCatalogos
                             w.WriteString("correo", columnas.Texto(lector, "correo"));
                             w.WriteString("rfc", columnas.Texto(lector, "rfc"));
                         }),
+                    CatalogoPanel.GruposInsumo or CatalogoPanel.Almacenes => Registro(columnas.Texto(lector, "id"),
+                        columnas.Texto(lector, "id"), columnas.TextoNombre(lector), null),
+                    CatalogoPanel.Proveedores => Registro(columnas.Texto(lector, "id"), columnas.Texto(lector, "id"),
+                        columnas.TextoNombre(lector), EstadoUnoCero(columnas.Valor(lector, "estatus"), "estatus", avisos)),
                     _ => throw new ArgumentOutOfRangeException(nameof(catalogo), catalogo, null),
                 });
             }
@@ -225,6 +251,109 @@ internal static class MapeoCatalogos
         return registros;
     }
 
+    /// <summary>
+    /// La clave de una unidad: la MISMA función para el <c>origenSrId</c> del catálogo
+    /// <c>unidades</c> y para el <c>unidadOrigenSrId</c> del insumo, o no cruzarían.
+    /// DECISION PROVISIONAL (nocturno): SR 10 no tiene tabla de unidades (docs/esquema-sr.md §9) y
+    /// <c>insumos.unidad</c> es texto libre con collation <c>Modern_Spanish_CI_AS</c>: para el POS
+    /// "kg", "KG" y "kg  " son la misma. Clave = sin espacios a la derecha y en mayúsculas
+    /// (invariante; los acentos se respetan, como en la collation); vacía = sin unidad (nulo).
+    /// </summary>
+    public static string? ClaveUnidad(string? unidad)
+    {
+        var texto = unidad?.TrimEnd(' ');
+        return string.IsNullOrEmpty(texto) ? null : texto.ToUpperInvariant();
+    }
+
+    /// <summary>
+    /// Una fila por cada texto distinto de <c>insumos.unidad</c> (la consulta usa una collation
+    /// binaria: aquí llegan "kg" y "KG" por separado). Se juntan por <see cref="ClaveUnidad"/>; el
+    /// nombre es la variante ordinal-menor sin espacios a la derecha, para que el hash no dependa
+    /// del orden en que SQL Server las devuelva. Sin estado: el POS no lo reporta.
+    /// </summary>
+    private static List<RegistroCatalogo> MapearUnidades(IDataReader lector, Columnas columnas, ref int filas)
+    {
+        var nombres = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        while (lector.Read())
+        {
+            filas++;
+            var texto = columnas.Texto(lector, "id");
+            if (ClaveUnidad(texto) is not { } clave)
+            {
+                continue;
+            }
+
+            if (!nombres.TryGetValue(clave, out var nombre) || string.CompareOrdinal(texto, nombre) < 0)
+            {
+                nombres[clave] = texto!;
+            }
+        }
+
+        return nombres.Select(par => Registro(par.Key, par.Key, par.Value, null)).ToList();
+    }
+
+    /// <summary>
+    /// Una fila por (insumo, fila de <c>insumosdetalle</c>), ordenada por insumo: se juntan las de un
+    /// mismo insumo. El grupo y la unidad van SIEMPRE, también nulos: omitirlos los guarda nulos en el
+    /// panel (nota de F2-120). Sin costo: el contrato del catálogo lo rechaza (va con las existencias).
+    /// </summary>
+    private static List<RegistroCatalogo> MapearInsumos(
+        IDataReader lector, Columnas columnas, List<string> avisos, ref int filas)
+    {
+        var registros = new List<RegistroCatalogo>();
+        var porId = new Dictionary<string, int>(StringComparer.Ordinal);
+        var estados = new List<List<bool?>>();
+        var bases = new List<(string? Id, string? Nombre, string? Grupo, string? Unidad)>();
+
+        while (lector.Read())
+        {
+            filas++;
+            var id = columnas.Texto(lector, "id");
+            var estado = EstadoUnoCero(columnas.Valor(lector, "estatus"), "estatus", avisos);
+            if (id is not null && porId.TryGetValue(id, out var i))
+            {
+                estados[i].Add(estado);
+                continue;
+            }
+
+            if (id is not null)
+            {
+                porId[id] = bases.Count;
+            }
+
+            bases.Add((id, columnas.TextoNombre(lector), columnas.Texto(lector, "grupo"),
+                ClaveUnidad(columnas.Texto(lector, "unidad"))));
+            estados.Add([estado]);
+        }
+
+        for (var i = 0; i < bases.Count; i++)
+        {
+            var (id, nombre, grupo, unidad) = bases[i];
+            var distintos = estados[i].Distinct().ToList();
+            bool? activo = null;
+            if (distintos.Count == 1)
+            {
+                activo = distintos[0];
+            }
+            else
+            {
+                // DECISION PROVISIONAL (nocturno): insumosdetalle tiene una fila por empresa (sin PK),
+                // como productosdetalle. Estados distintos = no se elige uno: viaja sin estado.
+                avisos.Add(
+                    $"El insumo {id} tiene {estados[i].Count} filas en insumosdetalle con estado distinto " +
+                    "(varias empresas en la base de SoftRestaurant): se manda sin estado.");
+            }
+
+            registros.Add(Registro(id, id, nombre, activo, w =>
+            {
+                w.WriteString("grupoOrigenSrId", grupo);
+                w.WriteString("unidadOrigenSrId", unidad);
+            }));
+        }
+
+        return registros;
+    }
+
     private static RegistroCatalogo Registro(
         string? origenSrId, string? clave, string? nombre, bool? activoPos, Action<Utf8JsonWriter>? extra = null)
     {
@@ -253,8 +382,9 @@ internal static class MapeoCatalogos
 
     /// <summary>
     /// DECISION PROVISIONAL (nocturno): 1 = vigente, 0 = baja (meseros.visible y
-    /// areasrestaurant.Estatus; en la base vista todas las filas valen 1). NULL u otro valor =
-    /// "el POS no lo reporta", con aviso. docs/esquema-sr.md §7 y §8.
+    /// areasrestaurant.Estatus; en la base vista todas las filas valen 1; proveedores.estatus e
+    /// insumosdetalle.estatus, sin filas que ver). NULL u otro valor = "el POS no lo reporta", con
+    /// aviso. docs/esquema-sr.md §7, §8 y §9.
     /// </summary>
     private static bool? EstadoUnoCero(object? valor, string columna, List<string> avisos) =>
         Bandera(valor, columna, avisos);

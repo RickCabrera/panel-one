@@ -1326,11 +1326,36 @@ motivo de rechazo ni en el log.
 > Alimenta a `F2-120`. Insumos, grupos de insumos, unidades, almacenes, presentaciones,
 > productos-receta.
 
-**Tablas de SR: sin mapear.** Nadie ha visto todavía dónde guarda SoftRestaurant su inventario.
-Lo busca y documenta aquí el lector de F2-241, y lo valida F2-192 contra una instalación real.
-Lo que sigue **no es un hallazgo**: es el contrato que el panel ya acepta (F2-120) y los
-supuestos con que se construyó. Las formas del seed (`api/prisma/seed-maestro/insumos.ts`) son
-sintéticas y **no son evidencia** de cómo es SR.
+**Tablas de SR (F2-241): ✅ vistas en SR 10 local, SÓLO metadatos** (`sys.columns`, `sys.indexes`,
+`sys.foreign_keys`, definición de triggers; 2026-09-23). En esa base las tablas de inventario tienen
+**0 filas** salvo `almacen` (3: 1 ALMACÉN GENERAL, 2 BARRA, 3 COCINA) y `gruposiclasificacion` (3):
+se sabe DÓNDE vive cada cosa, **no** qué valores toma en una operación real (eso es F2-192). Las
+formas del seed (`api/prisma/seed-maestro/insumos.ts`) son sintéticas y **no son evidencia**.
+
+| Catálogo del panel | Tabla de SR (✅ metadato) | Columnas que lee el agente | Qué es supuesto |
+|---|---|---|---|
+| `unidades` | **No hay tabla.** `insumos.unidad` varchar(10) NULL, texto libre, collation `Modern_Spanish_CI_AS` | `SELECT DISTINCT unidad COLLATE Latin1_General_BIN2` (`sr_catalogo_unidades.sql`) | `DECISION PROVISIONAL (nocturno)`: una unidad = un texto distinto; clave = sin espacios a la derecha y EN MAYÚSCULAS (`MapeoCatalogos.ClaveUnidad`, la MISMA para el catálogo y el `unidadOrigenSrId` del insumo: para SR "kg" = "KG"); nombre = la variante ordinal-menor; vacía = sin unidad. Sin estado |
+| `grupos_insumo` | `gruposi` (PK `idgruposi` varchar(5), `descripcion` varchar(30)); `idgruposiclasificacion` → `gruposiclasificacion` (ALIMENTOS/BEBIDAS/OTROS, no viaja) | id, descripción | Sin columna de estado: `activoPos` nulo |
+| `insumos` | `insumos` (PK `idinsumo` varchar(15), `descripcion` varchar(60), `idgruposi`, `unidad`, `elaborado` bit, `rendimientoelaborado`) + `insumosdetalle` (SIN PK: `idinsumo`, `idempresa`, `inventariable`, `costo`, `costopromedio`, `costoestandar`, `estatus` int, …) | id, descripción, grupo, unidad y `insumosdetalle.estatus` (una fila por detalle; se consolidan como productos, §6) | `estatus` 1 = vigente, 0 = baja (sin filas que ver); estados distintos entre empresas = sin estado, con aviso. El costo NO viaja aquí (va con las existencias) |
+| `almacenes` | `almacen` (PK `idalmacen` varchar(5), `nombre` varchar(30), `idempresa` → empresas, `tipo` numeric(1), `ultimofolio`) | id, nombre | Sin columna de estado: `activoPos` nulo. `tipo` (2 en el general, 1 en barra y cocina) sin significado validado; no viaja |
+| `proveedores` | `proveedores` (PK `idproveedor` varchar(15), `nombre` varchar(50), `estatus` numeric(1), más razón social, RFC, dirección, teléfono, correo y **datos bancarios**) | id, nombre, estatus — **nunca** RFC, contacto ni cuenta bancaria (un test lo vigila) | `estatus` 1/0 como insumos (sin filas que ver) |
+
+- **Presentaciones (empaques de compra): ✅ existen** en `insumospresentaciones` (PK
+  `idinsumospresentaciones` varchar(15), `descripcion`, `idinsumo`, `idgruposi`, `rendimiento`
+  numeric(12,4), `unidad` varchar(50)) e `insumospresentacionesdetalle`; sus movimientos van en
+  `movtosalmacen`/`movtosalmacencancelados` (por presentación) y `stockinsumos` guarda
+  mínimo/ideal/máximo por insumo o presentación y almacén. **Sin espejo ni contrato**: sería tarea nueva.
+  ⚠️ SUPUESTO: `rendimiento` = unidades del insumo por presentación (el factor de conversión).
+- **Productos-receta (elaborados): ✅ existen** como INSUMOS con `insumos.elaborado = 1` y
+  `rendimientoelaborado`; `insumoselaboracion` registra su producción. ⚠️ SUPUESTO: su receta de
+  insumos vive en la misma tabla de recetas (`costos`, §10) o en otra no vista; subrecetas = cambio de
+  contrato (F2-125).
+- ⚠️ **Varias empresas en una base de SR** (la decisión abierta de §6): `almacen` e `insumosdetalle`
+  llevan `idempresa`. El agente lee **todos** los almacenes y consolida los insumos de todas las
+  empresas; con varias, mandaría almacenes de otra empresa como si fueran de su sucursal. No se elige
+  empresa de noche: es la misma decisión para Ricardo que la de `productosdetalle`.
+
+Lo que sigue es el contrato que el panel ya acepta (F2-120) y sus supuestos.
 
 **Contrato (F2-120).** Cinco catálogos más por el MISMO camino de F2-230
 (`POST /ingesta/catalogos` + `/cierre`, mismo hash, mismo `visto_at`, misma baja sin borrar; ver
@@ -1373,10 +1398,23 @@ ese registro solo.
 > con costo promedio, movimientos con referencia a póliza, conteos y traspasos propios
 > conciliados contra ellos, explosión de insumos por producto, compras.
 
-**Tablas de SR: sin mapear.** No se conoce la tabla de existencias, movimientos, recetas ni compras
-(el lector es F2-241 y lo valida F2-193; compras son de F2-126). Lo que sigue **no es un hallazgo**:
-son los contratos de existencias (F2-121), movimientos (F2-122) y recetas (F2-125) que el panel ya
-acepta, y los supuestos con que se construyeron.
+**Tablas de SR (F2-241): ✅ vistas en SR 10 local, SÓLO metadatos y definición de triggers**
+(2026-09-23; todas con **0 filas** en esa base, así que ningún valor ni signo se ha visto en datos).
+El lector de existencias está hecho (F2-241); los de movimientos, recetas y compras son de **F2-241b**
+y arrancan de este mapeo. Todo lo valida F2-193 contra una operación real.
+
+| Qué | Tabla de SR (✅ metadato) | Notas |
+|---|---|---|
+| Existencia | `acumuladoinsumos` (PK `id` int; `idinsumo` → insumos, `idalmacen` → almacen, `existencia` numeric(14,4)); **sin índice único** sobre (insumo, almacén) | La mantienen los triggers `TRG_movsinv_insert/update/delete`: `existencia += cantidad` de cada fila de `movsinv`, **sin mirar el concepto** (✅ visto en la definición del trigger, sin datos). Sólo hay fila para (insumo, almacén) que alguna vez se movió; el trigger no la borra al llegar a 0. |
+| Costo promedio | `insumosdetalle.costopromedio` money, por **(insumo, empresa)**; también `costo`, `costoestandar`, `costoconimpuestos` | Responde a F2-121: **el costo NO es por almacén**, es por insumo y empresa. ⚠️ SUPUESTO: SR valúa con `costopromedio` (y no con `costo` o `costoestandar`). La descripción de `costoPromedio` en `existencias.dto.ts` ("en este almacén") queda inexacta: el agente manda el mismo costo en todos los almacenes de una empresa. No se toca /api en F2-241. |
+| Movimientos | `movsinv` (**SIN PK**: `fecha` datetime, `foliocheque`, `movto`, `idcompra`, `traspaso`, `invfisico`, `idconcepto` → conceptos, `idinsumo`, `costo` money, `cantidad` numeric(14,4), `idalmacen`, `idturno`, `presentaciondestino`, `idpedido`) y `movsinvcancelados` (misma forma); `foliosalmacen` (PK `folio` bigint, `idalmacen`, `folioalmacen`, `foliomovto`, `fecha`, `cancelado`, `nota`) | ✅ Por el trigger, **`cantidad` viaja CON SIGNO** (la existencia es su suma). ⚠️ SUPUESTOS para F2-241b: el documento/póliza es `movto` (o `foliosalmacen`); una venta deja `foliocheque`, una compra `idcompra`, un traspaso `traspaso`, un conteo `invfisico`; lo cancelado se MUEVE a `movsinvcancelados` (y el trigger de DELETE revierte la existencia). Sin PK ni rowversion: el cursor incremental tendrá que ser por `fecha` con ventana de relectura. |
+| Conceptos | `conceptos` (PK `idconcepto` varchar(5), `descripcion`, `tipo` numeric(1), `autorizacion`, `visible`) — **17 filas vistas** | `tipo` 1 = entrada: ECA/EPL entrada por cancelación, EDA entrada almacén, EPA ajuste, EPC compra, EPD devolución, EPP producción, ETA traspaso. `tipo` 2 = salida: CP comida de personal, SALM salida almacén, SPA ajuste, SPC cancelación, SPD desperdicio, SPM merma, SPP producción, SPV venta, STA traspaso. Es la base para traducir al enum del panel en F2-241b (`tipoSr` = `idconcepto`). |
+| Recetas | **`costos`** (**SIN PK**: `idproducto` → productos, `idinsumo` → insumos, `cantidad` numeric(12,4), `idempresa`) | ⚠️ SUPUESTO: es la explosión de insumos por producto (FK a productos e insumos, cantidad con 4 decimales = la del contrato). `recetasalmacenes` (producto, área, almacén, empresa, insumo) dice de qué almacén descarga cada área. `explosionproductos*` son corridas de explosión para órdenes de compra, no la receta. |
+| Compras | `compras` (PK `idcompra` bigint, `folio`, `fechaaplicacion`, `idproveedor` → proveedores, `cancelado` bit, `subtotal`, impuestos, `total`, `polizagenerada` bit, …) + `comprasmovtos` (`idcompra`, `idinsumo`, `costo` money, impuestos por renglón, `importesinimpuestos`, `importeconimpuestos`, `cantidad` numeric(14,4), **`idalmacen` POR RENGLÓN**) | ✅ SR tiene la compra como **documento propio** (responde a F2-126), con `idcompra` también en `movsinv`. El contrato lleva UN almacén por compra: con renglones de varios almacenes, F2-241b manda `almacenOrigenSrId` nulo o parte la compra (decisión de F2-241b). ⚠️ SUPUESTO: `comprasmovtos.costo` es sin impuestos (existe `importesinimpuestos` aparte). |
+| Traspasos | `traspasosalmacen` (PK `folio`, `fecha`, `almacenorigen`, `almacendestino`, `cancelado`, `idempresaorigen`, `idempresadestino`, `nota`) | ✅ UN documento con origen y destino (responde a F2-124: el agente lo parte en DOS pólizas). Las columnas `idempresaorigen/destino` sugieren que SR puede traspasar **entre empresas** de la misma base. |
+
+Lo que sigue son los contratos que el panel ya acepta (existencias F2-121, movimientos F2-122,
+recetas F2-125, compras F2-126) y los supuestos con que se construyeron.
 
 ### Existencias (F2-121): `POST /ingesta/existencias`
 
@@ -1419,6 +1457,38 @@ del panel y **nunca se escriben a SR**).
   el catálogo. En el panel sale "sin catálogo" hasta que llegue.
 - **Frecuencia:** la ficha pide leer cada 30 min (lo decide el agente, F2-241). El panel marca
   "atrasada" una lectura **recibida** hace más de 90 min (`DECISION PROVISIONAL`, 3 × 30 min).
+
+**Cómo lo lee el agente (F2-241, `sr_existencias.sql`, `Inventario/MapeoExistencias.cs`,
+`Inventario/SincronizadorExistencias.cs`, `Cola/ColaExistencias.cs`, `Cola/EnviadorExistencias.cs`):**
+
+- Cada 30 min (la marca de la última lectura buena vive en `cola.db`: un reinicio no relee antes), una
+  foto por cada almacén de `dbo.almacen` con las filas de `acumuladoinsumos` y el `costopromedio` de
+  `insumosdetalle` de la **empresa del almacén** (`almacen.idempresa`). `FULL JOIN`: un almacén sin
+  filas manda su foto VACÍA (la lectura sí salió bien) y una fila de `acumuladoinsumos` con un almacén
+  que no está en `dbo.almacen` (la FK lo impide, pero una FK puede estar deshabilitada) se manda igual
+  con un aviso y **sin costo**. El insumo viaja con el id de `dbo.insumos` (misma forma que el catálogo).
+- **Todas las filas**, en 0 y negativas incluidas. Un insumo que nunca se movió **no tiene fila** en
+  SR y no viaja (no se inventa un 0).
+- `DECISION PROVISIONAL (nocturno)` — **cantidad redondeada a 3 decimales** mitad lejos de cero (SR
+  guarda 4): 0.0004 viaja 0.000 y −0.0005 viaja −0.001; el log cuenta cuántas cambiaron. El cuadre
+  contra el reporte de SR a 4 decimales es de F2-193. Una cantidad de 10 enteros no se trunca: viaja y
+  el API rechaza ese registro (su fila se conserva), con aviso.
+- `DECISION PROVISIONAL (nocturno)` — **sin costo** (sin fila de `insumosdetalle` para esa empresa, o
+  varias con costos distintos: la tabla no tiene PK) viaja `costoPromedio: null`: el API rechaza ese
+  registro SOLO y conserva su fila (no se inventa $0 ni se borra). Consecuencia: un insumo NUEVO sin
+  costo no aparece en el panel, y uno viejo muestra su último costo. Va al log con la cuenta.
+- **Un insumo repetido en un almacén** (`acumuladoinsumos` no tiene índice único): viaja tal cual, sin
+  sumar, con aviso; el API rechaza todas sus apariciones.
+- **Más de 5000 filas en un almacén:** esa foto NO se manda (Error en el log: paginar es cambio de
+  contrato); las demás sí.
+- **Una lectura que falla** (timeout de 5 s, columna que falta, tipo que no convierte) no manda
+  NINGUNA foto, se registra y se reintenta a los 15 min. **Sólo con usuario de solo lectura** (mismo
+  `diagnostico.sql` que catálogos; sus listas incluyen las tablas de esta consulta).
+- **Cola:** a lo más UNA foto pendiente por almacén (`existencias_pendientes`); una más nueva
+  reemplaza a la vieja. 401/429/5xx≠500/red = backoff; 400/413/500/2xx ilegible = se descarta esa
+  foto (la siguiente lectura manda otra completa).
+- **Un almacén que desaparece de SR** deja de mandar foto: sus existencias se quedan en el panel con
+  su última lectura ("atrasada" a los 90 min) y el catálogo de almacenes lo da de baja.
 - **Alerta `bajo_minimo`** (centro de alertas): se abre cuando la existencia queda por debajo del
   umbral % de su mínimo (100 % por defecto; en el mínimo exacto no). Una sucursal que nunca mandó
   existencias no se evalúa. Una alerta de un artículo que pasó a "sin lectura" **se queda abierta**
@@ -1589,8 +1659,8 @@ sin ningún espejo. Los traspasos **leídos** de SR no son tabla nueva: son las 
 
 ### Recetas (F2-125): `POST /ingesta/recetas`, y el consumo teórico contra el real
 
-**Tabla de recetas de SR: sin mapear.** Nadie ha visto dónde guarda SoftRestaurant la explosión de
-insumos por producto; la busca el lector de F2-241 y la valida F2-193. Lo que sigue es el contrato
+**Tabla de recetas de SR: ✅ `costos`, sólo metadatos (F2-241, ver la tabla de arriba); el lector es
+F2-241b** y lo valida F2-193. Lo que sigue es el contrato
 que el panel ya acepta y los supuestos del cálculo. Las recetas del seed
 (`api/prisma/seed-maestro/recetas.ts`) son **sintéticas**, no evidencia.
 
@@ -1678,9 +1748,8 @@ sólo avanza `leida_at`. Candado por sucursal (`recetas:<sucursal>`).
 
 ### Compras, gastos y utilidad (F2-126): `POST /ingesta/compras`, gastos propios y estado de resultados
 
-**Tabla de compras de SR: sin mapear.** Nadie ha visto dónde guarda SoftRestaurant sus compras a
-proveedor ni si esta versión las registra como documento propio o sólo como póliza de entrada. Lo
-busca el lector de F2-241 y lo valida F2-193. Las compras del seed (`api/prisma/seed-maestro/`,
+**Tablas de compras de SR: ✅ `compras` + `comprasmovtos`, sólo metadatos (F2-241, ver la tabla de
+arriba): SR 10 las registra como DOCUMENTO propio.** El lector es F2-241b y lo valida F2-193. Las compras del seed (`api/prisma/seed-maestro/`,
 persistidas por `api/prisma/seed-compras.ts`) son **sintéticas**, no evidencia.
 
 **Contrato.** Lo define `api/src/ingesta/dto/compras.dto.ts` y lo publica `api/openapi.json`. Una
@@ -1819,6 +1888,21 @@ validado**: depende de cómo registre SR sus salidas, que nadie ha visto (F2-193
   (`ConexionSoftRestaurant.TimeoutComandoSegundos`). Nadie los ha medido contra un POS con
   carga: F1-090 / F1-091 dicen si alcanzan en hora pico.
 - Horas pico del restaurante en las que conviene espaciar la lectura: _(pendiente)_
+- ⚠️ **Peor caso de un ciclo con el SQL degradado (F2-241), riesgo SIN arreglar.** Catálogos y
+  existencias corren en el MISMO ciclo que el heartbeat, después de él. Con cada conexión agotando su
+  timeout (5 s de conexión + 5 s de comando): permisos (10 s) + 11 catálogos (110 s) + la consulta de
+  solicitud y hasta 5 envíos de catálogos (30 s c/u) + permisos y existencias (20 s) + hasta 5 fotos
+  (30 s c/u) ≈ **5 min** en el peor caso teórico (antes de F2-241: ~130 s). Mientras tanto no sale
+  el siguiente heartbeat y el panel marca "desconectado" a los 90 s. Sólo pasa cuando vence la
+  diaria o un forzado y a la vez las existencias, con SQL y API degradados. Arreglo posible: correr
+  catálogos y existencias en una tarea aparte del ciclo del heartbeat (tarea nueva). El timeout real
+  de 5 s por comando nunca se ha probado contra un SQL lento de verdad (p. ej. con `WAITFOR`): los
+  tests simulan la excepción.
+- **El agente nunca abre transacciones contra el POS** (F2-241): la conexión sale con
+  `ApplicationIntent=ReadOnly` y `Enlist=false` (no se une a una transacción ambiental aunque el
+  técnico ponga `Enlist=true`), todo comando sale de `CrearComando` sin transacción, y `SoloLecturaTests`
+  revisa el IL del ensamblado: ningún `BeginTransaction`/`TransactionScope` fuera de SQLite y ningún
+  comando de SQL Server armado fuera de `CrearComando`.
 
 ### Conexión al SQL Server del POS (F1-020)
 
@@ -1997,6 +2081,14 @@ Supuestos del instalador (⚠️ ninguno visto funcionando):
   ponen alias en minúsculas y el mapeo busca columnas **sin distinguir mayúsculas**.
 - **Columnas con eñe que el agente NUNCA lee:** `meseros.contraseña` y `clientes.cumpleaños`
   (además de la de `configuracion`).
+- **Tablas de inventario SIN PK ni índice único** (F2-241, ✅ SR 10): `movsinv`, `movsinvcancelados`,
+  `insumosdetalle`, `costos` (recetas), `comprasmovtos`, `stockinsumos`, `recetasalmacenes`.
+  `acumuladoinsumos` tiene PK `id` pero ningún único sobre (insumo, almacén). Cualquier lector tiene
+  que tolerar duplicados sin sumar en silencio.
+- **`acumuladoinsumos` la escriben triggers de `movsinv`** (F2-241, ✅ definición vista): son cursores
+  que suman `cantidad` por (insumo, almacén) al insertar, restan al borrar y ajustan la diferencia al
+  actualizar. Es la existencia corrida del POS; el agente sólo la LEE.
+- **No hay tabla de unidades** (F2-241, ✅ SR 10): `insumos.unidad` es texto libre (varchar(10), CI).
 - **Hay identificadores que no son ASCII**, por ejemplo la columna
   `configuracion.contraseñainventarios`, con eñe. El agente no la lee. Queda anotado para
   cuando alguna query tenga que nombrar una columna así: el `.sql` embebido es UTF-8.
@@ -2094,8 +2186,9 @@ que cumplir al leer SR:
 **Cómo lo cumple el lector de F2-240** (`agent/src/ArkonAgente/Catalogos/`, `Cola/ColaCatalogos.cs`,
 `Cola/EnviadorCatalogos.cs`; tablas de SR en §6–§8):
 
-- Lee `grupos`, `productos`, `meseros`, `areas`, `canales` y `clientes`. **No** lee ni cierra los
-  cinco de inventario (F2-241). Sólo sincronizaciones COMPLETAS (páginas de 500 + cierre), nunca
+- Lee `grupos`, `productos`, `meseros`, `areas`, `canales` y `clientes` (F2-240) y, desde F2-241, los
+  cinco de inventario: `unidades`, `grupos_insumo`, `insumos`, `almacenes` y `proveedores` (tablas en
+  §9). Con los once, un forzado del panel se atiende completo. Sólo sincronizaciones COMPLETAS (páginas de 500 + cierre), nunca
   incrementales, y no abre una si el catálogo tiene otra sin confirmar en su cola.
 - `total` del cierre = registros **consolidados** (un producto con varias filas de detalle es uno).
 - **Regla de recorte de ids (la tiene que copiar el lector de cheques, F1-022):** todo texto leído
@@ -2117,8 +2210,8 @@ que cumplir al leer SR:
 
 ### Contrato de existencias (F2-121): `POST /ingesta/existencias`
 
-Foto completa de un almacén por petición; todos sus supuestos y decisiones están en §10. Lo que
-F2-241 tiene que cumplir: mandar TODAS las filas del almacén (también en 0 y negativas), el costo
+Foto completa de un almacén por petición; todos sus supuestos y decisiones están en §10 (y cómo lo
+cumple el agente, en "Cómo lo lee el agente"). Lo que F2-241 tiene que cumplir: mandar TODAS las filas del almacén (también en 0 y negativas), el costo
 promedio en texto con la regla de dinero, y una foto por almacén; no mandar fotos de más de 5000
 registros; y no reportar un almacén vacío si la lectura falló.
 
@@ -2181,5 +2274,6 @@ lote (partir por partidas); (7) documentar en §10 si SR guarda la compra sólo 
 
 | Fecha | Versión SR | Restaurante / entorno | Qué se validó |
 |---|---|---|---|
+| 2026-09-23 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, login sysadmin). Metadatos (`sys.columns`, `sys.indexes`, `sys.foreign_keys`, `sys.sql_modules`) y conteos; las 17 filas de `conceptos` y los 3 almacenes de demo; ningún valor de negocio al repo | Tablas de inventario (F2-241, §9, §10, §12): insumos, insumosdetalle, gruposi, almacen, proveedores, acumuladoinsumos y sus triggers, movsinv, conceptos, costos, compras, comprasmovtos, traspasosalmacen, presentaciones; que las 5 consultas `sr_catalogo_*` de inventario y `sr_existencias.sql` compilan y corren (0/0/0/3/0 filas y 3 almacenes vacíos). **No** valida valores ni signos (tablas vacías) ni qué costo usa SR: eso es F2-192/F2-193. |
 | 2026-09-23 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, login sysadmin). Metadatos (`sys.*`) y conteos agregados; ningún valor de negocio al repo | Tablas y columnas de catálogos: productos, productosdetalle, grupos, meseros, areasrestaurant, tiposervicio, clientes, estaciones y el señuelo `areas`; FKs reales; permisos por objeto de `diagnostico.sql`; que las 6 consultas `sr_catalogo_*.sql` compilan y devuelven 14/217/2/3/0/0 filas (F2-240, §6–§8, §11, §12). **No** valida el SENTIDO de las columnas de estado ni el cruce con cheques (sin FK): eso es F2-192. |
 | 2026-09-21 | 10 (exe 10.0.323, `versiondb` 10.021800) | Instalación local de desarrollo (SQL Server 2014 SP1 Express, instancia `.\NATIONALSOFT`). Sin datos de negocio: sólo catálogo y la columna de versión. Login sysadmin (no es config de producción) | Detección de versión y elección del reader (F1-021); conexión, certificado y TLS; `diagnostico.sql` (§1, §11, §12). Modo mixto, permisos de `public` y comportamiento de `sqlcmd` 2014 (F1-026, §11). **No** valida el mapeo de cuentas, pagos ni productos: eso es F1-090. |

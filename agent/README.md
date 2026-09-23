@@ -341,17 +341,19 @@ Nunca lleva la API key, la contraseña ni la cadena de conexión: los mensajes d
 desconectada en falso entre ciclo y ciclo (decisión abierta, ver la ficha de F1-061 en
 `backlog.md`).
 
-## Catálogos (F2-240)
+## Catálogos (F2-240, F2-241)
 
-El agente manda al panel seis catálogos del POS por el contrato de F2-230
+El agente manda al panel once catálogos del POS por el contrato de F2-230
 (`POST {apiUrl}/ingesta/catalogos` y `/cierre`): **grupos, productos (con grupo, precio y estado),
-meseros, áreas, canales (tipos de servicio) y clientes**. Qué tabla y columna de SoftRestaurant es
-cada campo está en `docs/esquema-sr.md` §6–§8. Los cinco de inventario son de F2-241.
+meseros, áreas, canales (tipos de servicio) y clientes** (F2-240), y los de inventario **unidades,
+grupos de insumo, insumos (con grupo y unidad), almacenes y proveedores** (F2-241). Qué tabla y
+columna de SoftRestaurant es cada campo está en `docs/esquema-sr.md` §6–§9. SoftRestaurant no tiene
+tabla de unidades: son los textos distintos de `insumos.unidad`, sin distinguir mayúsculas.
 
 - **Cuándo.** La primera vez que arranca con SoftRestaurant detectado; después, una vez al día a
   partir de `horaSincronizacionCatalogos`; y cuando un admin pulsa "Pedir sincronización" en el
-  panel (el agente lo pregunta a lo más cada minuto y atiende cada petición una vez). El panel la
-  seguirá mostrando "pendiente" hasta que existan los lectores de inventario: es lo esperado.
+  panel (el agente lo pregunta a lo más cada minuto y atiende cada petición una vez). Si algún
+  catálogo falló, el panel la sigue mostrando "pendiente" hasta que ese catálogo cierre.
 - **Sólo lo que cambió.** Cada catálogo leído se compara (SHA-256) con lo último que se mandó: sin
   cambios, no se encola nada. El forzado del panel manda todo.
 - **Sólo con usuario de solo lectura.** Antes de leer corre `diagnostico.sql`; si el usuario SQL
@@ -371,6 +373,26 @@ En el log, por catálogo:
 Catálogos: 'productos' leído en SoftRestaurant: 217 registro(s) (217 fila(s)) en 41 ms; encolado en 1 página(s) más su cierre (sincronización 6f0c…).
 Catálogos: 'grupos' leído en SoftRestaurant: 14 registro(s) (14 fila(s)) en 3 ms; sin cambios, no se encola nada.
 Catálogos: 'productos' sincronizado en el panel: 217 activos, 0 dados de baja.
+```
+
+## Existencias (F2-241)
+
+Cada 30 minutos el agente lee las existencias de **cada almacén** con su costo promedio y manda la
+foto completa de cada uno (`POST {apiUrl}/ingesta/existencias`). De dónde sale cada dato está en
+`docs/esquema-sr.md` §10: la existencia es `acumuladoinsumos` (la que SoftRestaurant mantiene con
+triggers) y el costo, `insumosdetalle.costopromedio` de la empresa del almacén.
+
+- **Todas las filas**, también las que están en cero o negativas: lo que no viene se borra del panel.
+- **Nunca una foto vacía por error.** Si la lectura falla (timeout incluido), no se manda nada, el
+  panel conserva la última foto y se reintenta a los 15 min.
+- **Sólo con usuario de solo lectura**, con la misma revisión que los catálogos.
+- **Su propia cola** (tabla `existencias_pendientes` en `cola.db`): a lo más una foto pendiente por
+  almacén; una más nueva reemplaza a la vieja. Un rechazo definitivo del API (400, 413, 500) descarta
+  esa foto: la siguiente lectura manda otra completa.
+
+```text
+Existencias: leídas en SoftRestaurant en 35 ms: 3 almacén(es), 412 registro(s) (412 fila(s)); encoladas 3 foto(s).
+Existencias: foto del almacén 2 aplicada en el panel: 140 registro(s), 0 nuevo(s), 12 con cambios, 0 borrado(s), 0 rechazado(s).
 ```
 
 ## Auto-actualización (F2-143)

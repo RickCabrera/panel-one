@@ -3,6 +3,7 @@ using ArkonAgente.Catalogos;
 using ArkonAgente.Cola;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
+using ArkonAgente.Inventario;
 using ArkonAgente.Salud;
 using ArkonAgente.SoftRestaurant;
 using ArkonAgente.Sql;
@@ -23,7 +24,8 @@ internal sealed record DependenciasWorker(
     TimeSpan ReintentoConfig,
     Action<int> TerminarProceso,
     Func<ConfiguracionAgente, ILogger, IRevisorActualizacion>? CrearRevisor = null,
-    Func<ConfiguracionAgente, ILogger, ISincronizadorCatalogos>? CrearCatalogos = null)
+    Func<ConfiguracionAgente, ILogger, ISincronizadorCatalogos>? CrearCatalogos = null,
+    Func<ConfiguracionAgente, ILogger, ISincronizadorExistencias>? CrearExistencias = null)
 {
     public static readonly TimeSpan ReintentoConfigPorDefecto = TimeSpan.FromSeconds(60);
 
@@ -32,7 +34,8 @@ internal sealed record DependenciasWorker(
             estadoSr, (config, logger) => CrearEnvioDeVerdad(rutas, config, logger), TimeProvider.System,
             ArmadorHeartbeat.VersionAgente(), ReintentoConfigPorDefecto, TerminarDeVerdad,
             (config, logger) => CrearRevisorDeVerdad(rutas, config, logger),
-            (config, logger) => SincronizadorCatalogos.DeVerdad(rutas, config, logger));
+            (config, logger) => SincronizadorCatalogos.DeVerdad(rutas, config, logger),
+            (config, logger) => SincronizadorExistencias.DeVerdad(rutas, config, logger));
 
     /// <summary>La auto-actualización real (F2-143): el canal del api y el estado en <c>actualizacion\estado.db</c>.</summary>
     internal static RevisorActualizacion CrearRevisorDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger)
@@ -97,6 +100,7 @@ internal sealed class Worker : BackgroundService
     private string? _ultimaFallaInterna;
     private string? _ultimaFallaActualizacion;
     private string? _ultimaFallaCatalogos;
+    private string? _ultimaFallaExistencias;
 
     public Worker(ILogger<Worker> logger, DependenciasWorker dependencias)
     {
@@ -209,14 +213,15 @@ internal sealed class Worker : BackgroundService
         using var envio = _dep.CrearEnvio(config, _logger);
         using var revisor = _dep.CrearRevisor?.Invoke(config, _logger);
         using var catalogos = _dep.CrearCatalogos?.Invoke(config, _logger);
+        using var existencias = _dep.CrearExistencias?.Invoke(config, _logger);
         // El primer ciclo corre al arrancar: lo pendiente de antes de un reinicio sale
         // sin esperar al primer tick, y el panel ve al agente de inmediato.
-        await UnCicloAsync(config, envio, revisor, catalogos, stoppingToken);
+        await UnCicloAsync(config, envio, revisor, catalogos, existencias, stoppingToken);
 
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
-            await UnCicloAsync(config, envio, revisor, catalogos, stoppingToken);
+            await UnCicloAsync(config, envio, revisor, catalogos, existencias, stoppingToken);
         }
     }
 
@@ -224,13 +229,13 @@ internal sealed class Worker : BackgroundService
     /// Un ciclo: consultar SR, encolar el heartbeat y vaciar la cola. El heartbeat se
     /// encola SIEMPRE, antes de enviar: así sale un lote por ciclo aunque no haya cheques,
     /// que es lo que el panel lee como "conectado" (F1-061). F1-022 / F1-023 encolan
-    /// cheques y snapshot aquí, también antes de enviar. Los catálogos (F2-240) van DESPUÉS del
-    /// heartbeat y del envío: leer seis catálogos puede tardar, y el panel no puede quedarse sin
-    /// reporte mientras tanto.
+    /// cheques y snapshot aquí, también antes de enviar. Los catálogos (F2-240, F2-241) y las
+    /// existencias (F2-241) van DESPUÉS del heartbeat y del envío: leer once catálogos puede tardar,
+    /// y el panel no puede quedarse sin reporte mientras tanto.
     /// </summary>
     private async Task UnCicloAsync(
         ConfiguracionAgente config, ICicloEnvio envio, IRevisorActualizacion? revisor,
-        ISincronizadorCatalogos? catalogos, CancellationToken stoppingToken)
+        ISincronizadorCatalogos? catalogos, ISincronizadorExistencias? existencias, CancellationToken stoppingToken)
     {
         await ConsultarSrAsync(config, stoppingToken);
         EncolarHeartbeat(envio);
@@ -238,6 +243,11 @@ internal sealed class Worker : BackgroundService
         if (catalogos is not null && _dep.EstadoSr.Reader is { } reader)
         {
             await SincronizarCatalogosAsync(catalogos, reader, stoppingToken);
+        }
+
+        if (existencias is not null && _dep.EstadoSr.Reader is { } readerExistencias)
+        {
+            await SincronizarExistenciasAsync(existencias, readerExistencias, stoppingToken);
         }
 
         if (revisor is not null)
@@ -268,6 +278,33 @@ internal sealed class Worker : BackgroundService
             {
                 _ultimaFallaCatalogos = ex.GetType().FullName;
                 _logger.LogError(ex, "Catálogos: falla interna; se reintenta en el siguiente ciclo.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Las existencias (F2-241), igual que los catálogos: una excepción no prevista (disco, SQLite)
+    /// queda en el log una vez por tipo y el ciclo sigue. Una falla de LECTURA (timeout de SQL) ni
+    /// siquiera llega aquí: la maneja el sincronizador sin mandar nada.
+    /// </summary>
+    private async Task SincronizarExistenciasAsync(
+        ISincronizadorExistencias existencias, ISoftRestaurantReader reader, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await existencias.CicloAsync(reader, stoppingToken);
+            _ultimaFallaExistencias = null;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (ex.GetType().FullName != _ultimaFallaExistencias)
+            {
+                _ultimaFallaExistencias = ex.GetType().FullName;
+                _logger.LogError(ex, "Existencias: falla interna; se reintenta en el siguiente ciclo.");
             }
         }
     }

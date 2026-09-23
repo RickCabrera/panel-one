@@ -29,6 +29,9 @@ internal interface ISoftRestaurantReader
     /// <see cref="SelectorReader"/> antes de leer nada.
     /// </summary>
     string ConsultaCatalogo(CatalogoPanel catalogo);
+
+    /// <summary>La consulta embebida que lee las existencias por almacén en ESTA versión (F2-241).</summary>
+    string ConsultaExistencias { get; }
 }
 
 /// <summary>
@@ -50,4 +53,10 @@ internal sealed class SrV11Reader(VersionSr version) : ISoftRestaurantReader
     /// como el resto de este reader. docs/esquema-sr.md §6–§8.
     /// </summary>
     public string ConsultaCatalogo(CatalogoPanel catalogo) => "sr_catalogo_" + catalogo.Texto();
+
+    /// <summary>
+    /// ✅ Tablas y triggers vistos en SR 10 (2026-09-23, sólo metadatos; sin movimientos en la
+    /// base); ⚠️ en la 11, SUPUESTO. docs/esquema-sr.md §10.
+    /// </summary>
+    public string ConsultaExistencias => "sr_existencias";
 }
