@@ -1467,3 +1467,56 @@ export interface EstadoResultados {
   total: EstadoResultadosTotal;
   gastosPorCategoria: GastoCategoriaTotal[];
 }
+
+// ---------------------------------------------------------------------------
+// Proyecciones y sugerido de compra (F2-127): `GET /inventario/proyecciones`
+// ---------------------------------------------------------------------------
+
+/** `sin_historial` = menos de 28 días desde su primer movimiento: no se proyecta (nulos). */
+export type EstadoProyeccion = 'calculada' | 'sin_historial';
+
+export type AvisoProyeccion = 'sin_foto' | 'fuera_de_foto' | 'foto_atrasada' | 'sin_minimo';
+
+export interface SucursalProyeccion {
+  sucursalId: string;
+  sucursal: string;
+  zonaHoraria: string;
+  calculada: boolean;
+  /** `sin_polizas` = el agente nunca ha mandado pólizas de inventario. */
+  motivo: 'sin_polizas' | null;
+  polizasRecibidas: number;
+  almacenesConFoto: number;
+  hoy: string;
+  ventanaDesde: string;
+  ventanaHasta: string;
+  horizonteDesde: string;
+  horizonteHasta: string;
+}
+
+export interface FilaProyeccion {
+  sucursalId: string;
+  sucursal: string;
+  almacenOrigenSrId: string;
+  almacen: string | null;
+  insumoOrigenSrId: string;
+  insumo: string | null;
+  clave: string | null;
+  unidad: string | null;
+  estado: EstadoProyeccion;
+  diasHistorial: number;
+  /** Demanda de las 4 semanas de la ventana, la MÁS RECIENTE primero. */
+  semanas: string[] | null;
+  proyeccion: string | null;
+  existencia: string | null;
+  minimo: string | null;
+  sugerido: string | null;
+  avisos: AvisoProyeccion[];
+}
+
+export interface Proyecciones {
+  horizonte: number;
+  pesos: number[];
+  sucursales: SucursalProyeccion[];
+  filas: FilaProyeccion[];
+  kpis: { filas: number; conSugerido: number; sinHistorial: number };
+}

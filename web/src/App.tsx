@@ -35,6 +35,7 @@ import { TraspasoDetalle } from './paginas/TraspasoDetalle';
 import { TraspasoNuevo } from './paginas/TraspasoNuevo';
 import { Compras } from './paginas/Compras';
 import { Gastos } from './paginas/Gastos';
+import { Proyecciones } from './paginas/Proyecciones';
 import { Recetas } from './paginas/Recetas';
 import { Traspasos } from './paginas/Traspasos';
 import { MarcaDemo } from './sistema/MarcaDemo';
@@ -105,6 +106,7 @@ export function Rutas() {
         <Route path="traspasos/nuevo" element={<TraspasoNuevo />} />
         <Route path="traspasos/:id" element={<TraspasoDetalle />} />
         <Route path="recetas" element={<Recetas />} />
+        <Route path="proyecciones" element={<Proyecciones />} />
         <Route path="compras" element={<Compras />} />
         <Route path="gastos" element={<Gastos />} />
         <Route path="cuenta" element={<Cuenta />} />

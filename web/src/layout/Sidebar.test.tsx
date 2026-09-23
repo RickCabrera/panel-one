@@ -116,7 +116,7 @@ describe('AC1 · las seis secciones con sus entradas', () => {
     await menu();
     expect(document.getElementById('menu-seccion-administracion')).toBeNull();
     // Las pendientes NO se ocultan por no estar construidas: el visor ve el mapa.
-    expect(screen.getByRole('button', { name: 'Proyecciones' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ventas por canal' })).toBeInTheDocument();
   });
 });
 
@@ -125,13 +125,18 @@ describe('AC2 · una entrada sin módulo no navega a una pantalla rota', () => {
     api(usuario('visor'));
     montar(`/tickets?empresa=${A}`);
     const nav = await menu();
-    // Compras ya navega (F2-126): la pendiente de ejemplo es Proyecciones (F2-127).
-    const compras = within(nav).getByRole('button', { name: 'Proyecciones' });
+    // Proyecciones ya navega (F2-127): la pendiente de ejemplo es Ventas por canal (F2-144).
+    const compras = within(nav).getByRole('button', { name: 'Ventas por canal' });
 
     expect(compras).toHaveAttribute('aria-disabled', 'true');
     expect(compras).not.toBeDisabled(); // sigue en el orden de Tab
-    expect(compras).toHaveAccessibleDescription('Se construye en F2-127.');
-    expect(compras).toHaveAttribute('title', 'Proyecciones: Se construye en F2-127.');
+    expect(compras).toHaveAccessibleDescription(
+      'Se construye en F2-144, sobre los canales de F2-233.',
+    );
+    expect(compras).toHaveAttribute(
+      'title',
+      'Ventas por canal: Se construye en F2-144, sobre los canales de F2-233.',
+    );
 
     await userEvent.click(compras);
     expect(ubicacion()).toBe(`/tickets?empresa=${A}`);
