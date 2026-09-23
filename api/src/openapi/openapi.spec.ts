@@ -76,6 +76,8 @@ describe('Contrato OpenAPI', () => {
     const consulta = esquemas.ConsultaCodigoDto.properties!;
     expect(consulta.estado.enum).toEqual([
       'pendiente',
+      // F2-104: la emisión en curso (o que el PAC no confirmó).
+      'en_proceso',
       'facturado',
       'en_global',
       'expirado',
@@ -90,7 +92,7 @@ describe('Contrato OpenAPI', () => {
     }
   });
 
-  it('F2-103: el portal es público y con 429; el POST dice que hoy es 503; admin con roles y 404', async () => {
+  it('F2-103/F2-104: el portal es público y con 429; el POST emite (201) y documenta sus fallas; admin con roles y 404', async () => {
     const { paths, components } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
     for (const ruta of [
@@ -104,10 +106,13 @@ describe('Contrato OpenAPI', () => {
     }
     const post = paths['/facturacion/portal/{slug}/facturas']?.post;
     expect(post?.security).toBeUndefined();
-    expect(codigos(post)).toEqual(['201', '400', '404', '409', '429', '503']);
-    // El contrato no promete un 201 como si ya pasara (F2-104 conecta la emisión).
-    expect(post?.description).toContain('HOY RESPONDE 503');
-    expect(JSON.stringify(post?.responses?.['201'])).toContain('Hoy ningún camino lo produce');
+    // F2-104: 422 (no se factura en línea), 502 (el PAC no confirmó: en proceso) y 503.
+    expect(codigos(post)).toEqual(['201', '400', '404', '409', '422', '429', '502', '503']);
+    // Ya no dice que hoy responde 503: el 201 lo produce la emisión.
+    expect(post?.description).not.toContain('HOY RESPONDE 503');
+    expect(JSON.stringify(post?.responses?.['201'])).not.toContain('Hoy ningún camino lo produce');
+    expect(post?.description).toContain('candado por código');
+    expect(JSON.stringify(post?.responses?.['502'])).toContain('no se debe volver a pedir');
     expect(codigos(paths['/facturacion/portales']?.get)).toEqual([
       '200',
       '400',

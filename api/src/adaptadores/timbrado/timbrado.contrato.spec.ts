@@ -1,7 +1,11 @@
+import { Prisma } from '@prisma/client';
+
 import { RELOJ_FIJO, solicitudCfdi } from '../../../test/fixtures-cfdi';
+import { solicitudDesdeCheque } from '../../facturacion/cfdi';
+import { MENSAJES_SAT, MENSAJE_RECHAZO_GENERICO } from './errores-sat';
 import type { ClienteHttp, PeticionHttp, RespuestaHttp } from '../http';
 import { ErrorTimbrado } from './puerto';
-import { TimbradoFacturama } from './timbrado-facturama';
+import { esFallaDeConexion, TimbradoFacturama } from './timbrado-facturama';
 
 /**
  * CONTRATO con Facturama (F2-202): la forma EXACTA de lo que se le mandará, fijada en
@@ -169,7 +173,8 @@ describe('Contrato Facturama (F2-202)', () => {
       ).rejects.toMatchObject({ codigo: 'ESTADO_DESCONOCIDO' });
     });
 
-    it('red caída o timeout → PAC_SIN_RESPUESTA, reintentable (no un error crudo)', async () => {
+    // F2-104: el timeout es AMBIGUO (el PAC pudo haber timbrado): ya NO se marca reintentable.
+    it('timeout → PAC_SIN_RESPUESTA, NO reintentable a ciegas (no un error crudo)', async () => {
       const http: ClienteHttp = {
         enviar: () => Promise.reject(new DOMException('The operation timed out.', 'TimeoutError')),
       };
@@ -177,7 +182,7 @@ describe('Contrato Facturama (F2-202)', () => {
       await expect(promesa).rejects.toBeInstanceOf(ErrorTimbrado);
       await expect(promesa).rejects.toMatchObject({
         codigo: 'PAC_SIN_RESPUESTA',
-        reintentable: true,
+        reintentable: false,
       });
     });
 
@@ -286,6 +291,153 @@ describe('Contrato Facturama: alta del CSD (F2-100)', () => {
     const http = new ClienteQueCaptura(() => ({ status: 404, cuerpo: null }));
     await expect(
       new TimbradoFacturama(BASE, http, RELOJ_FIJO).registrarCsd(csd(true)),
+    ).rejects.toMatchObject({ codigo: 'CSD_RECHAZADO' });
+  });
+});
+
+/**
+ * CONTRATO de la emisión de un CFDI de CONSUMO (F2-104): de un cheque del panel al JSON EXACTO
+ * que recibe Facturama. Revisado a mano contra la documentación pública de la API multiemisor de
+ * Facturama (CFDI 4.0, `POST /api-lite/3/cfdis`): `Issuer`/`Receiver` con `FiscalRegime`,
+ * `CfdiUse` y `TaxZipCode`; un `Item` con `ProductCode` 90101500, `UnitCode` E48, `TaxObject`
+ * 02 y su traslado de IVA; `PaymentForm` mapeada, `PaymentMethod` PUE, `Currency` MXN y
+ * `ExpeditionPlace` = CP del emisor. Que Facturama lo acepte se confirma en F2-190.
+ */
+describe('Contrato Facturama: CFDI de consumo desde un cheque (F2-104)', () => {
+  const solicitud = solicitudDesdeCheque({
+    reservaId: '00000000-0000-4000-8000-0000000000c1',
+    serie: 'A',
+    folio: 1025,
+    // 2026-09-21 20:15:30 en CDMX (UTC-6): la fecha del JSON va en hora LOCAL, sin zona.
+    fecha: new Date('2026-09-22T02:15:30.000Z'),
+    emisor: {
+      rfc: 'EKU9003173C9',
+      razonSocial: 'ESCUELA KEMPER URGATE',
+      regimenFiscal: '601',
+      cp: '06700',
+    },
+    sucursal: { zonaHoraria: 'America/Mexico_City' },
+    cheque: { folio: 'T-4410', total: new Prisma.Decimal('315.50') },
+    receptor: {
+      rfc: 'XOJI740919U48',
+      razonSocial: 'CLIENTE SINTETICO',
+      regimenFiscal: '612',
+      cp: '76028',
+      usoCfdi: 'G03',
+    },
+    formaPago: '01',
+  });
+
+  it('el cuerpo del POST, exacto', async () => {
+    const http = new ClienteQueCaptura(respuestaEmision);
+    await new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir(solicitud);
+    expect(http.peticiones[0]).toMatchSnapshot();
+    const cuerpo = http.peticiones[0].cuerpo as Record<string, unknown> & {
+      Items: Array<Record<string, unknown>>;
+    };
+    // Lo que el AC de F2-104 nombra, explícito además del snapshot.
+    expect(cuerpo).toMatchObject({
+      Currency: 'MXN',
+      PaymentMethod: 'PUE',
+      PaymentForm: '01',
+      ExpeditionPlace: '06700',
+      Serie: 'A',
+      Folio: '1025',
+      Date: '2026-09-21T20:15:30',
+    });
+    expect(cuerpo.Items).toEqual([
+      expect.objectContaining({
+        ProductCode: '90101500',
+        UnitCode: 'E48',
+        Quantity: 1,
+        UnitPrice: 271.98,
+        Subtotal: 271.98,
+        TaxObject: '02',
+        Total: 315.5,
+        Taxes: [{ Name: 'IVA', Base: 271.98, Rate: 0.16, Total: 43.52, IsRetention: false }],
+      }),
+    ]);
+  });
+});
+
+describe('Contrato Facturama: errores de la emisión (F2-104)', () => {
+  const emitirCon = (r: RespuestaHttp) =>
+    new TimbradoFacturama(BASE, new ClienteQueCaptura(() => r), RELOJ_FIJO).emitir(solicitudCfdi());
+
+  it('un rechazo del SAT reconocido sale con su código y el mensaje AMABLE, no el crudo', async () => {
+    const crudo =
+      'CFDI40144 - El campo Rfc del receptor no se encuentra en la lista de RFC inscritos no cancelados en el SAT.';
+    const promesa = emitirCon({
+      status: 400,
+      cuerpo: { Message: 'La solicitud no es válida.', ModelState: { '': [crudo] } },
+    });
+    await expect(promesa).rejects.toMatchObject({
+      codigo: 'RFC_NO_INSCRITO',
+      message: MENSAJES_SAT.RFC_NO_INSCRITO,
+      reintentable: false,
+    });
+  });
+
+  it('un rechazo que no está en la tabla queda RECHAZADO_POR_PAC (la emisión no lo muestra)', async () => {
+    await expect(emitirCon({ status: 400, cuerpo: 'Serie inválida' })).rejects.toMatchObject({
+      codigo: 'RECHAZADO_POR_PAC',
+      message: 'Serie inválida',
+    });
+    await expect(emitirCon({ status: 400, cuerpo: null })).rejects.toMatchObject({
+      codigo: 'RECHAZADO_POR_PAC',
+      message: `El PAC rechazó la solicitud (HTTP 400). ${MENSAJE_RECHAZO_GENERICO}`,
+    });
+  });
+
+  it('429 y 503: PAC_NO_DISPONIBLE (el PAC dice que NO procesó)', async () => {
+    for (const status of [429, 503]) {
+      await expect(emitirCon({ status, cuerpo: null })).rejects.toMatchObject({
+        codigo: 'PAC_NO_DISPONIBLE',
+        reintentable: true,
+      });
+    }
+  });
+
+  it('500, 502 y 504: AMBIGUOS (PAC_SIN_RESPUESTA), el PAC pudo haber timbrado', async () => {
+    for (const status of [500, 502, 504]) {
+      await expect(emitirCon({ status, cuerpo: null })).rejects.toMatchObject({
+        codigo: 'PAC_SIN_RESPUESTA',
+        reintentable: false,
+      });
+    }
+  });
+
+  it('no se llegó a conectar (ECONNREFUSED, DNS…): PAC_SIN_CONEXION, seguro de reintentar', async () => {
+    const caida = (code: string) => {
+      const e = new TypeError('fetch failed');
+      (e as { cause?: unknown }).cause = Object.assign(new Error(code), { code });
+      return e;
+    };
+    for (const code of ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']) {
+      expect(esFallaDeConexion(caida(code))).toBe(true);
+      const http: ClienteHttp = { enviar: () => Promise.reject(caida(code)) };
+      await expect(
+        new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir(solicitudCfdi()),
+      ).rejects.toMatchObject({ codigo: 'PAC_SIN_CONEXION', reintentable: true });
+    }
+    // Un corte a MEDIO camino no es "sin conexión": es ambiguo.
+    expect(esFallaDeConexion(caida('ECONNRESET'))).toBe(false);
+    expect(esFallaDeConexion(new DOMException('timeout', 'TimeoutError'))).toBe(false);
+  });
+
+  it('el alta del CSD NO pasa por la tabla del receptor (su texto se limpia aparte)', async () => {
+    const http = new ClienteQueCaptura(() => ({
+      status: 400,
+      cuerpo: { Message: 'El RFC del receptor no aplica aquí.' },
+    }));
+    await expect(
+      new TimbradoFacturama(BASE, http, RELOJ_FIJO).registrarCsd({
+        rfc: 'EKU9003173C9',
+        certificado: Buffer.from('c'),
+        llavePrivada: Buffer.from('k'),
+        contrasena: 'x',
+        reemplazar: false,
+      }),
     ).rejects.toMatchObject({ codigo: 'CSD_RECHAZADO' });
   });
 });

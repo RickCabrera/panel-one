@@ -369,9 +369,48 @@ cheque, y lo que eso supone de esta sección (nada visto en una instalación rea
   sucursal". Ojo: el 404 no esconde que un código existe (la consulta global de F2-101 ya lo dice a
   cualquiera); sólo evita que el portal de una empresa muestre tickets de otra. Para Ricardo.
 - **Estados que el portal explica** (`pendiente`, `facturado`, `en_global`, `expirado`,
-  `cancelado`): los mismos de F2-101, derivados igual. Un `facturado` NO afirma que se envió nada:
-  hoy no hay CFDI guardados ni correos (F2-104/F2-105), y ~15 % de los códigos del seed están
-  `facturado` sin ningún CFDI detrás.
+  `cancelado`): los mismos de F2-101, derivados igual, más `en_proceso` (F2-104, abajo). Un
+  `facturado` NO afirma que se envió nada: todavía no hay correos ni archivos guardados (F2-105), y
+  ~15 % de los códigos del seed están `facturado` sin ningún CFDI detrás (el seed de CFDI es de
+  F2-106).
+
+**La emisión del CFDI (F2-104, tabla `cfdis`).** Dato NUESTRO, nunca se escribe a SR. El portal pide
+la factura de un código y la emisión la timbra con el PAC (`PUERTO_TIMBRADO`). Lo que eso supone del
+cheque de SR, nada visto en una instalación real (F2-190):
+
+- ⚠️ **SUPUESTO — NO VALIDADO (`DECISION PROVISIONAL (nocturno)` en
+  `api/src/facturacion/cfdi.ts#importesDeTotal`): la base del CFDI es `cheques.total`**, lo que el
+  cliente pagó, que según el supuesto de arriba NO incluye la propina. `subtotal = total / 1.16`
+  redondeado al centavo e `IVA = total − subtotal` (suman el total exacto; un barrido de $0.01 a
+  $2,000.00 confirma que el IVA cae dentro de los límites que el SAT valida contra la base). NO se
+  usan `cheques.subtotal` ni `cheques.impuestos`: no se sabe si el subtotal de SR es antes o después
+  del descuento ni si `impuestos` incluye IEPS. **Si SR mete la propina en `total`, el CFDI la
+  facturaría como consumo**: se valida con el piloto.
+- ⚠️ **SUPUESTO — IVA 16 % fijo** (`TASA_IVA`, `DECISION PROVISIONAL (nocturno)`). El backlog lo
+  pide configurable por empresa (zona fronteriza = 8 %); no hay columna todavía. Una sucursal en
+  zona fronteriza facturaría mal.
+- ⚠️ **SUPUESTO — un solo concepto** "Consumo de alimentos y bebidas" (90101500, E48 "Servicio",
+  cantidad 1) con `NoIdentificacion` = el folio del ticket (`cheques.folio`), no las partidas.
+- ⚠️ **SUPUESTO — la forma de pago del CFDI es la forma DOMINANTE del cheque** (mayor monto sumado
+  por forma, con el catálogo `formas_pago_catalogo` de la empresa, como los agregados; empate →
+  efectivo > tarjeta > transferencia). `efectivo → 01`, `transferencia → 03`, y
+  `DECISION PROVISIONAL (nocturno)`: **`tarjeta → 04` (crédito)**; nuestro ENUM no distingue débito
+  (`28`). Una cuenta cuya forma dominante es `otro` (texto sin catálogo, p. ej. vales) o que no trae
+  pagos **no se factura en línea** (422): `99` (por definir) no se admite con `PUE`. Ver §4.
+- La emisión vuelve a medir el código CON candado (`FOR UPDATE`): una cuenta que SR canceló, o que
+  **reabrió** (`cerrado_at` nulo otra vez: ya no `esFacturable`), entre la consulta del portal y el
+  clic ya no se factura (409 `cancelado` / 422). Mientras el PAC timbra, el código dice
+  `en_proceso` (hay una reserva en `cfdis` con estado `timbrando`).
+- `DECISION PROVISIONAL (nocturno)` (`api/src/adaptadores/timbrado/timbrado-facturama.ts#errorDe` y
+  `api/src/facturacion/cfdi.service.ts`): **sólo 429 y 503 del PAC (y "no se llegó a conectar") se
+  reintentan** (máx. 3, backoff 0.5/1/2 s). Un timeout o un 500/502/504 es AMBIGUO (el PAC pudo
+  haber timbrado): la reserva se queda en `timbrando`, el código queda `en_proceso` y nadie puede
+  pedir otro CFDI para él hasta que alguien la concilie (F2-110). La tabla de errores del SAT
+  (`api/src/adaptadores/timbrado/errores-sat.ts`) es supuesto no validado contra respuestas reales
+  de Facturama (F2-190).
+- Toda reserva que se LIBERA deja un **hueco de folio** (ya había tomado `folio_actual + 1` y se
+  borra): un rechazo del SAT, o el PAC no disponible (429/503) tras agotar los reintentos. El CFDI
+  4.0 no exige folios consecutivos; se deja así a propósito.
 
 ---
 
@@ -455,6 +494,12 @@ usa ningún agregado.
   entrada de F1-060). Mientras tanto se da de alta directo en la base.
 
 **Cuentas con pago mixto:** _(pendiente — cómo se reparten los montos)_
+
+**Lo que la emisión del CFDI (F2-104) supone de esta sección:** la `c_FormaPago` del CFDI sale de
+la forma DOMINANTE del cheque (mayor monto), leída con este mismo catálogo; un texto sin catálogo es
+`otro` y una cuenta cuya dominante es `otro` no se factura en línea (ver §2, "La emisión del
+CFDI"). ⚠️ **SUPUESTO:** `tarjeta` = crédito (`04`); si SR distingue débito en `forma_raw`, hará
+falta separar el ENUM (o mapear `forma_raw` directo a `c_FormaPago`).
 
 **Lo que el modelo de Postgres (F1-030, tabla `cheque_pagos`) ya supone de esta sección:**
 un cheque puede tener varios pagos, uno por fila. `forma_raw` guarda siempre el texto crudo

@@ -106,6 +106,59 @@ exports[`Contrato Facturama (F2-202) emitir: el cuerpo del POST y las descargas 
 ]
 `;
 
+exports[`Contrato Facturama: CFDI de consumo desde un cheque (F2-104) el cuerpo del POST, exacto 1`] = `
+{
+  "cuerpo": {
+    "CfdiType": "I",
+    "Currency": "MXN",
+    "Date": "2026-09-21T20:15:30",
+    "ExpeditionPlace": "06700",
+    "Exportation": "01",
+    "Folio": "1025",
+    "Issuer": {
+      "FiscalRegime": "601",
+      "Name": "ESCUELA KEMPER URGATE",
+      "Rfc": "EKU9003173C9",
+    },
+    "Items": [
+      {
+        "Description": "Consumo de alimentos y bebidas",
+        "IdentificationNumber": "T-4410",
+        "ProductCode": "90101500",
+        "Quantity": 1,
+        "Subtotal": 271.98,
+        "TaxObject": "02",
+        "Taxes": [
+          {
+            "Base": 271.98,
+            "IsRetention": false,
+            "Name": "IVA",
+            "Rate": 0.16,
+            "Total": 43.52,
+          },
+        ],
+        "Total": 315.5,
+        "Unit": "Servicio",
+        "UnitCode": "E48",
+        "UnitPrice": 271.98,
+      },
+    ],
+    "PaymentForm": "01",
+    "PaymentMethod": "PUE",
+    "Receiver": {
+      "CfdiUse": "G03",
+      "FiscalRegime": "612",
+      "Name": "CLIENTE SINTETICO",
+      "Rfc": "XOJI740919U48",
+      "TaxZipCode": "76028",
+    },
+    "Serie": "A",
+  },
+  "metodo": "POST",
+  "url": "https://apisandbox.facturama.mx/api-lite/3/cfdis",
+}
+`;
+
 exports[`Contrato Facturama: alta del CSD (F2-100) alta: POST /api-lite/csds con los archivos en base64 1`] = `
 [
   {

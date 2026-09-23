@@ -8,6 +8,7 @@ import {
   estadoDelApi,
   iniciales,
   normalizarCodigo,
+  QUE_HACER,
   regimenesPara,
   textoSobre,
   tipoPersona,
@@ -128,9 +129,18 @@ describe('portal: lo que llega del api', () => {
 
   it('estado de un 409: sólo uno de los estados públicos', () => {
     expect(estadoDelApi({ estado: 'facturado' })).toBe('facturado');
+    // F2-104: la emisión en curso (o que el PAC no confirmó).
+    expect(estadoDelApi({ estado: 'en_proceso' })).toBe('en_proceso');
     expect(estadoDelApi({ estado: 'inventado' })).toBeNull();
     expect(estadoDelApi({ estado: 'constructor' })).toBeNull();
     expect(estadoDelApi(null)).toBeNull();
+  });
+});
+
+describe('portal: qué hacer con cada estado (F2-104)', () => {
+  it('en_proceso dice que NO la vuelva a pedir y a quién acudir si no llega', () => {
+    expect(QUE_HACER.en_proceso).toMatch(/no la vuelvas a solicitar/);
+    expect(QUE_HACER.en_proceso).toMatch(/restaurante/);
   });
 });
 

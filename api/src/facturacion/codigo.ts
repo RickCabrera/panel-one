@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
-import type { EstadoCodigoFacturacion, Prisma } from '@prisma/client';
+import type { EstadoCodigoFacturacion, EstadoEmisionCfdi, Prisma } from '@prisma/client';
 
 import { fechaLocal, instanteDesdeLocal } from '../comun/fechas';
 
@@ -99,37 +99,61 @@ export function esFacturable(cheque: {
   return cheque.cerradoAt !== null && !cheque.cancelado && cheque.total.greaterThan(0);
 }
 
-/** Lo que responde el endpoint público: el estado guardado más `cancelado`, que se deriva. */
-export type EstadoPublico = EstadoCodigoFacturacion | 'cancelado';
+/**
+ * Lo que responde el endpoint público: el estado guardado más `cancelado` y `en_proceso`, que se
+ * derivan.
+ */
+export type EstadoPublico = EstadoCodigoFacturacion | 'cancelado' | 'en_proceso';
 
 /**
  * El estado que se le dice al público, en este orden:
  * 1. `facturado` / `en_global` guardados mandan (ya hay un CFDI detrás).
- * 2. Cheque cancelado → `cancelado`. DECISION PROVISIONAL (nocturno): se DERIVA del cheque y no
+ * 2. El código tiene un CFDI (F2-104): en `timbrando` (la reserva mientras el PAC contesta, o una
+ *    que se quedó colgada por un timeout) → `en_proceso`; `vigente` → `facturado` (no debería
+ *    verse: la emisión cambia los dos en la misma transacción).
+ * 3. Cheque cancelado → `cancelado`. DECISION PROVISIONAL (nocturno): se DERIVA del cheque y no
  *    se guarda (no está en el enum de la ficha); si SR cancela la cuenta después de emitir el
  *    código, la fila del código no cambia (docs/esquema-sr.md §2).
- * 3. `expirado` guardado, o `ahora >= expira_at` → `expirado`. Se deriva al leer: ningún cron
+ * 4. `expirado` guardado, o `ahora >= expira_at` → `expirado`. Se deriva al leer: ningún cron
  *    tiene que correr para que un código diga la verdad.
- * 4. Si no, `pendiente`.
+ * 5. Si no, `pendiente`.
  */
 export function estadoPublico(
-  codigo: { estado: EstadoCodigoFacturacion; expiraAt: Date },
+  codigo: {
+    estado: EstadoCodigoFacturacion;
+    expiraAt: Date;
+    cfdi: { estado: EstadoEmisionCfdi } | null;
+  },
   cheque: { cancelado: boolean },
   ahoraMs: number,
 ): EstadoPublico {
   if (codigo.estado === 'facturado' || codigo.estado === 'en_global') return codigo.estado;
+  if (codigo.cfdi?.estado === 'timbrando') return 'en_proceso';
+  if (codigo.cfdi?.estado === 'vigente') return 'facturado';
   if (cheque.cancelado) return 'cancelado';
   if (codigo.estado === 'expirado' || ahoraMs >= codigo.expiraAt.getTime()) return 'expirado';
   return 'pendiente';
 }
 
-/** Mensaje en español por estado, para el portal (F2-103). Ninguno lleva datos del ticket. */
+/** Todos los estados públicos, en el orden en que los lista el contrato OpenAPI. */
+export const ESTADOS_PUBLICOS: readonly EstadoPublico[] = [
+  'pendiente',
+  'en_proceso',
+  'facturado',
+  'en_global',
+  'expirado',
+  'cancelado',
+];
+
 export const MENSAJE_ESTADO: Readonly<Record<EstadoPublico, string>> = {
   pendiente: 'El ticket se puede facturar.',
   facturado: 'Este ticket ya fue facturado.',
   en_global: 'Este ticket ya se incluyó en la factura global del periodo y no se puede facturar.',
   expirado: 'El plazo para facturar este ticket ya venció.',
   cancelado: 'La cuenta de este ticket fue cancelada y no se puede facturar.',
+  en_proceso:
+    'La factura de este ticket se está emitiendo. Si en unos minutos no te llega, pídela en el ' +
+    'restaurante con tu ticket; no la vuelvas a solicitar aquí.',
 };
 
 /** El punto de azar de la ingesta. Un provider para que los e2e fuercen colisiones y fallas. */

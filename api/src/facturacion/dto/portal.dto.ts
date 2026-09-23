@@ -11,7 +11,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import type { EstadoPublico } from '../codigo';
+import { ESTADOS_PUBLICOS, type EstadoPublico } from '../codigo';
 import { MAX_BYTES_LOGO } from '../portal';
 import { TicketCodigoDto } from './codigo.dto';
 import { RegimenFiscalDto } from './facturacion.dto';
@@ -22,13 +22,6 @@ import { RegimenFiscalDto } from './facturacion.dto';
  * mesa, mesero, partidas ni ids internos.
  */
 
-const ESTADOS_PUBLICOS: readonly EstadoPublico[] = [
-  'pendiente',
-  'facturado',
-  'en_global',
-  'expirado',
-  'cancelado',
-];
 
 /** El logo medido sobre el base64 que llega (4 caracteres por cada 3 bytes). */
 export const MAX_BASE64_LOGO = Math.ceil(MAX_BYTES_LOGO / 3) * 4;
@@ -61,8 +54,9 @@ export class PortalPublicoDto {
 
   @ApiProperty({
     description:
-      'Si hoy se puede emitir una factura desde este portal. En F2-103 siempre es `false` (la ' +
-      'emisión es F2-104): el portal deja consultar el código pero no pide datos fiscales.',
+      'Si hoy se puede emitir una factura desde este portal: la empresa tiene perfil fiscal ' +
+      'activo con CSD registrado y vigente (F2-104). Si es `false`, el portal deja consultar el ' +
+      'código pero no pide datos fiscales.',
   })
   emisionDisponible!: boolean;
 }

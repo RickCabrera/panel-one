@@ -1,20 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsIn, IsInt, IsUUID, Max, Min, ValidateIf } from 'class-validator';
 
-import { DIAS_VIGENCIA_MAX, DIAS_VIGENCIA_MIN, type EstadoPublico } from '../codigo';
+import {
+  DIAS_VIGENCIA_MAX,
+  DIAS_VIGENCIA_MIN,
+  ESTADOS_PUBLICOS,
+  type EstadoPublico,
+} from '../codigo';
 
 /**
  * Contratos del código corto de facturación (F2-101): la consulta PÚBLICA de un código y la regla
  * de vigencia por empresa. Fechas en UTC (ISO 8601); dinero como texto con 2 decimales.
  */
 
-const ESTADOS_PUBLICOS: readonly EstadoPublico[] = [
-  'pendiente',
-  'facturado',
-  'en_global',
-  'expirado',
-  'cancelado',
-];
 const REGLAS = ['fin_de_mes', 'dias'] as const;
 
 export class TicketCodigoDto {

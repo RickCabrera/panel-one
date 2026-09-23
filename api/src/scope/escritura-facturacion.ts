@@ -1,7 +1,20 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-import type { VigenciaCodigos } from '../facturacion/codigo';
+import {
+  esFacturable,
+  estadoPublico,
+  MENSAJE_ESTADO,
+  type EstadoPublico,
+  type VigenciaCodigos,
+} from '../facturacion/codigo';
+import { formaPagoSat, importesDeTotal, type FormaPagoEnum } from '../facturacion/cfdi';
+import { MENSAJE_EMISION_NO_DISPONIBLE } from '../facturacion/emision-portal';
 import { normalizarRfc, RFC_GENERICOS } from '../facturacion/sat';
 import type { EmpresaScope } from './empresa-scope';
 import { encontradoOr404, whereScoped } from './scope.helper';
@@ -66,6 +79,73 @@ export interface DatosReceptor {
   cp: string;
   usoCfdi: string;
   email: string | null;
+}
+
+/** Lo que la emisión (F2-104) pide reservar: todo sale de la base, nada del público. */
+export interface PedidoReserva {
+  codigoId: string;
+  chequeId: string;
+  sucursalId: string;
+  /** Ya validado por el portal, con el RFC normalizado. */
+  receptor: DatosReceptor & { email: string };
+}
+
+/** La reserva creada: lo que hace falta para armar la solicitud al PAC. */
+export interface ReservaCfdi {
+  reservaId: string;
+  serie: string;
+  folio: number;
+  emisor: { rfc: string; razonSocial: string; regimenFiscal: string; cp: string };
+  sucursal: { zonaHoraria: string };
+  cheque: { folio: string; total: Prisma.Decimal };
+  formaPago: string;
+  importes: { subtotal: Prisma.Decimal; iva: Prisma.Decimal; total: Prisma.Decimal };
+}
+
+/** El timbre que devolvió el PAC. */
+export interface TimbreCfdi {
+  uuid: string;
+  idPac: string;
+  fechaTimbrado: Date;
+}
+
+export const MENSAJE_SIN_FORMA_PAGO =
+  'Este ticket no se puede facturar en línea (su forma de pago no se puede declarar ante el SAT ' +
+  'desde aquí). Pide tu factura en el restaurante con tu ticket.';
+export const MENSAJE_NO_FACTURABLE =
+  'Esta cuenta no se puede facturar en este momento. Pide tu factura en el restaurante con tu ' +
+  'ticket.';
+
+/** ¿El perfil puede emitir en este instante? Activo, con CSD registrado en el PAC y vigente. */
+export function perfilEmite(
+  p: {
+    activo: boolean;
+    facturamaOrgId: string | null;
+    csdNoCertificado: string | null;
+    csdVigenteDesde: Date | null;
+    csdVigenteHasta: Date | null;
+  },
+  ahora: Date,
+): boolean {
+  return (
+    p.activo &&
+    p.facturamaOrgId !== null &&
+    p.csdNoCertificado !== null &&
+    p.csdVigenteDesde !== null &&
+    p.csdVigenteHasta !== null &&
+    p.csdVigenteDesde.getTime() <= ahora.getTime() &&
+    ahora.getTime() < p.csdVigenteHasta.getTime()
+  );
+}
+
+/** El 409 que el portal ya sabe pintar: el estado público actual del código. */
+export function conflictoDeEstado(estado: EstadoPublico): ConflictException {
+  return new ConflictException({
+    statusCode: 409,
+    error: 'Conflict',
+    message: MENSAJE_ESTADO[estado],
+    estado,
+  });
 }
 
 /** El enlace y la marca del portal de autofactura de una sucursal (F2-103), ya validados. */
@@ -242,6 +322,18 @@ export class EscrituraFacturacion {
     }
     return this.#enTransaccion(async (tx) => {
       await this.#empresa(tx, empresaId);
+      return this.#guardarReceptorTx(tx, empresaId, r, ahora);
+    });
+  }
+
+  /** El upsert del receptor frecuente DENTRO de una transacción ya abierta (y ya verificada). */
+  async #guardarReceptorTx(
+    tx: Tx,
+    empresaId: string,
+    r: DatosReceptor,
+    ahora: Date,
+  ): Promise<string> {
+    {
       const existente = await tx.receptorFrecuente.findFirst({
         where: whereScoped(this.#scope, 'ReceptorFrecuente', { empresaId, rfc: r.rfc }),
         select: { id: true },
@@ -265,6 +357,216 @@ export class EscrituraFacturacion {
         select: { id: true },
       });
       return id;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // F2-104 · Emisión de CFDI: reservar → (PAC) → confirmar, o liberar.
+  // -------------------------------------------------------------------------
+
+  /**
+   * RESERVA el CFDI de un código: el candado de "doble clic no emite dos veces". En UNA
+   * transacción, y en este orden:
+   * 1. La empresa, con el scope (404). El código se BLOQUEA (`FOR UPDATE`) filtrado por
+   *    (id, empresa, cheque, sucursal): de otra empresa, o con ids que no casan = 404.
+   * 2. Con el candado puesto se vuelve a medir TODO (entre la consulta del portal y aquí el código
+   *    pudo vencer, el cheque cancelarse o alguien más reservar): sucursal y empresa activas (404),
+   *    estado público `pendiente` (si no, 409 con `estado`), cheque facturable (422).
+   * 3. Perfil fiscal que emite hoy (activo, CSD registrado y vigente); si no, 503.
+   * 4. Forma de pago facturable en línea (422). ANTES de consumir folio: un rechazo aquí no deja
+   *    hueco.
+   * 5. `folio_actual + 1` del perfil (el UPDATE bloquea la fila: folios en serie) e INSERT de la
+   *    reserva en `timbrando`. El UNIQUE de `codigo_id` es la segunda red: si otra transacción
+   *    ganó, 409 `en_proceso`.
+   */
+  async reservarCfdi(empresaId: string, pedido: PedidoReserva, ahora: Date): Promise<ReservaCfdi> {
+    try {
+      return await this.#enTransaccion(async (tx) => {
+        await this.#empresa(tx, empresaId);
+        const bloqueado = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id FROM codigos_facturacion
+          WHERE id = ${exigir('codigoId', pedido.codigoId)}::uuid
+            AND empresa_id = ${empresaId}::uuid
+            AND cheque_id = ${exigir('chequeId', pedido.chequeId)}::uuid
+            AND sucursal_id = ${exigir('sucursalId', pedido.sucursalId)}::uuid
+          FOR UPDATE`;
+        encontradoOr404(bloqueado[0] ?? null);
+        const codigo = encontradoOr404(
+          await tx.codigoFacturacion.findFirst({
+            where: whereScoped(this.#scope, 'CodigoFacturacion', {
+              id: pedido.codigoId,
+              empresaId,
+            }),
+            select: {
+              estado: true,
+              expiraAt: true,
+              cfdi: { select: { estado: true } },
+              cheque: {
+                select: {
+                  folio: true,
+                  cerradoAt: true,
+                  cancelado: true,
+                  total: true,
+                  pagos: { select: { formaRaw: true, monto: true }, orderBy: { id: 'asc' } },
+                },
+              },
+              sucursal: {
+                select: { activo: true, zonaHoraria: true, empresa: { select: { activo: true } } },
+              },
+            },
+          }),
+        );
+        if (!codigo.sucursal.activo || !codigo.sucursal.empresa.activo) encontradoOr404(null);
+        const estado = estadoPublico(codigo, codigo.cheque, ahora.getTime());
+        if (estado !== 'pendiente') throw conflictoDeEstado(estado);
+        if (!esFacturable(codigo.cheque)) {
+          throw new UnprocessableEntityException(MENSAJE_NO_FACTURABLE);
+        }
+
+        const perfil = await tx.perfilFiscal.findFirst({
+          where: whereScoped(this.#scope, 'PerfilFiscal', { empresaId }),
+          select: {
+            id: true,
+            rfc: true,
+            razonSocial: true,
+            regimenFiscal: true,
+            cp: true,
+            serie: true,
+            activo: true,
+            facturamaOrgId: true,
+            csdNoCertificado: true,
+            csdVigenteDesde: true,
+            csdVigenteHasta: true,
+          },
+        });
+        if (!perfil || !perfilEmite(perfil, ahora)) {
+          throw new ServiceUnavailableException(MENSAJE_EMISION_NO_DISPONIBLE);
+        }
+
+        const catalogo = await tx.formaPagoCatalogo.findMany({
+          where: whereScoped(this.#scope, 'FormaPagoCatalogo', { empresaId }),
+          select: { formaRaw: true, forma: true },
+        });
+        const formaPago = formaPagoSat(
+          codigo.cheque.pagos,
+          new Map(catalogo.map((c) => [c.formaRaw, c.forma as FormaPagoEnum])),
+        );
+        if (formaPago === null) throw new UnprocessableEntityException(MENSAJE_SIN_FORMA_PAGO);
+
+        const importes = importesDeTotal(codigo.cheque.total);
+        const [{ folio_actual: folio }] = await tx.$queryRaw<{ folio_actual: number }[]>`
+          UPDATE perfiles_fiscales SET folio_actual = folio_actual + 1
+          WHERE id = ${perfil.id}::uuid AND empresa_id = ${empresaId}::uuid
+          RETURNING folio_actual`;
+        const { id } = await tx.cfdi.create({
+          data: {
+            empresaId,
+            sucursalId: pedido.sucursalId,
+            chequeId: pedido.chequeId,
+            codigoId: pedido.codigoId,
+            perfilFiscalId: perfil.id,
+            serie: perfil.serie,
+            folio,
+            receptor: { ...pedido.receptor },
+            formaPago,
+            subtotal: importes.subtotal,
+            iva: importes.iva,
+            total: importes.total,
+            estado: 'timbrando',
+            updatedAt: ahora,
+          },
+          select: { id: true },
+        });
+        return {
+          reservaId: id,
+          serie: perfil.serie,
+          folio,
+          emisor: {
+            rfc: perfil.rfc,
+            razonSocial: perfil.razonSocial,
+            regimenFiscal: perfil.regimenFiscal,
+            cp: perfil.cp,
+          },
+          sucursal: { zonaHoraria: codigo.sucursal.zonaHoraria },
+          cheque: { folio: codigo.cheque.folio, total: codigo.cheque.total },
+          formaPago,
+          importes,
+        };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        // Otra transacción reservó el mismo código entre la lectura y el INSERT.
+        throw conflictoDeEstado('en_proceso');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * CONFIRMA una reserva con el timbre del PAC, en UNA transacción: la reserva pasa a `vigente`,
+   * el código a `facturado`, y el receptor queda como frecuente (F2-100). Si la reserva no está
+   * en el scope o ya no está en `timbrando` (nadie más la toca, así que no debería pasar), 404: la
+   * transacción se deshace y quien llama deja constancia del UUID en el log.
+   */
+  async confirmarCfdi(
+    empresaId: string,
+    reservaId: string,
+    timbre: TimbreCfdi,
+    receptor: DatosReceptor,
+    ahora: Date,
+  ): Promise<{ codigoFacturado: boolean }> {
+    return this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      // Fuera del scope, de otra empresa, o que ya no está en `timbrando`: el mismo 404.
+      const reserva = encontradoOr404(
+        await tx.cfdi.findFirst({
+          where: whereScoped(this.#scope, 'Cfdi', {
+            id: exigir('reservaId', reservaId),
+            empresaId,
+            estado: 'timbrando',
+          }),
+          select: { id: true, codigoId: true },
+        }),
+      );
+      await tx.cfdi.updateMany({
+        where: { id: reserva.id, empresaId, estado: 'timbrando' },
+        data: {
+          estado: 'vigente',
+          uuid: exigir('uuid', timbre.uuid),
+          idPac: exigir('idPac', timbre.idPac),
+          emitidoAt: timbre.fechaTimbrado,
+          updatedAt: ahora,
+        },
+      });
+      let codigoFacturado = false;
+      if (reserva.codigoId) {
+        const { count } = await tx.codigoFacturacion.updateMany({
+          where: { id: reserva.codigoId, empresaId, estado: 'pendiente' },
+          data: { estado: 'facturado', updatedAt: ahora },
+        });
+        codigoFacturado = count === 1;
+      }
+      const r = { ...receptor, rfc: normalizarRfc(receptor.rfc) };
+      if (!RFC_GENERICOS.includes(r.rfc)) await this.#guardarReceptorTx(tx, empresaId, r, ahora);
+      return { codigoFacturado };
+    });
+  }
+
+  /**
+   * LIBERA una reserva que el PAC rechazó sin timbrar (validación, o "no disponible" tras los
+   * reintentos): se borra, y el código vuelve a poderse facturar. Su folio queda como hueco (el
+   * CFDI 4.0 no exige folios consecutivos). Sólo borra reservas en `timbrando`.
+   */
+  async liberarReserva(empresaId: string, reservaId: string): Promise<void> {
+    await this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      await tx.cfdi.deleteMany({
+        where: whereScoped(this.#scope, 'Cfdi', {
+          id: exigir('reservaId', reservaId),
+          empresaId,
+          estado: 'timbrando',
+        }),
+      });
     });
   }
 

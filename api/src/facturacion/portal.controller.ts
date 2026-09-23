@@ -25,8 +25,10 @@ import {
   ApiOperation,
   ApiParam,
   ApiProduces,
+  ApiBadGatewayResponse,
   ApiServiceUnavailableResponse,
   ApiTags,
+  ApiUnprocessableEntityResponse,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -174,32 +176,54 @@ export class PortalPublicoController {
   @UseGuards(ThrottlerGuard)
   @SoloThrottlers(THROTTLER_FACTURAS_PORTAL)
   @ApiOperation({
-    summary: 'Pide la factura (CFDI) de un código desde el portal (F2-103).',
+    summary: 'Emite la factura (CFDI) de un código desde el portal (F2-103, F2-104).',
     description:
-      '**HOY RESPONDE 503 SIEMPRE que los datos son válidos: la emisión se conecta en F2-104.** ' +
       'Pública, 5 por minuto por IP. Orden fijo: portal (404) → formato del código (400) → ' +
       'código de la empresa (404) → estado del código (409 con `estado`) → datos del receptor ' +
-      '(400 con `campos`, un mensaje en español por campo) → emisión. La respuesta 201 es el ' +
-      'contrato FIJO que el portal ya consume y que F2-104 cumplirá; en esta versión ningún ' +
-      'camino la produce. No escribe nada en ningún caso.',
+      '(400 con `campos`, un mensaje en español por campo) → emisión (F2-104): se RESERVA el ' +
+      'CFDI con candado por código (doble clic = un solo CFDI; el segundo recibe 409 ' +
+      '`en_proceso` o `facturado`), se timbra con el PAC y, con el timbre, en una sola operación ' +
+      'el CFDI queda vigente, el código `facturado` y el receptor guardado como frecuente. Un ' +
+      'rechazo del SAT sobre un dato del receptor vuelve como 400 con `campos` (mensaje en ' +
+      'español, nunca el texto crudo del PAC) y no guarda nada.',
   })
   @ApiParam({ name: 'slug', example: 'demo-centro' })
   @ApiCreatedResponse({
     type: FacturaPortalDto,
-    description: 'Contrato fijo para F2-104. Hoy ningún camino lo produce.',
+    description: 'CFDI timbrado. `descargas` viene en nulos hasta F2-105 (entrega).',
   })
   @ApiBadRequestResponse({
     type: ErrorReceptorDto,
-    description: 'Código con formato inválido (sin `campos`) o datos del receptor inválidos.',
+    description:
+      'Código con formato inválido (sin `campos`), datos del receptor inválidos, o el SAT ' +
+      'rechazó un dato del receptor (RFC no inscrito, nombre, CP, régimen o uso que no ' +
+      'corresponden): `campos` dice cuál. No se guardó nada.',
   })
   @ApiNotFoundResponse({ type: ErrorDto, description: 'Portal o código no encontrados.' })
   @ApiConflictResponse({
     type: ErrorEstadoCodigoDto,
-    description: 'El código no se puede facturar: ya facturado, en global, expirado o cancelado.',
+    description:
+      'El código no se puede facturar: ya facturado, en proceso de emisión, en global, ' +
+      'expirado o cancelado.',
+  })
+  @ApiUnprocessableEntityResponse({
+    type: ErrorDto,
+    description:
+      'La cuenta no se puede facturar en línea: su forma de pago no se puede declarar con PUE ' +
+      '(sin catálogo o `otro`), ya no está cerrada, o el SAT la rechazó por algo que no es un ' +
+      'dato del receptor. No se guardó nada.',
+  })
+  @ApiBadGatewayResponse({
+    type: ErrorDto,
+    description:
+      'El PAC no confirmó a tiempo y pudo haber timbrado: la emisión queda EN PROCESO (el ' +
+      'código responde `en_proceso`) y no se debe volver a pedir.',
   })
   @ApiServiceUnavailableResponse({
     type: ErrorDto,
-    description: 'La emisión todavía no está disponible (F2-104). No se guardó nada.',
+    description:
+      'La empresa no puede emitir (sin perfil fiscal activo o sin CSD vigente), o el PAC no ' +
+      'está disponible tras los reintentos. No se guardó nada.',
   })
   @ApiTooManyRequestsResponse({ description: 'Más de 5 por minuto desde la misma IP.' })
   solicitarFactura(

@@ -131,8 +131,8 @@ export class PortalFacturacionService {
   /**
    * Pide la factura de un código. Orden fijo: portal (404) → formato del código (400) → código de
    * la empresa (404) → estado (409 con `estado`) → datos del receptor (400 con `campos`) → puerto
-   * de emisión. Nada de esto escribe: lo que se guarde (CFDI, receptor frecuente, estado del
-   * código) es de la emisión (F2-104). Hoy el puerto responde 503.
+   * de emisión. Nada de esto escribe: lo que se guarda (CFDI, receptor frecuente, estado del
+   * código) lo escribe la emisión (F2-104, `CfdiService`), que vuelve a medir todo con candado.
    */
   async solicitarFactura(slug: string, dto: SolicitarFacturaDto): Promise<FacturaPortal> {
     const { portal, fila, estado } = await this.#codigo(slug, dto.codigo);

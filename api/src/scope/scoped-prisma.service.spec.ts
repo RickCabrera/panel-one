@@ -85,6 +85,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'canalVentaCatalogo',
       // F2-126: categorías de gasto y gastos; se escriben por `gastos(scope)`.
       'categoriaGasto',
+      // F2-104: CFDI emitidos y sus reservas; se escriben por `facturacion(scope)`, no por aquí.
+      'cfdi',
       'cheque',
       'chequePago',
       'chequePartida',

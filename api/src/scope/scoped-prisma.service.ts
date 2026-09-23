@@ -152,6 +152,8 @@ const SELECCION_CODIGO_PUBLICO = {
   estado: true,
   expiraAt: true,
   cheque: { select: { abiertoAt: true, cerradoAt: true, total: true, cancelado: true } },
+  // F2-104: si hay una reserva o un CFDI, el estado público lo dice (`en_proceso`).
+  cfdi: { select: { estado: true } },
   sucursal: {
     select: {
       nombre: true,
@@ -188,6 +190,7 @@ const SELECCION_CODIGO_PORTAL = {
       cancelado: true,
     },
   },
+  cfdi: { select: { estado: true } },
   sucursal: {
     select: {
       nombre: true,

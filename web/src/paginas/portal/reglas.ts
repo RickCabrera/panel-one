@@ -145,11 +145,15 @@ export function estadoDelApi(cuerpo: unknown): EstadoCodigoFacturacion | null {
 
 /**
  * Qué puede hacer el cliente con cada estado que no se factura. Nada de esto afirma algo que el
- * sistema no hizo: hoy no hay CFDI guardados ni correos enviados (F2-104/F2-105), así que un
- * `facturado` no dice "te la mandamos": dice a quién pedírsela.
+ * sistema no hizo: todavía no se envían correos ni se guardan los archivos (F2-105), así que un
+ * `facturado` no dice "te la mandamos": dice a quién pedírsela. `en_proceso` (F2-104) puede ser
+ * una emisión que el PAC no confirmó: dice que NO la vuelva a pedir y a quién acudir.
  */
 export const QUE_HACER: Readonly<Record<EstadoCodigoFacturacion, string>> = {
   pendiente: '',
+  en_proceso:
+    'Espera unos minutos y no la vuelvas a solicitar. Si no te llega, pídela en el restaurante ' +
+    'con tu ticket.',
   facturado:
     'Si no recibiste tu factura o necesitas otra copia, pídela en el restaurante con tu ticket.',
   en_global:

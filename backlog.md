@@ -1475,6 +1475,17 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 > de otras sucursales de su empresa (hoy sí; DECISION PROVISIONAL, esquema-sr §2); (4) confirmar
 > con tickets reales que `subtotal + impuestos = total` (si no, el portal muestra sólo el total).
 
+> **Y además (de F2-104).** Contra el sandbox: (1) el cuerpo de `POST /api-lite/3/cfdis` del CFDI
+> de consumo (snapshot en `timbrado.contrato.spec.ts`, "CFDI de consumo desde un cheque");
+> (2) **la tabla de errores del SAT** (`api/src/adaptadores/timbrado/errores-sat.ts`): cómo
+> reenvía Facturama los rechazos (¿trae el código `CFDI40xxx`? ¿en `Message` o en `ModelState`?)
+> y si la numeración supuesta (40144 RFC, 40145 nombre, 40147 CP, 40157/58 régimen, 40161/62 uso)
+> es la real; (3) **reintentos**: que 429/503 de verdad signifiquen "no procesé" y que 500/502/504
+> puedan llegar después de timbrar (hoy se tratan como ambiguos y NO se reintentan); si Facturama
+> tiene llave de idempotencia, usarla y reintentar también lo ambiguo; (4) el piloto: base del CFDI
+> = `cheques.total` sin propina, IVA 16 %, tarjeta = `04` (¿débito `28`?), y qué hacer con vales
+> (hoy `otro` → no se factura en línea). Todo en esquema-sr §2 "La emisión del CFDI" y §4.
+
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus
 registros DNS y el volumen persistente del servidor.** Cambiar `CORREO_IMPL` y `ARCHIVOS_IMPL`
@@ -1893,6 +1904,14 @@ F1-004).
 >    que se emitió (nunca a uno que escriba quien pregunta), o (b) pedir el RFC receptor exacto y
 >    entonces dar el enlace temporal. La opción conservadora es (a).
 
+> **Y además (de F2-104).** La emisión ya existe (`api/src/facturacion/cfdi.service.ts`) y NO
+> guarda los archivos: `CfdiTimbrado.xml` y `.pdf` llegan del puerto y se descartan; `cfdis.xml_url`
+> y `cfdis.pdf_url` quedan nulos. Aquí: (1) guardarlos por `PuertoArchivos` en el mismo paso de
+> `confirmarCfdi` (o justo después, sin romper la regla "el PAC nunca corre dentro de una
+> transacción"); (2) los CFDI emitidos ANTES de esta tarea (sólo de desarrollo, con el PAC falso) no
+> tienen archivos: con el falso no se pueden volver a descargar; con Facturama, por `idPac`
+> (`peticionDescarga`). (3) `FacturaPortalDto.descargas` sigue en nulos: llenarlo aquí.
+
 ### F2-106 · Dashboard de facturación
 `[ ]` Réplica funcional del dashboard de facturación de Arkhon: filtros (sucursal, rango de
 fechas, atajos Hoy/7/30/mes/año), KPIs (ventas del periodo = tickets sincronizados, monto
@@ -1908,6 +1927,12 @@ código pendiente del periodo.
 > (`/comparativos`, `web/src/paginas/comparativos/matriz.ts` → `METRICAS`), con A, B y Δ, la
 > misma regla de "—" sin datos, su columna en el CSV y su test; y quita "Tasa de facturación"
 > de la nota de pendientes de la vista (`NOTA_PENDIENTES` en `paginas/Comparativos.tsx`).
+
+> **Y además (de F2-104).** La tabla es `cfdis` (estado `timbrando | vigente | cancelado`; sólo
+> `vigente`/`cancelado` son CFDI emitidos: `timbrando` es una RESERVA, que puede ser una emisión
+> ambigua colgada). **El seed no genera CFDI** y ~15 % de sus códigos están `facturado` sin CFDI:
+> generarlos (deterministas, con el PAC falso o directo con `uuidDeterminista`) es parte de ESTA
+> tarea (regla 2 de la Ronda 2), para que el tablero no mienta.
 
 ### F2-107 · Factura sin ticket y refacturación
 `[ ]` Vista admin "Facturar sin ticket": captura manual de importe total + datos de receptor
@@ -1933,6 +1958,9 @@ periodicidad correcta; un ticket dentro de una global ya no puede autofacturarse
 lo explica ("este ticket fue incluido en factura global del periodo X, contacta al
 restaurante").
 
+> **Y además (de F2-104).** Un código con una reserva `timbrando` (emisión en curso o ambigua)
+> NO debe entrar a la global: ya podría tener CFDI propio. `estadoPublico` lo reporta `en_proceso`.
+
 ### F2-109 · Cancelación de CFDI
 `[ ]` Flujo de cancelación desde el dashboard: elegir motivo SAT (01–04; si 01, exigir UUID
 sustituto), llamar API de cancelación de Facturama, reflejar estados intermedios (en proceso
@@ -1943,6 +1971,12 @@ código).
 **Listo cuando:** cancelación en sandbox con motivo 02 queda `cancelado` y la tasa de
 facturación del dashboard baja en consecuencia; con motivo 01 sin sustituto el formulario no
 deja continuar.
+
+> **Y además (de F2-104).** `cfdis.codigo_id` es ÚNICO (es el candado de "doble clic no emite dos
+> veces"): hoy un código cancelado no puede volver a emitirse por el portal. Si al cancelar se
+> quiere dejar el ticket facturable otra vez, hay que decidir cómo (liberar el código del CFDI
+> cancelado, o un índice único parcial `WHERE estado <> 'cancelado'`) y probar que el candado
+> sigue valiendo. `estadoPublico` hoy trata un CFDI `cancelado` del código como nada (no lo lee).
 
 ### F2-110 · Control de folios del PAC
 `[ ]` Contador de folios consumidos por empresa y global (cada timbre exitoso, incluida
@@ -1960,6 +1994,14 @@ de consumo por empresa (base para el recobro en la anualidad del cliente).
 **Listo cuando:** con saldo simulado en 0, la emisión se bloquea ANTES de llamar a Facturama
 con mensaje claro; el reporte mensual cuadra con el nº de CFDI vigentes+cancelados del
 periodo.
+
+> **Y además (de F2-104).** (1) **Reservas colgadas**: una emisión con respuesta AMBIGUA del PAC
+> (timeout, 500/502/504) o cuya confirmación falló deja la fila de `cfdis` en `timbrando` y el
+> código en `en_proceso` para siempre; el log del api trae la reserva (y el UUID si lo hubo). Hace
+> falta un proceso (manual o programado) que consulte al PAC y la resuelva: confirmarla si timbró,
+> o liberarla si no. (2) **Folios**: la reserva toma `perfiles_fiscales.folio_actual + 1`; un
+> rechazo del SAT deja hueco a propósito. El conteo de timbres consumidos debe salir de los
+> `cfdis` `vigente`/`cancelado`, no de `folio_actual`.
 
 ## EPIC 9 — Inventario y compras
 
