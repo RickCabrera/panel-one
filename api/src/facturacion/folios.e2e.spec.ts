@@ -68,6 +68,8 @@ class PacContado implements PuertoTimbrado {
   readonly emisiones: SolicitudCfdi[] = [];
   constructor(readonly falso: TimbradoFalso) {}
   registrarCsd: PuertoTimbrado['registrarCsd'] = (s) => this.falso.registrarCsd(s);
+  buscarPorFolio: PuertoTimbrado['buscarPorFolio'] = (c) => this.falso.buscarPorFolio(c);
+  descargarArchivos: PuertoTimbrado['descargarArchivos'] = (c) => this.falso.descargarArchivos(c);
   emitir(s: SolicitudCfdi): Promise<CfdiTimbrado> {
     this.emisiones.push(s);
     return this.falso.emitir(s);

@@ -66,8 +66,9 @@ export class ConsultaCancelacionDto {
     description:
       'En qué quedó la solicitud tras consultar al PAC: `aceptada` = la factura quedó cancelada; ' +
       '`rechazada` = el receptor la rechazó (sigue vigente, se puede volver a pedir); ' +
-      '`no_procedio` = el PAC nunca la registró (sigue vigente); `solicitando`/`en_proceso` = sin ' +
-      'cambio todavía.',
+      '`no_procedio` = el PAC no la registró (sigue vigente y se puede volver a pedir; F2-110b: la ' +
+      'solicitud queda `sin_confirmar` y la conciliación la vuelve a consultar hasta 7 días, por si ' +
+      'el PAC la registró tarde); `solicitando`/`en_proceso` = sin cambio todavía.',
   })
   estado!: 'solicitando' | 'en_proceso' | 'aceptada' | 'rechazada' | 'no_procedio';
 

@@ -4,6 +4,9 @@ import { CancelacionController } from './cancelacion.controller';
 import { CancelacionProgramador } from './cancelacion.programador';
 import { CancelacionCfdiService } from './cancelacion.service';
 import { CodigoFacturacionPublicoController } from './codigos.controller';
+import { ConciliacionController } from './conciliacion.controller';
+import { ConciliacionProgramador } from './conciliacion.programador';
+import { ConciliacionPacService } from './conciliacion.service';
 import { CodigosFacturacionService } from './codigos.service';
 import { FacturacionController } from './facturacion.controller';
 import { FacturacionService } from './facturacion.service';
@@ -38,6 +41,8 @@ import { VentasModule } from '../ventas/ventas.module';
  * factura global (`FacturaGlobalService`) y su programador de emisión automática. F2-109: la
  * cancelación de CFDI (`CancelacionCfdiService`), que también usa la refacturación, y su sondeo.
  * F2-110: el control de folios del PAC (`FoliosService`, saldo de PLATAFORMA) y sus avisos.
+ * F2-110b: la conciliación con el PAC (`ConciliacionPacService`) de lo que la emisión o la
+ * cancelación dejaron sin saber, con su programador y su disparo manual.
  */
 @Module({
   imports: [VentasModule],
@@ -53,6 +58,7 @@ import { VentasModule } from '../ventas/ventas.module';
     FacturaGlobalController,
     CancelacionController,
     FoliosController,
+    ConciliacionController,
   ],
   providers: [
     FacturacionService,
@@ -68,6 +74,8 @@ import { VentasModule } from '../ventas/ventas.module';
     CancelacionProgramador,
     FoliosService,
     FoliosProgramador,
+    ConciliacionPacService,
+    ConciliacionProgramador,
     Espera,
     { provide: EMISION_PORTAL, useExisting: CfdiService },
   ],

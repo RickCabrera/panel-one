@@ -115,7 +115,8 @@ export interface CfdiFila {
   cancelacion: CancelacionFila | null;
 }
 
-export type EstadoCancelacionFila = 'solicitando' | 'en_proceso' | 'rechazada';
+/** `sin_confirmar` (F2-110b): el PAC no la registró a tiempo; la conciliación la sigue revisando. */
+export type EstadoCancelacionFila = 'solicitando' | 'en_proceso' | 'rechazada' | 'sin_confirmar';
 
 export interface CancelacionFila {
   estado: EstadoCancelacionFila;

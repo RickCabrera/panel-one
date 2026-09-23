@@ -330,6 +330,62 @@ describe('tablero de facturación', () => {
     ).toBeVisible();
   });
 
+  it('F2-110b: "Conciliar ahora" pide la vuelta al api, dice el resultado en frases y recarga el tablero', async () => {
+    const user = userEvent.setup();
+    const a = api({
+      'POST /facturacion/conciliacion': () =>
+        json(200, {
+          reservas: { revisadas: 2, confirmadas: 1, liberadas: 0, enEspera: 1 },
+          cancelaciones: { revisadas: 0, canceladas: 0, descartadas: 0 },
+          sustituciones: { revisadas: 0, cerradas: 0 },
+          archivos: { revisados: 0, recuperados: 0 },
+          fallidas: 0,
+          requierenRevision: [],
+        }),
+    });
+    montar();
+    await screen.findByTestId('tabla-cfdis');
+    const tableros = a.contar('GET', '/facturacion/tablero');
+    await user.click(screen.getByRole('button', { name: 'Conciliar ahora' }));
+    const resultado = await screen.findByTestId('conciliacion');
+    expect(resultado).toHaveTextContent(
+      '1 factura que el PAC sí timbró quedó confirmada y se entregó.',
+    );
+    expect(resultado).toHaveTextContent('1 emisión no aparece en el PAC todavía');
+    expect(a.contar('POST', '/facturacion/conciliacion')).toBe(1);
+    const llamada = a.llamadas.find((l) => l.ruta === '/facturacion/conciliacion')!;
+    expect(llamada.autorizacion).toMatch(/^Bearer /);
+    await waitFor(() => expect(a.contar('GET', '/facturacion/tablero')).toBeGreaterThan(tableros));
+  });
+
+  it('F2-110b: sin nada que conciliar lo dice; un error del api se dice como error', async () => {
+    const user = userEvent.setup();
+    let falla = false;
+    api({
+      'POST /facturacion/conciliacion': () =>
+        falla
+          ? json(503, { statusCode: 503, message: 'El PAC no contesta (prueba).' })
+          : json(200, {
+              reservas: { revisadas: 0, confirmadas: 0, liberadas: 0, enEspera: 0 },
+              cancelaciones: { revisadas: 0, canceladas: 0, descartadas: 0 },
+              sustituciones: { revisadas: 0, cerradas: 0 },
+              archivos: { revisados: 0, recuperados: 0 },
+              fallidas: 0,
+              requierenRevision: [],
+            }),
+    });
+    montar();
+    await screen.findByTestId('tabla-cfdis');
+    await user.click(screen.getByRole('button', { name: 'Conciliar ahora' }));
+    expect(await screen.findByTestId('conciliacion')).toHaveTextContent(
+      /^No había nada pendiente con el PAC/,
+    );
+    falla = true;
+    await user.click(screen.getByRole('button', { name: 'Conciliar ahora' }));
+    expect(await screen.findByText('El PAC no contesta (prueba).')).toBeVisible();
+    expect(screen.queryByTestId('conciliacion')).toBeNull();
+  });
+
   it('un error del tablero se dice como error, no como vacío', async () => {
     api({ 'GET /facturacion/tablero': () => json(500, { statusCode: 500, message: 'caído' }) });
     montar();

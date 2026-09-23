@@ -104,6 +104,8 @@ function armar(respuestas: Array<CfdiTimbrado | Error>, confirmar?: () => Promis
     registrarCsd: () => Promise.reject(new Error('no')),
     cancelar: () => Promise.reject(new Error('no')),
     consultarEstado: () => Promise.reject(new Error('no')),
+    buscarPorFolio: () => Promise.reject(new Error('no')),
+    descargarArchivos: () => Promise.reject(new Error('no')),
     emitir: (s) => {
       llamadas.emitir.push(s);
       const r = respuestas.shift();

@@ -589,3 +589,120 @@ describe('Contrato Facturama: factura global (F2-108)', () => {
     expect(http.peticiones[0].cuerpo).not.toHaveProperty('GlobalInformation');
   });
 });
+
+describe('Contrato Facturama: conciliación con el PAC (F2-110b)', () => {
+  const consulta = {
+    rfcEmisor: 'EKU9003173C9',
+    serie: 'A',
+    folio: '1024',
+    zonaHoraria: 'America/Mexico_City',
+  };
+  const fila = (cambios: Record<string, unknown> = {}) => ({
+    Id: 'fcm-777',
+    Serie: 'A',
+    Folio: '1024',
+    Uuid: UUID.toLowerCase(),
+    Status: 'active',
+    Date: '2026-09-21T20:20:05',
+    ...cambios,
+  });
+  const buscar = async (respuesta: RespuestaHttp) => {
+    const http = new ClienteQueCaptura(() => respuesta);
+    const pac = new TimbradoFacturama(BASE, http, RELOJ_FIJO);
+    return { http, resultado: pac.buscarPorFolio(consulta) };
+  };
+
+  it('buscarPorFolio: la petición exacta (GET a la lista, filtrada por emisor, serie y folio)', async () => {
+    const { http, resultado } = await buscar({ status: 200, cuerpo: [] });
+    await resultado;
+    expect(http.peticiones).toMatchSnapshot();
+    expect(http.peticiones).toEqual([
+      {
+        metodo: 'GET',
+        url:
+          `${BASE}/api-lite/cfdis?type=issuedLite&rfcIssuer=EKU9003173C9&serie=A&folioStart=1024` +
+          '&folioEnd=1024&status=all',
+      },
+    ]);
+  });
+
+  it('una fila EXACTA: uuid en mayúsculas, idPac, estado y la fecha en hora LOCAL de la sucursal', async () => {
+    const { resultado } = await buscar({ status: 200, cuerpo: [fila()] });
+    const r = await resultado;
+    expect(r).toEqual({
+      uuid: UUID,
+      idPac: 'fcm-777',
+      estado: 'vigente',
+      fechaTimbrado: new Date('2026-09-22T02:20:05.000Z'),
+    });
+  });
+
+  it('el folio numérico y el Status cancelado/pending se mapean; sin fecha legible, null', async () => {
+    const cancelado = await (
+      await buscar({ status: 200, cuerpo: [fila({ Folio: 1024, Status: 'canceled', Date: 'x' })] })
+    ).resultado;
+    expect(cancelado).toMatchObject({ estado: 'cancelado', fechaTimbrado: null });
+    const pendiente = await (
+      await buscar({ status: 200, cuerpo: [fila({ Status: 'Pending' })] })
+    ).resultado;
+    expect(pendiente).toMatchObject({ estado: 'en_cancelacion' });
+  });
+
+  it('SÓLO una lista vacía (o un 404) es "no la tiene": null', async () => {
+    await expect((await buscar({ status: 200, cuerpo: [] })).resultado).resolves.toBeNull();
+    await expect((await buscar({ status: 404, cuerpo: null })).resultado).resolves.toBeNull();
+  });
+
+  it.each([
+    ['una fila de OTRO folio (el PAC ignoró el filtro)', [fila({ Folio: '1023' })]],
+    ['una fila de OTRA serie', [fila({ Serie: 'B' })]],
+    ['una fila de OTRO emisor', [fila({ RfcIssuer: 'AAA010101AAA' })]],
+    ['nuestra fila y otra ajena (el PAC no filtró, o pagina)', [fila(), fila({ Folio: '9' })]],
+    ['DOS filas exactas', [fila(), fila({ Id: 'fcm-778' })]],
+    ['una fila sin Uuid', [fila({ Uuid: undefined })]],
+    ['un Status que no reconocemos', [fila({ Status: 'weird' })]],
+    ['un cuerpo que no es arreglo', { Id: 'fcm-777' }],
+  ])('%s → ESTADO_DESCONOCIDO reintentable (nadie libera ni confirma)', async (_, cuerpo) => {
+    const error = await (await buscar({ status: 200, cuerpo })).resultado.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ErrorTimbrado);
+    expect(error).toMatchObject({ codigo: 'ESTADO_DESCONOCIDO', reintentable: true });
+  });
+
+  it('el emisor de la fila, si viene, se compara sin importar mayúsculas', async () => {
+    const r = await (
+      await buscar({ status: 200, cuerpo: [fila({ Issuer: { Rfc: 'eku9003173c9' } })] })
+    ).resultado;
+    expect(r?.idPac).toBe('fcm-777');
+  });
+
+  it('errores HTTP: 503 no disponible (reintentable), 500 ambiguo, 401 rechazo', async () => {
+    await expect((await buscar({ status: 503, cuerpo: null })).resultado).rejects.toMatchObject({
+      codigo: 'PAC_NO_DISPONIBLE',
+      reintentable: true,
+    });
+    await expect((await buscar({ status: 500, cuerpo: null })).resultado).rejects.toMatchObject({
+      codigo: 'PAC_SIN_RESPUESTA',
+    });
+    await expect(
+      (await buscar({ status: 401, cuerpo: { Message: 'no autorizado' } })).resultado,
+    ).rejects.toMatchObject({ codigo: 'RECHAZADO_POR_PAC' });
+  });
+
+  it('descargarArchivos: las dos descargas por idPac y el contenido decodificado', async () => {
+    const http = new ClienteQueCaptura(respuestaEmision);
+    const archivos = await new TimbradoFacturama(BASE, http, RELOJ_FIJO).descargarArchivos({
+      uuid: UUID,
+      idPac: 'fcm-777',
+    });
+    expect(http.peticiones).toMatchSnapshot();
+    expect(archivos.xml).toBe('<cfdi:Comprobante/>');
+    expect(archivos.pdf.toString()).toBe('%PDF-1.4');
+  });
+
+  it('descargarArchivos: un 404 del PAC es CFDI_NO_ENCONTRADO', async () => {
+    const http = new ClienteQueCaptura(() => ({ status: 404, cuerpo: null }));
+    await expect(
+      new TimbradoFacturama(BASE, http, RELOJ_FIJO).descargarArchivos({ uuid: UUID, idPac: 'x' }),
+    ).rejects.toMatchObject({ codigo: 'CFDI_NO_ENCONTRADO' });
+  });
+});

@@ -23,9 +23,9 @@ export const TEXTO_MOTIVO: Readonly<Record<MotivoCancelacion, string>> = {
 /**
  * Una solicitud en `solicitando` más vieja que esto se puede CONCILIAR (consultar al PAC y
  * resolverla). Más nueva, puede haber una llamada al PAC en vuelo: no se toca.
- * DECISION PROVISIONAL (nocturno): si a los 10 min el PAC la ve VIGENTE, se concluye que nunca
- * llegó y se borra. Supone que Facturama registra el DELETE en ese plazo; si lo hiciera después, el
- * CFDI quedaría cancelado ante el SAT y vigente aquí hasta que otra consulta lo vea (F2-110b/F2-190).
+ * DECISION PROVISIONAL (nocturno): si a los 10 min el PAC la ve VIGENTE, se concluye que no se
+ * registró y deja de estar abierta. F2-110b: no se borra, queda `sin_confirmar`, y la conciliación
+ * (`ConciliacionPacService`) la vuelve a consultar hasta 7 días por si Facturama la registró tarde.
  */
 export const SOLICITUD_VENCIDA_MS = 10 * 60 * 1000;
 
@@ -33,6 +33,8 @@ export const SOLICITUD_VENCIDA_MS = 10 * 60 * 1000;
 export const MAX_ERROR_CANCELACION = 300;
 
 export type EstadoSolicitudAbierta = 'solicitando' | 'en_proceso';
+/** F2-110b: los estados que todavía se consultan al PAC (las abiertas y las `sin_confirmar`). */
+export type EstadoSolicitudConsultable = EstadoSolicitudAbierta | 'sin_confirmar';
 
 export const MENSAJE_CANCELACION_ABIERTA =
   'Esta factura ya tiene una solicitud de cancelación en curso. Pulsa "Actualizar estado" para ' +

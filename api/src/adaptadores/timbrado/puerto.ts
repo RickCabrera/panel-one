@@ -198,10 +198,43 @@ export interface CsdRegistrado {
   idOrganizacion: string;
 }
 
+/**
+ * F2-110b: cómo se busca en el PAC un CFDI del que NO tenemos `uuid` ni `idPac` (una reserva que se
+ * quedó en `timbrando` porque la respuesta del PAC fue ambigua). La llave es la del emisor: su RFC,
+ * la serie y el folio (en nuestra base, `(empresa, serie, folio)` es único).
+ */
+export interface ConsultaFolio {
+  rfcEmisor: string;
+  serie: string;
+  folio: string;
+  /** Zona IANA de la sucursal: la fecha que devuelva el PAC viene en hora LOCAL, sin offset. */
+  zonaHoraria: string;
+}
+
+/** Un CFDI que el PAC SÍ tiene (F2-110b). */
+export interface CfdiEncontrado extends ReferenciaCfdi {
+  estado: Exclude<EstadoCfdi, 'no_encontrado'>;
+  /** Null si el PAC no la da (o no se pudo leer): quien confirma usa la de la reserva. */
+  fechaTimbrado: Date | null;
+}
+
+/** El XML y el PDF de un CFDI, tal como los guarda el PAC (F2-110b). */
+export interface ArchivosPac {
+  xml: string;
+  pdf: Buffer;
+}
+
 export interface PuertoTimbrado {
   /** Da de alta (o reemplaza) el CSD de un emisor en el PAC multiemisor (F2-100). */
   registrarCsd(solicitud: SolicitudCsd): Promise<CsdRegistrado>;
   emitir(solicitud: SolicitudCfdi): Promise<CfdiTimbrado>;
   cancelar(solicitud: SolicitudCancelacion): Promise<ResultadoCancelacion>;
   consultarEstado(cfdi: ReferenciaCfdi): Promise<{ uuid: string; estado: EstadoCfdi }>;
+  /**
+   * F2-110b: el CFDI de ese emisor con esa serie y folio, o null si el PAC no tiene ninguno. Más de
+   * uno es `ESTADO_DESCONOCIDO` (reintentable): nadie decide a ciegas cuál es el nuestro.
+   */
+  buscarPorFolio(consulta: ConsultaFolio): Promise<CfdiEncontrado | null>;
+  /** F2-110b: el XML y el PDF de un CFDI que el PAC tiene (`CFDI_NO_ENCONTRADO` si no). */
+  descargarArchivos(cfdi: ReferenciaCfdi): Promise<ArchivosPac>;
 }

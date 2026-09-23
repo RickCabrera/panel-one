@@ -1778,6 +1778,11 @@ model Cfdi {
   globalAnio         Int?              @map("global_anio")
   globalDesde        DateTime?         @map("global_desde") @db.Timestamptz(3)
   globalHasta        DateTime?         @map("global_hasta") @db.Timestamptz(3)
+  // F2-110b. Conciliación con el PAC: la última vez que una vuelta RECLAMÓ este CFDI (el candado
+  // en base: un UPDATE condicional, sólo gana una vuelta cada `RECLAMO_MS`), y, en una reserva
+  // `timbrando`, la PRIMERA búsqueda en el PAC que no la encontró (liberar exige una segunda).
+  conciliacionAt     DateTime?         @map("conciliacion_at") @db.Timestamptz(3)
+  busquedaVaciaAt    DateTime?         @map("conciliacion_vacia_at") @db.Timestamptz(3)
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime          @map("updated_at") @db.Timestamptz(3)
 
@@ -1862,6 +1867,10 @@ enum EstadoCancelacionCfdi {
   aceptada
   // El receptor la rechazó: el CFDI sigue vigente y se puede volver a solicitar.
   rechazada
+  // F2-110b. Una `solicitando` que a los 10 min el PAC veía VIGENTE: se dio por no registrada, pero
+  // Facturama pudo registrarla TARDE. No cuenta como abierta (se puede volver a pedir); la
+  // conciliación la consulta hasta 7 días y, si el PAC la ve cancelada, la acepta con sus efectos.
+  sin_confirmar
 
   @@map("estado_cancelacion_cfdi")
 }

@@ -1153,6 +1153,14 @@ escritura contra el POS (test que lo afirma inspeccionando el modo de la conexi�
 > (sólo admin_global): decidir y, si sí, escribirlo como tarea. Ver esquema-sr §2 "Control de folios
 > (F2-110)".
 
+> **Y además (de F2-110b).** Tres huecos conocidos de la conciliación con el PAC, a revisar en la
+> auditoría: (1) una reserva LIBERADA (dos búsquedas vacías separadas 15 min) que el PAC listara
+> después no se detecta; (2) una cancelación hecha FUERA del sistema (portal de Facturama) no se
+> detecta: sólo se re-consultan las `sin_confirmar`, no todos los vigentes; (3) una reserva que se
+> confirma aunque el PAC ya la reporta cancelada sólo se dice en `requierenRevision` (tarjeta del
+> tablero y log): no queda marcada en la base. Decidir si alguno amerita tarea. Ver esquema-sr §2
+> "Conciliación con el PAC (F2-110b)".
+
 > **Decisión abierta que dejó F2-140:** Comparativos compara **una empresa a la vez** (la de la
 > cabecera); la dimensión "empresa" de la matriz, para admin_global, no se construyó. Costo de
 > hacerlo en el front: N empresas × 4 consultas (`resumen` y `comparativo-sucursales`, A y B).
@@ -1536,6 +1544,13 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 > saldo y la vigencia: si sí, conciliar el saldo local contra el suyo; (4) qué contesta Facturama al
 > timbrar SIN saldo (hoy el panel bloquea antes, pero con el control apagado el rechazo sería suyo).
 > Supuestos en esquema-sr §2 "Control de folios (F2-110)".
+> **Y además (de F2-110b).** Contra Facturama: (1) la búsqueda por serie y folio (`GET
+> /api-lite/cfdis?type=issuedLite&rfcIssuer&serie&folioStart&folioEnd&status=all`): que exista, que
+> aplique los filtros, que no pagine a un solo resultado, la forma de la fila (`Id`, `Serie`, `Folio`,
+> `Uuid`, `Status`, `Date`, ¿trae el RFC emisor?) y la zona de `Date`; (2) cuánto tarda en listar un
+> CFDI recién timbrado (hoy: 15 min de edad mínima y dos búsquedas vacías separadas 15 min antes de
+> liberar); (3) cuánto puede tardar en registrar un DELETE que contestó ambiguo (hoy: se re-consulta
+> 7 días). Supuestos en esquema-sr §2 "Conciliación con el PAC (F2-110b)".
 
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus

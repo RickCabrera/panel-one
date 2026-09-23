@@ -66,6 +66,8 @@ class PacControlado implements PuertoTimbrado {
   }
 
   registrarCsd: PuertoTimbrado['registrarCsd'] = (s) => this.falso.registrarCsd(s);
+  buscarPorFolio: PuertoTimbrado['buscarPorFolio'] = (c) => this.falso.buscarPorFolio(c);
+  descargarArchivos: PuertoTimbrado['descargarArchivos'] = (c) => this.falso.descargarArchivos(c);
   cancelar: PuertoTimbrado['cancelar'] = (s) => this.falso.cancelar(s);
   consultarEstado: PuertoTimbrado['consultarEstado'] = (s) => this.falso.consultarEstado(s);
 

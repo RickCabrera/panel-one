@@ -28,6 +28,7 @@ import type { Filtro } from '../../inicio/consultas';
 import { fechaHoraEn, fechaParaTabla } from '../../tickets/formato';
 import {
   bajarArchivoCfdi,
+  conciliarConPac,
   LLAVE_TABLERO,
   POR_PAGINA_TABLA,
   reintentarEnvio,
@@ -49,6 +50,7 @@ import {
   puntosMes,
   puntosSucursal,
   tasaTexto,
+  textoConciliacion,
 } from './reglas';
 
 const CONTROL =
@@ -64,7 +66,8 @@ const facturas = (n: number) => `${n} ${n === 1 ? 'factura' : 'facturas'}`;
 
 /**
  * Tablero de facturación (F2-106): KPIs, barras por sucursal / mes / hora, la tabla de CFDI con
- * búsqueda y CSV, las cuentas por facturar y los envíos por correo a reintentar. El periodo y la
+ * búsqueda y CSV, las cuentas por facturar, los envíos por correo a reintentar y la conciliación con
+ * el PAC a pedido (F2-110b). El periodo y la
  * sucursal son los globales de la cabecera. Ninguna cifra se calcula aquí.
  */
 export function TableroFacturacion({
@@ -92,6 +95,7 @@ export function TableroFacturacion({
       <TablaCfdis filtro={filtro} rango={rango} sucursales={sucursales} />
       <PorFacturar filtro={filtro} rango={rango} sucursales={sucursales} />
       <EnviosPendientes empresaId={filtro?.empresaId ?? null} />
+      <ConciliacionPac />
     </div>
   );
 }
@@ -710,6 +714,62 @@ function PorFacturar({
           )
         }
       </SegunEstado>
+    </Tarjeta>
+  );
+}
+
+/**
+ * Conciliación con el PAC a pedido (F2-110b): lo mismo que corre solo cada 15 minutos. El alcance lo
+ * pone el api (un admin de empresa concilia su empresa). El resultado se dice en frases.
+ */
+function ConciliacionPac() {
+  const queryClient = useQueryClient();
+  const [enCurso, setEnCurso] = useState(false);
+  const [resultado, setResultado] = useState<
+    { tipo: 'ok'; frases: string[] } | { tipo: 'error'; texto: string } | null
+  >(null);
+
+  async function conciliar() {
+    if (enCurso) return;
+    setEnCurso(true);
+    setResultado(null);
+    try {
+      setResultado({ tipo: 'ok', frases: textoConciliacion(await conciliarConPac()) });
+      await queryClient.invalidateQueries({ queryKey: LLAVE_TABLERO });
+    } catch (e) {
+      setResultado({ tipo: 'error', texto: mensajeDe(e) });
+    } finally {
+      setEnCurso(false);
+    }
+  }
+
+  return (
+    <Tarjeta titulo="Conciliación con el PAC">
+      <p className="text-sm text-tinta-suave">
+        Resuelve lo que quedó sin saber cuando el PAC no contestó a tiempo: emisiones colgadas,
+        cancelaciones sin confirmar, refacturaciones a medias y facturas sin archivos. Corre sola
+        cada 15 minutos; aquí se puede pedir ahora.
+      </p>
+      <button
+        type="button"
+        className={`${BOTON} mt-2`}
+        disabled={enCurso}
+        onClick={() => void conciliar()}
+      >
+        {enCurso ? 'Conciliando…' : 'Conciliar ahora'}
+      </button>
+      {resultado?.tipo === 'error' && (
+        <p role="alert" className="mt-2 text-sm text-peligro">
+          {resultado.texto}
+        </p>
+      )}
+      {resultado?.tipo === 'ok' && (
+        <ul role="status" className="mt-2 flex flex-col gap-1 text-sm" data-testid="conciliacion">
+          {resultado.frases.map((f) => (
+            <li key={f}>{f}</li>
+          ))}
+        </ul>
+      )}
     </Tarjeta>
   );
 }

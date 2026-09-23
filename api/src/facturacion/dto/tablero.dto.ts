@@ -335,13 +335,16 @@ export class CfdiFilaDto implements CfdiFila {
     description:
       'F2-109: la última solicitud de cancelación si NO quedó aceptada, o null. `en_proceso` = el ' +
       'SAT espera al receptor (la factura sigue vigente y sigue contando en lo facturado); ' +
-      '`rechazada` = el receptor la rechazó; `solicitando` = el PAC no confirmó (consultar).',
+      '`rechazada` = el receptor la rechazó; `solicitando` = el PAC no confirmó (consultar); ' +
+      '`sin_confirmar` (F2-110b) = a los 10 min el PAC la veía vigente: sigue vigente y se puede ' +
+      'volver a pedir, y la conciliación la vuelve a consultar (si el PAC la registró tarde, queda ' +
+      'cancelada sola).',
   })
   cancelacion!: CancelacionFilaDto | null;
 }
 
 export class CancelacionFilaDto implements CancelacionFila {
-  @ApiProperty({ enum: ['solicitando', 'en_proceso', 'rechazada'] })
+  @ApiProperty({ enum: ['solicitando', 'en_proceso', 'rechazada', 'sin_confirmar'] })
   estado!: EstadoCancelacionFila;
 
   @ApiProperty({ example: '02', description: 'c_MotivoCancelacion pedido.' })

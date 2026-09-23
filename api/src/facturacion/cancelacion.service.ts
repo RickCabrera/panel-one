@@ -27,6 +27,7 @@ import {
   type AnotacionCancelacion,
   type AvisoCancelacion,
   type SolicitudAbierta,
+  type SolicitudSinConfirmar,
 } from '../scope/escritura-facturacion';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import {
@@ -41,6 +42,7 @@ import {
   textoErrorPac,
   type EstadoSolicitudAbierta,
 } from './cancelacion';
+import { ventanaVencida } from './conciliacion';
 import { textoDeError } from './entrega';
 
 const SCOPE_SISTEMA: EmpresaScope = { tipo: 'global' };
@@ -329,8 +331,15 @@ export class CancelacionCfdiService {
       await escritura.marcarConsultada(s.empresaId, s.solicitudId, null, ahora).catch(() => false);
       return s.estado;
     }
+    // F2-110b: "no procedió" tras una solicitud AMBIGUA ya no se borra: queda `sin_confirmar` para que
+    // la conciliación la vuelva a consultar (Facturama pudo registrarla tarde). Deja de estar abierta:
+    // se puede volver a pedir, igual que antes.
     const anotacion: AnotacionCancelacion =
-      res === 'aceptada' ? { tipo: 'aceptada', fecha: ahora } : { tipo: res };
+      res === 'aceptada'
+        ? { tipo: 'aceptada', fecha: ahora }
+        : res === 'no_procedio'
+          ? { tipo: 'sin_confirmar' }
+          : { tipo: res };
     const r = await escritura.anotarCancelacion(
       s.empresaId,
       s.solicitudId,
@@ -341,7 +350,8 @@ export class CancelacionCfdiService {
     if (!r.gano) return s.estado;
     if (res === 'no_procedio') {
       this.#log.warn(
-        `Solicitud de cancelación ${s.solicitudId} (CFDI ${s.uuid}) nunca llegó al PAC.`,
+        `Solicitud de cancelación ${s.solicitudId} (CFDI ${s.uuid}): el PAC no la registró; queda ` +
+          'sin confirmar (la conciliación la vuelve a consultar).',
       );
     }
     if (r.aviso) await this.#avisar(scope, r.aviso);
@@ -386,6 +396,88 @@ export class CancelacionCfdiService {
         `No se pudo anotar el aviso de cancelación ${a.solicitudId}: ${String(error)}`,
       );
     }
+  }
+
+  /**
+   * F2-110b: vuelve a consultar al PAC una solicitud `sin_confirmar` (la que a los 10 min se dio por
+   * no registrada) y la resuelve. Nunca lanza por el PAC (la conciliación sigue con la siguiente):
+   * - `cancelado` → `aceptada` con la fecha de la consulta (el GET no trae la de la cancelación;
+   *   misma convención que `#conciliar`), con TODOS los efectos de F2-109 y el aviso al receptor.
+   * - `en_cancelacion` → `en_proceso` (la sigue el sondeo de F2-109). Si el CFDI ya tiene otra
+   *   solicitud abierta, el único parcial lo impide: se deja y se reintenta.
+   * - `vigente` / `no_encontrado` → nada, hasta que vence `VENTANA_SIN_CONFIRMAR_MS`: entonces se
+   *   borra (como antes de F2-110b).
+   */
+  async revisarSinConfirmar(
+    scope: EmpresaScope,
+    s: SolicitudSinConfirmar,
+  ): Promise<'cancelada' | 'en_proceso' | 'descartada' | 'sin_cambio' | 'fallida'> {
+    const escritura = this.datos.facturacion(scope);
+    let pac: EstadoCfdi;
+    try {
+      pac = (await this.pac.consultarEstado({ uuid: s.uuid, idPac: s.idPac })).estado;
+    } catch (error) {
+      await escritura
+        .marcarConsultada(s.empresaId, s.solicitudId, textoErrorPac(error), this.#ahora())
+        .catch(() => false);
+      return 'fallida';
+    }
+    const ahora = this.#ahora();
+    if (pac === 'cancelado' || pac === 'en_cancelacion') {
+      const anotacion: AnotacionCancelacion =
+        pac === 'cancelado' ? { tipo: 'aceptada', fecha: ahora } : { tipo: 'en_proceso' };
+      let r: { gano: boolean; aviso: AvisoCancelacion | null };
+      try {
+        r = await escritura.anotarCancelacion(
+          s.empresaId,
+          s.solicitudId,
+          'sin_confirmar',
+          anotacion,
+          ahora,
+        );
+      } catch (error) {
+        this.#log.warn(
+          `Cancelación sin confirmar ${s.solicitudId} (CFDI ${s.uuid}, ${pac} en el PAC) sin ` +
+            `anotar: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        await escritura
+          .marcarConsultada(s.empresaId, s.solicitudId, null, ahora)
+          .catch(() => false);
+        return 'fallida';
+      }
+      if (!r.gano) return 'descartada';
+      if (r.aviso) await this.#avisar(scope, r.aviso);
+      this.#log.warn(
+        `Cancelación del CFDI ${s.uuid} registrada TARDE por el PAC: ` +
+          (pac === 'cancelado' ? 'se anota cancelada.' : 'queda en proceso.'),
+      );
+      return pac === 'cancelado' ? 'cancelada' : 'en_proceso';
+    }
+    if (ventanaVencida(s.solicitadaAt, ahora)) {
+      const r = await escritura.anotarCancelacion(
+        s.empresaId,
+        s.solicitudId,
+        'sin_confirmar',
+        { tipo: 'no_procedio' },
+        ahora,
+      );
+      if (r.gano) {
+        this.#log.warn(
+          `Cancelación sin confirmar ${s.solicitudId} (CFDI ${s.uuid}): el PAC la sigue viendo ` +
+            `${pac} al vencer la ventana; se da por no registrada.`,
+        );
+      }
+      return 'descartada';
+    }
+    await escritura
+      .marcarConsultada(
+        s.empresaId,
+        s.solicitudId,
+        pac === 'no_encontrado' ? `CFDI_NO_ENCONTRADO: ${MENSAJE_PAC_NO_CONOCE}` : null,
+        ahora,
+      )
+      .catch(() => false);
+    return 'sin_cambio';
   }
 
   /**

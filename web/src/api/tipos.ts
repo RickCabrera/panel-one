@@ -1744,17 +1744,30 @@ export interface CfdiFila {
   /**
    * F2-109: la última solicitud de cancelación si NO quedó aceptada, o null. `en_proceso` = el SAT
    * espera al receptor (la factura sigue vigente y cuenta); `rechazada` = el receptor la rechazó;
-   * `solicitando` = el PAC no confirmó (hay que consultar).
+   * `solicitando` = el PAC no confirmó (hay que consultar); `sin_confirmar` (F2-110b) = el PAC no la
+   * registró a tiempo: sigue vigente, se puede volver a pedir, y la conciliación la revisa sola.
    */
   cancelacion: CancelacionFila | null;
 }
 
-/** `CancelacionFilaDto` (F2-109). */
+/** `CancelacionFilaDto` (F2-109; `sin_confirmar`, F2-110b). */
 export interface CancelacionFila {
-  estado: 'solicitando' | 'en_proceso' | 'rechazada';
+  estado: 'solicitando' | 'en_proceso' | 'rechazada' | 'sin_confirmar';
   motivo: string;
   solicitadaAt: string;
   resueltaAt: string | null;
+}
+
+/** `ResumenConciliacionDto` (F2-110b): cómo terminó una vuelta de conciliación con el PAC. */
+export interface ResumenConciliacion {
+  reservas: { revisadas: number; confirmadas: number; liberadas: number; enEspera: number };
+  cancelaciones: { revisadas: number; canceladas: number; descartadas: number };
+  sustituciones: { revisadas: number; cerradas: number };
+  archivos: { revisados: number; recuperados: number };
+  /** El PAC falló o no permitió decidir: se reintentan solos. */
+  fallidas: number;
+  /** Serie-folio confirmados que el PAC ya reporta cancelados: revisar a mano. */
+  requierenRevision: string[];
 }
 
 /** c_MotivoCancelacion del SAT (F2-109). */

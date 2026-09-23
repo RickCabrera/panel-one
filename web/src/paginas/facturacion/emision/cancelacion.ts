@@ -20,11 +20,17 @@ export function motivosPara(c: Pick<CfdiFila, 'origen'>): MotivoCancelacion[] {
 }
 
 /**
- * ¿Se le ofrece "Cancelar"? Vigente y sin una solicitud abierta (una rechazada sí se puede volver a
- * pedir). Con una abierta se ofrece "Actualizar estado".
+ * ¿Se le ofrece "Cancelar"? Vigente y sin una solicitud abierta (una rechazada, o una que el PAC no
+ * confirmó (`sin_confirmar`, F2-110b), sí se puede volver a pedir). Con una abierta se ofrece
+ * "Actualizar estado".
  */
 export function puedeCancelar(c: Pick<CfdiFila, 'estado' | 'cancelacion'>): boolean {
-  return c.estado === 'vigente' && (c.cancelacion === null || c.cancelacion.estado === 'rechazada');
+  return (
+    c.estado === 'vigente' &&
+    (c.cancelacion === null ||
+      c.cancelacion.estado === 'rechazada' ||
+      c.cancelacion.estado === 'sin_confirmar')
+  );
 }
 
 /** ¿Tiene una solicitud de cancelación abierta (hay que consultar)? */
@@ -73,5 +79,10 @@ export function textoCancelacion(c: NonNullable<CfdiFila['cancelacion']>): strin
       return `Cancelación sin confirmar (motivo ${c.motivo}): consulta su estado`;
     case 'rechazada':
       return `El receptor rechazó la cancelación (motivo ${c.motivo})`;
+    case 'sin_confirmar':
+      return (
+        `El PAC no registró la cancelación (motivo ${c.motivo}): sigue vigente y se puede volver ` +
+        'a pedir; si el PAC la registra tarde, se anota sola'
+      );
   }
 }
