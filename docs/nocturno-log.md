@@ -7967,3 +7967,123 @@ instalador elevado se probaron sólo con fakes y carpetas temporales (verificaci
 
 **Qué haría distinto.** Decidir desde el plan dónde vive el estado del backoff (el revisor lo pidió en
 SQLite y ya estaba escrito en JSON en mi cabeza) y medir la memoria del publicar antes de montar el raw.
+
+## 2026-09-23 13:20 — F2-240 · Lector de catálogos de SoftRestaurant
+**Estado:** CERRADA si el PR de `feat/F2-240` se mergea. Carril /agent (+ docs). Sin cambios de API ni de
+OpenAPI: el contrato de F2-230/F2-145 ya existía. **PENDIENTE DE VALIDACIÓN REAL (F2-192):** el flujo completo
+contra una SR real **no se ha visto correr**. En esta PC el login es sysadmin, así que el agente se niega a leer
+catálogos (ver decisiones). Lo probado de verdad: las 7 consultas compilan contra la SR 10 local y devuelven lo
+esperado. Todo lo demás (ciclo, hash, cola, envío, reintentos) está probado con un lector falso y un API falso.
+Revisor, gate del plan: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos; 3 obligatorias, todas hechas).
+Gate del entregable: APROBADO CON OBSERVACIONES al primer pase (0 bloqueos).
+
+**Qué quedó hecho.**
+- **Mapeo real de catálogos**, leyendo en la SR 10 local (`.\NATIONALSOFT`) sólo metadatos (`sys.*`) y conteos,
+  sin ningún valor de negocio. Está en `docs/esquema-sr.md` §6–§8, con §11, §12, §13 y la tabla de instalaciones:
+  - grupos = `dbo.grupos`;
+  - productos = `dbo.productos` LEFT JOIN `dbo.productosdetalle` (el precio y `bloqueado` viven en el detalle,
+    una fila por empresa del POS);
+  - meseros = `dbo.meseros`;
+  - áreas = `dbo.areasrestaurant`. **`dbo.areas` es un SEÑUELO**: es el área de producción e impresión;
+  - canales = `dbo.tiposervicio`, que está vacía (ver lo abierto);
+  - clientes = `dbo.clientes`.
+- **Agente** (`agent/src/ArkonAgente/`):
+  - `Sql/Consultas/sr_catalogo_*.sql` (6): NOLOCK, alias en minúsculas y columnas explícitas. Nunca contraseña,
+    foto ni dirección.
+  - `Catalogos/MapeoCatalogos.cs`: PURO, sobre `IDataReader`. Consolida productos, calcula el hash SHA-256 y
+    busca columnas sin distinguir mayúsculas.
+  - `Catalogos/LectorCatalogos.cs`: la consulta sale de `ISoftRestaurantReader.ConsultaCatalogo`, colgada del
+    reader que eligió la versión.
+  - `Catalogos/SincronizadorCatalogos.cs`: decide cuándo leer y qué encolar.
+  - `Cola/ColaCatalogos.cs`: tablas `catalogo_envios`, `catalogo_estado` y `agente_marcas` en el MISMO `cola.db`.
+    No toca el `user_version` de `ColaLocal`.
+  - `Cola/EnviadorCatalogos.cs`: carril propio con su propio backoff; también consulta el forzado.
+  - `Worker.cs`: corre DESPUÉS del heartbeat y del envío, con try/catch propio.
+- **`diagnostico.sql`** revisa ahora permisos por tabla (INSERT/UPDATE/DELETE/ALTER) sobre las 13 tablas que lee
+  el agente. `agente test` marca FALLA con "permiso por tabla (dbo.x: UPDATE …)". Con el sysadmin local da 52.
+- **Config:** `horaSincronizacionCatalogos` ("HH:mm", hora de ESTA PC, 04:00 por defecto) en el cargador,
+  `infra/config.example.json` y `agent/README.md`, que tiene una sección nueva "Catálogos (F2-240)". El
+  instalador no escribe este campo; el default basta.
+
+**Decisiones que tomé y por qué.** Las `DECISION PROVISIONAL (nocturno)`:
+- **No leer catálogos si el usuario SQL puede escribir, o si no se pudo confirmar** (`SincronizadorCatalogos`,
+  cabecera). Sigue la nota del Worker de F1-021. Consecuencia: en esta PC no se sincroniza nada hasta F1-020b.
+  Si Ricardo lo quiere distinto, es un `if`.
+- **`origenSrId` del mesero = `idmeserointerno` (el PK)**, y `idmesero` va como `clave`. `idmesero` no tiene
+  índice único, y el cheque apunta a `idmesero` sin FK (§7). F1-022 tendrá que traducir si algún día manda un id
+  de mesero.
+- **Producto con varias filas de detalle distintas** (varias empresas en una base de SR): viaja con precio y
+  estado nulos, más un aviso (`MapeoCatalogos.MapearProductos`). ❓ La multiempresa queda abierta para Ricardo
+  (§6).
+- **Sentido de los estados:** `meseros.visible`, `areasrestaurant.Estatus` y `productosdetalle.bloqueado`
+  (1 = bloqueado) son supuestos marcados. `clientes.status` NO se lee: sin clientes en la base no hay evidencia
+  de su sentido, y va `activoPos` nulo.
+- **Recorte:** todo texto, ids incluidos, pierde SÓLO los espacios de la derecha. **F1-022 tiene que copiar esta
+  regla** para `areaOrigenSrId` y `clienteOrigenSrId`, o el cruce de F2-233/F2-232 falla en silencio (§13).
+- **No se recorta** a los largos del contrato. `clientes.email`, `telefono1`, `rfc` y `nombre` son más largos que
+  el DTO: el API rechaza ESE registro y el agente lo registra y lo suma a `rechazados`. ❓ Queda abierto (§13).
+- **Sólo sincronizaciones COMPLETAS** (páginas de 500 + cierre), nunca incrementales. No se abre otra mientras
+  la anterior del catálogo siga en la cola (contrato de F2-230).
+- **Hash del agente:** si no cambió y no es forzado, no se encola nada. Se guarda EN LA MISMA transacción que las
+  páginas y el cierre.
+- **Respuestas del API:**
+  - 400, 409, 413, 500 o un 2xx ilegible: se abandona la sincronización, se borra el hash y se relee a los 15 min.
+  - 401, 429, 503 y otros 5xx: backoff.
+  - La marca "primera vez" es `agente_marcas`, no la falta de hash. Así un 400 persistente no relee el POS en
+    cada ciclo (obs. 2 del revisor; test `Un_400_que_no_se_va…`).
+- **Forzado:** cada `solicitadaAt` se atiende una vez y queda en `agente_marcas`. El panel lo sigue viendo
+  pendiente por los 5 de inventario (F2-241): es lo esperado y el agente no se cicla.
+
+**Trampas que encontré.**
+- **`sqlcmd -E` desde Git Bash dice "-E and -U/-P mutually exclusive"**, aun con `MSYS_NO_PATHCONV=1`. Desde
+  PowerShell funciona: `powershell -NoProfile -Command "& sqlcmd -S '.\NATIONALSOFT' -E -d softrestaurant10 -t 10
+  -W -s '|' -i archivo.sql"`, con el `.sql` en el scratchpad.
+- **Los heredocs de Python con `\\b`, `\\n` o `\\s` salieron corrompidos**: se metió un backspace real (0x08) en
+  un regex de C# y saltos de línea reales en literales. Para literales con escapes usa Write o Edit, o
+  `chr(92)`. Para buscar basura: `grep -rlP '[\x00-\x08]' agent`.
+- Un `[Theory]` con un parámetro de tipo `internal enum` no compila (CS0051): pasa el texto y parsea.
+- Los tests del sincronizador que miran `ContarPendientes()` dan 0: el envío sale en el MISMO ciclo. Mide lo que
+  llega al API falso.
+
+**Qué quedó abierto.**
+- ❓ **Canales:** `areasrestaurant.idtiposervicio` es numérico (1/2/3) y `tiposervicio` es nchar y está vacía.
+  Probablemente el tipo de servicio es un enum fijo del POS. Hoy canales cierra con `total = 0` en esta base.
+  Va a F2-192 (§8).
+- **Estaciones:** SR sí las tiene (`dbo.estaciones`, `cheques.estacion`). No se mandan porque el panel no tiene ni
+  espejo ni contrato. Sería tarea nueva; lo anoto para F2-250.
+- **Riesgos conocidos** (observaciones del revisor, sin arreglar):
+  - Un ciclo de catálogos con SQL o red degradados puede tardar ~130 s: 7 conexiones × (5+5 s) más dos
+    peticiones HTTP de 30 s. Eso retrasa los heartbeats SIGUIENTES y el panel marca "desconectado" a los 90 s.
+    Sólo se probó que el PRIMER heartbeat sale antes. Arreglo posible: correr los catálogos en una tarea aparte
+    del ciclo.
+  - El aviso de "varias empresas" se repite cada día, uno por producto, aunque no haya cambios.
+  - El `idcliente` sale en el log cuando el API rechaza un cliente. Se supone que es un código, no un teléfono.
+  - Una lectura NOLOCK a media edición del POS podría dar de baja productos hasta la siguiente sincronización.
+    Es reversible.
+  - Un forzado se marca atendido aunque algún catálogo haya quedado esperando su envío anterior.
+- La lista de tablas de `diagnostico.sql` está en dos subconsultas. El test exige que las dos sean iguales (obs. 1
+  del revisor).
+
+**Tests.**
+- **agente:**
+  - `dotnet build --configuration Release`: 0 warnings.
+  - `dotnet test`: **431/431**, 0 omitidos (antes 367), tres corridas seguidas verdes.
+- **Nuevos:**
+  - `MapeoCatalogosTests`: vacíos de los 6; acentos, comillas, ñ y NULL; relleno; precio siempre presente;
+    consolidación; tipos que no convierten.
+  - `EnviadorCatalogosTests` y `ColaCatalogosTests`: paginado, Σ `rechazadosSinFila`, abandono, backoff,
+    migración de un `cola.db` viejo y atomicidad.
+  - `SincronizadorCatalogosTests`: **dos corridas sin cambios = la 2.ª no encola nada**, hora diaria, forzado una
+    vez, falla sin `total = 0`, 400 sin ciclo y permisos.
+  - `WorkerCatalogosTests`.
+  - Y además: guardia de tablas contra `diagnostico.sql`, parseo TSql100 de todas las consultas, meseros sin
+    contraseña, config de la hora y permiso por tabla.
+- **Mutaciones a mano:**
+  - quitar la comparación de hash: 2 rojos;
+  - `total` = filas SQL: 2 rojos.
+
+**Qué haría distinto.** Para la próxima sesión que toque el agente (F2-241), mirar las tablas en la SR local ANTES
+de escribir el plan, como hice aquí. §9 y §10 siguen "sin mapear", pero `recetasalmacenes`,
+`explosionproductos*`, `costos` y `gruposi` existen en `softrestaurant10` (sólo vi sus nombres). F2-241 puede reusar
+`ColaCatalogos`, `EnviadorCatalogos` y `SincronizadorCatalogos`: los cinco de inventario son el mismo contrato.
+Basta con sumarlos a `CatalogoPanel`, a sus `.sql` y a la lista de `diagnostico.sql`.

@@ -121,7 +121,10 @@ public partial class ConsultasEmbebidasTests
         // F2-240: si una consulta nueva lee una tabla que la sonda no revisa, un GRANT de escritura
         // sobre ella pasaría sin que 'agente test' falle.
         var diagnostico = ConsultasEmbebidas.Leer("diagnostico");
-        var revisadas = Regex.Matches(diagnostico, @"N'dbo\.(\w+)'").Select(m => m.Groups[1].Value.ToLowerInvariant()).ToHashSet();
+        var nombres = Regex.Matches(diagnostico, @"N'dbo\.(\w+)'").Select(m => m.Groups[1].Value.ToLowerInvariant()).ToList();
+        // La lista va dos veces (el conteo y el ejemplo): las dos tienen que ser la misma.
+        Assert.All(nombres.GroupBy(n => n), g => Assert.True(g.Count() == 2, $"dbo.{g.Key} no está en las dos listas"));
+        var revisadas = nombres.ToHashSet();
         var leidas = ConsultasEmbebidas.Nombres()
             .Where(n => n.StartsWith("sr_", StringComparison.Ordinal))
             .SelectMany(n => TablaDbo().Matches(SinComentariosNiTextos(ConsultasEmbebidas.Leer(n)))
