@@ -1804,7 +1804,7 @@ el código en el panel (vista de tickets F1-042 muestra el código de facturaci�
 el código precargado; si la impresión falla, el código es consultable en el panel en < 30 s.
 
 ### F2-103 · Portal público de autofactura
-`[ ]` Rutas públicas `/f/:slug` (slug por sucursal, estilo `me-facturo`): paso 1 código de
+`[x]` **ALCANCE:** sin emisión real (el POST responde 503 hasta F2-104) — no se cumple "flujo completo de las tres pantallas contra el puerto falso" — y sin re-descarga de un código facturado (F2-105, decisión abierta); viewport de celular no verificado en navegador real. **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190. Rutas públicas `/f/:slug` (slug por sucursal, estilo `me-facturo`): paso 1 código de
 ticket (precargado si viene en URL) → muestra resumen del consumo (fecha, sucursal, total,
 desglose subtotal/IVA); paso 2 datos del receptor: RFC (validar forma con regex oficial),
 razón social, régimen (select con catálogo SAT), CP, uso CFDI (select filtrado por régimen),
