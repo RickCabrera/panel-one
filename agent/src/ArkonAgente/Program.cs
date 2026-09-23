@@ -61,7 +61,7 @@ finally
     await Log.CloseAndFlushAsync();
 }
 
-// El servicio ArkonAgenteActualizador (F2-143). Su log va aparte (logsctualizador-AAAAMMDD.log)
+// El servicio ArkonAgenteActualizador (F2-143). Su log va aparte (logs\actualizador-AAAAMMDD.log)
 // para que un problema del swap no se pierda entre los del agente.
 static async Task<int> CorrerActualizadorAsync(RutasAgente rutas)
 {
