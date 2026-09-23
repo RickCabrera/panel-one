@@ -1913,7 +1913,7 @@ F1-004).
 > (`peticionDescarga`). (3) `FacturaPortalDto.descargas` sigue en nulos: llenarlo aquí.
 
 ### F2-106 · Dashboard de facturación
-`[ ]` Réplica funcional del dashboard de facturación de Arkhon: filtros (sucursal, rango de
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190/F2-191 (tasa con la base emisión/cierre como `DECISION PROVISIONAL`, esquema-sr §2 "El tablero de facturación"). Réplica funcional del dashboard de facturación de Arkhon: filtros (sucursal, rango de
 fechas, atajos Hoy/7/30/mes/año), KPIs (ventas del periodo = tickets sincronizados, monto
 facturado CFDI, cancelaciones, tasa de facturación = facturado/ventas), barras por sucursal,
 por mes y por hora, tabla de CFDI emitidos (UUID, serie-folio, receptor, total, estado,
