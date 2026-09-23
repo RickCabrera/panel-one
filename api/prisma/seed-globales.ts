@@ -92,8 +92,9 @@ export function generarGlobalesSeed(
         m = { periodo, incluidos: [], vigentes: 0 };
         meses.set(periodo.clave, m);
       }
+      if (!esFacturable(c.cheque)) continue;
       const estado = estadoPublico({ ...c, global: null }, c.cheque, op.ahora.getTime());
-      if (estado === 'expirado' && esFacturable(c.cheque)) m.incluidos.push(c);
+      if (estado === 'expirado') m.incluidos.push(c);
       else if (estado === 'pendiente') m.vigentes++;
     }
     const listos = [...meses.values()]
@@ -322,7 +323,8 @@ export async function sembrarGlobales(
 /**
  * El filtro de las globales DEL SEED de unas sucursales: las `origen = global` de esas sucursales
  * que amparan al menos un ticket del seed. Lo usa `sembrarVentas` para borrarlas (con sus filas, por
- * CASCADE) ANTES de recrear los códigos. Nunca toca una global que no ampare tickets del seed.
+ * CASCADE) ANTES de recrear los códigos. Nunca toca una global que no ampare tickets del seed, ni
+ * una que mezcle tickets del seed con tickets de otro origen (`every`: todos deben ser del seed).
  */
 export function whereGlobalesSeed(
   sucursalIds: readonly string[],
@@ -332,7 +334,8 @@ export function whereGlobalesSeed(
     origen: 'global',
     sucursalId: { in: [...sucursalIds] },
     globalCodigos: {
-      some: {
+      some: { sucursalId: { in: [...sucursalIds] } },
+      every: {
         sucursalId: { in: [...sucursalIds] },
         codigo: {
           cheque: { sucursalId: { in: [...sucursalIds] }, folioSr: { startsWith: prefijo } },

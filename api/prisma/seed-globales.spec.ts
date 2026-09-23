@@ -112,7 +112,8 @@ describe('generarGlobalesSeed()', () => {
       origen: 'global',
       sucursalId: { in: [FX.sucursalA1] },
       globalCodigos: {
-        some: {
+        some: { sucursalId: { in: [FX.sucursalA1] } },
+        every: {
           sucursalId: { in: [FX.sucursalA1] },
           codigo: {
             cheque: { sucursalId: { in: [FX.sucursalA1] }, folioSr: { startsWith: PREFIJO_SEED } },

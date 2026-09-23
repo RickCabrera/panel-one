@@ -377,7 +377,6 @@ export function mensajeGlobalEsperando(n: number): string {
   );
 }
 
-
 /** El enlace y la marca del portal de autofactura de una sucursal (F2-103), ya validados. */
 export interface DatosPortal {
   slug: string;
@@ -1425,7 +1424,12 @@ export class EscrituraFacturacion {
           throw error;
         }
       }
-      return { ...actual, periodicidad: datos.periodicidad, automatica: datos.automatica, automaticaDesde: desde };
+      return {
+        ...actual,
+        periodicidad: datos.periodicidad,
+        automatica: datos.automatica,
+        automaticaDesde: desde,
+      };
     });
   }
 
@@ -1437,8 +1441,11 @@ export class EscrituraFacturacion {
    *
    * El SQL replica "incluible" = `estadoPublico(...) === 'expirado'` y sin global, y "todavía
    * autofacturable" = `estadoPublico(...) === 'pendiente'` (un e2e lo compara rama por rama):
-   * código `pendiente`/`expirado` guardado, cuenta cerrada y no cancelada, SIN CFDI propio `vigente`
-   * o `timbrando` y SIN fila en `cfdi_global_codigos`. Empresa Y sucursal en CADA tabla.
+   * código `pendiente`/`expirado` guardado, cuenta FACTURABLE (cerrada, no cancelada y con total > 0,
+   * `codigo.ts#esFacturable`), SIN CFDI propio `vigente` o `timbrando` y SIN fila en
+   * `cfdi_global_codigos`. Empresa Y sucursal en CADA tabla. Una cuenta que SR reprocesó a total 0
+   * después de tener código no cuenta ni como lista ni como vigente (el portal tampoco la emite):
+   * la misma regla que `#ticketsDelPeriodo`.
    */
   async periodosGlobal(
     empresaId: string,
@@ -1476,6 +1483,7 @@ export class EscrituraFacturacion {
           AND cf.estado IN ('pendiente', 'expirado')
           AND ch.cancelado = false
           AND ch.cerrado_at IS NOT NULL
+          AND ch.total > 0
           AND ch.cerrado_at >= ${ventana}
           AND NOT EXISTS (
             SELECT 1 FROM cfdis c
@@ -1580,7 +1588,10 @@ export class EscrituraFacturacion {
     const vigentes: typeof codigos = [];
     for (const c of codigos) {
       const estado = estadoPublico(c, c.cheque, ahora.getTime());
-      if (estado === 'expirado' && c.global === null && esFacturable(c.cheque)) incluidos.push(c);
+      // Sólo cuentas facturables (total > 0): una que SR reprocesó a 0 no entra ni detiene la
+      // global (el portal tampoco la emitiría). Misma regla que el SQL de `periodosGlobal`.
+      if (!esFacturable(c.cheque)) continue;
+      if (estado === 'expirado' && c.global === null) incluidos.push(c);
       else if (estado === 'pendiente') vigentes.push(c);
     }
     return { incluidos, vigentes };
@@ -1649,7 +1660,12 @@ export class EscrituraFacturacion {
         })),
         vigentes: { tickets: vigentes.length, hasta },
         formaPago,
-        importes: incluidos.length > 0 ? importesGlobal(incluidos.map((c) => ({ folio: c.cheque.folio, total: c.cheque.total }))) : null,
+        importes:
+          incluidos.length > 0
+            ? importesGlobal(
+                incluidos.map((c) => ({ folio: c.cheque.folio, total: c.cheque.total })),
+              )
+            : null,
         globalesPrevias: await this.#globalesDelPeriodo(tx, empresaId, suc.id, periodo),
       };
     });

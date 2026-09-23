@@ -2,7 +2,13 @@ import { Prisma } from '@prisma/client';
 
 import type { InformacionGlobal, SolicitudCfdi } from '../adaptadores/timbrado/puerto';
 import { fechaLocal, instanteDesdeLocal } from '../comun/fechas';
-import { FORMA_PAGO_SAT, formaDominante, importesDeTotal, TASA_IVA, type FormaPagoEnum } from './cfdi';
+import {
+  FORMA_PAGO_SAT,
+  formaDominante,
+  importesDeTotal,
+  TASA_IVA,
+  type FormaPagoEnum,
+} from './cfdi';
 import type { DatosEmision } from './cfdi';
 
 /**
@@ -312,6 +318,7 @@ export function enrollarPeriodos(
     }
   }
   return [...porClave.values()]
+    .filter((r) => r.nListos > 0 || r.nVigentes > 0)
     .map((r) => ({
       ...r,
       estado: estadoPeriodo(r.periodo, r, ahora, zona),

@@ -26,7 +26,7 @@ import {
   MENSAJE_GLOBAL_SIN_TICKETS,
 } from '../scope/escritura-facturacion';
 import { Espera } from './cfdi.service';
-import { estadoPublico } from './codigo';
+import { esFacturable, estadoPublico } from './codigo';
 import { MENSAJE_GLOBAL_INCIERTA, FacturaGlobalService } from './global.service';
 import { periodoDe } from './global';
 
@@ -131,6 +131,10 @@ const CHEQUES_A1 = [
   cheque('G8', '2026-08-12T13:00:00-06:00', '40.00'),
   cheque('G9', '2026-08-22T13:00:00-06:00', '20.00'),
   cheque('S1', '2026-09-10T13:00:00-06:00', '50.00'),
+  // Junio: G11 se reprocesa a total 0 DESPUÉS de tener código; G12 queda `en_global` guardado sin
+  // fila de global (dato viejo). Ninguno entra: junio NO debe salir `lista`.
+  cheque('G11', '2026-06-15T13:00:00-06:00', '10.00'),
+  cheque('G12', '2026-06-16T13:00:00-06:00', '12.00'),
 ];
 const CHEQUES_A2 = [cheque('T1', '2026-08-31T23:30:00-07:00', '80.00')];
 
@@ -353,6 +357,16 @@ describe('Factura global (e2e, F2-108)', () => {
       where: { folioSr: 'G8', empresaId: FX.empresaA },
       data: { cancelado: true },
     });
+    // G11: SR la reprocesa a total 0 (cortesía total) DESPUÉS de que tuvo código.
+    await prisma.cheque.updateMany({
+      where: { folioSr: 'G11', empresaId: FX.empresaA },
+      data: { total: '0.00', subtotal: '0.00' },
+    });
+    // G12: `en_global` guardado sin fila en `cfdi_global_codigos`.
+    await prisma.codigoFacturacion.updateMany({
+      where: { cheque: { folioSr: 'G12', empresaId: FX.empresaA } },
+      data: { estado: 'en_global' },
+    });
     reloj.t = HOY;
   }, 120_000);
 
@@ -413,6 +427,12 @@ describe('Factura global (e2e, F2-108)', () => {
         },
       ]);
       expect(res.body.emitidas).toEqual([]);
+      // Junio (G11 en total 0, G12 en_global guardado) no aparece: no hay nada que globalizar.
+      expect(periodo(res.body, '2026-06-01')).toBeUndefined();
+      expect((await vistaPrevia('2026-06-01')).body).toMatchObject({ tickets: [], total: null });
+      const junio = await emitir({ clave: '2026-06-01' });
+      expect(junio.status).toBe(409);
+      expect(junio.body.message).toBe(MENSAJE_GLOBAL_SIN_TICKETS);
     });
 
     it('A2 (Tijuana): el ticket del 31 de agosto 23:30 local cae en AGOSTO de A2', async () => {
@@ -457,7 +477,7 @@ describe('Factura global (e2e, F2-108)', () => {
           cheque: true,
         },
       });
-      expect(codigos).toHaveLength(8);
+      expect(codigos).toHaveLength(10);
       const esperado = new Map<
         string,
         { tickets: number; vigentes: number; total: Prisma.Decimal }
@@ -468,12 +488,15 @@ describe('Factura global (e2e, F2-108)', () => {
         ramas[c.cheque.folioSr] = estado;
         const clave = periodoDe(c.cheque.cerradoAt!, 'America/Mexico_City', 'mensual').clave;
         const e = esperado.get(clave) ?? { tickets: 0, vigentes: 0, total: new Prisma.Decimal(0) };
-        if (estado === 'expirado' && c.global === null) {
+        // Sólo cuentas facturables (cerrada, no cancelada, total > 0): el mismo juez que el portal.
+        const facturable = esFacturable(c.cheque);
+        if (facturable && estado === 'expirado' && c.global === null) {
           e.tickets++;
           e.total = e.total.add(c.cheque.total);
         }
-        if (estado === 'pendiente') e.vigentes++;
-        esperado.set(clave, e);
+        if (facturable && estado === 'pendiente') e.vigentes++;
+        if (e.tickets > 0 || e.vigentes > 0) esperado.set(clave, e);
+        else if (!esperado.has(clave)) esperado.set(clave, e);
       }
       expect(ramas).toEqual({
         G1: 'expirado',
@@ -483,15 +506,23 @@ describe('Factura global (e2e, F2-108)', () => {
         G5: 'en_proceso',
         G8: 'cancelado',
         G9: 'expirado',
+        G11: 'expirado',
+        G12: 'en_global',
         S1: 'pendiente',
       });
       const res = await periodos(FX.sucursalA1);
       for (const [clave, e] of esperado) {
+        if (e.tickets === 0 && e.vigentes === 0) {
+          // Nada que globalizar ni que esperar: el periodo no aparece (junio: G11 y G12).
+          expect([clave, periodo(res.body, clave)]).toEqual([clave, undefined]);
+          continue;
+        }
         expect([clave, periodo(res.body, clave)]).toMatchObject([
           clave,
           { tickets: e.tickets, vigentes: e.vigentes, total: e.total.toFixed(2) },
         ]);
       }
+      expect(esperado.get('2026-06-01')).toMatchObject({ tickets: 0, vigentes: 0 });
     });
 
     it('vista previa de agosto: 4 tickets, 253.46 + 40.55 = 294.01, forma 01, InformacionGlobal 04/08/2026', async () => {

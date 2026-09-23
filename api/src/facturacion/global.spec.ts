@@ -173,6 +173,16 @@ describe('periodos de la global', () => {
     ]);
     expect(r[1].vigentesHasta?.toISOString()).toBe('2026-10-01T06:00:00.000Z');
   });
+
+  it('un periodo sin tickets listos ni vigentes no se lista (nunca `lista` con 0)', () => {
+    const r = enrollarPeriodos(
+      [{ dia: '2026-06-15', nListos: 0, totalListos: D('0'), nVigentes: 0, vigentesHasta: null }],
+      CDMX,
+      'mensual',
+      new Date('2026-09-23T18:00:00.000Z'),
+    );
+    expect(r).toEqual([]);
+  });
 });
 
 describe('importes y solicitud de la global', () => {
