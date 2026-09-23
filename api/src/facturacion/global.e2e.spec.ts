@@ -495,8 +495,7 @@ describe('Factura global (e2e, F2-108)', () => {
           e.total = e.total.add(c.cheque.total);
         }
         if (facturable && estado === 'pendiente') e.vigentes++;
-        if (e.tickets > 0 || e.vigentes > 0) esperado.set(clave, e);
-        else if (!esperado.has(clave)) esperado.set(clave, e);
+        esperado.set(clave, e);
       }
       expect(ramas).toEqual({
         G1: 'expirado',

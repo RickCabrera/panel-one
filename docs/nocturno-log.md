@@ -7043,3 +7043,130 @@ a la primera, con observaciones (todas atendidas).
 **Qué haría distinto.** Esta vez esperé el veredicto del plan antes de escribir código y el bloqueo B1 no costó
 retrabajo. Habría escrito desde el principio el e2e con su limpieza de `configuraciones_facturacion` al empezar: la
 primera corrida a medias dejó la base sucia y la segunda falló por eso.
+
+## 2026-09-23 03:40 — F2-108 · Factura global de tickets no facturados
+**Estado:** CERRADA (PR de `feat/F2-108`, squash a main) con el AC nocturno de la tabla "Cierre nocturno de las
+tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190. Revisor: plan bloqueado 1 vez (B1: la
+tabla de tickets de la global no amarraba la SUCURSAL; B2: el tablero escondía la global de todas sus cifras al
+redefinir `cuenta_facturado`) y aprobado a la segunda con 10 obligatorias; entregable bloqueado 1 vez (B1: la lista de periodos contaba cuentas con total 0 que la
+vista previa y la reserva excluyen) y aprobado a la segunda.
+
+**Qué quedó hecho.**
+- Migración `20260927010000_factura_global` (`prisma migrate diff --from-schema-datasource` + CHECKs a mano):
+  - `origen_cfdi` gana `global`. Los CHECK comparan `origen::text`: Postgres no deja usar un valor de enum nuevo
+    en la misma transacción que lo crea.
+  - `cfdis` gana `global_periodicidad` ('01'/'02'/'04'), `global_meses`, `global_anio`, `global_desde` y
+    `global_hasta` (instantes UTC del periodo local de la sucursal; `hasta` exclusivo). `cfdis_origen_check`
+    reemplazado: global ⇒ sin cheque ni código. `cfdis_global_check`: global ⇔ los 5 campos, y nunca es
+    sustituto.
+  - Tabla `cfdi_global_codigos` (qué ticket entró a qué global): `codigo_id` ÚNICO = el candado. FKs de TRES
+    columnas `(cfdi_id|codigo_id, sucursal_id, empresa_id)` contra únicos nuevos de `cfdis` y `codigos_facturacion`
+    (un ticket de otra sucursal no puede colgar: probado con SQL crudo). CASCADE desde `cfdis`: liberar la reserva
+    suelta los tickets. Índices por empresa, sucursal y cfdi. `CfdiGlobalCodigo` en `scope.helper.ts`;
+    `cfdiId`/`codigoId`/`cfdi` en `COLUMNAS_INTOCABLES`.
+  - `configuraciones_facturacion`: `global_periodicidad` (enum `periodicidad_global`, default mensual),
+    `global_automatica` (default false) y `global_automatica_desde` (CHECK: automática ⇔ con fecha).
+- Reglas puras `api/src/facturacion/global.ts`: periodos (diaria / semanal CORTADA en el cambio de mes / mensual) en la
+  zona de la sucursal con su etiqueta en español, año permitido por el SAT, estado del periodo (`lista`,
+  `esperando`, `en_curso`, `fuera_de_plazo`), `enrollarPeriodos` (días → periodos, marca complementaria),
+  `formaPagoGlobal`, `importesGlobal`, `solicitudGlobal` (XAXX/616/S01, un concepto `01010101`/`ACT` por ticket).
+- Puerto: `SolicitudCfdi.informacionGlobal`. Facturama: `GlobalInformation { Periodicity, Months, Year }` (snapshot
+  revisado a mano; los snapshots anteriores NO cambiaron). PAC falso: `<cfdi:InformacionGlobal .../>` primer hijo.
+- `EscrituraFacturacion`: `configuracionGlobal`/`guardarConfiguracionGlobal`, `periodosGlobal` (SQL crudo por DÍA
+  local con empresa Y sucursal en las 4 tablas), `vistaPreviaGlobal`, `reservarGlobal` (FOR UPDATE OF cf ORDER BY
+  cf.id, UNA relectura con pagos, re-medido con `estadoPublico`), `empresasConGlobalAutomatica`. `confirmarCfdi`
+  pasa los tickets a `en_global` en la misma transacción; `reservarSustituto`/`cfdiParaRefacturar` → 409 para una
+  global.
+- `estadoPublico` lee la global del ticket (`timbrando` → `en_proceso`; `vigente` → `en_global`). Los TRES lectores
+  (consulta pública, portal GET y el 409 del POST, detalle de Tickets) y el 409 de `reservarCfdi` dicen el PERIODO:
+  "Este ticket se incluyó en la factura global del periodo agosto de 2026…" y un campo nuevo `periodoGlobal`. La
+  selección pública en lista blanca sólo trae `global.cfdi.{estado, globalPeriodicidad, globalDesde}`.
+- `FacturaGlobalService` + `FacturaGlobalController` (`/facturacion/global`, `/configuracion`, `/periodos`,
+  `/periodos/{clave}`; sólo admins, 404 fuera de alcance) + `FacturaGlobalProgramador` (`GLOBAL_INTERVALO_S`,
+  3600 por omisión, apagado en test; en `.env.example`). Auditoría `cfdi.global` y `factura_global.configurar`.
+- Tablero: columna `es_global` en `cfdis_periodo` (`cuenta_facturado` NO cambió) y cifra `global { monto, cfdis }`
+  total y por sucursal; `facturado`/tasa/porMes/porHora = a CLIENTES. `ORIGENES_CFDI` con `global`.
+- Seed `prisma/seed-globales.ts` (después de `sembrarCfdis`): globales mensuales de los meses listos salvo el
+  último. En desarrollo: 4 globales con 491 tickets (junio y julio por sucursal); agosto queda `lista` para la
+  vista previa. `sembrarVentas` borra antes SÓLO las globales que amparan tickets del seed de esas sucursales.
+- Web: pestaña "Factura global" (`?tab=global`, `facturacion/global/`): configuración con aviso de la vigencia,
+  periodos con estado y POR QUÉ, vista previa (Periodicidad · Meses · Año, forma, totales, tickets con fecha en la
+  zona de la sucursal, aviso de complementaria), emitir con confirmación, globales emitidas. Tablero: KPI "Factura
+  global", columna Global por sucursal, insignia y filtro, sin "Refacturar" para la global.
+- Docs: esquema-sr §2 "Factura global (F2-108)"; backlog: "Y además (de F2-108)" en F2-109, F2-110 y F2-190.
+
+**Decisiones que tomé y por qué.** (todas en esquema-sr §2)
+- `DECISION PROVISIONAL (nocturno)` `global.ts` (cabecera): un ticket entra sólo cuando su código YA expiró y la
+  global de un periodo ESPERA a que venzan todos. Nunca se globaliza algo que el cliente todavía puede facturar.
+  **Para Ricardo:** choca con el plazo del SAT cuando la vigencia es más larga que el periodo; la UI lo avisa
+  (`global.service.ts#avisoVigencia`).
+- `DECISION PROVISIONAL (nocturno)`: global POR SUCURSAL (zona propia) y semana cortada en el cambio de mes.
+- `DECISION PROVISIONAL (nocturno)` `global.ts#formaPagoGlobal`: la forma con mayor monto sumado; `otro` no cuenta.
+- `DECISION PROVISIONAL (nocturno)` `tablero.service.ts` (`A_CLIENTES`/`DE_GLOBAL`): la global fuera de la tasa.
+- Ticket que llega tarde a un periodo con global: complementaria A MANO; el programador nunca la emite.
+- Automática apagada por omisión; encenderla sólo emite periodos que terminan después (`global_automatica_desde`).
+- `node-cron` no: patrón de programador del repo (setInterval, candado en base).
+- Tabla aparte y no columna en `codigos_facturacion`: una FK códigos → cfdis cerraba un ciclo con cfdis → códigos y
+  rompía todo lo que hoy borra `cfdis` antes que `codigos`.
+- El POST lleva la `periodicidad` explícita (la de la vista previa), no la de la configuración al momento de emitir.
+
+**Trampas que encontré.**
+- `ALTER TYPE ... ADD VALUE` y un CHECK que usa el valor nuevo en la misma migración truena: compara `::text`.
+- El mini-analizador XML de `timbrado-falso.spec.ts` no aceptaba `Año` (`\w` es ASCII): se amplió a Latin-1.
+- `instanteDesdeLocal` LANZA con una zona inválida (no devuelve null): `periodoDeClave` la atrapa.
+- El `desde` de una global es el inicio en la zona de SU sucursal: reconstruir el periodo con otra zona da null.
+- Un código literal de prueba con "O" viola el CHECK de formato (el alfabeto no tiene O/0/I/1).
+- `AS global` como alias de columna: lo evité (`monto_global`); GLOBAL es palabra clave de Postgres.
+- `.wt-main/` sigue en la raíz sin seguimiento: nunca `git add -A`.
+
+**Qué quedó abierto.**
+- F2-109 (nota en el backlog): cancelar una global y soltar sus tickets; qué pasa si SR reabre una cuenta ya
+  globalizada.
+- F2-110 (nota): conciliar una global colgada en `timbrando` (sus tickets quedan amarrados); cuenta para folios.
+- F2-190 (nota): sandbox de `GlobalInformation` y las decisiones abiertas de arriba.
+- Periodicidades quincenal/bimestral no se ofrecen (el backlog pedía diaria/semanal/mensual).
+- La regla de las 72 h del SAT sólo está documentada.
+
+**El bloqueo B1 del entregable y su corrección.** El SQL de `periodosGlobal` no filtraba `total > 0` y
+`#ticketsDelPeriodo` sí (vía `esFacturable`): una cuenta que SR reprocesa a total 0 después de tener código
+hacía que un periodo saliera `lista` pero el POST diera 409, y el programador lo reintentara para siempre. Y el
+test rama por rama NO lo veía porque armaba su esperado con la misma omisión que el SQL. Ahora las tres rutas
+(SQL, vista previa/reserva, seed) descartan lo no facturable ANTES de clasificar (un `pendiente` con total 0
+tampoco detiene la global); `enrollarPeriodos` nunca lista un periodo con 0 y 0; el e2e suma G11 (total 0) y
+G12 (`en_global` guardado sin fila). Mutación a mano: quitar `ch.total > 0` pone 2 tests en rojo.
+
+**Tests.**
+- api nuevos: `facturacion/global.spec.ts` (16: periodos por zona y cambio de mes/año, etiquetas, año permitido,
+  estado, enrollar y complementaria, importes y solicitud con cifras a mano, forma de pago), `global.e2e.spec.ts`
+  (20, app real + Postgres + PAC falso con compuerta: periodos A1/A2 en CDMX y Tijuana, SQL vs `estadoPublico`
+  rama por rama, vista previa 253.46 + 40.55 = 294.01, alcance 403/404, rechazos sin folio, doble clic 201+409
+  con el ticket `en_proceso` mientras timbra, portal/consulta pública/Tickets con "agosto de 2026" y el 409 del
+  POST, complementaria, FK cruzada entre sucursales en las dos direcciones, PAC rechaza → se libera / ambiguo →
+  502 y se quedan amarrados, tablero clientes 200.00 + global 294.01 = Σ vigentes 494.01 y tasa 0.2096, 600
+  tickets en los timeouts, programador: apagado, encendido tarde, dos vueltas simultáneas = UNA global),
+  `prisma/seed-globales.spec.ts` (7, puro + Postgres con la secuencia completa dos veces idéntica, y no borra una
+  global ajena), contrato Facturama +4 (snapshot nuevo revisado a mano), PAC falso +1, `codigo.spec` +2,
+  `portal-publico.spec` +1 (lista blanca exacta), `scoped-prisma.service.spec` +1 (intocables), `openapi.spec` +1,
+  `consulta-ventas.spec` +1 aserción.
+- Adaptados al comportamiento nuevo, no aflojados: `codigo.e2e`/`portal.e2e` (`periodoGlobal: null`),
+  `tablero.e2e` (`global` en 0 e `include` de la global), listas de modelos y rutas, `seed-codigos.spec`/`codigo.spec`
+  (firma de `estadoPublico`), el mini analizador XML del PAC falso (acepta `Año`).
+- web nuevos: `FacturacionGlobal.test.tsx` (6), `facturacion/global/reglas.test.ts` (5), +1 en
+  `FacturacionEmision.test` (insignia, sin Refacturar, filtro), KPI global en `FacturacionTablero.test`, +1 en
+  `tablero/reglas.test`.
+- Números: /api lint, typecheck, `prisma validate` limpios; `migrate diff` contra la base = vacío; openapi
+  regenerado. Jest completo **2166/2167** (124 suites) cero skips ANTES de la corrección de B1 (que sólo tocó los
+  archivos de la global; sus suites 43/43 después): el único rojo es el preexistente de `prisma/esquema.spec.ts`
+  ("al crear el admin…", FK en la base local de dev, igual que F2-104…F2-107), así que **NO es verde** en esta
+  base local. /web build y lint limpios; vitest **1208/1208** (96 archivos); check:bundle 315.3 kB gzip.
+- Seed real en desarrollo dos veces: "Facturas globales sembradas (F2-108): 4 con 491 tickets".
+- Sin prueba visual en navegador: la pestaña se probó con testing-library contra el router real.
+
+**Observaciones del revisor que quedan anotadas.** Un periodo que da 422 (sin forma de pago declarable) o 503
+(sin perfil/CSD) con la automática encendida se reintenta y se loguea como fallido en cada vuelta (cada hora)
+sin fin: sería bueno que F2-110/F2-190 lo conviertan en alerta.
+
+**Qué haría distinto.** Escribir el test rama por rama con el juez COMPLETO (`esFacturable` + `estadoPublico`)
+desde el principio: un test que copia la condición del código que revisa no atrapa lo que al código le falta.
+Y pensar el orden de borrado del seed (quién cuelga de quién) antes de elegir tabla vs columna: eso decidió el
+diseño.

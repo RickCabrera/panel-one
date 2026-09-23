@@ -491,6 +491,9 @@ cierre del cheque), y en supuestos del SAT y de Facturama. Supuestos y decisione
   total > 0, SIN CFDI propio `vigente` o `timbrando` (el "Y además (de F2-104)": un ticket con una
   reserva propia colgada NO entra) y sin otra global. Uno con CFDI propio `cancelado` vuelve a ser
   facturable, y si ya expiró, entra.
+  Una cuenta que SR reprocesa a total 0 DESPUÉS de tener código (cortesía total) no entra NI
+  detiene la global de su periodo aunque su código siga `pendiente`: el portal tampoco la emitiría
+  (422). La misma regla (`esFacturable`) en la lista de periodos, la vista previa y la reserva.
 - `DECISION PROVISIONAL (nocturno)`: **un ticket que llega TARDE** (el agente estuvo desconectado)
   a un periodo que ya tiene global deja el periodo `lista` como **complementaria**: se puede emitir
   otra global A MANO (el SAT permite más de una por periodo), la vista previa lo avisa, y la emisión
