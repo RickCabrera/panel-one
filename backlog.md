@@ -119,6 +119,7 @@ que lo intente termina SALTANDO una tarea que era perfectamente construible.
 | 35 | F2-108 · Factura global | F · Facturación | /api + /web |
 | 36 | F2-109 · Cancelación de CFDI | F · Facturación | /web + /api |
 | 37 | F2-110 · Control de folios del PAC | F · Facturación | /web + /api |
+| 37b | F2-110b · Conciliación de reservas colgadas con el PAC | F · Facturación | /api + /web |
 | 38 | F2-144 · Ventas por canal (delivery y mostrador) | G · Extras | /web + /api |
 | 39 | F2-142 · Tiempo real en el monitor (WebSocket) | G · Extras | /api + /web |
 | 40 | F2-146 · PWA instalable con notificaciones | G · Extras | /web + /api |
@@ -1189,6 +1190,7 @@ el de aquí abajo. El original queda vivo y se verifica en su tarea Diurna corre
 | **F2-108** Factura global | La estructura de periodicidad/meses/año del CFDI global se fija por test de contrato; un ticket incluido en una global ya no se puede autofacturar y el portal lo explica con el periodo correcto. |
 | **F2-109** Cancelación | Los cuatro motivos SAT, la exigencia de UUID sustituto con motivo 01, los estados intermedios y el efecto en la tasa de facturación, todo contra el puerto falso. |
 | **F2-110** Folios | Con saldo simulado en 0 la emisión se bloquea **antes** de llamar al puerto; el reporte mensual cuadra con los CFDI del periodo; la alerta de umbral y la de vigencia anual disparan sobre relojes falsos. |
+| **F2-110b** Conciliación | Contra el puerto falso con reloj falso: cada origen colgado (ticket, sin ticket, sustituto, global) se confirma si el PAC timbró y se libera si no; un vigente cancelado en el PAC queda cancelado; la 01 pendiente se cierra; los archivos faltantes se recuperan; el método nuevo del puerto queda fijado por test de contrato. El real contra el sandbox es F2-190. |
 | **F2-120 … F2-127** Inventario | Se cierran **contra el seed de F2-201**, no contra el piloto: cada cifra cuadra con lo que el seed generó y hay un test que lo afirma. El kardex reproduce el saldo desde el inicial más movimientos; conteos y traspasos **no escriben a SR** (test que lo afirma sobre el agente); las recetas listan aparte los productos sin receta; la proyección se mide contra una semana simulada del propio seed. |
 | **F2-140** Comparativos | Cuadra contra los dashboards individuales para el mismo periodo, con test; sucursal sin datos muestra "—". Ya era cerrable tal cual. |
 | **F2-141** Reportes programados | El correo sale por `PuertoCorreo` falso a la hora correcta en la zona de la empresa (reloj falso), con cifras que cuadran contra el panel; la baja funciona sin sesión iniciada. |
@@ -2045,7 +2047,7 @@ deja continuar.
 > `total` guardado en su fila no cambia: decidir qué se hace.
 
 ### F2-110 · Control de folios del PAC
-`[ ]` Contador de folios consumidos por empresa y global (cada timbre exitoso, incluida
+`[x]` **PARCIAL:** falta la conciliación de reservas colgadas en `timbrando` con el PAC (los cuatro orígenes), la de CFDI vigentes que el PAC canceló tarde, la refacturación con la 01 pendiente y la recuperación de XML/PDF no guardados: todo en **F2-110b**; y sin `folios_bajo` en el centro de alertas (❓ decisión abierta, esquema-sr §2 "Control de folios (F2-110)" y nota en F2-250). **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (saldo único por cuenta, cancelar no consume, vigencia de 12 meses). Contador de folios consumidos por empresa y global (cada timbre exitoso, incluida
 global y sustituciones, decrementa saldo local configurado al comprar paquete a Facturama).
 Vista admin de saldo + umbral de alerta (default 20%) con aviso por correo al admin_global;
 recordatorio de vigencia anual de los folios (fecha de compra + 12 meses). Reporte mensual
@@ -2280,3 +2282,37 @@ checklist de arranque visible hasta completarse.
 
 **Listo cuando:** lighthouse de la landing > 90; el wizard deja una empresa nueva lista para
 instalar agente en < 10 min de captura.
+
+### F2-110b · Conciliación de reservas colgadas con el PAC
+`[ ]` **Bloque F** · /api + /web · Resto del corte de F2-110 (ver `docs/nocturno-log.md`, F2-110).
+
+Un proceso (programado, con el patrón de `cancelacion.programador.ts`, más un disparo manual desde
+el tablero) que CONCILIA contra el PAC lo que la emisión o la cancelación dejaron sin saber:
+
+1. **Reservas colgadas en `timbrando`** de los cuatro orígenes: ticket (portal), sin ticket (captura
+   manual, su `solicitudId` contesta 409 mientras tanto), sustituto de una refacturación (el anterior
+   contesta 409 "ya tiene un sustituto en emisión") y factura global (sus tickets quedan amarrados en
+   `cfdi_global_codigos`). Si el PAC timbró: CONFIRMAR con `confirmarCfdi` (el código pasa a
+   `facturado`, los de la global a `en_global`, el sustituto se lleva el código). Si no timbró:
+   LIBERAR con `liberarReserva` (la global suelta sus tickets por CASCADE). Hoy una reserva colgada
+   resta saldo de folios ("en emisión") hasta que se concilie.
+2. **CFDI vigentes contra el PAC**: una cancelación ambigua que a los 10 min se dio por no
+   registrada y que Facturama sí registró deja el CFDI cancelado ante el SAT y vigente aquí.
+3. **Refacturación con la cancelación 01 pendiente** (anterior `vigente` con sustituto `vigente`,
+   `sustitucionPendiente` en el tablero): consultar al PAC y anotar la cancelación.
+4. **Archivos no guardados**: recuperar del PAC el XML/PDF de un CFDI vigente sin archivos (ALCANCE
+   de F2-105), con `PuertoArchivos`.
+
+Exige un método NUEVO en `PuertoTimbrado` para encontrar un CFDI sin `idPac` (la reserva ambigua no
+lo tiene): por serie y folio o por la referencia. Implementación Facturama (supuesto documentado en
+esquema-sr §2, a validar en F2-190) con **test de contrato**, y el PAC falso capaz de "timbrar sin
+contestar" para probarlo.
+
+**Listo cuando:** contra el PAC falso, con reloj falso y sobre fixtures propias: (1) una reserva
+ambigua de CADA origen que el PAC sí timbró queda confirmada (código/tickets en el estado correcto) y
+una que no timbró queda liberada (ticket de nuevo facturable, tickets de la global sueltos), cada una
+con un test; (2) un CFDI vigente que el PAC reporta cancelado queda `cancelado` con su fecha; (3) una
+refacturación con la 01 pendiente se cierra sola; (4) un CFDI sin archivos los recupera; (5) dos
+vueltas simultáneas no confirman ni liberan dos veces (candado en base); (6) el saldo de folios deja
+de contar la reserva conciliada; (7) el contrato del método nuevo queda fijado por test de contrato;
+(8) una reserva recién tomada (menos de N minutos) NO se toca.
