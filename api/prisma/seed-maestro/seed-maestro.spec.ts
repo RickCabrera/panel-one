@@ -4,7 +4,14 @@ import { generarVentas, universoDe, type OpcionesVentas } from '../seed-ventas';
 import { hoyEn } from './azar';
 import { CANALES, CLIENTES, GRUPOS_PRODUCTO, PRODUCTOS, precioEn } from './catalogos';
 import { CATEGORIAS_GASTO } from './gastos';
-import { FORZADOS, INSUMOS, insumo, PROVEEDORES, UNIDADES } from './insumos';
+import {
+  CONSUMO_OPERATIVO,
+  FORZADOS,
+  INSUMOS,
+  insumo,
+  PROVEEDORES,
+  UNIDADES,
+} from './insumos';
 import { generarInventario, type PolizaSeed } from './inventario';
 import { RECETAS } from './recetas';
 
@@ -243,6 +250,38 @@ describe('módulo existencias (F2-121)', () => {
       const bajo = de(FORZADOS[a.tipo].bajoMinimo);
       expect(bajo.cantidad.greaterThan(0)).toBe(true);
       expect(bajo.cantidad.lessThan(bajo.minimo)).toBe(true);
+    }
+  });
+});
+
+describe('insumo de consumo operativo (F2-127)', () => {
+  it('I063 sale cada día con la base de su día de semana ±4 %, sin inicial, surtido por compras', () => {
+    const base = CONSUMO_OPERATIVO.I063;
+    const dias = new Set(u.polizas.map((p) => p.dia));
+    for (const s of ['A1-GEN', 'A2-GEN']) {
+      const movs = u.polizas.flatMap((p) =>
+        p.almacen === s
+          ? p.movimientos.filter((m) => m.insumo === 'I063').map((m) => ({ p, m }))
+          : [],
+      );
+      expect(movs.filter(({ p }) => p.tipo === 'inicial')).toEqual([]);
+      expect(movs.every(({ p }) => p.tipo === 'consumo' || p.tipo === 'compra')).toBe(true);
+      const consumos = movs.filter(({ p }) => p.tipo === 'consumo');
+      // Una salida por día, todos los días del seed (nunca se queda sin aceite).
+      expect(consumos).toHaveLength(dias.size);
+      for (const { p, m } of consumos) {
+        expect(p.movimientos).toHaveLength(1);
+        const b = new Dec(base[new Date(`${p.dia}T00:00:00Z`).getUTCDay()]);
+        const q = m.cantidad.negated();
+        expect(q.greaterThanOrEqualTo(b.times('0.96').minus('0.001'))).toBe(true);
+        expect(q.lessThanOrEqualTo(b.times('1.04').plus('0.001'))).toBe(true);
+      }
+      // El primer día se compra al máximo (no hay inventario inicial).
+      const primera = movs.find(({ p }) => p.tipo === 'compra')!;
+      const e = u.existencias.find((x) => x.almacen === s && x.insumo === 'I063')!;
+      expect(primera.p.dia).toBe([...dias].sort()[0]);
+      expect(primera.m.cantidad.toFixed(3)).toBe(e.maximo.toFixed(3));
+      expect(u.compras.some((c) => c.poliza === primera.p.folio)).toBe(true);
     }
   });
 });
