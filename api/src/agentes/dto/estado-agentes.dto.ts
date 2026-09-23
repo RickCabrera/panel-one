@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID } from 'class-validator';
 
 import type { EstadoAgenteSucursal } from '../estado-agentes.service';
+import { ReporteActualizacionVistoDto } from './actualizacion.dto';
 
 export class EstadoAgentesQueryDto {
   @ApiProperty({ format: 'uuid', description: 'Fuera del alcance del usuario = 404.' })
@@ -83,4 +84,27 @@ export class EstadoAgenteSucursalDto implements EstadoAgenteSucursal {
 
   @ApiProperty({ type: String, nullable: true, description: 'Último error que reportó el agente.' })
   ultimoError!: string | null;
+
+  @ApiProperty({
+    description: 'F2-143: la bandera de rollout. Con ella el agente toma solo la versión vigente.',
+  })
+  actualizacionAutomatica!: boolean;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '1.4.0',
+    description:
+      'F2-143: la versión vigente del canal si la bandera está encendida (null sin bandera o ' +
+      'sin versión publicada). Se compara contra `versionAgente` sin el `+commit`.',
+  })
+  versionObjetivo!: string | null;
+
+  @ApiProperty({
+    type: ReporteActualizacionVistoDto,
+    nullable: true,
+    description:
+      'F2-143: el último reporte de auto-actualización del agente. Null = nunca reportó.',
+  })
+  actualizacion!: ReporteActualizacionVistoDto | null;
 }

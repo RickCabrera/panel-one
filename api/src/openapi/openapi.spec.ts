@@ -735,8 +735,9 @@ describe('Contrato OpenAPI', () => {
     ]) {
       expect(codigos(op)).toEqual(['200', '400', '401', '403', '404', '409', '503']);
     }
-    // El agente (API key `agente`) sólo tiene `/agente/yo` y las `/ingesta/*`: ninguna ruta de
-    // conteos, así que nada de un conteo le puede llegar como orden de escribir en SR.
+    // El agente (API key `agente`) sólo tiene `/agente/yo`, las `/ingesta/*` y las dos del
+    // auto-update (F2-143: el canal y el reporte): ninguna ruta de conteos, así que nada de un
+    // conteo le puede llegar como orden de escribir en SR.
     const conKeyDeAgente = Object.entries(paths).flatMap(([ruta, ops]) =>
       Object.values(ops as Record<string, { security?: Array<Record<string, unknown>> }>).some(
         (op) => (op.security ?? []).some((s) => 'agente' in s),
@@ -746,7 +747,10 @@ describe('Contrato OpenAPI', () => {
     );
     expect(conKeyDeAgente.length).toBeGreaterThan(0);
     for (const ruta of conKeyDeAgente) {
-      expect([ruta, ruta === '/agente/yo' || ruta.startsWith('/ingesta/')]).toEqual([ruta, true]);
+      const permitida =
+        ['/agente/yo', '/agente/version', '/agente/actualizacion'].includes(ruta) ||
+        ruta.startsWith('/ingesta/');
+      expect([ruta, permitida]).toEqual([ruta, true]);
     }
     expect(conKeyDeAgente.some((r) => r.includes('conteo'))).toBe(false);
     const esquemas = doc.components?.schemas as Record<
@@ -1039,6 +1043,11 @@ describe('Contrato OpenAPI', () => {
     const { paths } = await generarDocumento();
     expect(Object.keys(paths).sort()).toEqual(
       [
+        '/agente/actualizacion',
+        '/agente/binario/{version}',
+        '/agente/version',
+        '/agente/versiones',
+        '/agente/versiones/{version}/retirar',
         '/agente/yo',
         '/agentes/estado',
         // F2-105: descarga pública de XML/PDF por enlace firmado.
@@ -1175,6 +1184,7 @@ describe('Contrato OpenAPI', () => {
         '/mesas/abiertas',
         '/sucursales',
         '/sucursales/{id}',
+        '/sucursales/{id}/actualizacion-automatica',
         '/sucursales/{id}/api-key',
         '/sistema',
         '/ventas/comparativo-sucursales',

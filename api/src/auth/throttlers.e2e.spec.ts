@@ -8,6 +8,7 @@ import request from 'supertest';
 
 import { crearFixtures, limpiarFixtures, PASSWORD, USUARIOS } from '../../test/fixtures-auth';
 import { UsuariosAdminController } from '../administracion/administracion.controller';
+import { BinarioAgenteController } from '../agentes/actualizacion-agente.controller';
 import { AgenteController } from '../agentes/agente.controller';
 import { AppModule } from '../app.module';
 import { CodigoFacturacionPublicoController } from '../facturacion/codigos.controller';
@@ -185,6 +186,11 @@ describe('Cada ruta con ThrottlerGuard aplica exactamente sus cubos', () => {
     ['POST /usuarios/:id/password', UsuariosAdminController.prototype.resetPassword, ['reset']],
     // `@AutenticacionAgente()` va en la clase: la metadata vive ahí.
     ['rutas de agente (GET /agente/yo, POST /ingesta/eventos)', AgenteController, ['agente']],
+    [
+      'GET /agente/binario/:version (F2-143)',
+      BinarioAgenteController.prototype.descargar,
+      ['binario-agente'],
+    ],
     ['POST /ingesta/eventos', IngestaController, ['agente']],
     // F2-101: pública; su cubo no gasta el de la baja de reportes, ni al revés.
     [

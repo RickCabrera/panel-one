@@ -20,6 +20,7 @@ import { EscrituraPush } from './escritura-push';
 import { EscrituraReportes } from './escritura-reportes';
 import { EscrituraTraspasos } from './escritura-traspasos';
 import { EscrituraSucursal } from './escritura-sucursal';
+import { EscrituraVersionesAgente, LecturaVersionesAgente } from './versiones-agente';
 import {
   COLUMNAS_INTOCABLES,
   LLAVE_EMPRESA,
@@ -414,6 +415,19 @@ export class ScopedPrismaService {
   /** Las escrituras del control de folios (F2-110). Lanza con un scope que no sea global. */
   escrituraFolios(scope: EmpresaScope): EscrituraFolios {
     return new EscrituraFolios(this.#prisma, scope);
+  }
+
+  /**
+   * El canal de versiones del agente (F2-143): lecturas de PLATAFORMA (la vigente, un binario
+   * publicado). Sin tenant: la tabla no tiene empresa y nada de lo que devuelve es de una.
+   */
+  versionesAgente(): LecturaVersionesAgente {
+    return new LecturaVersionesAgente(this.#prisma);
+  }
+
+  /** Listar, publicar y retirar versiones del agente (F2-143). Lanza con un scope que no sea global. */
+  escrituraVersionesAgente(scope: EmpresaScope): EscrituraVersionesAgente {
+    return new EscrituraVersionesAgente(this.#prisma, scope);
   }
 
   /**

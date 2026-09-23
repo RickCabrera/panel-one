@@ -20,6 +20,7 @@ export const THROTTLER_FACTURAS_PORTAL = 'facturas-portal';
 export const THROTTLER_PRUEBA_PUSH = 'prueba-push';
 export const THROTTLER_CONTACTO = 'contacto';
 export const THROTTLER_CONTACTO_HORA = 'contacto-hora';
+export const THROTTLER_BINARIO_AGENTE = 'binario-agente';
 
 /** `POST /auth/login` y `POST /cuenta/password`: 5 intentos por minuto por IP. */
 export const OPCIONES_THROTTLER_LOGIN: ThrottlerOptions = {
@@ -133,6 +134,17 @@ export const OPCIONES_THROTTLER_CONTACTO_HORA: ThrottlerOptions = {
   limit: 20,
 };
 
+/**
+ * `GET /agente/binario/:version` (F2-143): 10 por minuto por IP. Pública (la firma del enlace es la
+ * credencial) y cada descarga son decenas de MB: un agente baja UN binario por actualización, y una
+ * sucursal detrás de la misma IP que otras no llega a 10 por minuto.
+ */
+export const OPCIONES_THROTTLER_BINARIO_AGENTE: ThrottlerOptions = {
+  name: THROTTLER_BINARIO_AGENTE,
+  ttl: 60_000,
+  limit: 10,
+};
+
 /** Todos los throttlers registrados en `AuthModule`. Uno nuevo va aquí. */
 export const THROTTLERS = [
   THROTTLER_LOGIN,
@@ -146,6 +158,7 @@ export const THROTTLERS = [
   THROTTLER_PRUEBA_PUSH,
   THROTTLER_CONTACTO,
   THROTTLER_CONTACTO_HORA,
+  THROTTLER_BINARIO_AGENTE,
   THROTTLER_AGENTE,
 ] as const;
 export type NombreThrottler = (typeof THROTTLERS)[number];

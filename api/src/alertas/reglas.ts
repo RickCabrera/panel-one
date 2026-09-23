@@ -87,6 +87,20 @@ export const REGLAS: readonly DefinicionRegla[] = [
     porDefecto: 48,
     severidad: SeveridadAlerta.advertencia,
   },
+  {
+    // F2-143. La auto-actualización del agente a la versión VIGENTE falla (hash inválido,
+    // descarga, no se pudo detener el servicio, rollback…) y la racha de fallas de esa versión
+    // lleva MÁS de estos minutos. DECISION PROVISIONAL (nocturno): 1 min por defecto (avisar casi
+    // en cuanto llega el reporte, sin abrir por un reporte que se corrige solo en el mismo ciclo),
+    // rango 1–1440 y advertencia, no crítica: el agente viejo sigue corriendo y leyendo, nada se
+    // ciega. Ver docs/actualizacion-agente.md y docs/nocturno-log.md (F2-143).
+    tipo: TipoAlerta.actualizacion_fallida,
+    unidad: 'minutos',
+    minimo: 1,
+    maximo: 1440,
+    porDefecto: 1,
+    severidad: SeveridadAlerta.advertencia,
+  },
 ];
 
 export function definicion(tipo: TipoAlerta): DefinicionRegla {

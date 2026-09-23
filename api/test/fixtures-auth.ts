@@ -114,6 +114,8 @@ export async function limpiarFixtures(
   await prisma.agenteEstado.deleteMany(deEstas);
   // El último contacto del agente (F1-061: lo escribe todo lote aceptado).
   await prisma.agenteContacto.deleteMany(deEstas);
+  // El último reporte de auto-actualización del agente (F2-143).
+  await prisma.agenteActualizacion.deleteMany(deEstas);
   // El catálogo de formas de pago (F1-032) cuelga de la empresa.
   await prisma.formaPagoCatalogo.deleteMany(deEstas);
   // El centro de alertas (F2-224) cuelga de la empresa y de la sucursal.

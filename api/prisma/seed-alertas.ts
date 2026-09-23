@@ -105,6 +105,10 @@ function detalleDe(
     case TipoAlerta.traspaso_sin_conciliar:
       // Tampoco: las abre la evaluación con los traspasos del seed (F2-124).
       throw new Error('El historial sintético no siembra alertas de traspasos.');
+    case TipoAlerta.actualizacion_fallida:
+      // Tampoco: las abre la evaluación con el reporte del agente (F2-143); el seed no publica
+      // versiones del agente ni inventa fallas.
+      throw new Error('El historial sintético no siembra alertas de actualización del agente.');
   }
 }
 
@@ -121,6 +125,7 @@ const UMBRAL: Record<TipoAlerta, number> = {
   caida_venta: 30,
   bajo_minimo: 100,
   traspaso_sin_conciliar: 48,
+  actualizacion_fallida: 1,
 };
 
 export function generarAlertasSeed(op: OpcionesAlertas): AlertaSeed[] {

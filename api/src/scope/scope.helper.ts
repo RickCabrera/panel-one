@@ -14,6 +14,9 @@ export const LLAVE_EMPRESA = {
   Usuario: 'empresaId',
   AgenteEstado: 'empresaId',
   AgenteContacto: 'empresaId',
+  // F2-143. El último resultado de auto-actualización: lo escribe SÓLO
+  // `EscrituraSucursal.reportarActualizacion` (clavada a la sucursal del agente).
+  AgenteActualizacion: 'empresaId',
   Cheque: 'empresaId',
   ChequePartida: 'empresaId',
   ChequePago: 'empresaId',
@@ -110,6 +113,9 @@ export const LLAVE_EMPRESA = {
   // NUNCA va con `null`: `scope.helper.spec.ts` exige que la lista sea exactamente ésta.
   PaqueteFolios: null,
   ConfiguracionFolios: null,
+  // F2-143: el canal de versiones del agente, también de PLATAFORMA (el binario es el mismo para
+  // todas las empresas). Lo lee y escribe SÓLO `src/scope/versiones-agente.ts`.
+  VersionAgente: null,
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId' | null>;
 
 export type WhereGenerico = Record<string, unknown>;

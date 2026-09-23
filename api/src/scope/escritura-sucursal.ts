@@ -75,6 +75,22 @@ export interface DatosEstado {
   latenciaQueryMs: number | null;
 }
 
+/** F2-143: lo que reporta el agente de su último intento de auto-actualización. */
+export interface DatosActualizacion {
+  resultado: 'aplicada' | 'fallida';
+  version: string;
+  /** Sólo con `fallida` (y obligatorio con ella). */
+  motivo:
+    | 'hash_invalido'
+    | 'descarga'
+    | 'detener'
+    | 'reemplazo'
+    | 'arranque'
+    | 'version_distinta'
+    | null;
+  detalle: string | null;
+}
+
 /** Intentos de generar un código de facturación que no choque con otro ya guardado (F2-101). */
 export const INTENTOS_CODIGO = 5;
 
@@ -346,6 +362,43 @@ export class OperacionesSucursal {
       VALUES (${this.#sucursalId}::uuid, ${this.#empresaId}::uuid, ${t})
       ON CONFLICT (sucursal_id) DO UPDATE
         SET ultimo_contacto_at = GREATEST(agente_contacto.ultimo_contacto_at, EXCLUDED.ultimo_contacto_at)`);
+  }
+
+  /**
+   * F2-143: el resultado del último intento de auto-actualización de ESTA sucursal. Un solo
+   * `INSERT ... ON CONFLICT` por la PK (dos reportes en paralelo no chocan). La racha de fallas
+   * (`primera_falla_at`) se CONSERVA si ya había una falla de la MISMA versión: un reenvío del
+   * mismo reporte, o una falla nueva de esa versión, no la reinician. Otra versión o `aplicada`
+   * sí. El CHECK de la tabla ata `motivo` y `primera_falla_at` al resultado.
+   */
+  async reportarActualizacion(datos: DatosActualizacion, ahora: Date): Promise<void> {
+    const t = exigirFecha('ahora', ahora);
+    const fallida = datos.resultado === 'fallida';
+    if (fallida !== (datos.motivo !== null)) {
+      throw new Error('Reporte de actualización: `motivo` va si y sólo si el resultado es fallida.');
+    }
+    const version = exigir('version', datos.version);
+    await this.#tx.$executeRaw(Prisma.sql`
+      INSERT INTO agente_actualizacion
+        (sucursal_id, empresa_id, resultado, version, motivo, detalle, primera_falla_at, reportada_at)
+      VALUES (
+        ${this.#sucursalId}::uuid, ${this.#empresaId}::uuid,
+        ${datos.resultado}::resultado_actualizacion, ${version},
+        ${datos.motivo}::motivo_falla_actualizacion, ${datos.detalle},
+        ${fallida ? t : null}, ${t})
+      ON CONFLICT (sucursal_id) DO UPDATE SET
+        resultado = EXCLUDED.resultado,
+        version = EXCLUDED.version,
+        motivo = EXCLUDED.motivo,
+        detalle = EXCLUDED.detalle,
+        primera_falla_at = CASE
+          WHEN EXCLUDED.resultado = 'fallida'
+            AND agente_actualizacion.resultado = 'fallida'
+            AND agente_actualizacion.version = EXCLUDED.version
+          THEN agente_actualizacion.primera_falla_at
+          ELSE EXCLUDED.primera_falla_at
+        END,
+        reportada_at = EXCLUDED.reportada_at`);
   }
 }
 

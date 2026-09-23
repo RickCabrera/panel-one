@@ -1,7 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
-import type { NextFunction, Request, Response } from 'express';
+import { raw, type NextFunction, type Request, type Response } from 'express';
 
 import { leerTrustProxy } from './config/proxy.config';
 
@@ -13,6 +13,11 @@ import { leerTrustProxy } from './config/proxy.config';
  * pequeño que infla a más de esto es 413, no memoria agotada.
  */
 export const LIMITE_BODY_JSON = '5mb';
+
+/** F2-143: la única ruta con cuerpo crudo (el `agente.exe` que publica el admin_global). */
+export const RUTA_PUBLICAR_BINARIO = '/agente/versiones';
+/** Mismo tope que `TAMANO_MAXIMO_BINARIO` (actualizacion-agente.service.ts). */
+export const LIMITE_BINARIO_AGENTE = '128mb';
 
 /**
  * Cabeceras de seguridad de TODA respuesta de la API (F1-092). Sin helmet: son
@@ -45,6 +50,12 @@ export function configurarApp(
   app.disable('x-powered-by');
   app.use(cabecerasSeguridad);
   app.useBodyParser('json', { limit: LIMITE_BODY_JSON });
+  // F2-143: publicar un binario del agente. SÓLO esa ruta acepta un cuerpo crudo, y hasta
+  // `LIMITE_BINARIO_AGENTE`; el resto de la API sigue con el JSON de 5 MB.
+  app.use(
+    RUTA_PUBLICAR_BINARIO,
+    raw({ type: 'application/octet-stream', limit: LIMITE_BINARIO_AGENTE }),
+  );
   app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),

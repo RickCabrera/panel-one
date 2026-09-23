@@ -26,7 +26,13 @@ import {
   type TraspasoObservado,
   type VentaObservada,
 } from './evaluador';
-import { cuentasDelSnapshot, diaLocal, existenciasObservadas, restarDias } from './observar';
+import {
+  cuentasDelSnapshot,
+  diaLocal,
+  existenciasObservadas,
+  fallaActualizacion,
+  restarDias,
+} from './observar';
 import {
   definicion,
   REGLAS,
@@ -137,7 +143,7 @@ export class AlertasService {
     }
     const sucursales = await datos.sucursal.findMany({
       where: { empresaId, activo: true },
-      select: { id: true, zonaHoraria: true },
+      select: { id: true, zonaHoraria: true, actualizacionAutomatica: true },
       orderBy: { id: 'asc' },
     });
     const ids = sucursales.map((s) => s.id);
@@ -149,6 +155,17 @@ export class AlertasService {
     const ventas = await this.ventasPorZona(scope, empresaId, sucursales, ahora);
     const existencias = await this.existenciasPorSucursal(scope, empresaId, ids);
     const traspasos = await this.traspasosPorSucursal(scope, empresaId, ids, ahora);
+    // F2-143: el reporte de actualización del agente, su versión y la vigente del canal.
+    const [reportes, estados, vigente] = await Promise.all([
+      datos.agenteActualizacion.findMany({ where: { empresaId, sucursalId: { in: ids } } }),
+      datos.agenteEstado.findMany({
+        where: { empresaId, sucursalId: { in: ids } },
+        select: { sucursalId: true, versionAgente: true },
+      }),
+      this.datos.versionesAgente().vigente(),
+    ]);
+    const reporteDe = new Map(reportes.map((r) => [r.sucursalId, r]));
+    const versionDe = new Map(estados.map((e) => [e.sucursalId, e.versionAgente]));
 
     const observadas = await Promise.all(
       sucursales.map(async (s): Promise<SucursalObservada> => {
@@ -182,6 +199,13 @@ export class AlertasService {
           venta: ventas.get(s.id) ?? null,
           existencias: existencias.get(s.id) ?? null,
           traspasos: traspasos.get(s.id) ?? [],
+          actualizacion: fallaActualizacion({
+            automatica: s.actualizacionAutomatica,
+            vigente: vigente?.version ?? null,
+            reporte: reporteDe.get(s.id) ?? null,
+            versionAgente: versionDe.get(s.id) ?? null,
+            ahora,
+          }),
         };
       }),
     );

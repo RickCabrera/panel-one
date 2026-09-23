@@ -1,5 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import type { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -94,6 +96,18 @@ export class ArchivosDisco implements PuertoArchivos {
   async leer(clave: string): Promise<Buffer> {
     try {
       return await readFile(this.ruta(clave));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new ArchivoNoEncontrado(clave);
+      throw error;
+    }
+  }
+
+  async abrirLectura(clave: string): Promise<{ flujo: Readable; bytes: number }> {
+    const ruta = this.ruta(clave);
+    try {
+      const info = await stat(ruta);
+      if (!info.isFile()) throw new ArchivoNoEncontrado(clave);
+      return { flujo: createReadStream(ruta), bytes: info.size };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new ArchivoNoEncontrado(clave);
       throw error;

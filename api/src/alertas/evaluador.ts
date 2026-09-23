@@ -73,6 +73,20 @@ export interface TraspasoObservado {
   almacenDestino: string;
 }
 
+/**
+ * La auto-actualización del agente (F2-143) que FALLA, ya filtrada en la observación: la sucursal
+ * tiene la bandera, hay versión vigente, el último reporte es `fallida` para ESA versión y el
+ * heartbeat no trae ya la vigente. Si cualquiera de esas cosas no se cumple, no hay falla que
+ * observar (y la alerta abierta, si la hay, se cierra).
+ */
+export interface FallaActualizacionObservada {
+  version: string;
+  motivo: string;
+  detalle: string | null;
+  /** Segundos enteros desde el inicio de la racha de fallas de esa versión (reloj del servidor). */
+  edadS: number;
+}
+
 export interface SucursalObservada {
   sucursalId: string;
   /** Segundos desde el último reporte (reloj del servidor); null = nunca ha reportado. */
@@ -87,6 +101,8 @@ export interface SucursalObservada {
   existencias: ExistenciasObservadas | null;
   /** Traspasos sin conciliar que salen de la sucursal (dato propio: siempre se evalúa). */
   traspasos: TraspasoObservado[];
+  /** F2-143: null = la actualización del agente no está fallando (o no aplica). */
+  actualizacion: FallaActualizacionObservada | null;
 }
 
 export interface Observacion {
@@ -228,6 +244,24 @@ function condiciones(
             almacenDestino: t.almacenDestino,
           },
         }));
+
+    case TipoAlerta.actualizacion_fallida: {
+      // Estrictamente MÁS de `umbral` minutos de racha. La llave es la versión: publicar otra
+      // cierra la de la anterior y, si vuelve a fallar, abre la nueva.
+      const f = s.actualizacion;
+      if (f === null || f.edadS <= umbral * 60) return [];
+      return [
+        {
+          llave: f.version,
+          detalle: {
+            version: f.version,
+            motivo: f.motivo,
+            detalle: f.detalle,
+            minutos: Math.floor(f.edadS / 60),
+          },
+        },
+      ];
+    }
   }
 }
 

@@ -1,7 +1,10 @@
 import type { Prisma } from '@prisma/client';
 
+import { REGEX_VERSION_AGENTE } from '../scope/versiones-agente';
+
 import {
   llaveArticulo,
+  type FallaActualizacionObservada,
   type ArticuloObservado,
   type CuentaObservada,
   type ExistenciasObservadas,
@@ -78,6 +81,48 @@ export function cuentasDelSnapshot(
     salida.push({ folio: m.folio, mesa: m.mesa, minutos, impreso: m.impreso });
   }
   return salida;
+}
+
+/**
+ * La versión X.Y.Z de lo que reporta el heartbeat (`1.2.0+1a99dc7` → `1.2.0`): el agente
+ * compara así contra el canal (F2-143), sin el commit. Null si no se entiende.
+ */
+export function versionSinCommit(v: string | null | undefined): string | null {
+  if (typeof v !== 'string') return null;
+  const base = v.split('+')[0].trim();
+  return REGEX_VERSION_AGENTE.test(base) ? base : null;
+}
+
+/**
+ * ¿La auto-actualización del agente (F2-143) está fallando? Sólo si TODO se cumple: la sucursal
+ * tiene la bandera, hay vigente, el último reporte es `fallida` PARA LA VIGENTE (con su racha) y el
+ * heartbeat no trae ya la vigente. Cualquier otra cosa = null (no hay falla que alertar).
+ */
+export function fallaActualizacion(op: {
+  automatica: boolean;
+  vigente: string | null;
+  reporte: {
+    resultado: 'aplicada' | 'fallida';
+    version: string;
+    motivo: string | null;
+    detalle: string | null;
+    primeraFallaAt: Date | null;
+  } | null;
+  versionAgente: string | null;
+  ahora: number;
+}): FallaActualizacionObservada | null {
+  const r = op.reporte;
+  if (!op.automatica || op.vigente === null || r === null) return null;
+  if (r.resultado !== 'fallida' || r.version !== op.vigente || r.primeraFallaAt === null) {
+    return null;
+  }
+  if (versionSinCommit(op.versionAgente) === op.vigente) return null;
+  return {
+    version: r.version,
+    motivo: r.motivo ?? 'desconocido',
+    detalle: r.detalle,
+    edadS: Math.max(0, Math.floor((op.ahora - r.primeraFallaAt.getTime()) / 1000)),
+  };
 }
 
 /** El día local (AAAA-MM-DD) de un instante en una zona IANA. */

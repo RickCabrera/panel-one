@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { MotivoFallaActualizacion } from '@prisma/client';
 
 import { Reloj } from '../comun/reloj';
 import { verificarAlcance } from '../scope/alcance';
@@ -23,6 +24,42 @@ export interface EstadoAgenteSucursal {
   /** Latencia de la consulta a SR del último heartbeat, en ms (F1-025). */
   latenciaQueryMs: number | null;
   ultimoError: string | null;
+  /** F2-143: la bandera de rollout de la sucursal. */
+  actualizacionAutomatica: boolean;
+  /** F2-143: la versión vigente del canal si la bandera está encendida; si no, null. */
+  versionObjetivo: string | null;
+  /** F2-143: el último reporte de auto-actualización del agente; null = nunca reportó. */
+  actualizacion: {
+    resultado: 'aplicada' | 'fallida';
+    version: string;
+    motivo: MotivoFallaActualizacion | null;
+    detalle: string | null;
+    primeraFallaAt: string | null;
+    reportadaAt: string;
+  } | null;
+}
+
+function reporte(
+  r:
+    | {
+        resultado: 'aplicada' | 'fallida';
+        version: string;
+        motivo: MotivoFallaActualizacion | null;
+        detalle: string | null;
+        primeraFallaAt: Date | null;
+        reportadaAt: Date;
+      }
+    | undefined,
+): EstadoAgenteSucursal['actualizacion'] {
+  if (!r) return null;
+  return {
+    resultado: r.resultado,
+    version: r.version,
+    motivo: r.motivo,
+    detalle: r.detalle,
+    primeraFallaAt: r.primeraFallaAt?.toISOString() ?? null,
+    reportadaAt: r.reportadaAt.toISOString(),
+  };
 }
 
 function segundosDesde(ahora: number, t: Date | null | undefined): number | null {
@@ -47,14 +84,17 @@ export class EstadoAgentesService {
     await verificarAlcance(datos, empresaId);
     const sucursales = await datos.sucursal.findMany({
       where: { empresaId, activo: true },
-      select: { id: true, nombre: true, zonaHoraria: true },
+      select: { id: true, nombre: true, zonaHoraria: true, actualizacionAutomatica: true },
       orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
     });
     const ids = sucursales.map((s) => s.id);
-    const [estados, contactos] = await Promise.all([
+    const [estados, contactos, reportes, vigente] = await Promise.all([
       datos.agenteEstado.findMany({ where: { empresaId, sucursalId: { in: ids } } }),
       datos.agenteContacto.findMany({ where: { empresaId, sucursalId: { in: ids } } }),
+      datos.agenteActualizacion.findMany({ where: { empresaId, sucursalId: { in: ids } } }),
+      this.datos.versionesAgente().vigente(),
     ]);
+    const reporteDe = new Map(reportes.map((r) => [r.sucursalId, r]));
     const estadoDe = new Map(estados.map((e) => [e.sucursalId, e]));
     const contactoDe = new Map(contactos.map((c) => [c.sucursalId, c.ultimoContactoAt]));
     const ahora = this.reloj.ahora();
@@ -75,6 +115,9 @@ export class EstadoAgentesService {
         tamanoCola: estado?.tamanoCola ?? null,
         latenciaQueryMs: estado?.latenciaQueryMs ?? null,
         ultimoError: estado?.ultimoError ?? null,
+        actualizacionAutomatica: s.actualizacionAutomatica,
+        versionObjetivo: s.actualizacionAutomatica ? (vigente?.version ?? null) : null,
+        actualizacion: reporte(reporteDe.get(s.id)),
       };
     });
   }

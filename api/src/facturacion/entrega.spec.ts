@@ -126,6 +126,7 @@ function armar(
       return Promise.resolve();
     },
     leer: () => Promise.reject(new Error('no')),
+    abrirLectura: () => Promise.reject(new Error('no')),
     urlFirmada: (clave) => Promise.resolve(`/api/archivos/${clave}?firma=f`),
     verificarUrl: () => false,
   };
