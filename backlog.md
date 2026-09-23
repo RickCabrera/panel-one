@@ -1130,7 +1130,7 @@ escritura contra el POS (test que lo afirma inspeccionando el modo de la conexi�
 ## BLOQUE I · Cierre
 
 ### F2-250 · Cierre de Ronda 2: auditoría de paridad y pendientes
-`[ ]` **Bloque I** · todos
+`[x]` **Bloque I** · todos · Estado real en `docs/paridad.md`; lo que falta, en RONDA 3 al final de este archivo (no autorizada).
 
 Última de la cola. Tres cosas, y ninguna es escribir funcionalidad nueva:
 
