@@ -4,7 +4,8 @@ import { CodigoFacturacionPublicoController } from './codigos.controller';
 import { CodigosFacturacionService } from './codigos.service';
 import { FacturacionController } from './facturacion.controller';
 import { FacturacionService } from './facturacion.service';
-import { EMISION_PORTAL, EmisionNoDisponible } from './emision-portal';
+import { CfdiService, Espera } from './cfdi.service';
+import { EMISION_PORTAL } from './emision-portal';
 import { PortalesAdminController, PortalPublicoController } from './portal.controller';
 import { PortalFacturacionService } from './portal.service';
 
@@ -14,7 +15,7 @@ import { PortalFacturacionService } from './portal.service';
  * lee la ficha de Clientes (`CatalogosService`). F2-101: la consulta pública del código corto de
  * facturación y la regla de vigencia por empresa (los códigos los crea la ingesta). F2-103: el
  * portal público de autofactura y su configuración por sucursal; la emisión va por
- * `EMISION_PORTAL`, que en F2-103 es `EmisionNoDisponible` (503) y F2-104 cambia por la real.
+ * `EMISION_PORTAL`. F2-104: la emisión del CFDI (`CfdiService`) es ese puerto.
  */
 @Module({
   controllers: [
@@ -27,7 +28,9 @@ import { PortalFacturacionService } from './portal.service';
     FacturacionService,
     CodigosFacturacionService,
     PortalFacturacionService,
-    { provide: EMISION_PORTAL, useClass: EmisionNoDisponible },
+    CfdiService,
+    Espera,
+    { provide: EMISION_PORTAL, useExisting: CfdiService },
   ],
 })
 export class FacturacionModule {}

@@ -19,7 +19,8 @@ import { MENSAJE_PORTAL_NO_ENCONTRADO } from './portal.service';
 // fixtures sintéticas de F1-011. Cubre: la configuración por sucursal (admins, alcance, slug
 // único, logo por sus bytes), las rutas públicas (marca, logo, código acotado a la empresa del
 // portal con su desglose, estados sin datos), y el POST de facturas (orden de errores, campos en
-// español, 409 por estado, 503 del puerto y que NO escribe nada). También el código en Tickets.
+// español, 409 por estado, 503 de una empresa sin perfil fiscal y que NO escribe nada). También el
+// código en Tickets. La emisión que sí timbra (F2-104) está en `cfdi.e2e.spec.ts`.
 //
 // TRUST_PROXY_SALTOS=1: cada petición pública lleva su propia IP en X-Forwarded-For, así los
 // límites por IP no se cruzan entre pruebas; los tests de rate limit usan IPs fijas.
@@ -342,7 +343,7 @@ describe('Portal público de autofactura (e2e, F2-103)', () => {
 
   // ---------------------------------------------------------------------------------------------
   describe('GET /facturacion/portal/:slug y su logo (públicas)', () => {
-    it('la marca del portal, sin sesión: sucursal, color, logo y que hoy NO puede emitir', async () => {
+    it('la marca del portal, sin sesión: sucursal, color, logo y que SIN perfil fiscal NO puede emitir', async () => {
       const res = await publico(`/facturacion/portal/${SLUG_A1}`);
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
@@ -544,7 +545,8 @@ describe('Portal público de autofactura (e2e, F2-103)', () => {
         }),
       });
 
-    it('datos válidos de un código pendiente: 503 con el mensaje honesto, y NO escribe nada', async () => {
+    // La emisión de verdad (201, candado, errores del SAT) se prueba en `cfdi.e2e.spec.ts` (F2-104).
+    it('datos válidos pero la empresa no tiene perfil fiscal: 503 con el mensaje honesto, y NO escribe nada', async () => {
       const antes = await foto();
       const res = await pedirFactura(SLUG_A1, {
         codigo: ` ${codigos.pend.toLowerCase()} `,

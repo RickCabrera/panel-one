@@ -6601,3 +6601,118 @@ gate del entregable APROBADO en la 1.ª pasada (0 bloqueos) con 6 observaciones:
 backlog ANTES de escribir el plan: ahí está el "Listo cuando" que manda de noche (para F2-103 pedía
 "contra el puerto falso"), y yo la encontré sólo porque el revisor la citó. Y probar el ancho de
 celular temprano, con el navegador, no al final cuando ya no hay margen para pelear con la extensión.
+
+## 2026-09-22 23:40 — F2-104 · Emisión de CFDI
+**Estado:** CERRADA (PR de `feat/F2-104`, squash a main) con el AC nocturno de la tabla "Cierre nocturno de las
+tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190.
+
+**Qué quedó hecho.**
+- Tabla `cfdis` (migración `20260924010000_cfdi`, generada con `prisma migrate diff --from-url` porque
+  `migrate dev` se niega a correr sin TTY; los CHECK van a mano al final) y enum
+  `EstadoEmisionCfdi { timbrando, vigente, cancelado }`. `timbrando` = la RESERVA: nace antes de
+  llamar al PAC y es el candado (UNIQUE en `codigo_id`). FK compuestas con `empresa_id` a cheque,
+  sucursal, código y perfil fiscal (se agregaron los únicos `(id, empresa_id)` que les faltaban a
+  `codigos_facturacion` y `perfiles_fiscales`).
+- Reglas puras en `api/src/facturacion/cfdi.ts` (importes desde el total, forma de pago dominante,
+  `solicitudDesdeCheque`), escrituras con scope en `EscrituraFacturacion` (`reservarCfdi`,
+  `confirmarCfdi`, `liberarReserva`), y `CfdiService` (`cfdi.service.ts`), que ES el puerto
+  `EMISION_PORTAL` (`useExisting`). `EmisionNoDisponible` se borró.
+- Flujo: RESERVAR (una transacción, `FOR UPDATE` del código, todo re-medido con el candado, folio
+  `+1`) → TIMBRAR fuera de transacción con reintento → CONFIRMAR (CFDI vigente + código facturado +
+  receptor frecuente en UNA transacción) o LIBERAR (borra la reserva si el PAC rechazó sin timbrar).
+- Estado público nuevo `en_proceso` (hay reserva `timbrando`) en los tres lectores: consulta global
+  (F2-101), portal (F2-103) y detalle de Tickets (F2-222). `ESTADOS_PUBLICOS` ahora vive en
+  `codigo.ts` (una sola lista para los tres DTO).
+- Tabla de errores del SAT en `api/src/adaptadores/timbrado/errores-sat.ts`, aplicada en el
+  ADAPTADOR (`errorDe` de Facturama): por código `CFDI40xxx` y por el atributo que cita el mensaje.
+  La emisión convierte un error de un dato del receptor en **400 con `campos`** (el portal ya lo
+  pinta por campo); lo no reconocido es 422 con mensaje genérico (el crudo sólo al log).
+- Web: `en_proceso` en tipos/`QUE_HACER`/Tabla de Tickets; el paso 3 del portal muestra el mensaje
+  del api también en 422 y 502; el test del flujo usa la fixture COMPARTIDA
+  `web/src/paginas/portal/factura-portal.fixture.json`, que el e2e del api compara con la respuesta
+  real (llaves, tipos y valores).
+- OpenAPI regenerado (POST del portal con 201/400/404/409/422/429/502/503, sin el "HOY RESPONDE
+  503"; enum de estados con `en_proceso`). `docs/esquema-sr.md` §2 "La emisión del CFDI" y §4.
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` `api/src/facturacion/cfdi.ts#importesDeTotal`: base =
+  `cheques.total`, `subtotal = round(total/1.16)`, `IVA = total − subtotal`. NO `cheques.subtotal`/
+  `impuestos` (no se sabe qué incluyen en SR). Barrido de $0.01 a $2,000.00 en el test: siempre
+  cuadra y el IVA cae en los límites del SAT (cálculo independiente en BigInt).
+- `DECISION PROVISIONAL (nocturno)` `TASA_IVA` = 16 % fija (no hay dónde configurarla por empresa).
+- `DECISION PROVISIONAL (nocturno)` `FORMA_PAGO_SAT`: tarjeta → 04 (crédito). `otro` (o sin pagos)
+  no se factura en línea → 422, y se decide ANTES de tomar folio (no deja hueco).
+- `DECISION PROVISIONAL (nocturno)` reintentos (`timbrado-facturama.ts#errorDe`, `cfdi.service.ts`):
+  sólo 429/503 y "no se llegó a conectar" (`PAC_SIN_CONEXION`, nuevo) se reintentan, máx. 3 con
+  backoff 0.5/1/2 s (`Espera` inyectable). Timeout y 500/502/504 = `PAC_SIN_RESPUESTA` AMBIGUO: NO
+  se reintenta, la reserva se queda (el código dice `en_proceso`), respuesta 502 que dice "no la
+  vuelvas a solicitar". Lo pidió el revisor en el plan: un 502/504 de gateway puede llegar DESPUÉS
+  de timbrar. Mejor una factura atorada que dos ante el SAT.
+- Toda reserva LIBERADA deja **hueco de folio** (ya tomó `folio_actual + 1` y se borra): rechazo del
+  SAT, o PAC no disponible tras los reintentos. A propósito: CFDI 4.0 no exige consecutivos, y reusar folios entre transacciones es peor.
+- Si el PAC timbra y la transacción de confirmación falla: 502 "no la vuelvas a solicitar", la
+  reserva se queda y el UUID va al log (`CFDI timbrado SIN confirmar`).
+- `PAC_SIN_RESPUESTA` ahora sale con `reintentable = false` (lo pidió el revisor del entregable):
+  cualquier consumidor futuro (F2-109 cancelar, F2-110 conciliar) que lea `.reintentable` no debe
+  reintentar a ciegas algo que el PAC pudo haber hecho. Se adaptó el test de contrato del timeout.
+- El PAC falso ganó dos RFC reservados que SÍ pasan la validación del portal (`XFAL010101NI0` → no
+  inscrito, `XFAL010101NO0` → nombre): `XEXX010101000` no sirve para probar desde el portal porque
+  es el genérico de extranjeros y el portal lo corta antes.
+- `seed-ventas.ts` borra ahora los `cfdis` de los cheques sintéticos antes que los códigos (si
+  alguien emitió en desarrollo, el re-seed ya no truena por la FK).
+
+**Trampas que encontré.**
+- **Correr `npx jest` SIN `--runInBand`** paraleliza suites que comparten las fixtures de la base y
+  truena en cadena (FK al borrar empresas). Usa `npm test` (ya trae `--runInBand`).
+- `XFAL010101NI0` es persona FÍSICA: si le mandas el régimen 601 del `RECEPTOR` de los tests, el
+  portal lo rechaza por régimen antes de llegar al PAC. Usa 612.
+- Heredocs largos con backticks y `${}` rompen el shell de Git Bash: escribe el script de edición a
+  un archivo del scratchpad y córrelo.
+- `prisma/esquema.spec.ts` ("al crear el admin…") sigue rojo en la base local de dev (una
+  `suscripciones_reporte` del admin, de `seed:reportes`, bloquea el DELETE). Confirmado igual en
+  main con la misma base. No es de esta tarea.
+
+**Qué quedó abierto.**
+- **F2-110** (nota "Y además (de F2-104)"): resolver reservas colgadas en `timbrando` (consultar al
+  PAC y confirmar o liberar); contar timbres desde `cfdis`, no desde `folio_actual`.
+- **F2-105**: la emisión descarta el XML y el PDF que devuelve el puerto (`xml_url`/`pdf_url`
+  nulos); guardarlos y llenar `descargas`. Los CFDI de desarrollo emitidos antes no tendrán archivo.
+- **F2-106**: el seed no genera CFDI (~15 % de códigos `facturado` sin CFDI): generarlos ahí.
+- **F2-109**: `codigo_id` único impide re-emitir un código después de cancelar su CFDI.
+- **F2-190**: la tabla de errores (numeración `CFDI40144/45/47/57/58/61/62` supuesta), 429/503 vs
+  5xx ambiguos, llave de idempotencia de Facturama si existe, y los supuestos del piloto (propina,
+  16 %, tarjeta 04/28, vales).
+
+**Tests.**
+- api nuevos: `facturacion/cfdi.spec.ts` (importes + barrido SAT, forma de pago, solicitud, RFC
+  reservados), `facturacion/cfdi.service.spec.ts` (13: reintentos y backoff, 4 fallas = 4 llamadas
+  y liberada, validación sin reintento con su campo, genérico 422 sin el crudo, ambiguo se queda,
+  confirmación que falla), `facturacion/cfdi.e2e.spec.ts` (16: 201 con la forma del web y 409 al
+  segundo, RFC no inscrito 400 amable sin escribir, `otro` 422 sin tocar ni folio, sin perfil 503,
+  **doble clic determinista con PAC con compuerta** → 409 `en_proceso` y un solo CFDI, dos POST
+  simultáneos → 201+409, ambiguo 502 y se queda, confirmación que falla, reintento hasta 201,
+  re-medición con candado (vencido, cancelado, cuenta REABIERTA → 422, ids cruzados), y scope de B sobre A = 404),
+  `adaptadores/timbrado/errores-sat.spec.ts`, `timbrado.contrato.spec.ts` (+7: **snapshot del JSON
+  de un cheque de consumo**, revisado a mano; errores traducidos; 429/503 vs 500/502/504; sin
+  conexión vs corte).
+- Adaptados al comportamiento nuevo, no aflojados: `codigo.spec.ts` y `seed-codigos.spec.ts`
+  (`estadoPublico` recibe el CFDI del código), `openapi.spec.ts` (el POST ya emite),
+  `portal.e2e.spec.ts` (títulos: el 503 es de una empresa sin perfil fiscal),
+  `scope.helper.spec`/`scoped-prisma.service.spec` (modelo nuevo).
+- web: `PortalFactura.test.tsx` (+3: 422 y 502 con el mensaje del api, 409 `en_proceso` con qué
+  hacer; el 201 ahora es la fixture compartida), `portal/reglas.test.ts` (+2).
+- Números: /api lint, typecheck, `prisma validate` y `migrate dev` limpios; openapi regenerado. Jest
+  completo **2011/2012** (115 suites): el único rojo es el preexistente de `prisma/esquema.spec.ts`, así que
+  **NO es verde** en esta base local. /web build y lint limpios; vitest **1166/1166** (90 archivos)
+  en tres corridas seguidas; una corrida ANTERIOR dio 1 falla intermitente que no alcancé a ver
+  cuál era y no se repitió.
+
+- `schema.prisma`: `prisma format` realineó columnas de `Empresa`, `Sucursal` y `Cheque` (ruido de
+  formato, sin cambio de esquema). Ojo con `.wt-main/` en la raíz: es una copia sin seguimiento de
+  main que NO es de ninguna tarea y no está en `.gitignore`; nunca uses `git add -A`/`git add .`.
+- Nada de esto está probado contra el mundo real: la tabla de errores del SAT, que 429/503 signifiquen
+  "no procesé", y la base del CFDI (sin propina, 16 %). Todo con el PAC falso; va a F2-190.
+
+**Qué haría distinto.** Diseñar el candado como "reserva en la tabla" desde el principio fue lo que
+hizo fácil el resto (doble clic, ambiguo, confirmación que falla son la misma fila en `timbrando`).
+Y escribir los scripts de edición a archivo desde el inicio: el shell se comió dos heredocs.

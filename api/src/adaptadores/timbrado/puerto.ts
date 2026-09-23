@@ -106,9 +106,19 @@ export interface ResultadoCancelacion {
 
 export type CodigoErrorTimbrado =
   | 'RFC_NO_INSCRITO'
+  | 'NOMBRE_NO_COINCIDE'
   | 'CODIGO_POSTAL_NO_COINCIDE'
   | 'REGIMEN_NO_CORRESPONDE'
+  | 'USO_CFDI_NO_APLICA'
+  /** El PAC contestó que no puede atender (429/503): NO procesó la solicitud. */
   | 'PAC_NO_DISPONIBLE'
+  /** No se llegó a conectar con el PAC (la solicitud nunca salió). */
+  | 'PAC_SIN_CONEXION'
+  /**
+   * AMBIGUO: timeout, corte a medio camino, o un 5xx que no sea 503. El PAC pudo haber timbrado
+   * (o cancelado): reintentar a ciegas puede duplicar un CFDI ante el SAT. Por eso va con
+   * `reintentable = false`: quien lo reciba CONSULTA el estado antes de volver a intentar.
+   */
   | 'PAC_SIN_RESPUESTA'
   | 'ESTADO_DESCONOCIDO'
   | 'MOTIVO_REQUIERE_SUSTITUTO'

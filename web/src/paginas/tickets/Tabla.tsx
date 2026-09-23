@@ -237,6 +237,7 @@ function Cancelacion({ ticket: t, sucursal }: { ticket: Ticket; sucursal: Sucurs
 
 const ETIQUETA_ESTADO_CODIGO: Record<EstadoCodigoFacturacion, string> = {
   pendiente: 'Se puede facturar',
+  en_proceso: 'Emitiéndose',
   facturado: 'Ya facturado',
   en_global: 'En la factura global',
   expirado: 'Plazo vencido',

@@ -1,6 +1,7 @@
 import type { Reloj } from '../../comun/reloj';
 import { numeroJson, type ClienteHttp, type PeticionHttp, type RespuestaHttp } from '../http';
 import { fechaLocalCfdi, instanteDesdeLocal } from './cfdi-comun';
+import { errorSatConocido, MENSAJE_RECHAZO_GENERICO } from './errores-sat';
 import {
   ErrorTimbrado,
   type CfdiTimbrado,
@@ -35,9 +36,10 @@ import {
  * - `Status`: sólo se conocen `active` y `canceled`. DECISION PROVISIONAL (nocturno):
  *   cualquier otro valor (p. ej. una cancelación en proceso) NO se da por vigente ni
  *   por cancelado: es `ESTADO_DESCONOCIDO`, reintentable (consultar más tarde).
- * - Un fallo de red o un timeout es `PAC_SIN_RESPUESTA`, reintentable. OJO en
- *   `emitir`: el PAC pudo haber timbrado. Quien reintente (F2-104/F2-109) consulta
- *   antes o usa una llave de idempotencia; reintentar a ciegas puede duplicar un CFDI.
+ * - Un timeout, un corte a medio camino o un 5xx que no sea 503 es `PAC_SIN_RESPUESTA`.
+ *   OJO en `emitir`: el PAC pudo haber timbrado; reintentar a ciegas puede duplicar un
+ *   CFDI. La emisión (F2-104) NO lo reintenta: deja la reserva colgada (F2-110 la resuelve
+ *   consultando). Una falla ANTES de conectar es `PAC_SIN_CONEXION`, y ésa sí se reintenta.
  */
 
 /*
@@ -75,7 +77,7 @@ export const OMITIDO = '[omitido]';
  * larga con pinta de base64. Lo que queda puede ir al usuario.
  */
 export function errorCsdDe(r: RespuestaHttp, s: SolicitudCsd): ErrorTimbrado {
-  const e = errorDe(r);
+  const e = errorDe(r, false);
   if (e.reintentable) return e;
   if (r.status === 404) {
     return new ErrorTimbrado(
@@ -166,25 +168,66 @@ export function peticionDescarga(
   return { metodo: 'GET', url: `${base}/cfdi/${formato}/issuedLite/${encodeURIComponent(idPac)}` };
 }
 
-/** Facturama contesta errores de validación como `{ Message, ModelState: { campo: [msg] } }`. */
-function errorDe(r: RespuestaHttp): ErrorTimbrado {
-  if (r.status >= 500 || r.status === 429) {
-    return new ErrorTimbrado(
-      'PAC_NO_DISPONIBLE',
-      'El servicio de timbrado no está disponible. Intenta de nuevo en unos minutos.',
-      true,
-    );
+export const MENSAJE_PAC_NO_DISPONIBLE =
+  'El servicio de timbrado no está disponible. Intenta de nuevo en unos minutos.';
+export const MENSAJE_PAC_SIN_RESPUESTA =
+  'No hubo respuesta del servicio de timbrado. Revisa el estado antes de reintentar.';
+
+/**
+ * Facturama contesta errores de validación como `{ Message, ModelState: { campo: [msg] } }`.
+ *
+ * F2-104: el texto de un rechazo pasa por la tabla de errores del SAT (`errores-sat.ts`). Si se
+ * reconoce, el error lleva su código y un mensaje en español listo para el cliente; si no, queda
+ * `RECHAZADO_POR_PAC` con el texto del PAC (que la emisión NO le muestra al cliente: lo loguea).
+ *
+ * DECISION PROVISIONAL (nocturno): sólo 429 y 503 son "no disponible" (el PAC dice que NO procesó
+ * la solicitud). Cualquier otro 5xx (500, 502, 504…) es AMBIGUO (`PAC_SIN_RESPUESTA`): un gateway
+ * puede contestar 502/504 después de que el PAC timbró. Se valida en F2-190.
+ */
+/** `traducir = false`: sin la tabla del SAT (el alta del CSD no habla del receptor). */
+function errorDe(r: RespuestaHttp, traducir = true): ErrorTimbrado {
+  if (r.status === 429 || r.status === 503) {
+    return new ErrorTimbrado('PAC_NO_DISPONIBLE', MENSAJE_PAC_NO_DISPONIBLE, true);
+  }
+  if (r.status >= 500) {
+    return new ErrorTimbrado('PAC_SIN_RESPUESTA', MENSAJE_PAC_SIN_RESPUESTA, false);
   }
   if (r.status === 404) {
     return new ErrorTimbrado('CFDI_NO_ENCONTRADO', 'El PAC no encontró ese CFDI.');
   }
   const cuerpo = (r.cuerpo ?? {}) as { Message?: string; ModelState?: Record<string, string[]> };
   const detalle = Object.values(cuerpo.ModelState ?? {}).flat();
-  const texto = [cuerpo.Message, ...detalle].filter(Boolean).join(' ');
+  const texto =
+    typeof r.cuerpo === 'string'
+      ? r.cuerpo
+      : [cuerpo.Message, ...detalle].filter(Boolean).join(' ');
+  const conocido = traducir ? errorSatConocido(texto) : null;
+  if (conocido) return new ErrorTimbrado(conocido.codigo, conocido.mensaje);
   return new ErrorTimbrado(
     'RECHAZADO_POR_PAC',
-    texto || `El PAC rechazó la solicitud (HTTP ${r.status}).`,
+    texto || `El PAC rechazó la solicitud (HTTP ${r.status}). ${MENSAJE_RECHAZO_GENERICO}`,
   );
+}
+
+/** Códigos de Node/undici de un intento que NUNCA llegó a conectar: la solicitud no salió. */
+const SIN_CONEXION = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+/** ¿La falla de `fetch` fue ANTES de conectar? (Todo lo demás, timeout incluido, es ambiguo.) */
+export function esFallaDeConexion(error: unknown): boolean {
+  let actual: unknown = error;
+  for (let i = 0; i < 4 && actual && typeof actual === 'object'; i++) {
+    const codigo = (actual as { code?: unknown }).code;
+    if (typeof codigo === 'string' && SIN_CONEXION.has(codigo)) return true;
+    actual = (actual as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 function ok(r: RespuestaHttp): boolean {
@@ -215,16 +258,18 @@ export class TimbradoFacturama implements PuertoTimbrado {
     private readonly reloj: Pick<Reloj, 'ahora'>,
   ) {}
 
-  /** Red caída o timeout → `ErrorTimbrado` reintentable (ver la nota de `emitir` arriba). */
+  /**
+   * Red caída → `PAC_SIN_CONEXION` (la solicitud no salió: reintentar es seguro). Timeout o corte
+   * a medio camino → `PAC_SIN_RESPUESTA` (ambiguo; ver la nota de `emitir` arriba).
+   */
   private async enviar(peticion: PeticionHttp): Promise<RespuestaHttp> {
     try {
       return await this.http.enviar(peticion);
-    } catch {
-      throw new ErrorTimbrado(
-        'PAC_SIN_RESPUESTA',
-        'No hubo respuesta del servicio de timbrado. Revisa el estado antes de reintentar.',
-        true,
-      );
+    } catch (error) {
+      if (esFallaDeConexion(error)) {
+        throw new ErrorTimbrado('PAC_SIN_CONEXION', MENSAJE_PAC_NO_DISPONIBLE, true);
+      }
+      throw new ErrorTimbrado('PAC_SIN_RESPUESTA', MENSAJE_PAC_SIN_RESPUESTA, false);
     }
   }
 

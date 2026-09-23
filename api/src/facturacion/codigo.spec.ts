@@ -166,33 +166,55 @@ describe('estadoPublico()', () => {
   const vivo = { cancelado: false };
 
   it('pendiente antes de expira_at; expirado desde expira_at (exclusivo)', () => {
-    expect(estadoPublico({ estado: 'pendiente', expiraAt }, vivo, antes)).toBe('pendiente');
-    expect(estadoPublico({ estado: 'pendiente', expiraAt }, vivo, justo)).toBe('expirado');
+    expect(estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null }, vivo, antes)).toBe('pendiente');
+    expect(estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null }, vivo, justo)).toBe('expirado');
   });
 
   it('expirado guardado es expirado aunque su fecha no haya pasado', () => {
-    expect(estadoPublico({ estado: 'expirado', expiraAt }, vivo, antes)).toBe('expirado');
+    expect(estadoPublico({ estado: 'expirado', expiraAt, cfdi: null }, vivo, antes)).toBe('expirado');
   });
 
   it('facturado y en_global mandan sobre la cancelación y la expiración', () => {
     for (const estado of ['facturado', 'en_global'] as const) {
-      expect(estadoPublico({ estado, expiraAt }, { cancelado: true }, justo + 1)).toBe(estado);
+      expect(estadoPublico({ estado, expiraAt, cfdi: null }, { cancelado: true }, justo + 1)).toBe(estado);
     }
   });
 
   it('cuenta cancelada: cancelado, aun vencido', () => {
-    expect(estadoPublico({ estado: 'pendiente', expiraAt }, { cancelado: true }, antes)).toBe(
+    expect(estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null }, { cancelado: true }, antes)).toBe(
       'cancelado',
     );
-    expect(estadoPublico({ estado: 'pendiente', expiraAt }, { cancelado: true }, justo)).toBe(
+    expect(estadoPublico({ estado: 'pendiente', expiraAt, cfdi: null }, { cancelado: true }, justo)).toBe(
       'cancelado',
     );
+  });
+
+  it('con una reserva de CFDI en timbrado: en_proceso, aun vencido o cancelado (F2-104)', () => {
+    const reserva = { estado: 'pendiente' as const, expiraAt, cfdi: { estado: 'timbrando' as const } };
+    expect(estadoPublico(reserva, vivo, antes)).toBe('en_proceso');
+    expect(estadoPublico(reserva, vivo, justo + 1)).toBe('en_proceso');
+    expect(estadoPublico(reserva, { cancelado: true }, antes)).toBe('en_proceso');
+  });
+
+  it('un CFDI vigente es facturado aunque el código no lo diga todavía (F2-104)', () => {
+    expect(
+      estadoPublico(
+        { estado: 'pendiente', expiraAt, cfdi: { estado: 'vigente' } },
+        { cancelado: true },
+        justo + 1,
+      ),
+    ).toBe('facturado');
+  });
+
+  it('en_proceso dice qué hacer si la factura no llega (no invita a pedirla otra vez)', () => {
+    expect(MENSAJE_ESTADO.en_proceso).toMatch(/restaurante/);
+    expect(MENSAJE_ESTADO.en_proceso).toMatch(/no la vuelvas a solicitar/);
   });
 
   it('cada estado tiene su mensaje en español, distinto de los demás', () => {
     const mensajes = Object.values(MENSAJE_ESTADO);
     expect(Object.keys(MENSAJE_ESTADO).sort()).toEqual(
-      ['cancelado', 'en_global', 'expirado', 'facturado', 'pendiente'].sort(),
+      ['cancelado', 'en_global', 'en_proceso', 'expirado', 'facturado', 'pendiente'].sort(),
     );
     expect(new Set(mensajes).size).toBe(mensajes.length);
   });

@@ -292,7 +292,9 @@ export class TicketsService {
           pagos: { orderBy: { id: 'asc' } },
           // En la MISMA consulta con scope: la FK compuesta (cheque_id, empresa_id) ata el código
           // a la empresa del cheque.
-          codigoFacturacion: { select: { codigo: true, estado: true, expiraAt: true } },
+          codigoFacturacion: {
+            select: { codigo: true, estado: true, expiraAt: true, cfdi: { select: { estado: true } } },
+          },
         },
       }),
       datos.formaPagoCatalogo.findMany({
@@ -369,7 +371,7 @@ export class TicketsService {
 }
 
 function codigoDelTicket(
-  codigo: { codigo: string; estado: Parameters<typeof estadoPublico>[0]['estado']; expiraAt: Date },
+  codigo: Parameters<typeof estadoPublico>[0] & { codigo: string },
   cancelado: boolean,
   ahoraMs: number,
 ): CodigoFacturacionTicket {

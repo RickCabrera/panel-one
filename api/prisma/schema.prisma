@@ -40,21 +40,23 @@ model Empresa {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sucursales           Sucursal[]
-  usuarios             Usuario[]
-  formasPagoCatalogo   FormaPagoCatalogo[]
-  correosEnviados      CorreoEnviado[]
-  alertas              Alerta[]
-  reglasAlerta         ReglaAlerta[]
-  alertaEvaluacion     AlertaEvaluacion?
-  suscripcionesReporte SuscripcionReporte[]
+  sucursales               Sucursal[]
+  usuarios                 Usuario[]
+  formasPagoCatalogo       FormaPagoCatalogo[]
+  correosEnviados          CorreoEnviado[]
+  alertas                  Alerta[]
+  reglasAlerta             ReglaAlerta[]
+  alertaEvaluacion         AlertaEvaluacion?
+  suscripcionesReporte     SuscripcionReporte[]
   // F2-126: categorías de gasto (dato del panel).
-  categoriasGasto      CategoriaGasto[]
+  categoriasGasto          CategoriaGasto[]
   // F2-100: datos fiscales (uno por empresa) y receptores frecuentes de facturación.
-  perfilFiscal         PerfilFiscal?
-  receptoresFrecuentes ReceptorFrecuente[]
+  perfilFiscal             PerfilFiscal?
+  receptoresFrecuentes     ReceptorFrecuente[]
   // F2-101: regla de vigencia de los códigos de facturación (sin fila = fin de mes).
   configuracionFacturacion ConfiguracionFacturacion?
+  // F2-104: los CFDI emitidos (y las reservas en timbrado).
+  cfdis                    Cfdi[]
 
   @@map("empresas")
 }
@@ -91,25 +93,25 @@ model Sucursal {
   solicitudSincronizacion  SolicitudSincronizacion?
 
   // Catálogos de inventario (F2-120).
-  unidadesCatalogo    UnidadCatalogo[]
-  gruposInsumo        GrupoInsumo[]
-  insumos             Insumo[]
-  almacenesCatalogo   AlmacenCatalogo[]
-  proveedoresCatalogo ProveedorCatalogo[]
+  unidadesCatalogo      UnidadCatalogo[]
+  gruposInsumo          GrupoInsumo[]
+  insumos               Insumo[]
+  almacenesCatalogo     AlmacenCatalogo[]
+  proveedoresCatalogo   ProveedorCatalogo[]
   // F2-121: existencias por almacén y lo propio del panel sobre ellas.
-  existencias         Existencia[]
-  lecturasExistencias LecturaExistencias[]
-  limitesExistencia   LimiteExistencia[]
+  existencias           Existencia[]
+  lecturasExistencias   LecturaExistencias[]
+  limitesExistencia     LimiteExistencia[]
   polizasInventario     PolizaInventario[]
   movimientosInventario MovimientoInventario[]
   // F2-123: conteos físicos, dato NUESTRO (nunca se escribe a SR).
   conteosFisicos        ConteoFisico[]
   partidasConteo        PartidaConteo[]
   // F2-124: traspasos del panel. La sucursal es el ORIGEN; el destino tiene su propia relación.
-  traspasos             Traspaso[]        @relation("TraspasoOrigen")
-  traspasosRecibidos    Traspaso[]        @relation("TraspasoDestino")
-  partidasTraspaso      PartidaTraspaso[] @relation("PartidaTraspasoOrigen")
-  partidasTraspasoDest  PartidaTraspaso[] @relation("PartidaTraspasoDestino")
+  traspasos             Traspaso[]             @relation("TraspasoOrigen")
+  traspasosRecibidos    Traspaso[]             @relation("TraspasoDestino")
+  partidasTraspaso      PartidaTraspaso[]      @relation("PartidaTraspasoOrigen")
+  partidasTraspasoDest  PartidaTraspaso[]      @relation("PartidaTraspasoDestino")
   // F2-125: recetas leídas de SR (espejo por sucursal).
   recetas               Receta[]
   renglonesReceta       RenglonReceta[]
@@ -121,6 +123,8 @@ model Sucursal {
   codigosFacturacion    CodigoFacturacion[]
   // F2-103: el portal público de autofactura de la sucursal (slug y marca).
   portalFacturacion     PortalFacturacion?
+  // F2-104: los CFDI de los cheques de la sucursal.
+  cfdis                 Cfdi[]
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -266,58 +270,60 @@ enum FormaPago {
 }
 
 model Cheque {
-  id         String    @id @default(uuid()) @db.Uuid
-  sucursalId String    @map("sucursal_id") @db.Uuid
-  empresaId  String    @map("empresa_id") @db.Uuid
+  id                String    @id @default(uuid()) @db.Uuid
+  sucursalId        String    @map("sucursal_id") @db.Uuid
+  empresaId         String    @map("empresa_id") @db.Uuid
   // DECISION PROVISIONAL (nocturno): `folio` (el que ve el cliente en el
   // ticket) y `folio_sr` (la llave estable del cheque dentro de SR) se guardan
   // como texto. No se ha visto una instalación real (docs/esquema-sr.md §2):
   // texto acepta tanto un entero como un alfanumérico sin perder ceros.
-  folio      String
-  folioSr    String    @map("folio_sr")
-  abiertoAt  DateTime  @map("abierto_at") @db.Timestamptz(3)
+  folio             String
+  folioSr           String    @map("folio_sr")
+  abiertoAt         DateTime  @map("abierto_at") @db.Timestamptz(3)
   // DECISION PROVISIONAL (nocturno): nulo permitido. Un cheque cancelado en SR
   // podría no tener fecha de cierre (supuesto, esquema-sr.md §2). Los
   // agregados de F1-032 filtran por `cerrado_at` y un nulo simplemente no
   // entra en ningún rango.
-  cerradoAt  DateTime? @map("cerrado_at") @db.Timestamptz(3)
-  mesa       String?
-  mesero     String?
+  cerradoAt         DateTime? @map("cerrado_at") @db.Timestamptz(3)
+  mesa              String?
+  mesero            String?
   // DECISION PROVISIONAL (nocturno): nulo = "SR no lo reportó", distinto de
   // cero. Con default 0 un dato ausente contaminaría "comensales totales" y el
   // promedio por comensal de F1-032 (supuesto, esquema-sr.md §2).
-  comensales Int?
+  comensales        Int?
   // DECISION PROVISIONAL (nocturno): sin CHECK >= 0 en importes. Devoluciones
   // o ajustes del POS podrían llegar negativos (supuesto, esquema-sr.md §2);
   // un CHECK que rechace datos reales tumbaría la ingesta de ese cheque.
-  subtotal   Decimal   @db.Decimal(12, 2)
-  impuestos  Decimal   @db.Decimal(12, 2)
-  descuentos Decimal   @db.Decimal(12, 2)
-  propina    Decimal   @db.Decimal(12, 2)
-  total      Decimal   @db.Decimal(12, 2)
-  cancelado  Boolean   @default(false)
+  subtotal          Decimal   @db.Decimal(12, 2)
+  impuestos         Decimal   @db.Decimal(12, 2)
+  descuentos        Decimal   @db.Decimal(12, 2)
+  propina           Decimal   @db.Decimal(12, 2)
+  total             Decimal   @db.Decimal(12, 2)
+  cancelado         Boolean   @default(false)
   // El cliente de la cuenta, si el POS lo capturó (F2-232): el MISMO id estable que usa el
   // catálogo de clientes de esa sucursal (`clientes_catalogo.origen_sr_id`). Sin FK: cheques y
   // catálogos llegan en cualquier orden. Nulo = la cuenta no trae cliente.
   // DECISION PROVISIONAL (nocturno): que el cheque de SR referencia al cliente por ese id no se
   // ha visto en una instalación real (docs/esquema-sr.md §2 y §8). CHECK "no vacío" a mano en la
   // migración `..._cheque_cliente`.
-  clienteOrigenSrId String? @map("cliente_origen_sr_id")
+  clienteOrigenSrId String?   @map("cliente_origen_sr_id")
   // El área del POS donde se atendió la cuenta (F2-233): el MISMO id estable que usa el
   // catálogo de áreas de esa sucursal (`areas_catalogo.origen_sr_id`). Sin FK: cheques y
   // catálogos llegan en cualquier orden. Nulo = la cuenta no trae área ("sin clasificar").
   // DECISION PROVISIONAL (nocturno): que el cheque de SR referencia el área por ese id no se ha
   // visto en una instalación real (docs/esquema-sr.md §2, §8 y §13). CHECK "no vacío" a mano en
   // la migración `..._areas_canal`.
-  areaOrigenSrId    String? @map("area_origen_sr_id")
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  areaOrigenSrId    String?   @map("area_origen_sr_id")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sucursal Sucursal        @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cheques_sucursal_empresa_fkey")
-  partidas ChequePartida[]
-  pagos    ChequePago[]
+  sucursal          Sucursal           @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cheques_sucursal_empresa_fkey")
+  partidas          ChequePartida[]
+  pagos             ChequePago[]
   // F2-101: el código corto de facturación (uno por cheque facturable).
   codigoFacturacion CodigoFacturacion?
+  // F2-104: los CFDI del cheque (uno vigente por código; F2-107 podrá refacturar).
+  cfdis             Cfdi[]
 
   // La llave de idempotencia de la ingesta (F1-031): upsert por aquí.
   @@unique([sucursalId, folioSr], map: "cheques_sucursal_id_folio_sr_key")
@@ -791,7 +797,7 @@ model AreaCatalogo {
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime @map("updated_at") @db.Timestamptz(3)
 
-  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "areas_catalogo_sucursal_empresa_fkey")
+  sucursal Sucursal   @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "areas_catalogo_sucursal_empresa_fkey")
   canal    AreaCanal?
 
   @@unique([sucursalId, origenSrId], map: "areas_catalogo_sucursal_id_origen_sr_id_key")
@@ -1168,11 +1174,11 @@ model PolizaInventario {
   createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime             @map("updated_at") @db.Timestamptz(3)
 
-  sucursal    Sucursal               @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "polizas_inventario_sucursal_empresa_fkey")
-  movimientos MovimientoInventario[]
+  sucursal         Sucursal               @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "polizas_inventario_sucursal_empresa_fkey")
+  movimientos      MovimientoInventario[]
   // F2-124: renglones de traspasos del panel conciliados contra esta póliza.
-  traspasosSalida  PartidaTraspaso[] @relation("EspejoSalida")
-  traspasosEntrada PartidaTraspaso[] @relation("EspejoEntrada")
+  traspasosSalida  PartidaTraspaso[]      @relation("EspejoSalida")
+  traspasosEntrada PartidaTraspaso[]      @relation("EspejoEntrada")
 
   @@unique([sucursalId, origenSrId], map: "polizas_inventario_sucursal_origen_key")
   @@unique([id, sucursalId, empresaId], map: "polizas_inventario_id_sucursal_empresa_key")
@@ -1296,25 +1302,25 @@ enum EstadoTraspaso {
 // `EscrituraTraspasos`. CHECKs a mano: folio > 0, origen ≠ destino, estado ⇔ marcas,
 // conciliado_at nulo si cancelado.
 model Traspaso {
-  id                  String         @id @default(uuid()) @db.Uuid
-  empresaId           String         @map("empresa_id") @db.Uuid
-  sucursalId          String         @map("sucursal_id") @db.Uuid
-  folio               Int
-  almacenOrigenSrId   String         @map("almacen_origen_sr_id")
-  sucursalDestinoId   String         @map("sucursal_destino_id") @db.Uuid
-  almacenDestinoSrId  String         @map("almacen_destino_sr_id")
-  nota                String?
-  estado              EstadoTraspaso @default(enviado)
-  enviadoPor          String         @map("enviado_por") @db.Uuid
-  enviadoAt           DateTime       @map("enviado_at") @db.Timestamptz(3)
-  recibidoPor         String?        @map("recibido_por") @db.Uuid
-  recibidoAt          DateTime?      @map("recibido_at") @db.Timestamptz(3)
-  canceladoPor        String?        @map("cancelado_por") @db.Uuid
-  canceladoAt         DateTime?      @map("cancelado_at") @db.Timestamptz(3)
+  id                 String         @id @default(uuid()) @db.Uuid
+  empresaId          String         @map("empresa_id") @db.Uuid
+  sucursalId         String         @map("sucursal_id") @db.Uuid
+  folio              Int
+  almacenOrigenSrId  String         @map("almacen_origen_sr_id")
+  sucursalDestinoId  String         @map("sucursal_destino_id") @db.Uuid
+  almacenDestinoSrId String         @map("almacen_destino_sr_id")
+  nota               String?
+  estado             EstadoTraspaso @default(enviado)
+  enviadoPor         String         @map("enviado_por") @db.Uuid
+  enviadoAt          DateTime       @map("enviado_at") @db.Timestamptz(3)
+  recibidoPor        String?        @map("recibido_por") @db.Uuid
+  recibidoAt         DateTime?      @map("recibido_at") @db.Timestamptz(3)
+  canceladoPor       String?        @map("cancelado_por") @db.Uuid
+  canceladoAt        DateTime?      @map("cancelado_at") @db.Timestamptz(3)
   // Nulo = no conciliado (le falta algún espejo). Se conserva mientras siga conciliado.
-  conciliadoAt        DateTime?      @map("conciliado_at") @db.Timestamptz(3)
-  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime       @map("updated_at") @db.Timestamptz(3)
+  conciliadoAt       DateTime?      @map("conciliado_at") @db.Timestamptz(3)
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime       @map("updated_at") @db.Timestamptz(3)
 
   sucursal        Sucursal          @relation("TraspasoOrigen", fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "traspasos_sucursal_empresa_fkey")
   sucursalDestino Sucursal          @relation("TraspasoDestino", fields: [sucursalDestinoId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "traspasos_sucursal_destino_empresa_fkey")
@@ -1417,22 +1423,22 @@ model RenglonReceta {
 // sin FK. DECISION PROVISIONAL (nocturno): la compra es un documento APARTE de su póliza de entrada
 // (F2-122); el panel no las concilia ni la suma a la utilidad. esquema-sr.md §10 "Compras, gastos y utilidad".
 model Compra {
-  id                   String   @id @default(uuid()) @db.Uuid
-  empresaId            String   @map("empresa_id") @db.Uuid
-  sucursalId           String   @map("sucursal_id") @db.Uuid
-  origenSrId           String   @map("origen_sr_id")
-  folio                String
-  proveedorOrigenSrId  String?  @map("proveedor_origen_sr_id")
-  almacenOrigenSrId    String?  @map("almacen_origen_sr_id")
-  fecha                DateTime @db.Timestamptz(3)
-  cancelada            Boolean
-  total                Decimal  @db.Decimal(12, 2)
-  partidas             Int
-  hash                 String   @db.Char(64)
-  leidaAt              DateTime @map("leida_at") @db.Timestamptz(3)
-  recibidaAt           DateTime @map("recibida_at") @db.Timestamptz(3)
-  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime @map("updated_at") @db.Timestamptz(3)
+  id                  String   @id @default(uuid()) @db.Uuid
+  empresaId           String   @map("empresa_id") @db.Uuid
+  sucursalId          String   @map("sucursal_id") @db.Uuid
+  origenSrId          String   @map("origen_sr_id")
+  folio               String
+  proveedorOrigenSrId String?  @map("proveedor_origen_sr_id")
+  almacenOrigenSrId   String?  @map("almacen_origen_sr_id")
+  fecha               DateTime @db.Timestamptz(3)
+  cancelada           Boolean
+  total               Decimal  @db.Decimal(12, 2)
+  partidas            Int
+  hash                String   @db.Char(64)
+  leidaAt             DateTime @map("leida_at") @db.Timestamptz(3)
+  recibidaAt          DateTime @map("recibida_at") @db.Timestamptz(3)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @map("updated_at") @db.Timestamptz(3)
 
   sucursal Sucursal        @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "compras_sucursal_empresa_fkey")
   detalle  PartidaCompra[]
@@ -1546,7 +1552,11 @@ model PerfilFiscal {
   updatedAt        DateTime  @map("updated_at") @db.Timestamptz(3)
 
   empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "perfiles_fiscales_empresa_fkey")
+  // F2-104: los CFDI emitidos con este perfil.
+  cfdis   Cfdi[]
 
+  // Destino de la FK compuesta de `cfdis`: el perfil de un CFDI es de SU empresa.
+  @@unique([id, empresaId], map: "perfiles_fiscales_id_empresa_id_key")
   @@map("perfiles_fiscales")
 }
 
@@ -1610,8 +1620,12 @@ model CodigoFacturacion {
 
   cheque   Cheque   @relation(fields: [chequeId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "codigos_facturacion_cheque_empresa_fkey")
   sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "codigos_facturacion_sucursal_empresa_fkey")
+  // F2-104: el CFDI del código (o su reserva mientras se timbra). Uno como mucho: es el candado.
+  cfdi     Cfdi?
 
   @@unique([codigo], map: "codigos_facturacion_codigo_key")
+  // Destino de la FK compuesta de `cfdis`: el código de un CFDI es de SU empresa.
+  @@unique([id, empresaId], map: "codigos_facturacion_id_empresa_id_key")
   // Un código por cheque. Con la empresa porque Prisma pide la llave completa de la FK en una
   // relación 1-1; `cheques.id` ya es único, así que equivale a único por `cheque_id`.
   @@unique([chequeId, empresaId], map: "codigos_facturacion_cheque_id_empresa_id_key")
@@ -1666,4 +1680,66 @@ model PortalFacturacion {
   @@unique([sucursalId, empresaId], map: "portales_facturacion_sucursal_id_empresa_id_key")
   @@index([empresaId])
   @@map("portales_facturacion")
+}
+
+// ---------------------------------------------------------------------------
+// F2-104 · CFDI emitidos. Dato NUESTRO: nada de esto se escribe a SoftRestaurant.
+// ---------------------------------------------------------------------------
+
+/// `timbrando` = RESERVA: la fila nace ANTES de llamar al PAC y es el candado del código.
+enum EstadoEmisionCfdi {
+  timbrando
+  vigente
+  cancelado
+
+  @@map("estado_emision_cfdi")
+}
+
+model Cfdi {
+  id             String            @id @default(uuid()) @db.Uuid
+  empresaId      String            @map("empresa_id") @db.Uuid
+  sucursalId     String            @map("sucursal_id") @db.Uuid
+  chequeId       String            @map("cheque_id") @db.Uuid
+  // El candado por código (doble clic no emite dos veces): ÚNICO. Nulo = CFDI sin código
+  // (F2-107, factura sin ticket); en Postgres los nulos no chocan entre sí.
+  codigoId       String?           @map("codigo_id") @db.Uuid
+  perfilFiscalId String            @map("perfil_fiscal_id") @db.Uuid
+  serie          String
+  folio          Int
+  // Nulos mientras `timbrando`; un CHECK a mano los exige en cuanto deja de serlo.
+  uuid           String?
+  idPac          String?           @map("id_pac")
+  // { rfc, razonSocial, regimenFiscal, cp, usoCfdi, email } tal como se timbró.
+  receptor       Json
+  // c_FormaPago con que se timbró (p. ej. "01").
+  formaPago      String            @map("forma_pago") @db.Char(2)
+  subtotal       Decimal           @db.Decimal(12, 2)
+  iva            Decimal           @db.Decimal(12, 2)
+  total          Decimal           @db.Decimal(12, 2)
+  estado         EstadoEmisionCfdi @default(timbrando)
+  // Fecha de timbrado (UTC). Nula mientras `timbrando`.
+  emitidoAt      DateTime?         @map("emitido_at") @db.Timestamptz(3)
+  // Dónde quedan el XML y el PDF: los llena F2-105 (entrega). Nulos hasta entonces.
+  xmlUrl         String?           @map("xml_url")
+  pdfUrl         String?           @map("pdf_url")
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime          @map("updated_at") @db.Timestamptz(3)
+
+  empresa  Empresa            @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "cfdis_empresa_fkey")
+  sucursal Sucursal           @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_sucursal_empresa_fkey")
+  cheque   Cheque             @relation(fields: [chequeId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_cheque_empresa_fkey")
+  codigo   CodigoFacturacion? @relation(fields: [codigoId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_codigo_empresa_fkey")
+  perfil   PerfilFiscal       @relation(fields: [perfilFiscalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_perfil_empresa_fkey")
+
+  @@unique([codigoId], map: "cfdis_codigo_id_key")
+  // Prisma pide la llave completa de la FK en una relación 1-1; equivale al único de arriba.
+  @@unique([codigoId, empresaId], map: "cfdis_codigo_id_empresa_id_key")
+  @@unique([uuid], map: "cfdis_uuid_key")
+  // Un folio por serie y empresa (los folios los reparte `perfiles_fiscales.folio_actual`).
+  @@unique([empresaId, serie, folio], map: "cfdis_empresa_id_serie_folio_key")
+  // Tablero de facturación (F2-106): por empresa y fecha de timbrado.
+  @@index([empresaId, emitidoAt], map: "cfdis_empresa_id_emitido_at_idx")
+  @@index([chequeId])
+  @@index([sucursalId])
+  @@map("cfdis")
 }

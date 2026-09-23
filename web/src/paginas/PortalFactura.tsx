@@ -47,9 +47,10 @@ import {
  * cliente llega escaneando el QR del ticket). Tres pasos: el código (precargado con `?c=`), los
  * datos fiscales y la confirmación; y la pantalla de éxito.
  *
- * Hoy el api NO emite (la emisión es F2-104): `emisionDisponible` llega en false, y el portal
- * deja consultar el código pero no le pide al cliente sus datos para luego fallar. Si alguien
- * llega a pedir la factura igual, el api contesta 503 y aquí se dice tal cual.
+ * El api emite el CFDI (F2-104) si la empresa tiene perfil fiscal y CSD vigente; si no,
+ * `emisionDisponible` llega en false y el portal deja consultar el código pero no le pide al
+ * cliente sus datos para luego fallar. Si alguien llega a pedir la factura igual, el api contesta
+ * 503 y aquí se dice tal cual.
  *
  * El código viaja en la URL: la página pide `no-referrer`, como la baja de reportes.
  */
@@ -705,7 +706,9 @@ function PasoConfirmar({
         if (campos) return onCampos(campos);
         const estado = e.status === 409 ? estadoDelApi(e.cuerpo) : null;
         if (estado) return onEstado({ codigo, estado, mensaje: e.message, ticket: null });
-        if (e.status === 503) {
+        // 503: no se puede emitir (o el PAC está caído); 422: la cuenta no se factura en línea;
+        // 502: el PAC no confirmó a tiempo (F2-104). En los tres el api dice qué hacer.
+        if (e.status === 503 || e.status === 422 || e.status === 502) {
           return setError(e.message);
         }
       }

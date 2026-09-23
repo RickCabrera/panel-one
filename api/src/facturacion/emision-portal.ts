@@ -1,5 +1,3 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-
 import type { ReceptorPortal } from './portal';
 
 /**
@@ -7,9 +5,8 @@ import type { ReceptorPortal } from './portal';
  * portal hace todo lo suyo antes de llamarlo (slug, código de la empresa, estado `pendiente`,
  * datos del receptor válidos) y no sabe qué hay detrás.
  *
- * En F2-103 la única implementación es `EmisionNoDisponible`: la emisión real (CFDI con el PAC,
- * modelo `Cfdi`, candado por código) es de F2-104, que cambia el provider de `EMISION_PORTAL` por
- * uno sobre `CfdiService.emitir`. Los archivos (XML/PDF) y el correo son de F2-105.
+ * Desde F2-104 la implementación es `CfdiService` (`cfdi.service.ts`): reserva con candado por
+ * código, timbra por `PUERTO_TIMBRADO` y confirma. Los archivos (XML/PDF) y el correo son de F2-105.
  */
 export const EMISION_PORTAL = Symbol('EMISION_PORTAL');
 
@@ -43,21 +40,7 @@ export interface EmisionPortal {
   emitir(solicitud: SolicitudFacturaPortal): Promise<FacturaPortal>;
 }
 
+/** Lo que se dice cuando la empresa todavía no puede emitir (sin perfil fiscal o sin CSD vigente). */
 export const MENSAJE_EMISION_NO_DISPONIBLE =
   'Este restaurante todavía no emite facturas en línea. Tus datos no se guardaron: intenta más ' +
   'tarde o pide tu factura en el restaurante.';
-
-/**
- * La implementación de F2-103: todavía no hay emisión. Nunca escribe nada ni llama al PAC; el
- * endpoint responde 503 con un mensaje que dice la verdad.
- */
-@Injectable()
-export class EmisionNoDisponible implements EmisionPortal {
-  disponible(): Promise<boolean> {
-    return Promise.resolve(false);
-  }
-
-  emitir(): Promise<FacturaPortal> {
-    return Promise.reject(new ServiceUnavailableException(MENSAJE_EMISION_NO_DISPONIBLE));
-  }
-}

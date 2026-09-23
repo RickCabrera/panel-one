@@ -283,8 +283,9 @@ export interface Ticket {
 }
 
 /** Estado PÚBLICO de un código de facturación (F2-101/F2-103). */
+/** `en_proceso` (F2-104): la factura se está emitiendo (o el PAC no confirmó a tiempo). */
 export type EstadoCodigoFacturacion =
-  'pendiente' | 'facturado' | 'en_global' | 'expirado' | 'cancelado';
+  'pendiente' | 'en_proceso' | 'facturado' | 'en_global' | 'expirado' | 'cancelado';
 
 /** `CodigoFacturacionTicketDto` (F2-103). */
 export interface CodigoFacturacionTicket {
@@ -1646,7 +1647,7 @@ export interface ReceptorPortal {
   email: string;
 }
 
-/** `FacturaPortalDto` (contrato fijo; hoy ningún camino del api lo produce: F2-104). */
+/** `FacturaPortalDto`: el CFDI emitido (F2-104). `descargas` en nulos hasta F2-105. */
 export interface FacturaPortal {
   uuid: string;
   serieFolio: string;

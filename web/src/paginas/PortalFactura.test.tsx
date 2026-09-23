@@ -13,6 +13,7 @@ import { Proveedores, Rutas } from '../App';
 import { terminarSesion } from '../auth/sesion';
 import { crearQueryClient } from '../consultas/queryClient';
 import { instalarApiFalsa, json, noAutorizado, type Manejador } from '../test/apiFalsa';
+import FACTURA_DEL_API from './portal/factura-portal.fixture.json';
 
 // F2-103 en el web, contra el router y la app reales: el portal PÚBLICO de autofactura
 // `/f/:slug`. Sin sesión (el refresh da 401). Lo que se prueba: la marca de la sucursal, el
@@ -21,8 +22,9 @@ import { instalarApiFalsa, json, noAutorizado, type Manejador } from '../test/ap
 // encendida (lo que F2-104 devolverá) el flujo de tres pasos con errores campo por campo del
 // cliente y del api, el 409, el 503 y la pantalla de éxito del contrato.
 //
-// OJO: la respuesta 201 de éxito es INVENTADA aquí (el contrato de `FacturaPortalDto`). En
-// F2-103 ningún camino real del api la produce: la emisión es F2-104.
+// La respuesta 201 de éxito es la fixture COMPARTIDA con el api (`portal/factura-portal.fixture.json`):
+// el e2e de la emisión (`api/src/facturacion/cfdi.e2e.spec.ts`, F2-104) comprueba que la respuesta
+// REAL tiene exactamente sus llaves, tipos y forma. Si el api cambia el contrato, ese e2e truena.
 
 const SLUG = 'demo-centro';
 
@@ -74,13 +76,7 @@ const CATALOGOS: CatalogosSat = {
   ],
 };
 
-const FACTURA: FacturaPortal = {
-  uuid: '5FB2822E-396D-4725-8521-CDC4BDD20CCF',
-  serieFolio: 'A-1024',
-  total: '315.50',
-  email: 'facturas@ejemplo.test',
-  descargas: { xml: null, pdf: null },
-};
+const FACTURA: FacturaPortal = FACTURA_DEL_API;
 
 function api(extra: Record<string, Manejador> = {}, p: Partial<PortalPublico> = {}) {
   return instalarApiFalsa({
@@ -379,5 +375,55 @@ describe('Portal de autofactura (público)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(mensaje);
     expect(screen.getByRole('button', { name: 'Emitir mi factura' })).toBeEnabled();
     expect(screen.queryByRole('heading', { name: /Listo/ })).toBeNull();
+  });
+
+  it.each([
+    [
+      422,
+      'Este ticket no se puede facturar en línea (su forma de pago no se puede declarar ante el SAT desde aquí). Pide tu factura en el restaurante con tu ticket.',
+    ],
+    [
+      502,
+      'Tu factura se está emitiendo, pero el servicio de timbrado no confirmó a tiempo. No la vuelvas a solicitar: si en unos minutos no te llega, pídela en el restaurante con tu ticket.',
+    ],
+  ])(
+    'un %i de la emisión (F2-104) muestra el mensaje del api, no uno de red',
+    async (status, mensaje) => {
+      const user = userEvent.setup();
+      api({
+        [`POST /facturacion/portal/${SLUG}/facturas`]: () =>
+          json(status, { statusCode: status, message: mensaje }),
+      });
+      montar(`/f/${SLUG}?c=7JQRECP3U`);
+      await user.click(await screen.findByRole('button', { name: 'Continuar con mis datos' }));
+      await waitFor(() => expect(screen.getByLabelText('Régimen fiscal')).toBeEnabled());
+      await llenarDatos(user);
+      await user.click(screen.getByRole('button', { name: 'Revisar mis datos' }));
+      await user.click(screen.getByRole('button', { name: 'Emitir mi factura' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(mensaje);
+      expect(screen.queryByRole('heading', { name: /Listo/ })).toBeNull();
+    },
+  );
+
+  it('un 409 `en_proceso` (doble clic, F2-104) lleva a la pantalla del estado con qué hacer', async () => {
+    const user = userEvent.setup();
+    const mensaje =
+      'La factura de este ticket se está emitiendo. Si en unos minutos no te llega, pídela en el restaurante con tu ticket; no la vuelvas a solicitar aquí.';
+    api({
+      [`POST /facturacion/portal/${SLUG}/facturas`]: () =>
+        json(409, { statusCode: 409, error: 'Conflict', message: mensaje, estado: 'en_proceso' }),
+    });
+    montar(`/f/${SLUG}?c=7JQRECP3U`);
+    await user.click(await screen.findByRole('button', { name: 'Continuar con mis datos' }));
+    await waitFor(() => expect(screen.getByLabelText('Régimen fiscal')).toBeEnabled());
+    await llenarDatos(user);
+    await user.click(screen.getByRole('button', { name: 'Revisar mis datos' }));
+    await user.click(screen.getByRole('button', { name: 'Emitir mi factura' }));
+    expect(await screen.findByText(mensaje)).toBeVisible();
+    expect(
+      screen.getByText(
+        'Espera unos minutos y no la vuelvas a solicitar. Si no te llega, pídela en el restaurante con tu ticket.',
+      ),
+    ).toBeVisible();
   });
 });

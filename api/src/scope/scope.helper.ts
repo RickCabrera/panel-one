@@ -89,6 +89,9 @@ export const LLAVE_EMPRESA = {
   ConfiguracionFacturacion: 'empresaId',
   // F2-103: el portal público de autofactura de cada sucursal (slug y marca, dato propio).
   PortalFacturacion: 'empresaId',
+  // F2-104: los CFDI emitidos y sus reservas (dato propio; los escribe SÓLO
+  // `EscrituraFacturacion`).
+  Cfdi: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

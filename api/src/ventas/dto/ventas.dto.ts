@@ -59,7 +59,7 @@ import {
   type PartidaTicket,
   type Ticket,
 } from '../tickets.service';
-import type { EstadoPublico } from '../../facturacion/codigo';
+import { ESTADOS_PUBLICOS, type EstadoPublico } from '../../facturacion/codigo';
 
 // ---------------------------------------------------------------------------
 // Query
@@ -533,7 +533,7 @@ export class CodigoFacturacionTicketDto implements CodigoFacturacionTicket {
   codigo!: string;
 
   @ApiProperty({
-    enum: ['pendiente', 'facturado', 'en_global', 'expirado', 'cancelado'],
+    enum: ESTADOS_PUBLICOS,
     description: 'El estado PÚBLICO, el mismo que ve el portal de autofactura.',
   })
   estado!: EstadoPublico;

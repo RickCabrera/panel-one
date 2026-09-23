@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 
 import type { Reloj } from '../../comun/reloj';
 import { dinero, fechaLocalCfdi, seis } from './cfdi-comun';
+import { MENSAJES_SAT } from './errores-sat';
 import { pdfMinimo } from './pdf-minimo';
 import {
   ErrorTimbrado,
@@ -50,6 +51,19 @@ export const RFC_CON_ERROR: Readonly<
     codigo: 'PAC_NO_DISPONIBLE',
     mensaje: 'El servicio de timbrado no está disponible. Intenta de nuevo en unos minutos.',
     reintentable: true,
+  },
+  // F2-104: dos RFC que SÍ pasan la validación del portal (forma del SAT, no genéricos), para
+  // probar el mensaje amable de punta a punta. `XEXX010101000` no sirve para eso: es el genérico
+  // de extranjeros y el portal lo corta antes de llegar al PAC.
+  XFAL010101NI0: {
+    codigo: 'RFC_NO_INSCRITO',
+    mensaje: MENSAJES_SAT.RFC_NO_INSCRITO,
+    reintentable: false,
+  },
+  XFAL010101NO0: {
+    codigo: 'NOMBRE_NO_COINCIDE',
+    mensaje: MENSAJES_SAT.NOMBRE_NO_COINCIDE,
+    reintentable: false,
   },
 };
 
