@@ -314,6 +314,7 @@ describe('sembrarVentas() (contra Postgres)', () => {
     });
     await sembrarVentas(prisma, CON_RELOJ);
     await expect(prisma.cheque.count({ where: { id: ajeno.id } })).resolves.toBe(1);
+    await prisma.codigoFacturacion.deleteMany({ where: { chequeId: ajeno.id } }); // F2-101
     await prisma.cheque.delete({ where: { id: ajeno.id } });
   }, 60_000); // 1500 cheques del seed de 90 días (F2-201): los 5 s de jest no alcanzan
 });

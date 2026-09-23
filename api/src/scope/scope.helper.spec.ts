@@ -88,6 +88,9 @@ describe('whereEmpresa / whereScoped', () => {
       // F2-100: datos fiscales y receptores frecuentes (dato propio).
       PerfilFiscal: 'empresaId',
       ReceptorFrecuente: 'empresaId',
+      // F2-101: códigos cortos de facturación y la regla de vigencia (dato propio).
+      CodigoFacturacion: 'empresaId',
+      ConfiguracionFacturacion: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });

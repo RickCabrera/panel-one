@@ -26,12 +26,20 @@ import {
   RegimenFiscalDto,
   RespuestaPerfilFiscalDto,
 } from './dto/facturacion.dto';
+import { CodigosFacturacionService } from './codigos.service';
+import {
+  GuardarVigenciaCodigosDto,
+  VigenciaCodigosDto,
+  VigenciaCodigosQueryDto,
+} from './dto/codigo.dto';
 import { FacturacionService } from './facturacion.service';
 import { REGIMENES_FISCALES } from './sat';
 
 const DESC_404 =
   'La empresa no existe o no está en tu alcance. Misma respuesta en todos los casos (nunca 403), ' +
   'tenga o no datos fiscales.';
+const DESC_404_EMPRESA =
+  'La empresa no existe o no está en tu alcance. Misma respuesta en todos los casos (nunca 403).';
 const DESC_403 = 'Rol insuficiente (visor): los datos fiscales son sólo de administradores.';
 
 @ApiTags('facturacion')
@@ -39,7 +47,10 @@ const DESC_403 = 'Rol insuficiente (visor): los datos fiscales son sólo de admi
 @ApiUnauthorizedResponse({ type: ErrorDto, description: 'Sin token, token inválido o vencido.' })
 @Controller('facturacion')
 export class FacturacionController {
-  constructor(private readonly facturacion: FacturacionService) {}
+  constructor(
+    private readonly facturacion: FacturacionService,
+    private readonly codigos: CodigosFacturacionService,
+  ) {}
 
   @Get('regimenes-fiscales')
   @ApiOperation({
@@ -124,5 +135,46 @@ export class FacturacionController {
   ): Promise<RespuestaPerfilFiscalDto> {
     const u = req.usuario!;
     return this.facturacion.cargarCsd(scope, { id: u.id, rol: u.rol }, dto);
+  }
+
+  @Get('vigencia-codigos')
+  @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
+  @ApiOperation({
+    summary: 'Regla de vigencia de los códigos de facturación de una empresa (F2-101).',
+    description: 'Sin configurar = fin del mes del cierre (`configurada = false`).',
+  })
+  @ApiOkResponse({ type: VigenciaCodigosDto })
+  @ApiBadRequestResponse({ type: ErrorDto, description: 'Parámetros inválidos.' })
+  @ApiForbiddenResponse({ type: ErrorDto, description: DESC_403 })
+  @ApiNotFoundResponse({ type: ErrorDto, description: DESC_404_EMPRESA })
+  vigenciaCodigos(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: VigenciaCodigosQueryDto,
+  ): Promise<VigenciaCodigosDto> {
+    return this.codigos.vigencia(scope, q.empresaId);
+  }
+
+  @Put('vigencia-codigos')
+  @HttpCode(200)
+  @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
+  @ApiOperation({
+    summary: 'Cambia la vigencia de los códigos de facturación de una empresa (F2-101).',
+    description:
+      'Aplica a los códigos NUEVOS: cada código guarda su vencimiento al nacer. `dias` (1..366) ' +
+      'es obligatorio con la regla `dias` y prohibido con `fin_de_mes`. Siempre en la zona de la ' +
+      'sucursal del cheque.',
+  })
+  @ApiOkResponse({ type: VigenciaCodigosDto })
+  @ApiBadRequestResponse({ type: ErrorDto, description: 'Regla o días inválidos.' })
+  @ApiForbiddenResponse({ type: ErrorDto, description: DESC_403 })
+  @ApiNotFoundResponse({ type: ErrorDto, description: DESC_404_EMPRESA })
+  @ApiConflictResponse({ type: ErrorDto, description: 'Otro administrador la guardó a la vez.' })
+  guardarVigenciaCodigos(
+    @Req() req: RequestAutenticado,
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Body() dto: GuardarVigenciaCodigosDto,
+  ): Promise<VigenciaCodigosDto> {
+    const u = req.usuario!;
+    return this.codigos.guardarVigencia(scope, { id: u.id, rol: u.rol }, dto);
   }
 }

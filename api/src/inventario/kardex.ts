@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 
-import { instanteDesdeLocal } from '../adaptadores/timbrado/cfdi-comun';
+import { instanteDesdeLocal } from '../comun/fechas';
 
 /**
  * La parte PURA de Movimientos y Kardex (F2-122): saldo corrido, cuadre contra la existencia

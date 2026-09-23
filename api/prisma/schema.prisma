@@ -53,6 +53,8 @@ model Empresa {
   // F2-100: datos fiscales (uno por empresa) y receptores frecuentes de facturación.
   perfilFiscal         PerfilFiscal?
   receptoresFrecuentes ReceptorFrecuente[]
+  // F2-101: regla de vigencia de los códigos de facturación (sin fila = fin de mes).
+  configuracionFacturacion ConfiguracionFacturacion?
 
   @@map("empresas")
 }
@@ -115,6 +117,8 @@ model Sucursal {
   compras               Compra[]
   partidasCompra        PartidaCompra[]
   gastos                Gasto[]
+  // F2-101: códigos cortos de facturación de los cheques de la sucursal.
+  codigosFacturacion    CodigoFacturacion[]
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -310,6 +314,8 @@ model Cheque {
   sucursal Sucursal        @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cheques_sucursal_empresa_fkey")
   partidas ChequePartida[]
   pagos    ChequePago[]
+  // F2-101: el código corto de facturación (uno por cheque facturable).
+  codigoFacturacion CodigoFacturacion?
 
   // La llave de idempotencia de la ingesta (F1-031): upsert por aquí.
   @@unique([sucursalId, folioSr], map: "cheques_sucursal_id_folio_sr_key")
@@ -1561,4 +1567,68 @@ model ReceptorFrecuente {
 
   @@unique([empresaId, rfc], map: "receptores_frecuentes_empresa_rfc_key")
   @@map("receptores_frecuentes")
+}
+
+// ---------------------------------------------------------------------------
+// F2-101 · Código corto de facturación por cheque. Dato NUESTRO: nunca se escribe a SR.
+// ---------------------------------------------------------------------------
+
+/**
+ * Estado GUARDADO del código. `expirado` también se DERIVA al leer (`expira_at` ya pasó), sin
+ * job; y "cancelado" no se guarda: sale del cheque (`facturacion/codigo.ts#estadoPublico`).
+ */
+enum EstadoCodigoFacturacion {
+  pendiente
+  facturado
+  en_global
+  expirado
+}
+
+/// Cómo se calcula la expiración de un código nuevo, por empresa.
+enum ReglaVigenciaCodigo {
+  /// Hasta el fin del mes de emisión en la zona de la sucursal (regla típica del SAT). Default.
+  fin_de_mes
+  /// Hasta el final del día N (natural) después del día de emisión, en la zona de la sucursal.
+  dias
+}
+
+model CodigoFacturacion {
+  id         String                  @id @default(uuid()) @db.Uuid
+  // 9 caracteres de A–Z y 2–9 sin O, 0, I, 1. CHECK de formato a mano en la migración
+  // `..._codigo_facturacion`. Único GLOBAL: el endpoint público busca sin tenant.
+  codigo     String
+  chequeId   String                  @map("cheque_id") @db.Uuid
+  sucursalId String                  @map("sucursal_id") @db.Uuid
+  empresaId  String                  @map("empresa_id") @db.Uuid
+  estado     EstadoCodigoFacturacion @default(pendiente)
+  // Se fija al generar el código y NO se recalcula (ni si cambia la regla, ni si el cheque cambia).
+  expiraAt   DateTime                @map("expira_at") @db.Timestamptz(3)
+  createdAt  DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime                @map("updated_at") @db.Timestamptz(3)
+
+  cheque   Cheque   @relation(fields: [chequeId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "codigos_facturacion_cheque_empresa_fkey")
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "codigos_facturacion_sucursal_empresa_fkey")
+
+  @@unique([codigo], map: "codigos_facturacion_codigo_key")
+  // Un código por cheque. Con la empresa porque Prisma pide la llave completa de la FK en una
+  // relación 1-1; `cheques.id` ya es único, así que equivale a único por `cheque_id`.
+  @@unique([chequeId, empresaId], map: "codigos_facturacion_cheque_id_empresa_id_key")
+  @@index([empresaId])
+  @@index([sucursalId])
+  @@map("codigos_facturacion")
+}
+
+model ConfiguracionFacturacion {
+  id              String              @id @default(uuid()) @db.Uuid
+  empresaId       String              @unique @map("empresa_id") @db.Uuid
+  vigenciaCodigos ReglaVigenciaCodigo @default(fin_de_mes) @map("vigencia_codigos")
+  // Sólo con `dias` (1..366). CHECK a mano en la migración `..._codigo_facturacion`.
+  vigenciaDias    Int?                @map("vigencia_dias")
+  actualizadoPor  String?             @map("actualizado_por") @db.Uuid
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "configuraciones_facturacion_empresa_fkey")
+
+  @@map("configuraciones_facturacion")
 }

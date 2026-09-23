@@ -9440,6 +9440,227 @@
           "facturacion"
         ]
       }
+    },
+    "/facturacion/vigencia-codigos": {
+      "get": {
+        "description": "Sin configurar = fin del mes del cierre (`configurada = false`).",
+        "operationId": "FacturacionController_vigenciaCodigos",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "La empresa (tiene que estar en tu alcance).",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VigenciaCodigosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): los datos fiscales son sólo de administradores.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Regla de vigencia de los códigos de facturación de una empresa (F2-101).",
+        "tags": [
+          "facturacion"
+        ]
+      },
+      "put": {
+        "description": "Aplica a los códigos NUEVOS: cada código guarda su vencimiento al nacer. `dias` (1..366) es obligatorio con la regla `dias` y prohibido con `fin_de_mes`. Siempre en la zona de la sucursal del cheque.",
+        "operationId": "FacturacionController_guardarVigenciaCodigos",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardarVigenciaCodigosDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VigenciaCodigosDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Regla o días inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): los datos fiscales son sólo de administradores.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Otro administrador la guardó a la vez.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cambia la vigencia de los códigos de facturación de una empresa (F2-101).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/codigo/{codigo}": {
+      "get": {
+        "description": "Pública (sin sesión), 10 consultas por minuto por IP. Acepta minúsculas y espacios alrededor. `ticket` (sucursal, fecha, total, vencimiento) viene SÓLO con `estado = pendiente`; con `expirado`, `facturado`, `en_global` o `cancelado` es `null`.",
+        "operationId": "CodigoFacturacionPublicoController_consultar",
+        "parameters": [
+          {
+            "name": "codigo",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": "7JQRECP3U",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaCodigoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No tiene el formato (9 de A–Z y 2–9 sin O, 0, I, 1). No se busca en la base.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe (o su sucursal o empresa están dadas de baja). Mismo cuerpo siempre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 10 consultas por minuto desde la misma IP."
+          }
+        },
+        "summary": "Estado de un código de facturación y, si se puede facturar, los datos del ticket.",
+        "tags": [
+          "facturacion"
+        ]
+      }
     }
   },
   "info": {
@@ -18459,6 +18680,137 @@
           "certificado",
           "llavePrivada",
           "contrasena"
+        ]
+      },
+      "VigenciaCodigosDto": {
+        "type": "object",
+        "properties": {
+          "regla": {
+            "type": "string",
+            "enum": [
+              "fin_de_mes",
+              "dias"
+            ],
+            "description": "`fin_de_mes` (default): hasta el fin del mes del cierre. `dias`: hasta el final del día N después del cierre. Siempre en la zona de la sucursal."
+          },
+          "dias": {
+            "type": "number",
+            "nullable": true,
+            "description": "N con `dias`; `null` con fin de mes."
+          },
+          "configurada": {
+            "type": "boolean",
+            "description": "false = la empresa usa el default (nadie la ha configurado)."
+          }
+        },
+        "required": [
+          "regla",
+          "dias",
+          "configurada"
+        ]
+      },
+      "GuardarVigenciaCodigosDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "regla": {
+            "type": "string",
+            "enum": [
+              "fin_de_mes",
+              "dias"
+            ]
+          },
+          "dias": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 366,
+            "description": "Obligatorio con `dias` y prohibido con `fin_de_mes`."
+          }
+        },
+        "required": [
+          "empresaId",
+          "regla"
+        ]
+      },
+      "TicketCodigoDto": {
+        "type": "object",
+        "properties": {
+          "sucursal": {
+            "type": "string",
+            "example": "Sucursal Centro",
+            "description": "Nombre de la sucursal."
+          },
+          "fecha": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cierre de la cuenta (UTC). Si SR la reabrió, su apertura."
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA de la sucursal, para presentar `fecha` y `expiraAt`."
+          },
+          "total": {
+            "type": "string",
+            "example": "315.50",
+            "description": "Total del ticket, 2 decimales."
+          },
+          "expiraAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Desde este instante el código ya no sirve (exclusivo, UTC)."
+          }
+        },
+        "required": [
+          "sucursal",
+          "fecha",
+          "zonaHoraria",
+          "total",
+          "expiraAt"
+        ]
+      },
+      "ConsultaCodigoDto": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "example": "7JQRECP3U",
+            "description": "El código normalizado (mayúsculas)."
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "pendiente",
+              "facturado",
+              "en_global",
+              "expirado",
+              "cancelado"
+            ],
+            "description": "`cancelado` se deriva de la cuenta; `expirado` también sale cuando `expiraAt` ya pasó."
+          },
+          "mensaje": {
+            "type": "string",
+            "description": "Mensaje en español para mostrar tal cual. Sin datos del ticket."
+          },
+          "ticket": {
+            "nullable": true,
+            "description": "Datos no sensibles del ticket. SÓLO con `estado = pendiente`; en cualquier otro estado es `null` (ni sucursal, ni fecha, ni total).",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TicketCodigoDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "codigo",
+          "estado",
+          "mensaje",
+          "ticket"
         ]
       }
     }

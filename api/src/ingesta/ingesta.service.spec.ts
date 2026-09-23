@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 
 import { crearFixtures, FX, limpiarFixtures } from '../../test/fixtures-auth';
 import { Reloj } from '../comun/reloj';
+import { GeneradorCodigo } from '../facturacion/codigo';
 import type { PrismaService } from '../prisma/prisma.service';
 import { OperacionesSucursal } from '../scope/escritura-sucursal';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
@@ -64,6 +65,7 @@ describe('IngestaService, fallas de base (contra Postgres, F1-031)', () => {
   const servicio = new IngestaService(
     new ScopedPrismaService(prisma as unknown as PrismaService),
     new Reloj(),
+    new GeneradorCodigo(),
   );
 
   beforeAll(async () => {
@@ -120,6 +122,23 @@ describe('IngestaService, fallas de base (contra Postgres, F1-031)', () => {
       expect(guardados.map((c) => c.folioSr)).toEqual([`${prefijo}-1`, `${prefijo}-3`]);
     },
   );
+  it('F2-101: si el SAVEPOINT del código ya no se puede revertir (conexión caída), el cheque sale rechazado REINTENTABLE y no se guarda nada', async () => {
+    // `intentarCodigoFacturacion` sólo propaga lo que no pudo aislar (su propio ROLLBACK): eso
+    // sigue el camino normal de `esTransitorio()`.
+    jest
+      .spyOn(OperacionesSucursal.prototype, 'intentarCodigoFacturacion')
+      .mockRejectedValue(errorPrisma('P1017'));
+    const cerrado = cheque('cod1', 'SVC-COD-1');
+    const r = await servicio.procesarLote(A1, [
+      { ...cerrado, datos: { ...cerrado.datos, cerradoAt: '2026-09-20T20:00:00Z' } },
+    ]);
+    expect(r.procesados).toEqual([]);
+    expect(r.rechazados).toEqual([
+      { id: 'cod1', indice: 0, reintentable: true, motivo: expect.any(String) },
+    ]);
+    expect(await prisma.cheque.count({ where: { folioSr: 'SVC-COD-1' } })).toBe(0);
+  });
+
   it('si falla el registro del CONTACTO (F1-061), se loguea y el lote se procesa igual', async () => {
     // Los tests de arriba ya registraron contacto de A1: se parte de cero.
     await prisma.agenteContacto.deleteMany({ where: { sucursalId: FX.sucursalA1 } });

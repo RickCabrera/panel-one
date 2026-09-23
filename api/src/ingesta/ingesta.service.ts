@@ -5,6 +5,7 @@ import { validate, type ValidationError } from 'class-validator';
 
 import type { AgenteAutenticado } from '../auth/request-autenticado';
 import { Reloj } from '../comun/reloj';
+import { esFacturable, GeneradorCodigo } from '../facturacion/codigo';
 import type {
   DatosCheque,
   DatosEstado,
@@ -97,6 +98,7 @@ export class IngestaService {
   constructor(
     private readonly datos: ScopedPrismaService,
     private readonly reloj: Reloj,
+    private readonly generador: GeneradorCodigo,
   ) {}
 
   async procesarLote(
@@ -116,7 +118,7 @@ export class IngestaService {
         continue;
       }
       try {
-        await this.aplicar(escritura, normalizado.valor);
+        await this.aplicar(escritura, agente, normalizado.valor);
         // La cabecera validada ya exigió un id de 1..64 caracteres.
         procesados.push(id as string);
       } catch (err) {
@@ -156,16 +158,41 @@ export class IngestaService {
     }
   }
 
-  private aplicar(escritura: EscrituraSucursal, evento: EventoNormalizado): Promise<void> {
+  private aplicar(
+    escritura: EscrituraSucursal,
+    agente: AgenteAutenticado,
+    evento: EventoNormalizado,
+  ): Promise<void> {
     switch (evento.tipo) {
       case 'cheque':
         return escritura.enTransaccion(async (ops) => {
           const guardado = await ops.leerCheque(evento.folioSr);
           const entrante = { ...evento.datos, partidas: evento.partidas, pagos: evento.pagos };
-          if (guardado && chequeCanonico(guardado) === chequeCanonico(entrante)) {
-            return; // reenvío idéntico: no se toca nada
+          // Reenvío idéntico: el cheque no se toca.
+          const chequeId =
+            guardado && chequeCanonico(guardado) === chequeCanonico(entrante)
+              ? guardado.id
+              : await ops.guardarCheque(
+                  evento.folioSr,
+                  evento.datos,
+                  evento.partidas,
+                  evento.pagos,
+                );
+          // F2-101: el código corto de facturación, en la MISMA transacción pero aislado en un
+          // savepoint (una falla suya no tumba la venta). También en el reenvío idéntico: si el
+          // cheque ya tiene código no escribe nada, y si no lo tiene (falló antes, o es anterior
+          // a la migración) lo crea.
+          if (evento.datos.cerradoAt !== null && esFacturable(evento.datos)) {
+            const r = await ops.intentarCodigoFacturacion(chequeId, evento.datos.cerradoAt, () =>
+              this.generador.generar(),
+            );
+            if (!r.ok) {
+              this.log.error(
+                `Cheque ${evento.folioSr} de la sucursal ${agente.sucursalId} guardado SIN código ` +
+                  `de facturación (se reintenta en su siguiente reenvío): ${motivoSinDatos(r.error)}`,
+              );
+            }
           }
-          await ops.guardarCheque(evento.folioSr, evento.datos, evento.partidas, evento.pagos);
         });
       case 'snapshot':
         return escritura.enTransaccion(async (ops) => {
@@ -218,6 +245,29 @@ function mismoEstado(
     a.latenciaQueryMs === b.latenciaQueryMs &&
     (a.ultimaLecturaAt?.getTime() ?? null) === (b.ultimaLecturaAt?.getTime() ?? null)
   );
+}
+
+/**
+ * El motivo de una falla del código de facturación SIN datos del ticket ni el código: un error
+ * de Postgres por CHECK trae la fila completa en su detalle, así que de Prisma sólo va el código
+ * de error.
+ */
+function motivoSinDatos(err: unknown): string {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    const pg = (err.meta as { code?: unknown } | undefined)?.code;
+    return `Prisma ${err.code}${typeof pg === 'string' ? ` (Postgres ${pg})` : ''}`;
+  }
+  // El resto de los errores de Prisma (validación, desconocido, pánico) pueden repetir los
+  // argumentos de la consulta en su mensaje: sólo el nombre de la clase.
+  if (
+    err instanceof Prisma.PrismaClientUnknownRequestError ||
+    err instanceof Prisma.PrismaClientValidationError ||
+    err instanceof Prisma.PrismaClientRustPanicError ||
+    err instanceof Prisma.PrismaClientInitializationError
+  ) {
+    return `Prisma (${err.name})`;
+  }
+  return err instanceof Error ? `${err.name}: ${err.message}` : 'error sin detalle';
 }
 
 function describir(err: unknown): string {

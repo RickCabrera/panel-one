@@ -144,6 +144,29 @@ export type DatosScoped = {
 };
 
 /**
+ * Lo ÚNICO que la consulta pública de un código de facturación (F2-101) puede leer: lista
+ * blanca. Ni folio, ni mesa, ni partidas, ni pagos, ni la empresa más allá de si está activa.
+ */
+const SELECCION_CODIGO_PUBLICO = {
+  codigo: true,
+  estado: true,
+  expiraAt: true,
+  cheque: { select: { abiertoAt: true, cerradoAt: true, total: true, cancelado: true } },
+  sucursal: {
+    select: {
+      nombre: true,
+      zonaHoraria: true,
+      activo: true,
+      empresa: { select: { activo: true } },
+    },
+  },
+} as const satisfies Prisma.CodigoFacturacionSelect;
+
+export type LecturaCodigoPublico = Prisma.CodigoFacturacionGetPayload<{
+  select: typeof SELECCION_CODIGO_PUBLICO;
+}>;
+
+/**
  * EL helper obligatorio de scope multiempresa. Todo servicio de datos de
  * negocio lee a través de `para(scope)`; importar `PrismaService` directamente
  * fuera de la allowlist de `eslint.config.mjs` rompe el lint.
@@ -297,6 +320,22 @@ export class ScopedPrismaService {
    */
   traspasos(scope: EmpresaScope): EscrituraTraspasos {
     return new EscrituraTraspasos(this.#prisma, scope);
+  }
+
+  /**
+   * La consulta PÚBLICA de un código de facturación (F2-101): sin usuario ni tenant, porque el
+   * código ES la credencial (único global, 32^9 combinaciones, rate limit por IP). Por eso no
+   * pasa por `para(scope)`, y por eso sólo devuelve la lista blanca `SELECCION_CODIGO_PUBLICO`:
+   * quien la use no puede pedir un `include` que filtre el folio o las partidas.
+   */
+  codigoFacturacionPublico(codigo: string): Promise<LecturaCodigoPublico | null> {
+    if (typeof codigo !== 'string' || codigo.length === 0) {
+      throw new Error('Consulta de código de facturación: código vacío o ausente.');
+    }
+    return this.#prisma.codigoFacturacion.findFirst({
+      where: { codigo },
+      select: SELECCION_CODIGO_PUBLICO,
+    });
   }
 
   /**

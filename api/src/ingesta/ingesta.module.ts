@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AgentesModule } from '../agentes/agentes.module';
+import { GeneradorCodigo } from '../facturacion/codigo';
 import { CatalogosIngestaController } from './catalogos-ingesta.controller';
 import { CatalogosIngestaService } from './catalogos-ingesta.service';
 import { ExistenciasIngestaController } from './existencias-ingesta.controller';
@@ -31,6 +32,8 @@ import { IngestaService } from './ingesta.service';
     ComprasIngestaController,
   ],
   providers: [
+    // F2-101: el azar de los códigos de facturación (los e2e lo reemplazan).
+    GeneradorCodigo,
     IngestaService,
     CatalogosIngestaService,
     ExistenciasIngestaService,

@@ -66,6 +66,7 @@ describe('Esquema de ventas (F1-030)', () => {
 
   async function limpiar(): Promise<void> {
     const deEstas = { where: { empresaId: { in: EMPRESAS } } };
+    await prisma.codigoFacturacion.deleteMany(deEstas); // F2-101: cuelgan del cheque
     await prisma.chequePartida.deleteMany(deEstas);
     await prisma.chequePago.deleteMany(deEstas);
     await prisma.cheque.deleteMany(deEstas);

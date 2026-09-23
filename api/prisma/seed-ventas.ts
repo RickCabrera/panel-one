@@ -29,6 +29,8 @@ import { sembrarCatalogos } from './seed-catalogos';
 import { sembrarCompras } from './seed-compras';
 import { sembrarConteos } from './seed-conteos';
 import { sembrarExistencias } from './seed-existencias';
+import { CODIGO_EJEMPLO, VIGENCIA_DEFAULT } from '../src/facturacion/codigo';
+import { generarCodigosSeed } from './seed-codigos';
 import { sembrarFacturacion } from './seed-facturacion';
 import { sembrarGastos } from './seed-gastos';
 import { sembrarMovimientos } from './seed-movimientos';
@@ -91,6 +93,12 @@ export interface OpcionesVentas {
    */
   ahora?: Date;
   semilla?: number;
+  /**
+   * F2-101: el código de facturación de ejemplo y la sucursal cuyo último cheque vigente lo
+   * lleva. `main` pone `7JQRECP3U` en CENTRO; los tests, si lo usan, uno propio (la unique es
+   * global y no deben pisar el de la base de desarrollo).
+   */
+  ejemploFacturacion?: { sucursalId: string; codigo: string };
 }
 
 export interface PartidaSeed {
@@ -374,7 +382,7 @@ export function generarVentas(op: OpcionesVentas): ChequeSeed[] {
 export async function sembrarVentas(
   prisma: PrismaClient,
   op: OpcionesVentas,
-): Promise<{ cheques: number; partidas: number; pagos: number }> {
+): Promise<{ cheques: number; partidas: number; pagos: number; codigos: number }> {
   const cheques = generarVentas(op);
   const sucursalIds = op.sucursales.map((s) => s.id);
   const sembrados = {
@@ -412,8 +420,26 @@ export async function sembrarVentas(
     })),
   );
 
+  // F2-101: un código de facturación por cheque facturable, como los dejaría la ingesta, con la
+  // regla de vigencia de la empresa (sin configurar = fin de mes).
+  const config = await prisma.configuracionFacturacion.findFirst({
+    where: { empresaId: op.empresaId },
+    select: { vigenciaCodigos: true, vigenciaDias: true },
+  });
+  const codigos = generarCodigosSeed(cheques, {
+    zonas: new Map(op.sucursales.map((s) => [s.id, s.zonaHoraria])),
+    vigencia:
+      config?.vigenciaCodigos === 'dias' && config.vigenciaDias !== null
+        ? { regla: 'dias', dias: config.vigenciaDias }
+        : VIGENCIA_DEFAULT,
+    ahora: op.ahora ?? new Date(),
+    ejemplo: op.ejemploFacturacion,
+  });
+
   await prisma.$transaction(
     async (tx) => {
+      // Los códigos cuelgan del cheque (FK Restrict): se borran antes que él.
+      await tx.codigoFacturacion.deleteMany({ where: { cheque: sembrados.cheque } });
       await tx.chequePartida.deleteMany({ where: sembrados });
       await tx.chequePago.deleteMany({ where: sembrados });
       await tx.cheque.deleteMany({ where: sembrados.cheque });
@@ -422,6 +448,7 @@ export async function sembrarVentas(
       });
       await tx.chequePartida.createMany({ data: partidas });
       await tx.chequePago.createMany({ data: pagos });
+      await tx.codigoFacturacion.createMany({ data: codigos });
       for (const { formaRaw, forma } of CATALOGO_SEED) {
         await tx.formaPagoCatalogo.upsert({
           where: { empresaId_formaRaw: { empresaId: op.empresaId, formaRaw } },
@@ -439,7 +466,12 @@ export async function sembrarVentas(
   // hace autovacuum (al pasar de 50 filas + 10 %); aquí no se le espera. Es NUESTRA base,
   // nunca la de SoftRestaurant.
   await prisma.$executeRaw`ANALYZE cheques, cheque_partidas, cheque_pagos`;
-  return { cheques: cheques.length, partidas: partidas.length, pagos: pagos.length };
+  return {
+    cheques: cheques.length,
+    partidas: partidas.length,
+    pagos: pagos.length,
+    codigos: codigos.length,
+  };
 }
 
 /**
@@ -498,11 +530,21 @@ async function main(): Promise<void> {
     }));
     const ahora = relojDelSeed(process.env.SEED_AHORA);
     const hoy = hoyEn(sucursales[0].zonaHoraria, ahora);
-    const op: OpcionesVentas = { empresaId: SEED_IDS.empresaDemo, sucursales, hoy, ahora };
+    const op: OpcionesVentas = {
+      empresaId: SEED_IDS.empresaDemo,
+      sucursales,
+      hoy,
+      ahora,
+      ejemploFacturacion: { sucursalId: SEED_IDS.sucursalCentro, codigo: CODIGO_EJEMPLO },
+    };
     const r = await sembrarVentas(prisma, op);
     console.log(
       `Seed de ventas aplicado: ${r.cheques} cheques, ${r.partidas} partidas, ${r.pagos} pagos ` +
         `(${DIAS} días hasta ${hoy}, sin cierres después de ${ahora.toISOString()}).`,
+    );
+    console.log(
+      `Códigos de facturación sembrados (F2-101): ${r.codigos}; el ${CODIGO_EJEMPLO} es del último ` +
+        'cheque vigente de CENTRO.',
     );
     const universo = universoDe(op, generarVentas(op));
     // Catálogos espejo (F2-230): grupos, productos, meseros, clientes, áreas y canales (F2-233),

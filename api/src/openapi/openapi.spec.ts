@@ -48,6 +48,48 @@ describe('Contrato OpenAPI', () => {
     expect(paths['/cuenta/reportes']?.get?.security).toEqual([{ bearer: [] }]);
   });
 
+  it('F2-101: consulta pública del código con 400/404/429 y sin token; vigencia con roles y 404', async () => {
+    const { paths, components } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    const publica = paths['/facturacion/codigo/{codigo}']?.get;
+    expect(codigos(publica)).toEqual(['200', '400', '404', '429']);
+    expect(publica?.security).toBeUndefined();
+    expect(codigos(paths['/facturacion/vigencia-codigos']?.get)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
+    expect(codigos(paths['/facturacion/vigencia-codigos']?.put)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+    ]);
+    const esquemas = components?.schemas as Record<
+      string,
+      { properties?: Record<string, { enum?: string[]; nullable?: boolean; description?: string }> }
+    >;
+    const consulta = esquemas.ConsultaCodigoDto.properties!;
+    expect(consulta.estado.enum).toEqual([
+      'pendiente',
+      'facturado',
+      'en_global',
+      'expirado',
+      'cancelado',
+    ]);
+    expect(consulta.ticket.nullable).toBe(true);
+    expect(consulta.ticket.description).toContain('SÓLO con `estado = pendiente`');
+    // Lo que la consulta pública NUNCA expone: ni folio, ni mesa, ni partidas.
+    const texto = JSON.stringify([esquemas.ConsultaCodigoDto, esquemas.TicketCodigoDto]);
+    for (const prohibido of ['folio', 'mesa', 'partidas', 'pagos', 'mesero']) {
+      expect(texto).not.toContain(`"${prohibido}"`);
+    }
+  });
+
   it('catálogos espejo (F2-230): agente con API key y reintentos claros; panel con 404 y roles', async () => {
     const { paths } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -730,6 +772,9 @@ describe('Contrato OpenAPI', () => {
         '/facturacion/perfil-fiscal',
         '/facturacion/perfil-fiscal/csd',
         '/facturacion/regimenes-fiscales',
+        // F2-101: consulta pública del código de facturación y vigencia por empresa.
+        '/facturacion/codigo/{codigo}',
+        '/facturacion/vigencia-codigos',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',

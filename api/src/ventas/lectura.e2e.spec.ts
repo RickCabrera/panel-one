@@ -847,10 +847,12 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
       });
       const pedir = (extra: Record<string, string | number> = {}) =>
         get(`/ventas/tickets?${Q({ ...base, porPagina: 100, ...extra })}`, USUARIOS.visorA);
-      const borrar = () =>
-        prisma.cheque.deleteMany({
-          where: { sucursalId: FX.sucursalA1, folioSr: { in: FOLIOS_SR } },
-        });
+      const borrar = async () => {
+        const deEstos = { sucursalId: FX.sucursalA1, folioSr: { in: FOLIOS_SR } };
+        // F2-101: el código de facturación cuelga del cheque (FK Restrict).
+        await prisma.codigoFacturacion.deleteMany({ where: { cheque: deEstos } });
+        await prisma.cheque.deleteMany({ where: deEstos });
+      };
       beforeEach(borrar);
       afterAll(borrar);
       // Estas pruebas recorren páginas con detalle completo y esperan al reloj de la
@@ -1249,6 +1251,7 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
     const ruta = `/ventas/resumen?${Q({ empresaId: FX.empresaA, ...dia })}`;
 
     afterAll(async () => {
+      await prisma.codigoFacturacion.deleteMany({ where: { cheque: { folioSr: 'F1-033-CACHE' } } });
       await prisma.cheque.deleteMany({ where: { folioSr: 'F1-033-CACHE' } });
     });
 
@@ -1327,6 +1330,9 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
           expect(cuentas((await get(r, USUARIOS.visorA)).body)).toBe(1);
         }
       } finally {
+        await prisma.codigoFacturacion.deleteMany({
+          where: { cheque: { folioSr: 'F1-043-CACHE' } },
+        });
         await prisma.cheque.deleteMany({ where: { folioSr: 'F1-043-CACHE' } });
       }
     });

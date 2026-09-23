@@ -1,13 +1,14 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import type { VigenciaCodigos } from '../facturacion/codigo';
 import { normalizarRfc, RFC_GENERICOS } from '../facturacion/sat';
 import type { EmpresaScope } from './empresa-scope';
 import { encontradoOr404, whereScoped } from './scope.helper';
 
 /**
  * Las escrituras de facturación (F2-100): el perfil fiscal de una empresa, la metadata de su CSD
- * y los receptores frecuentes. Parte del helper obligatorio de scope: sólo
+ * y los receptores frecuentes; y la regla de vigencia de los códigos de facturación (F2-101). Parte del helper obligatorio de scope: sólo
  * `ScopedPrismaService.facturacion(scope)` construye esta clase.
  *
  * - La empresa se verifica CON el scope del usuario ANTES de cualquier otra cosa: una empresa de
@@ -254,6 +255,46 @@ export class EscrituraFacturacion {
         select: { id: true },
       });
       return id;
+    });
+  }
+
+  /**
+   * La regla de vigencia de los códigos de facturación de la empresa (F2-101). Sólo afecta a los
+   * códigos NUEVOS: cada código guarda su `expira_at` al nacer. `dias` fuera de 1..366 lo
+   * rechaza también un CHECK de la base.
+   */
+  async guardarVigenciaCodigos(
+    empresaId: string,
+    vigencia: VigenciaCodigos,
+    actorId: string | null,
+    ahora: Date,
+  ): Promise<void> {
+    const datos = {
+      vigenciaCodigos: vigencia.regla,
+      vigenciaDias: vigencia.regla === 'dias' ? vigencia.dias : null,
+      actualizadoPor: actorId,
+      updatedAt: ahora,
+    };
+    await this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      const { count } = await tx.configuracionFacturacion.updateMany({
+        where: whereScoped(this.#scope, 'ConfiguracionFacturacion', { empresaId }),
+        data: datos,
+      });
+      if (count === 1) return;
+      try {
+        await tx.configuracionFacturacion.create({
+          data: { empresaId, ...datos },
+          select: { id: true },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw new ConflictException(
+            'Otro administrador acaba de guardar la vigencia de esta empresa. Recarga.',
+          );
+        }
+        throw error;
+      }
     });
   }
 }
