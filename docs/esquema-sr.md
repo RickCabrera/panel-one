@@ -894,7 +894,7 @@ ese registro solo.
 
 ## 10. Inventario — existencias, movimientos y recetas (Fase 2)
 
-> Alimenta a `F2-121`, `F2-122`, `F2-123`, `F2-124`, `F2-125` y `F2-126`. Existencias por almacén
+> Alimenta a `F2-121`, `F2-122`, `F2-123`, `F2-124`, `F2-125`, `F2-126` y `F2-127`. Existencias por almacén
 > con costo promedio, movimientos con referencia a póliza, conteos y traspasos propios
 > conciliados contra ellos, explosión de insumos por producto, compras.
 
@@ -1276,6 +1276,56 @@ sucursal se rechaza. Baja lógica (`anulado_at`), anulado no suma.
   que sí prueba es el COSTO: cruza recetas por CLAVE (el servicio por NOMBRE) con su propio promedio
   de costo. No dice nada de cómo registra SR su venta neta ni su costo: el cuadre contra el contador
   (±1 %) es de F2-193.
+
+### Proyecciones y sugerido de compra (F2-127): al vuelo, desde pólizas y existencias
+
+**No hay tabla ni contrato nuevo.** `GET /inventario/proyecciones` (puro en
+`api/src/inventario/proyecciones.ts`) lee las pólizas de F2-122, la última foto de existencias y
+los mínimos de F2-121. Nada se guarda ni se escribe a SR. Todo lo que sigue es **supuesto no
+validado**: depende de cómo registre SR sus salidas, que nadie ha visto (F2-193).
+
+- `DECISION PROVISIONAL (nocturno)` — **demanda de un almacén = sus SALIDAS** (renglones con
+  cantidad < 0) de pólizas NO canceladas de tipo `consumo`, `merma` y `traspaso_salida`, por día
+  LOCAL de la sucursal. Fuera: `ajuste` (conteo físico, ±: corrige, no es demanda), compras, inicial,
+  entradas y `otro`. Un renglón positivo dentro de una póliza de consumo (devolución) NO resta: se
+  sobrestima un poco (lado seguro). El **traspaso de salida SÍ cuenta** (observación del revisor): el
+  almacén que surte a otro tiene que comprar también lo que manda; sin él, el almacén general
+  sugeriría comprar de menos justo donde entran las compras. ⚠️ Si SR **no deja pólizas de
+  consumo** (la decisión abierta de F2-125: "¿SR descuenta por receta al vender?"), la demanda sería
+  sólo merma y traspasos y la proyección saldría muy baja: entonces hay que proyectar sobre el
+  consumo TEÓRICO (F2-125) y es cambio de esta regla. F2-193.
+- **Por qué la real y no la teórica.** La existencia y el mínimo son POR ALMACÉN; el teórico no
+  tiene almacén, depende del cruce por nombre y no trae merma.
+- **Ventana**: las 4 semanas COMPLETAS antes de hoy local, [hoy − 28, hoy − 1]; cada día de la
+  semana aparece 4 veces. **Pesos 4, 3, 2, 1** (la semana más reciente pesa 4). Diario(w) =
+  (4·c₁ + 3·c₂ + 2·c₃ + c₄) / 10; proyección = Σ de los días del horizonte; se redondea UNA vez, al
+  final, a 3 decimales (mitad lejos de cero). El API devuelve las 4 cifras semanales para que
+  cualquiera rehaga la cuenta.
+- `DECISION PROVISIONAL (nocturno)` — **el horizonte empieza HOY y lo cuenta completo** (1–28 días,
+  7 por defecto), aunque la foto de existencias ya descontó parte de hoy: sobrestima lo que falta
+  (lado seguro). `proyecciones.ts#diasDelHorizonte`.
+- **Sugerido** = max(0, proyección − existencia + mínimo), NUMERIC(12,3) (no es dinero). Sin mínimo
+  en el panel, cuenta 0 (aviso `sin_minimo`). Almacén sin foto de existencias: existencia y sugerido
+  NULOS (aviso `sin_foto`), nunca un número a ciegas. Almacén con foto pero el artículo no viene:
+  existencia 0 (aviso `fuera_de_foto`). Foto recibida hace más de 90 min (la regla de F2-121): aviso
+  `foto_atrasada`, porque la existencia puede estar sobrestimada. Existencia negativa se usa tal cual.
+- ⚠️ **SUPUESTO — sin redondeo a presentación de compra.** El catálogo de unidades de SR (F2-120) no
+  dice si una unidad es entera ni en qué presentación se compra (caja de 12, costal de 25 kg): el
+  sugerido sale a 3 decimales en la unidad del insumo. F2-193.
+- **"Sin datos"**: historial = días desde el PRIMER movimiento no cancelado (cualquier tipo) del
+  artículo en ese almacén hasta hoy. Con menos de 28, `estado = sin_historial`: proyección y
+  sugerido NULOS y la vista dice "Sin datos: N días de historial". Con 28 o más y cero salidas, la
+  proyección es 0 (eso sí es un dato). Una sucursal sin ninguna póliza no se calcula.
+- **Qué prueba el seed y qué NO** (`api/prisma/seed-proyecciones.spec.ts`): con el reloj en
+  HOY − 13, TODAS las filas cuadran contra un cálculo a mano desde las pólizas crudas del generador,
+  y el insumo de consumo ESTABLE del seed (I063, aceite para freír, base por día de la semana ±4 %,
+  agregado por F2-127 porque el seed no tenía ninguno) acierta la semana siguiente con error de
+  1.0 % (A1) y 0.2 % (A2); el AC pedía ±15 %. El ±15 % se mide sobre la PROYECCIÓN: el sugerido
+  hereda esa precisión cuando existencia = mínimo (identidad algebraica), no se validó aparte. En los
+  insumos de RECETA del seed el mismo método acierta ±15 % sólo en 24 de 69 (demanda de pocas
+  unidades por semana, 20–40 % de variación entre semanas, y baches de venta como el de A2·I032, que
+  erró 84 %). Nada de esto dice cómo es la demanda de un restaurante real: medirlo con una semana
+  del piloto es de F2-193.
 
 ---
 

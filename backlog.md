@@ -1538,6 +1538,18 @@ Recorre el AC original de F2-121, F2-122, F2-125, F2-126 y F2-127 con datos del 
 > doble envío del formulario de gasto (dos pestañas, reintento de red) crea dos gastos: el botón se
 > deshabilita mientras envía, pero el API no es idempotente para la captura.
 
+> **Y además (de F2-127).** La proyección se cerró contra el seed: todas las filas cuadran con un
+> cálculo a mano y el insumo ESTABLE del seed (I063, aceite para freír, agregado por F2-127) acierta
+> la semana siguiente con error de 1.0 % y 0.2 %; en los insumos de receta del seed sólo 24 de 69
+> caen en ±15 % (demanda de pocas unidades por semana). Con el piloto: (1) proyectar una semana con el
+> reloj una semana atrás y comparar contra lo que de verdad salió, al menos en 5 insumos de alta
+> rotación; (2) ❓ **si SR no deja pólizas de consumo** (la decisión abierta de F2-125), la demanda
+> sería sólo merma y traspasos: cambiar la base a consumo teórico; (3) confirmar que el traspaso de
+> salida debe contar como demanda del almacén que surte, y que el ajuste NO; (4) redondear el
+> sugerido a la presentación de compra (caja, costal) si SR la tiene en el catálogo; (5) decidir si
+> "hoy completo" en el horizonte sobra (hoy la foto ya descontó parte del día). Todo en
+> `docs/esquema-sr.md` §10 ("Proyecciones").
+
 **Listo cuando:** el valor de inventario cuadra contra el reporte de SR del mismo corte; el
 kardex de un artículo reproduce su saldo real; la variación teórico contra real de tres
 insumos de control coincide con lo que el encargado mide a mano; y el estado de resultados del

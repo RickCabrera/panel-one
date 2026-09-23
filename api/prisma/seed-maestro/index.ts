@@ -53,6 +53,10 @@ import { RECETAS, type Renglon } from './recetas';
  * | recetas                                | F2-125      |
  * | compras y gastos                       | F2-126      |
  *
+ * F2-127 (proyecciones) no tiene tabla: lee lo anterior. Agregó al universo dos insumos que las
+ * proyecciones necesitan ver: I062 (alta reciente, "sin datos") e I063 (consumo operativo estable);
+ * ver `insumos.ts`.
+ *
  * Nada de esto es un mapeo de SoftRestaurant: es sintético.
  */
 
