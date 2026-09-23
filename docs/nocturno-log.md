@@ -6934,3 +6934,112 @@ tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190/F2-
 
 **Qué haría distinto.** Esperar el veredicto del revisor antes de escribir el helper, y escribir los scripts de
 edición a archivo desde el primer minuto (el heredoc de esta misma nota se rompió).
+
+## 2026-09-23 12:00 — F2-107 · Factura sin ticket y refacturación
+**Estado:** CERRADA (PR de `feat/F2-107`, squash a main) con el AC nocturno de la tabla "Cierre nocturno de las
+tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190. Revisor: plan bloqueado 1 vez (B1: lo
+facturado se contaba DOBLE mientras la cancelación 01 seguía pendiente) y aprobado a la segunda; entregable aprobado
+a la primera, con observaciones (todas atendidas).
+
+**Qué quedó hecho.**
+- Migración `20260926010000_factura_manual_refacturacion` (hecha con `prisma migrate diff --from-schema-datasource`
+  + CHECKs a mano): enum `origen_cfdi {ticket, manual}`, `cfdis.cheque_id` NULLABLE, `solicitud_id` (único con
+  `empresa_id`: idempotencia de la captura manual), `sustituye_a_id` (único, FK compuesta NO ACTION a `cfdis`) +
+  `tipo_relacion` ('04'), `motivo_cancelacion` (01–04, sólo en `cancelado`) y `cancelado_at`. CHECKs: ticket ⇒ cheque;
+  manual ⇒ sin cheque ni código; manual no-sustituto ⇒ `solicitud_id`; relación 04 ⇔ `sustituye_a_id`.
+- Puerto de timbrado: `SolicitudCfdi.relacionados { tipoRelacion: '04', uuids }` y `noIdentificacion` opcional.
+  Facturama manda `Relations: { Type: '04', Cfdis: [{ Uuid }] }` (SUPUESTO, snapshot nuevo; el del consumo no cambió).
+  PAC falso: `<cfdi:CfdiRelacionados>` antes del Emisor, guarda relaciones y cancelaciones (`relacionadosDe`,
+  `cancelacionDe`, para tests) y RECHAZA una cancelación 01 si el sustituto no existe, no está vigente o no declara
+  la relación 04 con el cancelado (como el SAT).
+- `CfdiService.emitirReserva`: el tramo timbrar → confirmar/liberar → entregar, compartido por portal, sin ticket y
+  sustituto (misma clasificación de errores; sólo cambia el texto del caso ambiguo: `MENSAJE_EMISION_INCIERTA_ADMIN`).
+- `EscrituraFacturacion`: `reservarCfdiManual`, `cfdiParaRefacturar`, `reservarSustituto` (FOR UPDATE del anterior
+  por id+empresa y re-lectura con scope), `marcarCancelado`; `confirmarCfdi` MUEVE el código del anterior al sustituto.
+- `EmisionAdminService` + `EmisionAdminController` (admins; OpenAPI regenerado):
+  `POST /facturacion/cfdis/manual` y `POST /facturacion/cfdis/{id}/refacturar`. La refacturación: consulta al PAC que
+  el anterior siga vigente (si no, 409 sin emitir ni gastar folio) → sustituto 04 → cancelación 01 con el UUID del
+  sustituto. Si la cancelación falla: 201 `cancelacion: 'pendiente'`; repetir la petición SÓLO reintenta la
+  cancelación (consulta primero; si el PAC ya lo canceló, sólo anota). Auditoría `cfdi.manual`/`cfdi.refacturacion`.
+- Tablero: `cfdis_periodo` gana `origen`, receptor completo, `sustituye_a_uuid`, `sustituido_por_uuid`,
+  `sustituto_estado`, `motivo_cancelacion` y `cuenta_facturado`; `GET /facturacion/cfdis` con `origen=ticket|manual`.
+- Seed (`seed-cfdis.ts`): ~1 de cada 30 facturados sale refacturado (anterior cancelado 01 sin código + sustituto
+  04 con el código) y 2 facturas sin ticket por sucursal. En desarrollo: 251 CFDI, 8 refacturados, 4 sin ticket;
+  dos corridas iguales.
+- Web: Facturación gana la pestaña "Sin ticket" (`?tab=manual`, `facturacion/emision/FacturaSinTicket.tsx`); la tabla
+  del Tablero tiene insignia "Manual", filtro Origen, "Sustituye a / Sustituida por", "Cancelación pendiente: no suma
+  a lo facturado" y los botones "Refacturar" / "Reintentar cancelación" (`DialogoRefacturar.tsx`, receptor precargado).
+- Docs: esquema-sr §2 "Factura sin ticket y refacturación (F2-107)"; en el backlog, "Y además (de F2-107)" en F2-109,
+  F2-110 y F2-190.
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` `api/src/scope/consulta-ventas.ts` (`cuenta_facturado`): **un CFDI vigente con un
+  sustituto vigente NO suma a lo facturado** (KPIs, barras por sucursal/mes/hora); suma el sustituto. Es lo que pidió
+  el revisor: con la cancelación 01 pendiente hay dos vigentes por la misma venta. La TABLA sí lo lista con
+  `estado=vigente` (marcado `sustitucionPendiente`), así que el conteo de la tabla filtrada por vigentes NO coincide
+  con `num_vigentes` del KPI, a propósito (lo afirma el e2e R2). Como lo facturado va por fecha de emisión, un
+  sustituto emitido en otro mes MUEVE lo facturado a ese mes (e2e R4).
+- `DECISION PROVISIONAL (nocturno)` `escritura-facturacion.ts#reservarSustituto`: la refacturación corrige SÓLO el
+  receptor; importes, forma de pago, sucursal, cheque y origen se copian. Cambiar el importe = cancelar (F2-109) +
+  emitir.
+- Consultar al PAC ANTES de emitir el sustituto: evita dejar un sustituto colgado de algo que el PAC no puede
+  cancelar. Costo: una llamada más.
+- El código del ticket pasa al sustituto al confirmar (primero se suelta del anterior: `codigo_id` es único).
+- Correo del receptor OPCIONAL para el admin (`validarReceptor(r, { emailOpcional: true })`, api y web): sin correo no
+  se crea envío (F2-105 ya lo soportaba).
+- Factura sin ticket: mismo concepto 90101500/E48 y `importesDeTotal`; formas de pago sólo efectivo/tarjeta(04)/
+  transferencia; total como TEXTO (`^\d{1,6}(\.\d{1,2})?$`, > 0) en api y web. RFC genérico rechazado (la global es
+  F2-108).
+- La llave `solicitudId` la genera el formulario (`crypto.randomUUID()`) y se REPITE en un reintento de la misma
+  captura; "Capturar otra" la cambia. Misma llave = 409 con el `cfdiId` y el estado de lo que ya salió.
+
+**Trampas que encontré.**
+- **Modo demo:** el PAC falso guarda su estado EN MEMORIA; los CFDI del seed no los conoce, así que refacturar uno del
+  seed da 409 "El PAC no tiene registro…" (`no_encontrado`). A propósito no se aflojó el falso. Lo refacturable en
+  demo es lo emitido en la corrida (portal o sin ticket).
+- Un e2e que crea `configuraciones_facturacion` tiene que borrarlas en `afterAll` ANTES de `limpiarFixtures` (no
+  cascadea, y el DELETE de empresas truena con FK). Si una corrida quedó a medias, la siguiente falla en
+  `crearFixtures`: por eso el e2e nuevo también las borra al empezar.
+- `XAXX010101000` tiene 13 caracteres: el validador lo trata como persona FÍSICA y además marca el régimen 601. Para
+  probar sólo "RFC inválido" usa un RFC mal formado.
+- En el web, un `<span>` de error DENTRO de la `<label>` se vuelve parte del nombre accesible del campo
+  (`getByLabelText` deja de encontrarlo). Va afuera, enlazado con `aria-describedby`.
+- `consulta-ventas.spec.ts`: `PARAMS_F2_106` ahora es 16 (los dos LEFT JOIN nuevos a `cfdis` llevan empresa + tenant).
+- Heredocs de Python con `\.`/`\d` se rompieron otra vez: todas las ediciones grandes van a un `.py` del scratchpad con
+  cadenas crudas (`r"""..."""`).
+- `.wt-main/` sigue en la raíz sin seguimiento: nunca `git add -A`.
+
+**Qué quedó abierto.**
+- **F2-110**: reservas colgadas también del sustituto y de la captura manual (los 409 lo dicen y remiten ahí), y
+  conciliar en automático una cancelación 01 pendiente (nota en el backlog).
+- **F2-109**: ya existen `motivo_cancelacion`/`cancelado_at`; ubicar cancelaciones por `cancelado_at`; un sustituto que
+  después se cancela deja al anterior sin poder re-sustituirse (409; `sustituye_a_id` único): decidirlo ahí.
+- **F2-190**: validar `Relations` 04, `motive=01&uuidReplacement`, concepto sin `IdentificationNumber` y los estados
+  "en proceso" de una cancelación en el sandbox.
+- El CSV del tablero no trae columna de origen (la tabla sí lo distingue). Barato de agregar si Ricardo lo quiere.
+- `docs/esquema-sr.md` sí se tocó, pero NO hubo hallazgo del POS: sólo supuestos de Facturama y decisiones propias.
+
+**Tests.**
+- api nuevos: `facturacion/emision-admin.e2e.spec.ts` (13, app real + Postgres + PAC falso controlado; cifras
+  ESCRITAS A MANO: sustituto 04 + anterior cancelado 01 verificado en el falso y en el XML; cancelación pendiente sin
+  conteo doble —1790.00/5— y reintento que no emite otro; dos refacturaciones simultáneas → 201+409; `no_encontrado`
+  → 409 sin folio; sustituto en octubre mueve lo facturado; alcance B 404 / visor 403; manual 201 sin cheque ni envío,
+  misma llave 409, simultáneas 201+409, manual refacturada sigue manual, validación por campo, sucursal/empresa ajena
+  404; tablero de septiembre 2389.99/6 y cancelados 2230.00/4, tabla con `origen` y filtro), contrato Facturama (+3,
+  snapshot del sustituto revisado a mano), PAC falso (+3), `cfdi.spec` (+2), `portal.spec` (+2), `seed-cfdis.spec`
+  (+3 y persistencia con conteos por tipo).
+- Adaptados al comportamiento nuevo (no aflojados): `consulta-ventas.spec.ts` (16 parámetros, texto de los JOIN y
+  `cuenta_facturado`), `openapi.spec.ts` (rutas + test de códigos de F2-107), `tablero.e2e.spec.ts` (campos nuevos de la
+  fila con valores exactos), `seed-cfdis.spec.ts` ("exactamente un CFDI por código facturado"), `cfdi.service.spec.ts`
+  (forma de `ReservaCfdi`).
+- web nuevos: `FacturacionEmision.test.tsx` (6) y `facturacion/emision/reglas.test.ts` (4); fixtures de `CfdiFila`
+  adaptadas en `FacturacionTablero.test.tsx` y `tablero/reglas.test.ts`.
+- Números: /api lint, typecheck y `prisma validate` limpios; migración aplicada con `migrate deploy` y `migrate diff`
+  contra la base = vacío; openapi regenerado. Jest completo **2113/2114** (121 suites), cero skips: el único rojo es el
+  preexistente de `prisma/esquema.spec.ts` ("al crear el admin…", FK al borrar el usuario en la base local, igual que en
+  F2-104/105/106), así que **NO es verde** en esta base local; esta tarea no lo empeora. /web build y lint limpios (el
+  aviso de chunk > 500 kB del bundle principal sigue ahí; no lo comparé contra main); vitest **1196/1196** (94 archivos).
+
+**Qué haría distinto.** Esta vez esperé el veredicto del plan antes de escribir código y el bloqueo B1 no costó
+retrabajo. Habría escrito desde el principio el e2e con su limpieza de `configuraciones_facturacion` al empezar: la
+primera corrida a medias dejó la base sucia y la segunda falló por eso.

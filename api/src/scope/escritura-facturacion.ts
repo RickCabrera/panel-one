@@ -663,11 +663,11 @@ export class EscrituraFacturacion {
         });
         if (viejo?.codigoId) {
           await tx.cfdi.updateMany({
-            where: { id: reserva.sustituyeAId, empresaId },
+            where: whereScoped(this.#scope, 'Cfdi', { id: reserva.sustituyeAId, empresaId }),
             data: { codigoId: null, updatedAt: ahora },
           });
           await tx.cfdi.updateMany({
-            where: { id: reserva.id, empresaId },
+            where: whereScoped(this.#scope, 'Cfdi', { id: reserva.id, empresaId }),
             data: { codigoId: viejo.codigoId, updatedAt: ahora },
           });
         }
