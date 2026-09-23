@@ -2241,7 +2241,7 @@ panel. Cron por zona horaria de la empresa; opción de desuscribirse desde el co
 panel; darse de baja funciona sin login.
 
 ### F2-142 · WebSockets para el monitor de mesas
-`[ ]` Sustituir polling del monitor (F1-050) por WebSocket (gateway NestJS + socket.io): el api
+`[x]` **ALCANCE:** el aviso sólo relee mesas (no ventas); upgrade detrás de Caddy sin verificar (nota en F1-002) y una sola instancia del api (Redis adapter si hay réplicas; `docs/tiempo-real.md`). Sustituir polling del monitor (F1-050) por WebSocket (gateway NestJS + socket.io): el api
 emite evento al procesar snapshot/cheque; el front actualiza en caliente con fallback
 automático a polling si el socket cae. Autenticación del socket con el mismo JWT.
 
