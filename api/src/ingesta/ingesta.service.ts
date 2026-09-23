@@ -257,7 +257,16 @@ function motivoSinDatos(err: unknown): string {
     const pg = (err.meta as { code?: unknown } | undefined)?.code;
     return `Prisma ${err.code}${typeof pg === 'string' ? ` (Postgres ${pg})` : ''}`;
   }
-  if (err instanceof Prisma.PrismaClientUnknownRequestError) return 'Prisma (error desconocido)';
+  // El resto de los errores de Prisma (validación, desconocido, pánico) pueden repetir los
+  // argumentos de la consulta en su mensaje: sólo el nombre de la clase.
+  if (
+    err instanceof Prisma.PrismaClientUnknownRequestError ||
+    err instanceof Prisma.PrismaClientValidationError ||
+    err instanceof Prisma.PrismaClientRustPanicError ||
+    err instanceof Prisma.PrismaClientInitializationError
+  ) {
+    return `Prisma (${err.name})`;
+  }
   return err instanceof Error ? `${err.name}: ${err.message}` : 'error sin detalle';
 }
 

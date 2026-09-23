@@ -6327,3 +6327,127 @@ contaba el perfil del seed, ver Trampas) y re-aprobado tras corregirlo (ver abaj
 
 **Qué haría distinto.** Dar a cada e2e su propio número de certificado desde el principio: cualquier
 valor que el seed también escriba es una bomba para un "control positivo" que cuenta filas.
+
+## 2026-09-22 21:30 — F2-101 · Código corto de facturación por cheque
+**Estado:** CERRADA si el PR se mergea. **PENDIENTE DE VALIDACIÓN REAL**: ver F2-190 (su "Y además
+(de F2-101)"). Sólo carril /api (+ docs). Revisor: gate del plan BLOQUEADO 1 vez (B1: una falla del
+código tumbaba la venta) y APROBADO en la 2.ª pasada; gate del entregable APROBADO en la 1.ª pasada
+(0 bloqueos), con sus dos sugerencias aplicadas.
+
+**Qué quedó hecho.**
+- **Tablas** (migración `20260923031251_codigo_facturacion`):
+  - `codigos_facturacion`: único GLOBAL por `codigo`, único por cheque, CHECK de formato
+    `^[A-HJ-NP-Z2-9]{9}$` y FK compuestas a `cheques` y `sucursales`, Restrict.
+  - `configuraciones_facturacion`: vigencia por empresa, `fin_de_mes` o `dias` (1..366), con CHECK.
+  - Enums: `EstadoCodigoFacturacion` (pendiente, facturado, en_global, expirado) y `ReglaVigenciaCodigo`.
+- **Lógica pura** en `api/src/facturacion/codigo.ts`: alfabeto de 32 símbolos, `generarCodigo`
+  (crypto.randomInt), `expiracionDe` (en la zona de la SUCURSAL), `esFacturable` y `estadoPublico`.
+  Hay un provider inyectable, `GeneradorCodigo`, que los e2e reemplazan.
+- **Hook en la ingesta.** `IngestaService.aplicar` (cheque) llama
+  `OperacionesSucursal.intentarCodigoFacturacion` dentro de la MISMA transacción. Lo hace también en
+  el camino del reenvío idéntico: si el cheque ya tiene código no escribe nada; si no lo tiene, lo crea.
+- **Endpoints** (OpenAPI regenerado):
+  - `GET /facturacion/codigo/:codigo`: pública, cubo de throttler `codigo-facturacion` de 10/min por
+    IP, controlador aparte `CodigoFacturacionPublicoController`.
+  - `GET` y `PUT /facturacion/vigencia-codigos`: sólo admins. Visor recibe 403; empresa ajena, 404.
+- **Seed** (`prisma/seed-codigos.ts`, llamado dentro de la transacción de `sembrarVentas`):
+  - un código por cheque facturable, determinista (SHA-256 de cheque + intento), ~15 % `facturado`;
+  - `7JQRECP3U` en el último cheque vigente de CENTRO;
+  - en dev: 1442 códigos.
+
+**Decisiones que tomé y por qué.**
+- **SAVEPOINT (el bloqueo del plan).** El código corre en un `SAVEPOINT codigo_facturacion`.
+  - CUALQUIER falla del código hace `ROLLBACK TO SAVEPOINT`, y el cheque con sus partidas y pagos se
+    guarda igual y sale en `procesados`. Cuenta como falla: zona inválida, CHECK, FK, 5 colisiones o
+    un generador roto.
+  - Sin eso, un rechazo `reintentable:false` hace que el agente SAQUE el evento de su cola
+    (`EnviadorCola.cs:53`) y la venta se pierde para siempre.
+  - La única excepción que se propaga es la del propio ROLLBACK (conexión caída): sigue
+    `esTransitorio()`.
+  - Está marcado como `DECISION PROVISIONAL (nocturno)` en `escritura-sucursal.ts`.
+  - Mutación a mano: quitar el ROLLBACK pone rojo el e2e del CHECK.
+- **Inserción.** Colisión = `INSERT … ON CONFLICT DO NOTHING RETURNING id` crudo y sin target, que
+  cubre las dos uniques sin abortar la transacción; después se relee "¿ya tiene código?". Hasta 5
+  intentos. `created_at`/`updated_at` van a mano (`now()`), porque la tabla no tiene `@updatedAt`.
+- **El código nunca cambia.** Ni él ni su `expira_at` se recalculan, aunque SR mande el cheque con
+  otro cierre o la empresa cambie la regla: la regla aplica a los códigos NUEVOS.
+- `DECISION PROVISIONAL (nocturno)`, las dos registradas en esquema-sr §2:
+  - **facturable** = cerrado ∧ no cancelado ∧ total > 0;
+  - **`cancelado`** se DERIVA del cheque y no se guarda (no está en el enum de la ficha).
+- **`expirado` se deriva al leer** (`ahora >= expira_at`, con `Reloj`), sin job. Nadie escribe
+  `expirado` hoy; queda en el enum porque la ficha lo pide.
+- **La consulta pública** es la ÚNICA lectura que no pasa por `para(scope)`:
+  `ScopedPrismaService.codigoFacturacionPublico`, dentro del helper y con `select` en lista blanca.
+  - Por qué: no hay usuario ni tenant, y el código ES la credencial (32^9 combinaciones, 10/min).
+  - Con la lista blanca, nadie le puede agregar un `include` que filtre el folio o las partidas.
+  - `ticket` (sucursal, fecha, zona, total, vencimiento) sale SÓLO en `pendiente`.
+  - Formato inválido: 400 sin tocar la base. Inexistente, o sucursal/empresa inactiva: 404 con el
+    mismo cuerpo.
+- **El cheque tiene que ser de la sucursal del agente**, y lo verifica `#asegurarCodigo`: las FK sólo
+  atan la empresa, así que un cheque de A2 podría colgar un código "de A1" sin ese chequeo.
+- **El log del hook no lleva datos.** `motivoSinDatos` (ingesta.service.ts): de un error de Prisma
+  sólo sale su código o su clase, porque el detalle de Postgres trae la fila con el código.
+- **Utilidades de zona movidas.** `fechaLocal`/`instanteDesdeLocal` pasaron a `src/comun/fechas.ts`;
+  `cfdi-comun.ts` los re-exporta como antes y `kardex.ts` ya importa de `comun`.
+- **Sin backfill.** Los cheques ingeridos antes de la migración sólo reciben código si el agente los
+  reenvía. Hoy no hay piloto: sólo el seed, que sí los siembra.
+
+**Trampas que encontré.**
+- **Prisma 1-1 con FK compuesta** exige la unique sobre la llave completa: quedó
+  `@@unique([chequeId, empresaId])`, que equivale a "único por cheque" porque `cheques.id` ya es único.
+- **El mensaje de una violación de unique (23505) NO trae el nombre del constraint** (sale "Ya
+  existe la llave (codigo)=…", en español en esta base). Los tests identifican la unique por sus
+  columnas `(codigo)` y `(cheque_id, empresa_id)`; CHECK y FK sí traen el nombre.
+- **Toda FK nueva que cuelga de `cheques` rompe lo que borra cheques.** Hay que borrar los códigos
+  antes en: `limpiarFixtures`, `sembrarVentas`, `ventas.spec`, `seed-ventas.spec`, `analisis.e2e` y
+  `lectura.e2e` (3 sitios). El riesgo ya lo había anotado F2-201.
+- **La unique GLOBAL de `codigo` choca entre el seed de dev y el de los tests.** Por eso el ejemplo
+  es opcional (`ejemploFacturacion`): `main` pone `7JQRECP3U` y el spec usa `PRUEBAXYZ`. Los demás
+  códigos salen de SHA-256 (45 bits), no de mulberry32 con semilla fnv de 32 bits, que en miles de
+  códigos entre dos corridas llegaría a colisionar.
+- **`(npm test ...) &` dentro de la herramienta Bash NO muere al volver:** acabé con DOS jest a la
+  vez contra la misma base (la trampa de F2-100). Usa `run_in_background` y revisa con `wmic` que haya
+  uno solo.
+- **Prettier sobre carpetas enteras** reescribe fines de línea (LF sobre CRLF) en decenas de
+  archivos. `git status` los marca como modificados, pero al hacer `git add` no entra nada: revisa
+  `git diff --cached --stat`.
+- **Throttler en los e2e:** la app de `codigo.e2e` corre con `TRUST_PROXY_SALTOS=1` y cada consulta
+  lleva su propia IP en `X-Forwarded-For`. Si no, el límite de 10/min se cruza entre pruebas.
+- **Un heredoc largo en la herramienta Bash** falló con "unexpected EOF": escribe el texto con Write
+  y agrégalo con `cat archivo >> destino`.
+
+**Qué quedó abierto.**
+- **F2-103** ("Y además (de F2-101)" en el backlog):
+  - el desglose subtotal/IVA (hoy la consulta sólo da el total);
+  - cómo se re-descarga un `facturado` sin filtrar el CFDI de otro;
+  - el cruce slug ↔ código;
+  - **el código en el detalle de Tickets**, que F2-222 esperaba y que F2-101 (sólo /api) no tocó.
+- **F2-190**: validar con el piloto qué es "facturable", qué pasa con la reapertura o la cancelación
+  posterior, la vigencia default y el riesgo del `folio_sr` reusado (el código apuntaría a otra cuenta).
+- `en_global` no se siembra ni lo escribe nadie: es de F2-108. `expirado` guardado tampoco lo
+  escribe nadie.
+- **Sigue el rojo preexistente de `prisma/esquema.spec.ts`** (argon2id: FK al borrar el usuario en
+  la base local de dev), igual que F2-120…F2-100.
+
+**Tests.**
+- api nuevos:
+  - `facturacion/codigo.spec.ts` (30, puros);
+  - `facturacion/codigo.e2e.spec.ts` (42: hook, idempotencia ×3, colisión, 5 colisiones, generador
+    roto, CHECK de la base, cura en reenvío, concurrencia ×2, constraints, público en sus 5 estados
+    sin filtrar datos, 400/404, baja de sucursal/empresa, 429 por IP, vigencia GET/PUT con 403/404/400);
+  - `prisma/seed-codigos.spec.ts` (9);
+  - `escritura-sucursal.spec` (+5: SQL fijado, "ya tiene código", cheque de otra sucursal, ROLLBACK
+    que falla propaga, chequeId vacío);
+  - `ingesta.service.spec` (+1: P1017 del savepoint → reintentable y sin cheque);
+  - `openapi.spec` (+1 y rutas);
+  - `throttlers.e2e` (+2 filas).
+- Adaptados, no aflojados: `ingesta.e2e` (la foto de idempotencia incluye los códigos; en paralelo, 1
+  por cheque), `scope.helper.spec` y `scoped-prisma.service.spec` (modelos nuevos), y los que borran
+  cheques.
+- Números: lint, typecheck, `prisma validate` y `migrate dev` limpios; openapi regenerado. Jest
+  completo **1862/1863** (108 suites); el único rojo es el preexistente de `prisma/esquema.spec.ts`,
+  así que **NO es verde**. Seed real corrido dos veces en dev.
+
+**Qué haría distinto.** Pensar el SAVEPOINT desde el primer borrador. Cualquier cosa que cuelgue del
+camino de la ingesta de cheques y pueda fallar tiene que aislarse, porque un rechazo no reintentable
+del api BORRA el evento de la cola del agente.

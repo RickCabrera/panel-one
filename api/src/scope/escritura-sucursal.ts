@@ -312,7 +312,9 @@ export class OperacionesSucursal {
     });
     if (!config) return VIGENCIA_DEFAULT;
     return config.vigenciaCodigos === 'dias'
-      ? { regla: 'dias', dias: config.vigenciaDias ?? Number.NaN }
+      ? // NaN a propósito: el CHECK de la base impide `dias` sin número, y si llegara así,
+        // `expiracionDe` lanza y cae en el savepoint en vez de inventar un default silencioso.
+        { regla: 'dias', dias: config.vigenciaDias ?? Number.NaN }
       : { regla: 'fin_de_mes' };
   }
 
