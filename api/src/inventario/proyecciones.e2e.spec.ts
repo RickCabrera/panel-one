@@ -123,7 +123,11 @@ describe('Proyecciones y sugerido de compra (e2e, F2-127)', () => {
       ((await post(key, '/ingesta/catalogos', { ...base, registros })) as { rechazados: [] })
         .rechazados,
     ).toEqual([]);
-    await post(key, '/ingesta/catalogos/cierre', { ...base, total: registros.length, rechazados: 0 });
+    await post(key, '/ingesta/catalogos/cierre', {
+      ...base,
+      total: registros.length,
+      rechazados: 0,
+    });
   };
   const polizas = async (key: string, lista: Registro[]) => {
     const r = await post(key, '/ingesta/movimientos', { leidoAt: HOY_Z, polizas: lista });
@@ -263,7 +267,9 @@ describe('Proyecciones y sugerido de compra (e2e, F2-127)', () => {
   const fila = (body: { filas: Registro[] }, sucursalId: string, almacen: string, insumo: string) =>
     body.filas.find(
       (f) =>
-        f.sucursalId === sucursalId && f.almacenOrigenSrId === almacen && f.insumoOrigenSrId === insumo,
+        f.sucursalId === sucursalId &&
+        f.almacenOrigenSrId === almacen &&
+        f.insumoOrigenSrId === insumo,
     );
 
   describe('GET /inventario/proyecciones', () => {
@@ -293,7 +299,10 @@ describe('Proyecciones y sugerido de compra (e2e, F2-127)', () => {
     });
 
     it('el horizonte cambia la proyección: H = 1 → 20 / 15, H = 10 → 44 / 39', async () => {
-      const uno = await proyecciones(USUARIOS.visorA, { sucursalId: FX.sucursalA1, horizonte: '1' });
+      const uno = await proyecciones(USUARIOS.visorA, {
+        sucursalId: FX.sucursalA1,
+        horizonte: '1',
+      });
       expect(uno.body.horizonte).toBe(1);
       expect(fila(uno.body, FX.sucursalA1, 'ALM1', 'I1')).toMatchObject({
         proyeccion: '20.000',

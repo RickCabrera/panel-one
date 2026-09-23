@@ -4,14 +4,7 @@ import { generarVentas, universoDe, type OpcionesVentas } from '../seed-ventas';
 import { hoyEn } from './azar';
 import { CANALES, CLIENTES, GRUPOS_PRODUCTO, PRODUCTOS, precioEn } from './catalogos';
 import { CATEGORIAS_GASTO } from './gastos';
-import {
-  CONSUMO_OPERATIVO,
-  FORZADOS,
-  INSUMOS,
-  insumo,
-  PROVEEDORES,
-  UNIDADES,
-} from './insumos';
+import { CONSUMO_OPERATIVO, FORZADOS, INSUMOS, insumo, PROVEEDORES, UNIDADES } from './insumos';
 import { generarInventario, type PolizaSeed } from './inventario';
 import { RECETAS } from './recetas';
 
