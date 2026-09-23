@@ -1133,10 +1133,22 @@ una instalación real (F2-192):
 
 ## 8. Áreas, estaciones y canales de venta
 
-> Alimenta a `F2-144`. **Spike pendiente:** hay que ver si esta instalación distingue
-> comedor / mostrador / domicilio / plataformas, y por qué campo.
+> Alimenta a `F2-144`. **Spike de F2-144 hecho de noche, sin instalación real:** ver
+> `docs/delivery.md` (lo que se sabe, la checklist de lo que falta ver y la decisión de alcance).
+> Sigue sin verse si esta instalación distingue comedor / mostrador / domicilio / plataformas, y
+> por qué campo: lo responde F2-192.
 
-_(pendiente)_
+**Lo que el spike de F2-144 deja como supuesto no validado** (checklist completa en
+`docs/delivery.md` §3):
+
+- ⚠️ **SUPUESTO — el único dato de canal por cuenta es su área.** El contrato no trae tipo de
+  servicio ni canal, y no se agregó uno: inventar el campo sin verlo en el POS sería adivinar. Si
+  SR registra el tipo de servicio por cuenta (comedor / para llevar / a domicilio), es mejor
+  fuente que el mapeo de áreas, y eso es una tarea nueva con su contrato.
+- ⚠️ **SUPUESTO — las plataformas (Rappi, Uber Eats, DiDi Food) se distinguen por área.** No se
+  sabe si SR las registra como área, tipo de servicio, forma de pago o cliente genérico. El seed
+  no siembra plataformas. Tampoco se sabe si la comisión de la plataforma queda en el POS: la
+  vista de canales muestra venta bruta.
 
 **Estado del modelo (F2-233):** el contrato de eventos trae el **área** de la cuenta
 (`datos.areaOrigenSrId`, §2 y §13) y `cheques.area_origen_sr_id` la guarda; **ni estación ni
@@ -1174,10 +1186,14 @@ seed maestro persiste áreas, tipos de servicio, el área de cada cheque y un ma
   nueva cae en "sin canal" hasta que alguien las asigne. Es lo honesto; no se remapea por nombre.
 - ❓ **DECISIÓN ABIERTA PARA RICARDO — el conjunto de canales.** Quedó como enum fijo de Postgres
   (`canal_negocio`: comedor, mostrador, domicilio, plataformas, el de F2-144); agregar uno ("para
-  llevar", "eventos") es una migración. Lo cierra el spike de F2-144.
+  llevar", "eventos") es una migración. El spike de F2-144 **no la cerró** (sin instalación real
+  no hay dato): `DECISION PROVISIONAL (nocturno)` = se queda el enum y la vista `/canales` se
+  construyó encima; qué tocar para agregar un canal está en `docs/delivery.md` §5.
 - ❓ **DECISIÓN ABIERTA PARA RICARDO — mapeo por sucursal o por empresa.** El espejo es por
   sucursal, así que el mapeo también: una empresa con 10 sucursales mapea "Terraza" 10 veces.
-  ¿Mapear por nombre a nivel empresa? No se construyó sin decisión.
+  ¿Mapear por nombre a nivel empresa? No se construyó sin decisión. El spike de F2-144 **no la
+  cerró**: `DECISION PROVISIONAL (nocturno)` = se queda por sucursal; la salida barata si estorba
+  (copiar el mapeo por nombre a las demás sucursales) está en `docs/delivery.md` §5.
 - **Estaciones: sin dato.** No hay espejo, contrato ni seed de estaciones (terminales o puntos
   de cobro); no se sabe si esta versión de SR las registra ni dónde. La vista lo dice en vez de
   inventar un desglose. Queda para F2-240 (leerlas si existen) y F2-192 (validarlas).

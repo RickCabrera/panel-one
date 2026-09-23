@@ -19,6 +19,7 @@ import { Conteos } from './paginas/Conteos';
 import { Existencias } from './paginas/Existencias';
 import { Facturacion } from './paginas/Facturacion';
 import { Areas } from './paginas/Areas';
+import { Canales } from './paginas/Canales';
 import { Clientes } from './paginas/Clientes';
 import { Inicio } from './paginas/Inicio';
 import { Login } from './paginas/Login';
@@ -101,6 +102,7 @@ export function Rutas() {
         <Route path="meseros" element={<Meseros />} />
         <Route path="clientes" element={<Clientes />} />
         <Route path="areas" element={<Areas />} />
+        <Route path="canales" element={<Canales />} />
         <Route path="existencias" element={<Existencias />} />
         <Route path="movimientos" element={<Movimientos />} />
         <Route path="conteos" element={<Conteos />} />

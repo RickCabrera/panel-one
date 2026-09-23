@@ -76,11 +76,6 @@ export interface SeccionMenu {
   entradas: readonly EntradaMenu[];
 }
 
-const construye = (tarea: string, detalle = ''): Pendiente => ({
-  tarea,
-  razon: `Se construye en ${tarea}${detalle}.`,
-});
-
 // DECISION ABIERTA (F2-250): ninguna tarea del backlog construye estas vistas. "Empresas" y
 // "Sucursales" de Principal son de consulta (la gestión está en Administración), y las de
 // insumos no las pinta F2-120, que sólo sincroniza el catálogo. Salen deshabilitadas sin
@@ -273,7 +268,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'canales.ventas',
         texto: 'Ventas por canal',
         icono: Truck,
-        pendiente: construye('F2-144', ', sobre los canales de F2-233'),
+        destino: { ruta: '/canales' },
       },
     ],
   },
