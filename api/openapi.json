@@ -3393,6 +3393,217 @@
         ]
       }
     },
+    "/empresas/alta-guiada": {
+      "post": {
+        "description": "Sólo admin_global. Todo en UNA transacción: si algo falla (p. ej. el email del administrador ya existe) no queda nada creado. Las API keys vienen en claro UNA sola vez; la contraseña del administrador NO vuelve.",
+        "operationId": "OnboardingController_altaGuiada",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AltaGuiadaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AltaGuiadaRespuestaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, zona que no es IANA, o dos sucursales con el mismo nombre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol distinto de admin_global.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El email del administrador ya existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Alta guiada: empresa + sucursales con su API key + primer admin, en un solo paso.",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
+    "/empresas/{id}/arranque": {
+      "get": {
+        "description": "Se deduce de lo que ya hay (sucursales activas, sus keys, si su agente se reportó, si llegó alguna cuenta, y si hay un admin_empresa activo); no se guarda aparte.",
+        "operationId": "OnboardingController_arranque",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArranqueDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`id` no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor), por ruta.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe o es de otra empresa. Misma respuesta en los dos casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Checklist de arranque de la empresa: qué falta para que el panel reciba datos.",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
+    "/publico/contacto": {
+      "post": {
+        "description": "Pública: 3 por minuto y 20 por hora por IP. No guarda nada en la base. El campo `sitio` es una trampa para bots: con algo, responde 202 y no manda nada.",
+        "operationId": "ContactoController_enviar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactoRecibidoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 3 por minuto o 20 por hora por IP."
+          },
+          "503": {
+            "description": "El correo no salió (o el servidor no tiene buzón de contacto). Reintentable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Mensaje del formulario de contacto de la landing; sale por correo al negocio.",
+        "tags": [
+          "publico"
+        ]
+      }
+    },
     "/sistema": {
       "get": {
         "description": "Pública (sin token): la marca de \"Datos de ejemplo\" tiene que verse también en el login. No expone nada de ninguna empresa.",
@@ -15889,6 +16100,296 @@
         },
         "required": [
           "password"
+        ]
+      },
+      "SucursalAltaDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA (la que corta \"hoy\" de la sucursal). Un offset es 400."
+          }
+        },
+        "required": [
+          "nombre",
+          "zonaHoraria"
+        ]
+      },
+      "AdministradorAltaDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "description": "Se guarda en minúsculas. Duplicado = 409."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "format": "password",
+            "description": "Contraseña inicial. No vuelve en la respuesta: la tiene quien la mandó."
+          }
+        },
+        "required": [
+          "nombre",
+          "email",
+          "password"
+        ]
+      },
+      "AltaGuiadaDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "Nombre de la empresa."
+          },
+          "sucursales": {
+            "minItems": 1,
+            "maxItems": 20,
+            "description": "Nacen activas y CON su API key. Dos nombres iguales (sin distinguir mayúsculas ni espacios de más) son 400.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalAltaDto"
+            }
+          },
+          "administrador": {
+            "description": "El primer admin_empresa. Opcional: se puede crear después en Usuarios.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdministradorAltaDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "nombre",
+          "sucursales"
+        ]
+      },
+      "SucursalConKeyDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA. Es la que corta \"hoy\" en los agregados de esta sucursal."
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "API key del agente, EN CLARO y UNA sola vez (empieza con `msr_`). En la base queda su hash; si se pierde, se rota desde Administración."
+          }
+        },
+        "required": [
+          "id",
+          "empresaId",
+          "nombre",
+          "zonaHoraria",
+          "activo",
+          "apiKey"
+        ]
+      },
+      "AltaGuiadaRespuestaDto": {
+        "type": "object",
+        "properties": {
+          "empresa": {
+            "$ref": "#/components/schemas/EmpresaDto"
+          },
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalConKeyDto"
+            }
+          },
+          "administrador": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UsuarioDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "empresa",
+          "sucursales",
+          "administrador"
+        ]
+      },
+      "ClavePasoArranque": {
+        "type": "string",
+        "enum": [
+          "sucursales",
+          "llaves",
+          "agente",
+          "ventas",
+          "usuario"
+        ]
+      },
+      "SucursalPendienteDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "nombre"
+        ]
+      },
+      "PasoArranqueDto": {
+        "type": "object",
+        "properties": {
+          "clave": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ClavePasoArranque"
+              }
+            ]
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "hecho": {
+            "type": "boolean"
+          },
+          "detalle": {
+            "type": "string",
+            "description": "Qué falta, o por qué está hecho, en español."
+          },
+          "pendientes": {
+            "description": "Las sucursales activas a las que les falta este paso (vacío si no aplica).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalPendienteDto"
+            }
+          }
+        },
+        "required": [
+          "clave",
+          "titulo",
+          "hecho",
+          "detalle",
+          "pendientes"
+        ]
+      },
+      "ArranqueDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "completo": {
+            "type": "boolean",
+            "description": "Todos los pasos hechos: la tarjeta de arranque ya no se muestra."
+          },
+          "pasos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PasoArranqueDto"
+            }
+          },
+          "descargaAgente": {
+            "type": "string",
+            "nullable": true,
+            "description": "Dónde se descarga el instalador del agente (`AGENTE_URL_DESCARGA`). Nulo si el servidor no lo tiene configurado: el instalador lo entrega soporte."
+          }
+        },
+        "required": [
+          "empresaId",
+          "completo",
+          "pasos",
+          "descargaAgente"
+        ]
+      },
+      "ContactoDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254
+          },
+          "telefono": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "negocio": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Nombre del restaurante o grupo."
+          },
+          "sucursales": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "Cuántas sucursales tiene."
+          },
+          "mensaje": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "sitio": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Trampa para bots: el formulario lo esconde. Si llega con algo, se responde 202 igual y no se manda nada."
+          }
+        },
+        "required": [
+          "nombre",
+          "email",
+          "mensaje"
+        ]
+      },
+      "ContactoRecibidoDto": {
+        "type": "object",
+        "properties": {
+          "recibido": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "recibido"
         ]
       },
       "SistemaDto": {

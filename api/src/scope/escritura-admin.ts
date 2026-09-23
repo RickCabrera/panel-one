@@ -5,7 +5,8 @@ import { encontradoOr404, whereScoped } from './scope.helper';
 
 /**
  * Las ALTAS de la administración (F1-060), con scope. Es parte del helper
- * obligatorio, no un atajo: sólo `ScopedPrismaService.admin(scope)` construye
+ * obligatorio, no un atajo: sólo `ScopedPrismaService.admin(scope)` (y su variante en una
+ * transacción, `altaEnTransaccion`, del alta guiada de F2-147) construye
  * esta clase y le pasa el cliente; nadie más lo consigue.
  *
  * `para(scope)` sigue sin `create`: aquí hay tres altas explícitas y nada
@@ -81,7 +82,7 @@ export class EscrituraAdmin {
   /** Alta de sucursal en una empresa del alcance (fuera de él = 404). */
   async crearSucursal(
     empresaId: string,
-    datos: { nombre: string; zonaHoraria: string },
+    datos: { nombre: string; zonaHoraria: string; apiKeyHash?: string },
   ): Promise<SucursalCreada> {
     const empresa = await this.#empresaEnAlcance(empresaId);
     return this.#cliente.sucursal.create({
@@ -89,6 +90,10 @@ export class EscrituraAdmin {
         empresaId: empresa,
         nombre: exigir('nombre', datos.nombre),
         zonaHoraria: exigir('zonaHoraria', datos.zonaHoraria),
+        // F2-147: el alta guiada nace con su key (sólo el HASH; la key en claro nunca llega aquí).
+        ...(datos.apiKeyHash === undefined
+          ? {}
+          : { apiKeyHash: exigir('apiKeyHash', datos.apiKeyHash) }),
       },
       select: SELECT_SUCURSAL,
     });
