@@ -2060,3 +2060,39 @@ export interface ReporteFolios {
   filas: ConteoMensualFolios[];
   totales: Array<{ mes: string; vigentes: number; cancelados: number; total: number }>;
 }
+
+// --- Onboarding (F2-147) --------------------------------------------------------------
+
+export interface AltaGuiada {
+  nombre: string;
+  sucursales: { nombre: string; zonaHoraria: string }[];
+  administrador?: { nombre: string; email: string; password: string };
+}
+
+/** La key viene en claro UNA sola vez: vive en el estado del asistente, nunca en una caché. */
+export interface SucursalConKey extends Sucursal {
+  apiKey: string;
+}
+
+export interface AltaGuiadaHecha {
+  empresa: Empresa;
+  sucursales: SucursalConKey[];
+  administrador: UsuarioAdmin | null;
+}
+
+export type ClavePasoArranque = 'sucursales' | 'llaves' | 'agente' | 'ventas' | 'usuario';
+
+export interface PasoArranque {
+  clave: ClavePasoArranque;
+  titulo: string;
+  hecho: boolean;
+  detalle: string;
+  pendientes: { sucursalId: string; nombre: string }[];
+}
+
+export interface Arranque {
+  empresaId: string;
+  completo: boolean;
+  pasos: PasoArranque[];
+  descargaAgente: string | null;
+}

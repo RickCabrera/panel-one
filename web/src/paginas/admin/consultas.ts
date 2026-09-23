@@ -4,7 +4,10 @@ import { useCallback, useState } from 'react';
 import { pedir } from '../../api/cliente';
 import { POLLING_MS } from '../mesas/reglas';
 import type {
+  AltaGuiada,
+  AltaGuiadaHecha,
   ApiKeyEmitida,
+  Arranque,
   CrearSucursal,
   CrearUsuario,
   EditarEmpresa,
@@ -80,7 +83,24 @@ export const api = {
     pedir<UsuarioAdmin>(`/usuarios/${id}`, { method: 'PATCH', body: cambios }),
   resetPassword: (id: string, password: string) =>
     pedir<void>(`/usuarios/${id}/password`, { method: 'POST', body: { password } }),
+  // F2-147: la respuesta trae las keys EN CLARO; vive sólo en el estado del asistente.
+  altaGuiada: (datos: AltaGuiada) =>
+    pedir<AltaGuiadaHecha>('/empresas/alta-guiada', { method: 'POST', body: datos }),
 };
+
+/**
+ * El checklist de arranque de una empresa (F2-147). Se relee cada 20 s mientras esté
+ * incompleto: el paso del agente se marca solo cuando el agente se reporta. Completo, deja
+ * de preguntar. Sólo para admins (al visor la API le da 403 y la tarjeta ni se monta).
+ */
+export function useArranque(empresaId: string | undefined, habilitado = true) {
+  return useQuery({
+    queryKey: ['arranque', empresaId],
+    queryFn: ({ signal }) => pedir<Arranque>(`/empresas/${empresaId}/arranque`, { signal }),
+    enabled: habilitado && empresaId !== undefined,
+    refetchInterval: (consulta) => (consulta.state.data?.completo ? false : POLLING_MS),
+  });
+}
 
 type Lista = 'empresas' | 'sucursales' | 'usuarios';
 

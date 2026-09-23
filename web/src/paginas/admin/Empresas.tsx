@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router';
 
 import type { Empresa } from '../../api/tipos';
 import { useEmpresas } from '../../filtros/alcance';
@@ -22,6 +23,15 @@ export function Empresas() {
 
   return (
     <div className="space-y-6">
+      {/* F2-147: el camino recomendado; el alta suelta de abajo sigue para casos sueltos. */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-acento-borde p-3 text-sm">
+        <Link className={CLASE_PRIMARIO} to="/admin/alta">
+          Alta guiada de empresa
+        </Link>
+        <span className="text-tinta-tenue">
+          Empresa, sucursales con su API key y su administrador, en un solo paso.
+        </span>
+      </div>
       <AltaEmpresa />
       <div className="min-w-0 overflow-x-auto">
         {accion.error && (
