@@ -46,7 +46,8 @@ export function faltaDelCosto(c: CostoVendido): string | null {
         `sin receta (${formatearPesosTexto(c.ventaSinCosto)} en partidas, con IVA y antes de descuento)`,
     );
   }
-  return partes.join(' · ');
+  // Incompleto sin contadores (no debería pasar): se dice igual, nunca se calla.
+  return partes.length > 0 ? partes.join(' · ') : 'algo de lo vendido (sin detalle)';
 }
 
 function formatearPesosTexto(t: string): string {
@@ -62,10 +63,11 @@ export function avisosEstado(e: EstadoResultados): string[] {
     if (m) avisos.push(m);
   }
   for (const s of e.sucursales) {
+    // Manda la bandera del API; `faltaDelCosto` sólo pone el detalle.
     const falta = faltaDelCosto(s.costo);
-    if (falta) {
+    if (s.utilidadSobrestimada || falta) {
       avisos.push(
-        `${s.sucursal}: utilidad SOBRESTIMADA (la real es menor) porque falta costo de ${falta}.`,
+        `${s.sucursal}: utilidad SOBRESTIMADA (la real es menor) porque falta costo de ${falta ?? 'algo de lo vendido (sin detalle)'}.`,
       );
     }
     if (s.sinVentas && (aCentavos(s.gastos) ?? 0n) !== 0n) {
@@ -134,7 +136,8 @@ export function barrasEstado(e: EstadoResultados): BarraEstado[] {
 // ---------------------------------------------------------------------------
 
 const invalido = (que: string, v: string) => () => `${que} trae un importe inválido ("${v}").`;
-const dineroCsv = (v: string | null, que: string) => (v === null ? '' : importeCsv(v, invalido(que, v)));
+const dineroCsv = (v: string | null, que: string) =>
+  v === null ? '' : importeCsv(v, invalido(que, v));
 
 export const ENCABEZADOS_ESTADO: readonly string[] = [
   'Sucursal',
@@ -252,9 +255,7 @@ export function comprasACsv(
 // ---------------------------------------------------------------------------
 
 export type VacioCompras =
-  | { tipo: 'sin-lector'; texto: string }
-  | { tipo: 'periodo'; texto: string }
-  | null;
+  { tipo: 'sin-lector'; texto: string } | { tipo: 'periodo'; texto: string } | null;
 
 /** Por qué no hay compras que mostrar: el agente nunca las mandó, o el periodo no tiene. */
 export function vacioCompras(c: Compras): VacioCompras {

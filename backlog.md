@@ -1112,6 +1112,18 @@ escritura contra el POS (test que lo afirma inspeccionando el modo de la conexi�
 > una unidad de receta con factor, si tiene subrecetas (elaborados) y si explota modificadores o
 > paquetes — cualquiera de esas es cambio de contrato. Ver `docs/esquema-sr.md` §10 ("Recetas") y §13.
 
+> **Y además (de F2-126).** El panel ya acepta las compras a proveedor por `POST /ingesta/compras`:
+> un **lote de compras**, cada una con TODAS sus partidas (`{ leidoAt, compras: [{ origenSrId, folio,
+> proveedorOrigenSrId?, almacenOrigenSrId?, fecha, cancelada, partidas: [{ insumoOrigenSrId,
+> cantidad, costoUnitario }] }] }`). Obligaciones del lector: (1) la compra viaja **completa** —
+> reenviarla con otras partidas las REEMPLAZA; (2) `cancelada = true` en vez de dejar de mandarla (el
+> panel no la borra); (3) cantidad > 0 en la **unidad del insumo** del catálogo (NUMERIC(12,3)) y
+> costo por unidad **SIN IVA**, en texto; (4) proveedor y almacén por los ids del espejo de la misma
+> sucursal, o nulos; (5) a lo más 200 compras y 5000 partidas por lote. Documentar en §10 si SR guarda
+> la compra como documento propio o sólo como póliza de entrada (hoy se supone documento aparte y el
+> panel NO los concilia), y si el costo de SR trae IVA. Ver `docs/esquema-sr.md` §10 ("Compras,
+> gastos y utilidad") y §13.
+
 ## BLOQUE I · Cierre
 
 ### F2-250 · Cierre de Ronda 2: auditoría de paridad y pendientes
@@ -1511,6 +1523,20 @@ Recorre el AC original de F2-121, F2-122, F2-125, F2-126 y F2-127 con datos del 
 > merma + ajuste, con el desglose visible; (4) confirmar que la receta de SR está en la unidad del
 > insumo y por unidad vendida, y si los modificadores consumen. Todo en `docs/esquema-sr.md` §10
 > ("Recetas").
+
+> **Y además (de F2-126).** El estado de resultados se cerró contra el seed
+> (`api/prisma/seed-utilidad.spec.ts`: agosto de dos sucursales al centavo contra un cálculo a mano).
+> Eso prueba que el COSTO (cruce de recetas y costo de referencia) conserva lo simulado; la venta neta
+> ahí sólo prueba que nada se pierde. Con el piloto y el contador, para el mismo mes: (1) ¿`cheques.
+> subtotal` es venta NETA de descuento, sin IVA y sin propina? (supuesto de esquema-sr §2; si no, la
+> utilidad sale inflada); (2) ¿el contador usa costo de ventas ESTÁNDAR (teórico, lo que hace el
+> panel) o por inventarios (inicial + compras − final)? Si es el segundo, la diferencia es la merma y
+> hace falta otra métrica; (3) ¿los gastos se capturan SIN IVA acreditable? (supuesto del formulario);
+> (4) ¿el piloto registra compras en SR? Si no, ❓ **DECISIÓN ABIERTA PARA RICARDO**: la ficha de
+> F2-126 pedía "captura manual si la instalación no las registra" y NO se construyó (las compras no
+> entran a la utilidad; ver esquema-sr §10 "Compras, gastos y utilidad"): sería tarea nueva; (5) un
+> doble envío del formulario de gasto (dos pestañas, reintento de red) crea dos gastos: el botón se
+> deshabilita mientras envía, pero el API no es idempotente para la captura.
 
 **Listo cuando:** el valor de inventario cuadra contra el reporte de SR del mismo corte; el
 kardex de un artículo reproduce su saldo real; la variación teórico contra real de tres

@@ -87,7 +87,10 @@ export function useGastos(filtro: Filtro | null, rango: Rango | null, incluirAnu
     ],
     queryFn: ({ signal }) =>
       pedir<Gastos>('/finanzas/gastos', {
-        query: { ...rangoQuery(filtro, rango), incluirAnulados: incluirAnulados ? 'true' : undefined },
+        query: {
+          ...rangoQuery(filtro, rango),
+          incluirAnulados: incluirAnulados ? 'true' : undefined,
+        },
         signal,
       }),
     enabled: filtro !== null && rango !== null,
