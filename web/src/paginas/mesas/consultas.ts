@@ -4,15 +4,19 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { pedir } from '../../api/cliente';
 import type { MesasSucursal } from '../../api/tipos';
 import type { Filtro } from '../inicio/consultas';
-import { POLLING_MS } from './reglas';
+import { intervaloMesas, useTiempoRealMesas } from './tiempoReal';
 
 /**
  * Las mesas abiertas del monitor, consultadas cada 20 s. La llave es la misma de la
  * tarjeta "Venta en vivo" del Panel (mismo endpoint, misma respuesta). Sin
  * `placeholderData`: al cambiar de alcance salen skeletons, nunca las mesas del
  * alcance anterior bajo el nombre del nuevo.
+ *
+ * F2-142: con el socket vivo se relee con cada aviso de ingesta y el polling baja a
+ * respaldo (`tiempoReal.ts`); si el socket cae, vuelven los 20 s.
  */
 export function useMonitorMesas(filtro: Filtro | null) {
+  const enVivo = useTiempoRealMesas(filtro);
   return useQuery({
     queryKey: ['mesas', 'abiertas', filtro?.empresaId, filtro?.sucursalId ?? null],
     queryFn: ({ signal }) =>
@@ -21,7 +25,7 @@ export function useMonitorMesas(filtro: Filtro | null) {
         signal,
       }),
     enabled: filtro !== null,
-    refetchInterval: POLLING_MS,
+    refetchInterval: intervaloMesas(enVivo),
   });
 }
 

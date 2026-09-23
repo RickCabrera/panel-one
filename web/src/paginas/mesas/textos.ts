@@ -16,3 +16,11 @@ export function nombreMesa(
   const nombre = `Mesa ${mesa.mesa ?? 'sin número'}`;
   return conSucursal ? `${nombre} · ${mesa.sucursal}` : nombre;
 }
+
+/**
+ * Cómo se está actualizando el Monitor (F2-142). Es lo único que el usuario nota si el socket
+ * cae: "en vivo" pasa a "cada 20 s" y los datos siguen en pantalla.
+ */
+export function textoModo(enVivo: boolean): string {
+  return enVivo ? 'en vivo' : 'cada 20 s';
+}

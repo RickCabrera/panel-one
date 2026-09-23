@@ -12,6 +12,8 @@ import {
   salirPantallaCompleta,
   TEXTO_NADIE_EN_VIVO,
 } from './mesas/pared';
+import { textoModo } from './mesas/textos';
+import { useEnVivo } from './mesas/tiempoReal';
 import { useCriterioMesas, useMonitorVivo } from './mesas/vivo';
 
 /**
@@ -36,21 +38,23 @@ export function MesasPared() {
       ? { empresaId: empresa.id, sucursalId: sucursal?.id }
       : null;
   const consulta = useMonitorMesas(filtro);
+  const enVivo = useEnVivo(filtro);
   const monitor = useMonitorVivo(consulta.data, consulta.dataUpdatedAt);
 
   return (
-    <div
-      data-testid="vista-pared"
-      className="min-h-screen bg-fondo p-4 text-2xl text-tinta sm:p-6"
-    >
+    <div data-testid="vista-pared" className="min-h-screen bg-fondo p-4 text-2xl text-tinta sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="truncate text-4xl font-bold">
             Mesas · {sucursal?.nombre ?? (empresa ? 'Todas las sucursales' : '')}
           </h1>
-          <p className="text-tinta-suave">
+          <p
+            data-testid="consultado"
+            data-modo={enVivo ? 'en-vivo' : 'polling'}
+            className="text-tinta-suave"
+          >
             {consulta.dataUpdatedAt > 0
-              ? `Consultado ${horaEn(zona, consulta.dataUpdatedAt)}`
+              ? `Consultado ${horaEn(zona, consulta.dataUpdatedAt)} · ${textoModo(enVivo)}`
               : 'Sin consultar todavía'}
             {' · '}
             {TEXTO_ORDEN[criterio.orden]} · {TEXTO_ESTADO[criterio.estado]}

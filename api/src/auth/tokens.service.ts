@@ -64,7 +64,25 @@ export class TokensService {
   }
 
   async verificarAccess(token: string): Promise<UsuarioToken> {
-    const { sub, rol, empresaId } = await this.verificar(token, this.config.accessSecret, 'access');
+    return (await this.verificarAccessConVencimiento(token)).usuario;
+  }
+
+  /**
+   * Como `verificarAccess`, más CUÁNDO vence el token (ms epoch, del claim `exp`). Lo usa el
+   * socket del tiempo real (F2-142): un access válido al conectar no deja el socket abierto
+   * más allá de su vida. Un token sin `exp` numérico se rechaza (todos los nuestros lo traen).
+   */
+  async verificarAccessConVencimiento(
+    token: string,
+  ): Promise<{ usuario: UsuarioToken; venceEnMs: number }> {
+    const { sub, rol, empresaId, exp } = await this.verificar(
+      token,
+      this.config.accessSecret,
+      'access',
+    );
+    if (typeof exp !== 'number' || !Number.isFinite(exp)) {
+      throw new UnauthorizedException('No autenticado');
+    }
     if (
       typeof rol !== 'string' ||
       !ROLES_VALIDOS.has(rol) ||
@@ -72,7 +90,7 @@ export class TokensService {
     ) {
       throw new UnauthorizedException('No autenticado');
     }
-    return { id: sub, rol: rol as RolUsuario, empresaId };
+    return { usuario: { id: sub, rol: rol as RolUsuario, empresaId }, venceEnMs: exp * 1000 };
   }
 
   /**

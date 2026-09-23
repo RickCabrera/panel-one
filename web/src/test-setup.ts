@@ -1,8 +1,13 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
-import { afterEach, beforeEach } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
 
 import { instalarMatchMediaFalso } from './test/matchMedia';
+
+// Ningún test abre un socket de verdad (F2-142): `socket.io-client` es el falso de
+// `test/socketFalso.ts`, que no conecta si la prueba no lo pide. Sin conexión, toda vista
+// se comporta como hoy: polling de 20 s.
+vi.mock('socket.io-client', () => import('./test/socketFalso'));
 
 // Sin `globals: true` en vitest, Testing Library no registra su limpieza
 // automática: si no se hace aquí, el segundo test que renderice encuentra el DOM

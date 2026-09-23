@@ -21,6 +21,8 @@ function proxyApi(target: string): Record<string, ProxyOptions> {
     '^/api/': {
       target,
       changeOrigin: true,
+      // F2-142: el socket del tiempo real (`/api/socket.io`) sube a WebSocket por aquí.
+      ws: true,
       rewrite: (ruta) => ruta.replace(/^\/api(?=\/)/, ''),
       cookiePathRewrite: { '/auth': '/api/auth' },
     },
