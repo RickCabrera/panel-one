@@ -104,8 +104,16 @@ points: symlinks, junctions) en la carpeta, la solicitud y el preparado, y valid
 ## Límites conocidos
 
 - **Memoria del api al publicar**: el cuerpo (hasta 128 MB) llega entero a un Buffer
-  (`express.raw`, montado SÓLO en `/agente/versiones`). Es una petición del admin_global, no del
-  público. La descarga sí va en streaming (`PuertoArchivos.abrirLectura`).
+  (`express.raw`, montado SÓLO en `/agente/versiones`). Ese parseo corre ANTES de los guards de
+  Nest: por eso sólo se hace si la petición trae `Authorization: Bearer …` (sin él, 401 sin leer el
+  cuerpo; e2e "sin token"). Con un bearer **inválido** el cuerpo sí se lee antes del 401: alguien
+  con un token cualquiera puede hacer que el api cargue hasta 128 MB por petición. La descarga sí va
+  en streaming (`PuertoArchivos.abrirLectura`).
+- **Ventana a media sustitución**: si el watchdog muere (o la PC se apaga) entre mover `agente.exe`
+  a `agente.exe.anterior` y poner el nuevo, la PC se queda sin `agente.exe` hasta la siguiente
+  vuelta del watchdog. Esa vuelta encuentra la solicitud todavía ahí, el primer movimiento falla
+  (no hay `agente.exe`) y `Restaurar()` regresa el anterior y arranca el servicio. Por lectura del
+  código se recupera, pero **no está probado** con un corte real: es parte de F1-020b.
 - El almacenamiento real del binario es el de `ARCHIVOS_IMPL=disco` (F2-191): la misma carpeta y el
   mismo secreto de firma que los CFDI.
 - El watchdog no se auto-actualiza: se actualiza al correr otra vez `instalar.ps1`.

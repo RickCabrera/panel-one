@@ -1291,7 +1291,9 @@ F1-091, con una persona real.
 > `RUNNING`, el panel la ve "Al día" y `logsctualizador-*.log` cuenta el swap); una versión que
 > se cae al arrancar regresa sola a la anterior (queda `agente.exe.fallido`); con el agente
 > detenido a mano durante el swap no quedan dos procesos `agente.exe` del agente
-> (`Get-Process agente | Select Path`); y la cuenta virtual del agente puede borrar el
+> (`Get-Process agente | Select Path`); matar el watchdog a media sustitución (entre mover
+> `agente.exe` a `.anterior` y poner el nuevo) y confirmar que en su siguiente vuelta restaura el
+> anterior y arranca el servicio; y la cuenta virtual del agente puede borrar el
 > `resultado.json` que escribe el watchdog (herencia del `icacls` de la carpeta).
 
 ## F1-002 · Docker Compose de producción + Caddy

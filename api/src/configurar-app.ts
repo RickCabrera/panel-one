@@ -51,11 +51,17 @@ export function configurarApp(
   app.use(cabecerasSeguridad);
   app.useBodyParser('json', { limit: LIMITE_BODY_JSON });
   // F2-143: publicar un binario del agente. SÓLO esa ruta acepta un cuerpo crudo, y hasta
-  // `LIMITE_BINARIO_AGENTE`; el resto de la API sigue con el JSON de 5 MB.
-  app.use(
-    RUTA_PUBLICAR_BINARIO,
-    raw({ type: 'application/octet-stream', limit: LIMITE_BINARIO_AGENTE }),
-  );
+  // `LIMITE_BINARIO_AGENTE`; el resto de la API sigue con el JSON de 5 MB. El parseo corre ANTES
+  // de los guards de Nest: sin `Authorization: Bearer` no se lee el cuerpo (el guard responde 401
+  // sin haber cargado nada en memoria). Con un bearer inválido sí se lee, y el guard lo rechaza.
+  const parsearBinario = raw({ type: 'application/octet-stream', limit: LIMITE_BINARIO_AGENTE });
+  app.use(RUTA_PUBLICAR_BINARIO, (req: Request, res: Response, siguiente: NextFunction) => {
+    if (!/^Bearer\s+\S+/i.test(req.headers.authorization ?? '')) {
+      siguiente();
+      return;
+    }
+    parsearBinario(req, res, siguiente);
+  });
   app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),

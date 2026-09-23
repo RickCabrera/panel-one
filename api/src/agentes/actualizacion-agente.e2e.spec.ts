@@ -257,6 +257,15 @@ describe('Auto-update del agente (e2e, F2-143)', () => {
       expect(await prisma.versionAgente.count()).toBe(1);
     });
 
+    it('sin token: 401 y el cuerpo ni se parsea (no se carga en memoria antes de autenticar)', async () => {
+      const res = await request(url)
+        .post('/agente/versiones?version=3.3.0')
+        .set('Content-Type', 'application/octet-stream')
+        .send(binario('3.3.0'));
+      expect(res.status).toBe(401);
+      expect(await prisma.versionAgente.count()).toBe(0);
+    });
+
     it('más de 128 MB: 413 y no se publica nada', async () => {
       const res = await publicar('3.1.0', Buffer.alloc(128 * 1024 * 1024 + 1));
       expect(res.status).toBe(413);
