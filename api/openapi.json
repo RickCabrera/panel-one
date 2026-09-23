@@ -9137,6 +9137,426 @@
         ]
       }
     },
+    "/facturacion/tablero": {
+      "get": {
+        "description": "Cualquier rol. La venta es la MISMA de `/ventas/resumen` y `/ventas/comparativo-sucursales` (días locales de cada sucursal, `alturaAl` incluido). Lo facturado es por fecha de EMISIÓN del CFDI, cortada en la zona de su sucursal; una reserva en `timbrando` nunca cuenta.",
+        "operationId": "TableroFacturacionController_resumen",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "alturaAl",
+            "required": false,
+            "in": "query",
+            "description": "Corte \"a la misma altura\" (F2-220), para comparar contra un periodo anterior hasta la misma hora. Un INSTANTE ISO-8601 con zona obligatoria (sin zona, 400). Sólo afecta al ÚLTIMO día del rango (`hasta`): de ese día entra únicamente lo ocurrido ANTES de la hora local que marca el instante en la zona de CADA sucursal (corte exclusivo: una cuenta cerrada justo a esa hora no entra). Los días anteriores van completos. Con sucursales en zonas distintas, cada una se corta en su propia hora local del mismo instante (sólo la hora, no la fecha: en la hora en que el día local de una sucursal no es el de quien pide, su corte no corresponde a \"hoy\"; supuesto provisional). Los cancelados se ubican por su cierre o, sin cierre, por su apertura. Si ese día la hora local no existe (el reloj se adelanta) se lee con el offset de ANTES del salto (02:30 que no existe = 03:30 del horario nuevo); si pasa dos veces (el reloj se atrasa), con el de DESPUÉS (la segunda vez). Lo resuelve Postgres y lo fija un e2e. Sin él, el último día va completo.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-09-21T20:30:00.000Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TableroFacturacionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Filtro inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa o la sucursal no existen o no están en tu alcance. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "KPIs, barras por sucursal / mes / hora y cuentas por facturar del periodo (F2-106).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/cfdis": {
+      "get": {
+        "description": "Sólo administradores. Vigentes y cancelados (nunca reservas `timbrando`), por fecha de emisión en la zona de su sucursal, del más reciente al más viejo. Las descargas son `GET /facturacion/cfdis/{id}/xml|pdf`.",
+        "operationId": "TableroFacturacionController_cfdis",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "alturaAl",
+            "required": false,
+            "in": "query",
+            "description": "Corte \"a la misma altura\" (F2-220), para comparar contra un periodo anterior hasta la misma hora. Un INSTANTE ISO-8601 con zona obligatoria (sin zona, 400). Sólo afecta al ÚLTIMO día del rango (`hasta`): de ese día entra únicamente lo ocurrido ANTES de la hora local que marca el instante en la zona de CADA sucursal (corte exclusivo: una cuenta cerrada justo a esa hora no entra). Los días anteriores van completos. Con sucursales en zonas distintas, cada una se corta en su propia hora local del mismo instante (sólo la hora, no la fecha: en la hora en que el día local de una sucursal no es el de quien pide, su corte no corresponde a \"hoy\"; supuesto provisional). Los cancelados se ubican por su cierre o, sin cierre, por su apertura. Si ese día la hora local no existe (el reloj se adelanta) se lee con el offset de ANTES del salto (02:30 que no existe = 03:30 del horario nuevo); si pasa dos veces (el reloj se atrasa), con el de DESPUÉS (la segunda vez). Lo resuelve Postgres y lo fija un e2e. Sin él, el último día va completo.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-09-21T20:30:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "porPagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Búsqueda literal (sin comodines, sin distinguir mayúsculas) en RFC del receptor, UUID, serie-folio (`A-123`, `A123` o `123`) y folio del ticket. Busca SÓLO en los CFDI emitidos en el rango pedido, no en todo el histórico. Vacía = sin búsqueda.",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "description": "Sin él, los dos.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "vigente",
+                "cancelado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaCfdisDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Filtro inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): lleva datos de los receptores o códigos que facturan el ticket.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa o la sucursal no existen o no están en tu alcance. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "CFDI emitidos en el periodo, con búsqueda y paginados (F2-106).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/por-facturar": {
+      "get": {
+        "description": "Sólo administradores (el código deja facturar el ticket). Estado público `pendiente`: sin CFDI vigente ni reserva, sin vencer y de una cuenta no cancelada.",
+        "operationId": "TableroFacturacionController_porFacturar",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Acota a una sucursal de esa empresa. Sin él, todas. Una sucursal de otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de cada sucursal (`YYYY-MM-DD`), inclusivo. El corte de \"hoy\" se hace en la zona de la sucursal, no en la del servidor. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-09-20",
+              "type": "string"
+            }
+          },
+          {
+            "name": "alturaAl",
+            "required": false,
+            "in": "query",
+            "description": "Corte \"a la misma altura\" (F2-220), para comparar contra un periodo anterior hasta la misma hora. Un INSTANTE ISO-8601 con zona obligatoria (sin zona, 400). Sólo afecta al ÚLTIMO día del rango (`hasta`): de ese día entra únicamente lo ocurrido ANTES de la hora local que marca el instante en la zona de CADA sucursal (corte exclusivo: una cuenta cerrada justo a esa hora no entra). Los días anteriores van completos. Con sucursales en zonas distintas, cada una se corta en su propia hora local del mismo instante (sólo la hora, no la fecha: en la hora en que el día local de una sucursal no es el de quien pide, su corte no corresponde a \"hoy\"; supuesto provisional). Los cancelados se ubican por su cierre o, sin cierre, por su apertura. Si ese día la hora local no existe (el reloj se adelanta) se lee con el offset de ANTES del salto (02:30 que no existe = 03:30 del horario nuevo); si pasa dos veces (el reloj se atrasa), con el de DESPUÉS (la segunda vez). Lo resuelve Postgres y lo fija un e2e. Sin él, el último día va completo.",
+            "schema": {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+              "example": "2026-09-21T20:30:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "porPagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginaPorFacturarDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Filtro inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): lleva datos de los receptores o códigos que facturan el ticket.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa o la sucursal no existen o no están en tu alcance. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cuentas del periodo con código de facturación todavía facturable (F2-106).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
     "/facturacion/regimenes-fiscales": {
       "get": {
         "description": "Cualquier usuario autenticado (sin rol): es el catálogo público del SAT y no trae datos de ninguna empresa.",
@@ -19479,6 +19899,403 @@
         },
         "required": [
           "empresaId"
+        ]
+      },
+      "VentasTableroDto": {
+        "type": "object",
+        "properties": {
+          "venta": {
+            "type": "string",
+            "example": "3406.78",
+            "description": "La MISMA venta que `/ventas/resumen`."
+          },
+          "cuentas": {
+            "type": "number",
+            "example": 9
+          }
+        },
+        "required": [
+          "venta",
+          "cuentas"
+        ]
+      },
+      "CifrasCfdiDto": {
+        "type": "object",
+        "properties": {
+          "monto": {
+            "type": "string",
+            "example": "2350.00"
+          },
+          "cfdis": {
+            "type": "number",
+            "example": 4
+          }
+        },
+        "required": [
+          "monto",
+          "cfdis"
+        ]
+      },
+      "PorFacturarResumenDto": {
+        "type": "object",
+        "properties": {
+          "cuentas": {
+            "type": "number",
+            "example": 2
+          },
+          "monto": {
+            "type": "string",
+            "example": "273.45"
+          }
+        },
+        "required": [
+          "cuentas",
+          "monto"
+        ]
+      },
+      "SucursalTableroDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "venta": {
+            "type": "string",
+            "example": "2406.78",
+            "description": "La de `/ventas/comparativo-sucursales`."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "facturado": {
+            "type": "string",
+            "example": "1500.00",
+            "description": "CFDI vigentes emitidos en el periodo."
+          },
+          "cfdis": {
+            "type": "number",
+            "description": "Cuántos CFDI vigentes."
+          },
+          "cancelados": {
+            "$ref": "#/components/schemas/CifrasCfdiDto"
+          },
+          "tasa": {
+            "type": "string",
+            "nullable": true,
+            "example": "0.6232",
+            "description": "Facturado / venta del MISMO periodo, 4 decimales (0.1523 = 15.23 %), mitad lejos de cero. Null sin venta positiva. Lo facturado va por fecha de EMISIÓN y la venta por fecha de cierre: un ticket de otro periodo facturado en éste la puede llevar arriba de 1 (supuesto provisional)."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "nombre",
+          "venta",
+          "cuentas",
+          "facturado",
+          "cfdis",
+          "cancelados",
+          "tasa"
+        ]
+      },
+      "MesTableroDto": {
+        "type": "object",
+        "properties": {
+          "mes": {
+            "type": "string",
+            "example": "2026-09",
+            "description": "Mes LOCAL de la emisión (zona de la sucursal)."
+          },
+          "facturado": {
+            "type": "string",
+            "example": "2350.00"
+          },
+          "cfdis": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "mes",
+          "facturado",
+          "cfdis"
+        ]
+      },
+      "HoraTableroDto": {
+        "type": "object",
+        "properties": {
+          "hora": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 23,
+            "description": "Hora LOCAL de la emisión, 0..23."
+          },
+          "facturado": {
+            "type": "string",
+            "example": "500.00"
+          },
+          "cfdis": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "hora",
+          "facturado",
+          "cfdis"
+        ]
+      },
+      "TableroFacturacionDto": {
+        "type": "object",
+        "properties": {
+          "ventas": {
+            "$ref": "#/components/schemas/VentasTableroDto"
+          },
+          "facturado": {
+            "description": "CFDI VIGENTES emitidos en el periodo. Una reserva en `timbrando` nunca cuenta.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CifrasCfdiDto"
+              }
+            ]
+          },
+          "cancelados": {
+            "description": "CFDI emitidos en el periodo que HOY están cancelados (por su fecha de emisión: todavía no se guarda la de cancelación, F2-109). No suman en `facturado`.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CifrasCfdiDto"
+              }
+            ]
+          },
+          "tasa": {
+            "type": "string",
+            "nullable": true,
+            "example": "0.6898",
+            "description": "Facturado / venta del MISMO periodo, 4 decimales (0.1523 = 15.23 %), mitad lejos de cero. Null sin venta positiva. Lo facturado va por fecha de EMISIÓN y la venta por fecha de cierre: un ticket de otro periodo facturado en éste la puede llevar arriba de 1 (supuesto provisional)."
+          },
+          "porFacturar": {
+            "description": "Cuentas del periodo con código de facturación todavía facturable (estado público `pendiente`: sin CFDI ni reserva, sin vencer).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PorFacturarResumenDto"
+              }
+            ]
+          },
+          "porSucursal": {
+            "description": "Todas las del alcance, por nombre.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalTableroDto"
+            }
+          },
+          "porMes": {
+            "description": "Todos los meses que toca el rango, en orden; un mes sin CFDI va en 0.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MesTableroDto"
+            }
+          },
+          "porHora": {
+            "description": "Siempre 24 filas, 0..23.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HoraTableroDto"
+            }
+          }
+        },
+        "required": [
+          "ventas",
+          "facturado",
+          "cancelados",
+          "tasa",
+          "porFacturar",
+          "porSucursal",
+          "porMes",
+          "porHora"
+        ]
+      },
+      "CfdiFilaDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uuid": {
+            "type": "string",
+            "example": "5FB2822E-396D-4725-8521-CDC4BDD20CCF"
+          },
+          "serieFolio": {
+            "type": "string",
+            "example": "A-1024"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "receptorRfc": {
+            "type": "string",
+            "example": "EKU9003173C9"
+          },
+          "receptorNombre": {
+            "type": "string",
+            "example": "ESCUELA KEMPER URGATE"
+          },
+          "total": {
+            "type": "string",
+            "example": "315.50"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "cancelado"
+            ]
+          },
+          "emitidoAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "folioTicket": {
+            "type": "string",
+            "nullable": true,
+            "description": "Folio del ticket del POS."
+          },
+          "xml": {
+            "type": "boolean",
+            "description": "Hay XML guardado (`GET /facturacion/cfdis/{id}/xml`)."
+          },
+          "pdf": {
+            "type": "boolean",
+            "description": "Hay PDF guardado (`GET /facturacion/cfdis/{id}/pdf`)."
+          }
+        },
+        "required": [
+          "id",
+          "uuid",
+          "serieFolio",
+          "sucursalId",
+          "sucursal",
+          "receptorRfc",
+          "receptorNombre",
+          "total",
+          "estado",
+          "emitidoAt",
+          "folioTicket",
+          "xml",
+          "pdf"
+        ]
+      },
+      "PaginaCfdisDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "CFDI del filtro completo, no de esta página."
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number"
+          },
+          "cfdis": {
+            "description": "Del más reciente al más viejo (por emisión). Vacío si la página pasa del final.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiFilaDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "pagina",
+          "porPagina",
+          "cfdis"
+        ]
+      },
+      "CuentaPorFacturarDto": {
+        "type": "object",
+        "properties": {
+          "chequeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "cerradoAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "total": {
+            "type": "string",
+            "example": "315.50"
+          },
+          "codigo": {
+            "type": "string",
+            "example": "7JQRECP3U"
+          },
+          "expiraAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Desde este instante ya no sirve (exclusivo)."
+          }
+        },
+        "required": [
+          "chequeId",
+          "folio",
+          "sucursalId",
+          "sucursal",
+          "cerradoAt",
+          "total",
+          "codigo",
+          "expiraAt"
+        ]
+      },
+      "PaginaPorFacturarDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Cuentas por facturar del filtro completo."
+          },
+          "monto": {
+            "type": "string",
+            "example": "273.45",
+            "description": "Suma de su total, del filtro completo."
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number"
+          },
+          "cuentas": {
+            "description": "Las más recientes primero.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CuentaPorFacturarDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "monto",
+          "pagina",
+          "porPagina",
+          "cuentas"
         ]
       },
       "RegimenFiscalDto": {

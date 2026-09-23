@@ -18,6 +18,8 @@ import {
   utilidadesDe,
   type FilaOrdenada,
   type Orden,
+  tasasDe,
+  TASA_SIN_LECTURA,
 } from './comparativos/matriz';
 import {
   escribirB,
@@ -29,6 +31,7 @@ import {
 } from './comparativos/periodoB';
 import { TablaComparativos } from './comparativos/Tabla';
 import { useEstadoResultados } from './finanzas/consultas';
+import { useTablero } from './facturacion/tablero/consultas';
 import { useMesasAbiertas, useVentas, type Filtro } from './inicio/consultas';
 import { useAhora } from './mesas/consultas';
 import { Esqueleto, ErrorTarjeta, Tarjeta } from './inicio/Tarjeta';
@@ -41,8 +44,10 @@ const CONTROL =
 const BOTON =
   'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
 
-/** Lo que no se puede pintar todavía, dicho en vez de pintado en cero (regla de Ronda 2). */
-export const NOTA_PENDIENTES = 'Tasa de facturación: llega con Facturación (F2-106).';
+/** Qué es la columna Tasa de facturación (F2-106) y cuándo no se afirma. */
+export const NOTA_TASA =
+  'Tasa de facturación: lo facturado en el periodo (por fecha de emisión) entre la venta del ' +
+  'periodo, la misma del tablero de Facturación. “—” sin venta; el Δ va en puntos porcentuales (pp).';
 
 /** Qué es la columna Utilidad (F2-126) y cuándo no se afirma. */
 export const NOTA_UTILIDAD =
@@ -115,6 +120,10 @@ export function Comparativos() {
   const cortadaB = comparable?.alturaAl !== undefined;
   const estadoA = useEstadoResultados(filtro, rango);
   const estadoB = useEstadoResultados(filtro, cortadaB ? null : rangoB);
+  // Tasa de facturación (F2-106): la MISMA consulta que el tablero de Facturación. El tablero sí
+  // corta a la misma altura, así que B se pide con su `alturaAl`.
+  const tableroA = useTablero(filtro, rango);
+  const tableroB = useTablero(filtro, rangoB, comparable?.alturaAl);
   // Misma llave que Inicio y la cabecera: no sale una petición de más.
   const mesas = useMesasAbiertas(filtro);
 
@@ -141,21 +150,29 @@ export function Comparativos() {
   const utilidadLista =
     (estadoA.data !== undefined || estadoA.isError) &&
     (cortadaB || estadoB.data !== undefined || estadoB.isError);
+  // La tasa tampoco tumba la tabla: si su consulta falla, su columna dice "no se pudo leer".
+  const tasaLista =
+    (tableroA.data !== undefined || tableroA.isError) &&
+    (tableroB.data !== undefined || tableroB.isError);
   const listas =
     resumenA.data !== undefined &&
     resumenB.data !== undefined &&
     sucA.data !== undefined &&
     sucB.data !== undefined &&
-    utilidadLista;
+    utilidadLista &&
+    tasaLista;
 
   const utilA = utilidadesDe(estadoA.isError ? undefined : estadoA.data, UTILIDAD_SIN_LECTURA);
   const utilB = cortadaB
     ? utilidadesDe(undefined, UTILIDAD_CORTADA)
     : utilidadesDe(estadoB.isError ? undefined : estadoB.data, UTILIDAD_SIN_LECTURA);
 
+  const tasaA = tasasDe(tableroA.isError ? undefined : tableroA.data, TASA_SIN_LECTURA);
+  const tasaB = tasasDe(tableroB.isError ? undefined : tableroB.data, TASA_SIN_LECTURA);
+
   const ordenadas: FilaOrdenada[] =
     listas && sucA.data && sucB.data
-      ? ordenar(armarFilas(sucA.data, sucB.data, utilA, utilB), orden)
+      ? ordenar(armarFilas(sucA.data, sucB.data, utilA, utilB, tasaA, tasaB), orden)
       : [];
 
   const exportar = () => {
@@ -292,8 +309,8 @@ export function Comparativos() {
                 )}
                 <TablaComparativos
                   total={{
-                    a: cifrasDeResumen(resumenA.data, utilA.total),
-                    b: cifrasDeResumen(resumenB.data, utilB.total),
+                    a: cifrasDeResumen(resumenA.data, utilA.total, tasaA.total),
+                    b: cifrasDeResumen(resumenB.data, utilB.total, tasaB.total),
                   }}
                   etiquetaTotal={sucursal ? `Total (${sucursal.nombre})` : 'Total del alcance'}
                   filas={ordenadas}
@@ -315,8 +332,8 @@ export function Comparativos() {
           <p className="mt-1 text-xs text-tinta-tenue" data-testid="nota-utilidad">
             {NOTA_UTILIDAD}
           </p>
-          <p className="mt-1 text-xs text-tinta-tenue" data-testid="nota-pendientes">
-            {NOTA_PENDIENTES}
+          <p className="mt-1 text-xs text-tinta-tenue" data-testid="nota-tasa">
+            {NOTA_TASA}
           </p>
         </Tarjeta>
       )}

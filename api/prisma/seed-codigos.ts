@@ -9,6 +9,7 @@ import {
   LONGITUD_CODIGO,
   type VigenciaCodigos,
 } from '../src/facturacion/codigo';
+import { formaPagoSat, type FormaPagoEnum } from '../src/facturacion/cfdi';
 import { uuidDe } from './seed-alertas';
 
 /**
@@ -19,7 +20,10 @@ import { uuidDe } from './seed-alertas';
  *   del seed sobre sucursales distintas (la demo y las fixtures de los tests) no chocan en la
  *   unique global. Dentro de una corrida, un `Set` descarta repetidos y prueba el siguiente
  *   intento.
- * - ~15 % quedan `facturado` (también por hash). Los de meses anteriores quedan `pendiente`
+ * - ~15 % quedan `facturado` (también por hash), SÓLO si el cheque se puede facturar en línea: su
+ *   forma de pago dominante tiene clave SAT (`cfdi.ts#formaPagoSat`; `otro` o sin pagos no, igual
+ *   que la emisión real, que da 422). Así cada `facturado` del seed tiene su CFDI (F2-106 los
+ *   siembra en `seed-cfdis.ts`) y ninguno queda huérfano. Los de meses anteriores quedan `pendiente`
  *   guardado y se leen `expirado` por su `expira_at` (el estado público se deriva al leer).
  *   `en_global` no se siembra: es de F2-108.
  * - `ejemplo` (opcional): el último cheque facturable de esa sucursal que siga vigente a las
@@ -38,6 +42,7 @@ export interface ChequeParaCodigo {
   cerradoAt: Date | null;
   cancelado: boolean;
   total: Prisma.Decimal;
+  pagos: ReadonlyArray<{ formaRaw: string; monto: Prisma.Decimal }>;
 }
 
 export interface OpcionesCodigos {
@@ -45,6 +50,8 @@ export interface OpcionesCodigos {
   zonas: ReadonlyMap<string, string>;
   vigencia: VigenciaCodigos;
   ahora: Date;
+  /** El catálogo de formas de pago de la empresa (texto de SR → forma), como en la emisión. */
+  catalogoFormas: ReadonlyMap<string, FormaPagoEnum>;
   ejemplo?: { sucursalId: string; codigo: string };
 }
 
@@ -116,7 +123,9 @@ export function generarCodigosSeed(
       usados.add(codigo);
     }
     const facturado =
-      c.id !== chequeEjemplo && bytes(`facturado:${c.id}`)[0] % 100 < PORCENTAJE_FACTURADO;
+      c.id !== chequeEjemplo &&
+      bytes(`facturado:${c.id}`)[0] % 100 < PORCENTAJE_FACTURADO &&
+      formaPagoSat(c.pagos, op.catalogoFormas) !== null;
     return {
       id: uuidDe(`codigo-facturacion:${c.id}`),
       codigo,

@@ -6825,3 +6825,112 @@ tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-191. Re
 
 **Qué haría distinto.** Escribir el e2e con Edit desde el principio y no con un script de reemplazos:
 el heredoc largo se rompió una vez y el script de Python otra.
+
+## 2026-09-23 09:30 — F2-106 · Dashboard de facturación
+**Estado:** CERRADA (PR de `feat/F2-106`, squash a main) con el AC nocturno de la tabla "Cierre nocturno de las
+tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190/F2-191. Revisor: plan bloqueado 1 vez
+(B1: los tests de cuadre comparaban el servicio consigo mismo; pidió cifras escritas a mano) y aprobado a la segunda.
+
+**Qué quedó hecho.**
+- **Helper de scope** (`api/src/scope/consulta-ventas.ts`): dos CTEs nuevas AL FINAL del `WITH`, con empresa
+  pedida + tenant en CADA tabla real (también en el `LEFT JOIN cheques` y en el `EXISTS` a `cfdis`):
+  `cfdis_periodo` (CFDI `vigente`/`cancelado` —nunca `timbrando`— cuyo `emitido_at` cae en el rango cortado en
+  la zona de SU sucursal, con `alturaAl`; `mes_local`, `hora_local`, receptor, `folio_ticket`) y
+  `codigos_ventas` (el código de cada cuenta de `ventas`; `con_cfdi` = hay CFDI `vigente` o reserva
+  `timbrando`). El snapshot "byte a byte" de siempre NO se regeneró: el test quita las dos CTEs y sus 12
+  parámetros, y un test aparte fija su texto y valores con scope empresa y global.
+- **API** (OpenAPI regenerado): `GET /facturacion/tablero` (cualquier rol: sólo agregados; lo usa también
+  Comparativos), `GET /facturacion/cfdis` (admins: receptores; búsqueda `q` literal con `strpos` en RFC,
+  UUID, serie-folio `A-12`/`A12`/`12` y folio del ticket, SÓLO dentro del rango; `estado`; paginada ≤ 200) y
+  `GET /facturacion/por-facturar` (admins: el código factura el ticket). `TableroFacturacionService`
+  (`api/src/facturacion/tablero.service.ts`) + lo puro en `tablero.ts`. La VENTA no se recalcula: es
+  `AgregadosVentasService.resumen`/`.comparativoSucursales` (FacturacionModule importa VentasModule).
+- **Seed** (`api/prisma/seed-cfdis.ts`, corre en `seed-ventas.ts` después de `sembrarFacturacion`): un CFDI
+  por código `facturado` de los cheques SEED, con XML/PDF del PAC falso guardados por `ARCHIVOS_IMPL`;
+  ~8 % cancelados; folios desde el mayor folio NO-seed + 1 y `folio_actual` del perfil sube a lo usado.
+  `seed-codigos.ts` ya no marca `facturado` una cuenta cuya forma dominante no tiene clave SAT (vales):
+  ningún `facturado` queda huérfano.
+- **Web**: `/facturacion` ahora es "Facturación" con pestañas `Tablero` (default) y `Datos fiscales`
+  (`?tab=datos`, lo de F2-100/F2-103 sin cambios). Tablero: 5 KPIs, barras por sucursal (venta vs
+  facturado + tasa), por mes y por hora, tabla de CFDI con búsqueda/estado/paginación, XML/PDF por el
+  endpoint autenticado (`pedirArchivo` nuevo en `api/cliente.ts`, mismo refresh que `pedir`), CSV de TODA
+  la búsqueda (pagina de a 200), "Por facturar" y "Correos por reenviar" (la UI del reintento de F2-105).
+  `/facturacion` entró a `VISTAS_CON_PERIODO`. Comparativos: métrica `tasaFacturacion` (A, B, Δ % y la
+  diferencia en puntos porcentuales, en `bigint` desde el texto de 4 decimales), su columna en el CSV,
+  y `NOTA_PENDIENTES` se reemplazó por `NOTA_TASA`.
+- `docs/esquema-sr.md` §2: bloque "El tablero de facturación (F2-106)" (la tasa hereda el supuesto de la
+  propina; la base emisión/cierre).
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` `api/src/facturacion/tablero.ts` (cabecera): **tasa = facturado por
+  fecha de EMISIÓN / venta por fecha de CIERRE**, mismo rango. Una sola base de fechas para todo lo del CFDI
+  (KPIs, barras, tabla). Puede pasar de 100 % y NO se recorta. **Para Ricardo:** la alternativa es la tasa
+  "por ticket" (lo facturado DE las cuentas del periodo, 0..100 %); cambiarla es tocar sólo el cuerpo SQL
+  por sucursal del servicio (unir los CFDI a `ventas` en vez de a `cfdis_periodo`) y el e2e.
+- Cancelaciones = CFDI emitidos en el periodo que HOY están cancelados (no hay `cancelado_at`; F2-109).
+- "Por facturar" = exactamente `estadoPublico() === 'pendiente'`: `con_cfdi` sólo cuenta `vigente` y
+  `timbrando`, porque un CFDI `cancelado` con el código `pendiente` vuelve a ser facturable (así lo dice
+  `codigo.ts#estadoPublico`). Un e2e compara rama por rama.
+- El tablero es de CUALQUIER rol (visor incluido: Comparativos lo usa para la tasa); tabla y por-facturar,
+  sólo admins. La ruta web `/facturacion` sigue siendo sólo de admins (menú sin cambios).
+- Los totales del tablero salen de la MISMA consulta de CFDI por sucursal, y si las sucursales de ventas y
+  de CFDI no coinciden el servicio TRUENA en vez de repartir cifras (lo pidió el revisor).
+- Seed: `folio_actual` del perfil se sube con `updateMany ... folioActual < ultimo` SIN tocar `updatedAt`
+  (es el seed; si un admin edita el perfil a la vez no se detecta, aceptable en desarrollo).
+- Las barras de mes/hora del tablero son propias (`tablero/graficas.tsx`): importar las de Reportes rompía
+  su carga diferida (aviso `INEFFECTIVE_DYNAMIC_IMPORT` del build).
+
+**Trampas que encontré.**
+- **La guardia del helper rechaza como alias el nombre de una tabla real**: `count(*) AS cfdis` truena
+  ("menciona la tabla real cfdis") y el endpoint da 500. Usa `num_cfdi` (y así quedó en `completar()`).
+  `cfdis_periodo` sí pasa (el `_` es carácter de palabra para `\b`).
+- El PAC falso toma `fechaTimbrado` del `Reloj` que se le pase: en el e2e, el MISMO `RelojControlado` para
+  la app y el PAC permite emitir por el POST real del portal en el instante exacto que se quiera. Con eso
+  el `emitido_at` es controlable sin tocar filas.
+- `America/Tijuana` es UTC−7 en septiembre/octubre (verano) y CDMX UTC−6 todo el año: mismo instante,
+  horas locales distintas. El e2e depende de eso; si se mueven las fechas a noviembre en adelante, recalcula.
+- Heredocs con `\(`, comillas o backticks se rompen en Git Bash (hasta con `<<'EOF'`, se rompió el de esta
+  misma nota): escribe el texto o el script a un archivo del scratchpad con la herramienta Write y
+  córrelo/concaténalo. Así se hicieron todas las ediciones de tests de esta tarea (`r'''...'''` en Python).
+- `prettier --write` sobre archivos CONCRETOS está bien (sólo formateó lo mío); sobre carpetas, no (F2-105).
+- `.wt-main/` sigue en la raíz sin seguimiento: nunca `git add -A`.
+
+**Qué quedó abierto.**
+- Decisión de la base de la tasa (arriba), para Ricardo.
+- **F2-109**: con `cancelado_at`, las cancelaciones deberían ubicarse por esa fecha; y decidir qué pasa con
+  el código al cancelar (el seed deja el código `facturado` con su CFDI `cancelado`).
+- **F2-107** (sin ticket): `cfdis_periodo` ya usa `LEFT JOIN cheques` (folio del ticket nulo = "—" en la
+  tabla); la marca `origen=manual` que pide F2-107 tiene que salir en la tabla del tablero.
+- La re-descarga desde el portal de un código ya facturado sigue siendo la decisión abierta (a)/(b) de F2-105.
+- Proceso: empecé a escribir el helper y el servicio ANTES de que el revisor aprobara el plan (mientras
+  revisaba); tras el bloqueo B1 se ajustó todo al plan aprobado (tenant explícito en EXISTS/LEFT JOIN,
+  `con_cfdi` sólo vigente/timbrando). Mejor esperar el veredicto: no costó retrabajo, pero pudo.
+
+**Tests.**
+- api nuevos: `facturacion/tablero.e2e.spec.ts` (23: cifras ESCRITAS A MANO sobre 12 cheques en CDMX y
+  Tijuana —ventas 3406.78/9, facturado 2350.00/4, cancelados 250.00/1, tasa 0.6898/0.6232/0.8500, porMes con
+  el 30/09 20:00 CDMX que en UTC ya es octubre, porHora con el mismo instante en 14 y 13, porFacturar
+  2/273.45—, filtro por sucursal, `alturaAl` que deja fuera un CFDI emitido después del corte, periodo vacío
+  con tasa nula, verificación extra contra `/ventas/resumen` y los 201 del portal, tabla con búsqueda por
+  RFC/UUID/serie-folio/ticket y `%`/`_` literales, estado y paginación, 400s, por-facturar rama por rama
+  contra `estadoPublico`, y alcance: admin B → 404, sucursal ajena → 404, admin_global 200, visor 200 en el
+  tablero y 403 en tabla/por-facturar en su empresa y en otra), `facturacion/tablero.spec.ts` (tasa con
+  mitad lejos de cero `1/32 = 0.0313`, meses, `completar`), `prisma/seed-cfdis.spec.ts` (11: uno por
+  facturado, total = cheque, fechas, folios, cancelados, determinismo, archivos, contra Postgres dos veces
+  = filas idénticas y `folio_actual`, almacenamiento que falla), `consulta-ventas.spec.ts` +4 (texto y
+  valores de las CTEs nuevas, guardia), `openapi.spec.ts` +1.
+- Adaptados (no aflojados): `seed-codigos.spec.ts` (opción `catalogoFormas` + caso nuevo),
+  `consulta-ventas.spec.ts` (el snapshot quita también las CTEs de F2-106), `openapi.spec.ts` (rutas).
+- web nuevos: `FacturacionTablero.test.tsx` (7), `facturacion/tablero/reglas.test.ts` (6), tasa en
+  `matriz.test.ts` (+4, incluido el borde +0.01 pp sobre 20 % = +0.1 %), `csv.test.ts` (+1),
+  `Comparativos.test.tsx` (+1 y tasa en los existentes). Adaptados al comportamiento nuevo:
+  `Facturacion.test.tsx` (`?tab=datos`), `vista.test.ts` (`/facturacion` con periodo), CSV y notas de
+  Comparativos (columnas nuevas).
+- Números: /api lint, typecheck y `prisma validate` limpios (sin migración: el índice `(empresa_id, emitido_at)` ya
+  existía); openapi regenerado. Jest completo **2086/2087** (120 suites), cero skips: el único rojo es el
+  preexistente de `prisma/esquema.spec.ts` ("al crear el admin…", FK de `suscripciones_reporte` del seed de
+  reportes en la base local, igual que en F2-104/F2-105), así que **NO es verde** en esta base local; esta tarea no
+  lo empeora. /web build (sin avisos nuevos) y lint limpios; vitest **1186/1186** (92 archivos).
+
+**Qué haría distinto.** Esperar el veredicto del revisor antes de escribir el helper, y escribir los scripts de
+edición a archivo desde el primer minuto (el heredoc de esta misma nota se rompió).

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { pesos } from '../../dinero/dinero';
+import { puntosPorcentuales, tasaTexto } from '../facturacion/tablero/reglas';
 import { diferenciaEnPesos, type Delta } from '../resumen/delta';
 import {
   deltaDe,
@@ -46,6 +47,10 @@ function Cifra({ c, m, testId }: { c: Cifras | null; m: Metrica; testId: string 
     } else {
       contenido = pesos(c.utilidad.importe);
     }
+  } else if (m === 'tasaFacturacion') {
+    // F2-106: nula = "—" con su porqué (sin venta o sin lectura), nunca 0 %.
+    contenido = tasaTexto(c.tasa.valor) ?? '—';
+    if (c.tasa.valor === null) titulo = c.tasa.razon ?? undefined;
   } else if (m === 'cuentas') {
     contenido = c.cuentas;
   } else {
@@ -63,11 +68,14 @@ function Cifra({ c, m, testId }: { c: Cifras | null; m: Metrica; testId: string 
 function CeldaDelta({
   d,
   dinero,
+  puntos = false,
   testId,
   aviso,
 }: {
   d: Delta;
   dinero: boolean;
+  /** La diferencia viene en diezmilésimas (tasa): se pinta en puntos porcentuales. */
+  puntos?: boolean;
   testId: string;
   /** Salvedad que el Δ no puede quitarse (comensales en 0 que quizá no se registraron). */
   aviso?: string;
@@ -83,7 +91,9 @@ function CeldaDelta({
     d.diferencia > 0n ? 'text-exito' : d.diferencia < 0n ? 'text-peligro' : 'text-tinta-suave';
   const diferencia = dinero
     ? diferenciaEnPesos(d.diferencia)
-    : `${d.diferencia > 0n ? '+' : ''}${d.diferencia}`;
+    : puntos
+      ? `${d.diferencia > 0n ? '+' : ''}${puntosPorcentuales(d.diferencia)} pp`
+      : `${d.diferencia > 0n ? '+' : ''}${d.diferencia}`;
   return (
     <td className={`${NUM} ${color}`} data-testid={testId} title={aviso}>
       <div className="font-medium">{d.porcentaje}</div>
@@ -118,6 +128,7 @@ function MetricaCeldas({
       <CeldaDelta
         d={deltaDe(fila, m)}
         dinero={dinero}
+        puntos={m === 'tasaFacturacion'}
         testId={`${m}-delta`}
         // Con 0 comensales en A el Δ sale −100 %, pero ese 0 puede ser "no se registraron".
         aviso={

@@ -314,7 +314,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'administracion.facturacion',
         texto: 'Facturación',
         icono: FileCheck,
-        // F2-100: datos fiscales y CSD. El dashboard (F2-106) se suma a esta misma vista.
+        // F2-100: datos fiscales y CSD; F2-106: el tablero, pestaña por defecto de la vista.
         destino: { ruta: '/facturacion' },
         roles: ROLES_ADMIN,
       },

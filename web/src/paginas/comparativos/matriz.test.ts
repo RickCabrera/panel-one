@@ -5,7 +5,11 @@ import {
   armarFilas,
   deltaDe,
   ordenar,
+  sinTasa,
   sinUtilidad,
+  TASA_SIN_LECTURA,
+  TASA_SIN_VENTA,
+  tasasDe,
   UTILIDAD_CORTADA,
   UTILIDAD_SIN_COSTO,
   UTILIDAD_SIN_LECTURA,
@@ -14,6 +18,7 @@ import {
   type Cifras,
   type FilaComparada,
   type Orden,
+  type TasaFacturacion,
   type Utilidad,
 } from './matriz';
 
@@ -34,8 +39,9 @@ function cif(
   ticket: string | null,
   comensales: number,
   utilidad: Utilidad = sinUtilidad(UTILIDAD_SIN_COSTO),
+  tasa: TasaFacturacion = sinTasa(TASA_SIN_LECTURA),
 ): Cifras {
-  return { venta, cuentas, ticketPromedio: ticket, comensales, utilidad };
+  return { venta, cuentas, ticketPromedio: ticket, comensales, utilidad, tasa };
 }
 
 const util = (importe: string, sobrestimada = false): Utilidad => ({
@@ -329,5 +335,73 @@ describe('utilidad (F2-126)', () => {
     );
     expect(ids(r)).toEqual(['3', '1', '2']);
     expect(posiciones(r)).toEqual([1, 2, null]);
+  });
+});
+
+describe('tasa de facturación (F2-106)', () => {
+  const t = (valor: string | null): TasaFacturacion =>
+    valor === null ? sinTasa(TASA_SIN_VENTA) : { valor, razon: null };
+  const c = (tasa: TasaFacturacion) => cif('10.00', 1, '10.00', 1, undefined, tasa);
+
+  it('se lee en diezmilésimas desde el texto de 4 decimales (sin float)', () => {
+    expect(valor(c(t('0.6898')), 'tasaFacturacion')).toBe(6898n);
+    expect(valor(c(t('1.2500')), 'tasaFacturacion')).toBe(12500n);
+    expect(valor(c(t(null)), 'tasaFacturacion')).toBeNull();
+    // Sin cuentas en el periodo no hay cifra, aunque la tasa viniera.
+    expect(valor(cif('0.00', 0, null, 0, undefined, t('0.5000')), 'tasaFacturacion')).toBeNull();
+  });
+
+  it('Δ en el borde de redondeo: +1 diezmilésima sobre 0.2000 = +0.05 % → "+0.1 %"', () => {
+    const d = deltaDe(fila('1', 'C', c(t('0.2001')), c(t('0.2000'))), 'tasaFacturacion');
+    expect(d).toEqual({ tipo: 'cambio', diferencia: 1n, porcentaje: '+0.1 %' });
+    const baja = deltaDe(fila('1', 'C', c(t('0.6773')), c(t('0.6898'))), 'tasaFacturacion');
+    expect(baja).toEqual({ tipo: 'cambio', diferencia: -125n, porcentaje: '-1.8 %' });
+  });
+
+  it('sin tasa en un lado: "—" con el porqué de ese lado; base 0 sin Δ %', () => {
+    expect(deltaDe(fila('1', 'C', c(t(null)), c(t('0.5000'))), 'tasaFacturacion')).toEqual({
+      tipo: 'sinBase',
+      razon: `Periodo A: ${TASA_SIN_VENTA}`,
+    });
+    expect(deltaDe(fila('1', 'C', c(t('0.5000')), c(t(null))), 'tasaFacturacion')).toEqual({
+      tipo: 'sinBase',
+      razon: `Periodo B: ${TASA_SIN_VENTA}`,
+    });
+    expect(deltaDe(fila('1', 'C', c(t('0.5000')), c(t('0.0000'))), 'tasaFacturacion').tipo).toBe(
+      'sinBase',
+    );
+  });
+
+  it('tasasDe: la del API por sucursal y total; sin tablero = nula con razón, nunca 0', () => {
+    const sinTablero = tasasDe(undefined, TASA_SIN_LECTURA);
+    expect(sinTablero.total).toEqual(sinTasa(TASA_SIN_LECTURA));
+    expect(sinTablero.deSucursal('x')).toEqual(sinTasa(TASA_SIN_LECTURA));
+    const suc = (id: string, tasa: string | null) => ({
+      sucursalId: id,
+      nombre: id,
+      venta: '1.00',
+      cuentas: 1,
+      facturado: '0.00',
+      cfdis: 0,
+      cancelados: { monto: '0.00', cfdis: 0 },
+      tasa,
+    });
+    const tasas = tasasDe(
+      {
+        ventas: { venta: '2.00', cuentas: 2 },
+        facturado: { monto: '1.00', cfdis: 1 },
+        cancelados: { monto: '0.00', cfdis: 0 },
+        tasa: '0.5000',
+        porFacturar: { cuentas: 0, monto: '0.00' },
+        porSucursal: [suc('1', '1.0000'), suc('2', null)],
+        porMes: [],
+        porHora: [],
+      },
+      TASA_SIN_LECTURA,
+    );
+    expect(tasas.total).toEqual(t('0.5000'));
+    expect(tasas.deSucursal('1')).toEqual(t('1.0000'));
+    expect(tasas.deSucursal('2')).toEqual(sinTasa(TASA_SIN_VENTA));
+    expect(tasas.deSucursal('3')).toEqual(sinTasa(TASA_SIN_LECTURA));
   });
 });

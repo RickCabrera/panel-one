@@ -4,10 +4,13 @@ import { BOM, ErrorCsv } from '../../csv/csv';
 import { comparativosACsv, ENCABEZADOS_COMPARATIVOS, nombreCsvComparativos } from './csv';
 import {
   ordenar,
+  sinTasa,
   sinUtilidad,
+  TASA_SIN_LECTURA,
   UTILIDAD_SIN_COSTO,
   type Cifras,
   type FilaComparada,
+  type TasaFacturacion,
   type Utilidad,
 } from './matriz';
 
@@ -17,12 +20,14 @@ const cif = (
   ticket: string | null,
   comensales: number,
   utilidad: Utilidad = sinUtilidad(UTILIDAD_SIN_COSTO),
+  tasa: TasaFacturacion = sinTasa(TASA_SIN_LECTURA),
 ): Cifras => ({
   venta,
   cuentas,
   ticketPromedio: ticket,
   comensales,
   utilidad,
+  tasa,
 });
 const util = (importe: string, sobrestimada = false): Utilidad => ({
   importe,
@@ -63,6 +68,10 @@ describe('comparativosACsv', () => {
       'Utilidad B',
       'Δ Utilidad',
       'Δ Utilidad %',
+      'Tasa de facturación A',
+      'Tasa de facturación B',
+      'Δ Tasa de facturación',
+      'Δ Tasa de facturación %',
     ]);
   });
 
@@ -79,12 +88,12 @@ describe('comparativosACsv', () => {
     expect(csv.startsWith(BOM)).toBe(true);
     expect(lineas(csv)).toEqual([
       ENCABEZADOS_COMPARATIVOS.join(','),
-      // Utilidad sin costo en los dos periodos: sus cuatro celdas vacías, nunca 0.
-      '1,Centro,1100.00,1000.00,100.00,10.0,11,8,3,37.5,100.00,125.00,-25.00,-20.0,20,20,0,0.0,,,,',
-      '2,Sur,900.00,1000.00,-100.00,-10.0,9,10,-1,-10.0,100.00,100.00,0.00,0.0,0,10,-10,-100.0,,,,',
+      // Utilidad sin costo y tasa sin lectura en los dos periodos: sus celdas vacías, nunca 0.
+      '1,Centro,1100.00,1000.00,100.00,10.0,11,8,3,37.5,100.00,125.00,-25.00,-20.0,20,20,0,0.0,,,,,,,,',
+      '2,Sur,900.00,1000.00,-100.00,-10.0,9,10,-1,-10.0,100.00,100.00,0.00,0.0,0,10,-10,-100.0,,,,,,,,',
       // Sin cuentas en A: celdas de A y todos los Δ vacíos, sin posición; el nombre que empieza
       // como fórmula se neutraliza.
-      ",'=Norte,,500.00,,,,5,,,,100.00,,,,0,,,,,,",
+      ",'=Norte,,500.00,,,,5,,,,100.00,,,,0,,,,,,,,,,",
       '',
     ]);
   });
@@ -104,8 +113,28 @@ describe('comparativosACsv', () => {
     );
     const utilidades = lineas(comparativosACsv(filas))
       .slice(1, 4)
-      .map((l) => l.split(',').slice(-4).join(','));
+      .map((l) => l.split(',').slice(-8, -4).join(','));
     expect(utilidades).toEqual(['250.00,200.00,50.00,25.0', '-5.50,-10.00,,', ',100.00,,']);
+  });
+
+  it('tasa de facturación (F2-106): en %, Δ en puntos y Δ % exactos (sin float), nula = vacía', () => {
+    const t = (valor: string | null): TasaFacturacion =>
+      valor === null ? sinTasa('Sin venta en el periodo.') : { valor, razon: null };
+    const c = (tasa: TasaFacturacion) => cif('10.00', 1, '10.00', 1, undefined, tasa);
+    const filas = ordenar(
+      [
+        fila('1', 'Centro', c(t('0.6898')), c(t('0.6773'))),
+        // Borde de redondeo: +0.01 pp sobre 20 % = +0.05 % exacto → "0.1" (mitad lejos de cero).
+        fila('2', 'Norte', c(t('0.2001')), c(t('0.2000'))),
+        // Sin venta en B: B vacío y sin Δ.
+        fila('3', 'Sur', c(t('1.2500')), c(t(null))),
+      ],
+      'tasaFacturacion',
+    );
+    const tasas = lineas(comparativosACsv(filas))
+      .slice(1, 4)
+      .map((l) => l.split(',').slice(-4).join(','));
+    expect(tasas).toEqual(['125.00,,,', '68.98,67.73,1.25,1.8', '20.01,20.00,0.01,0.1']);
   });
 
   it('un importe ilegible detiene el archivo con un mensaje claro', () => {

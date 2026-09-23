@@ -32,6 +32,11 @@ import { sembrarExistencias } from './seed-existencias';
 import { CODIGO_EJEMPLO, VIGENCIA_DEFAULT } from '../src/facturacion/codigo';
 import { generarCodigosSeed } from './seed-codigos';
 import { sembrarFacturacion, sembrarPortales } from './seed-facturacion';
+import { sembrarCfdis } from './seed-cfdis';
+import { crearArchivos } from '../src/adaptadores/adaptadores.module';
+import type { PuertoArchivos } from '../src/adaptadores/archivos/puerto';
+import { leerAdaptadoresConfig } from '../src/adaptadores/config';
+import { Reloj } from '../src/comun/reloj';
 import { sembrarGastos } from './seed-gastos';
 import { sembrarMovimientos } from './seed-movimientos';
 import { sembrarRecetas } from './seed-recetas';
@@ -165,6 +170,10 @@ export const CATALOGO_SEED: ReadonlyArray<{ formaRaw: string; forma: FormaPago }
   { formaRaw: 'TRANSFERENCIA', forma: FormaPago.transferencia },
 ];
 export const FORMA_SIN_CATALOGO = 'VALES DESPENSA';
+/** `CATALOGO_SEED` como mapa: la regla "¿se factura en línea?" de los códigos y CFDI del seed. */
+export const CATALOGO_FORMAS_SEED: ReadonlyMap<string, FormaPago> = new Map(
+  CATALOGO_SEED.map((f) => [f.formaRaw, f.forma]),
+);
 
 /** UUID determinista: sucursal + tipo (0 cheque, 1 partida, 2 pago) + contador. */
 function idSeed(sucursalId: string, tipo: number, n: number): string {
@@ -434,6 +443,7 @@ export async function sembrarVentas(
         : VIGENCIA_DEFAULT,
     ahora: op.ahora ?? new Date(),
     ejemplo: op.ejemploFacturacion,
+    catalogoFormas: CATALOGO_FORMAS_SEED,
   });
 
   await prisma.$transaction(
@@ -656,6 +666,36 @@ async function main(): Promise<void> {
       `Datos fiscales sembrados (F2-100): perfil ${facturacion.perfil}, ` +
         `${facturacion.receptores} receptores frecuentes.`,
     );
+    // CFDI (F2-106): uno por código `facturado` del seed, con el PAC falso, y sus XML/PDF por el
+    // almacenamiento que diga `ARCHIVOS_IMPL` (el mismo que usa la app).
+    let archivos: PuertoArchivos | null = null;
+    try {
+      archivos = crearArchivos(leerAdaptadoresConfig(), new Reloj());
+    } catch (e) {
+      console.warn(
+        `AVISO: no se pudo armar el almacenamiento de archivos (${(e as Error).message}); los ` +
+          'CFDI del seed quedan SIN XML ni PDF.',
+      );
+    }
+    const cfdis = await sembrarCfdis(prisma, {
+      empresaId: op.empresaId,
+      prefijo: PREFIJO_SEED,
+      ahora,
+      catalogoFormas: CATALOGO_FORMAS_SEED,
+      archivos,
+    });
+    if (cfdis.sinPerfil) {
+      console.warn('AVISO: la empresa demo no tiene perfil fiscal: no se sembraron CFDI (F2-106).');
+    } else {
+      console.log(
+        `CFDI sembrados (F2-106): ${cfdis.cfdis}, ${cfdis.cancelados} cancelados (PAC falso).`,
+      );
+      if (cfdis.sinArchivos > 0) {
+        console.warn(
+          `AVISO: ${cfdis.sinArchivos} CFDI del seed quedaron SIN XML/PDF (falló el almacenamiento).`,
+        );
+      }
+    }
     // Portales de autofactura (F2-103): enlace y color por sucursal; Centro con logo sintético.
     const portales = await sembrarPortales(prisma, {
       empresaId: op.empresaId,

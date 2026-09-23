@@ -1669,3 +1669,95 @@ export interface SucursalPortal {
     actualizadoAt: string;
   } | null;
 }
+
+// ---------------------------------------------------------------------------
+// F2-106 · Tablero de facturación (`/facturacion/tablero`, `/cfdis`, `/por-facturar`)
+// ---------------------------------------------------------------------------
+
+export interface CifrasCfdi {
+  monto: Importe;
+  cfdis: number;
+}
+
+/** `SucursalTableroDto`. `tasa` con 4 decimales (`"0.6232"`), null sin venta positiva. */
+export interface SucursalTablero {
+  sucursalId: string;
+  nombre: string;
+  venta: Importe;
+  cuentas: number;
+  facturado: Importe;
+  cfdis: number;
+  cancelados: CifrasCfdi;
+  tasa: string | null;
+}
+
+/** `TableroFacturacionDto`. Lo facturado va por fecha de EMISIÓN; la venta, por cierre. */
+export interface TableroFacturacion {
+  ventas: { venta: Importe; cuentas: number };
+  facturado: CifrasCfdi;
+  cancelados: CifrasCfdi;
+  tasa: string | null;
+  porFacturar: { cuentas: number; monto: Importe };
+  porSucursal: SucursalTablero[];
+  porMes: Array<{ mes: string; facturado: Importe; cfdis: number }>;
+  porHora: Array<{ hora: number; facturado: Importe; cfdis: number }>;
+}
+
+export type EstadoCfdiEmitido = 'vigente' | 'cancelado';
+
+/** `CfdiFilaDto`. */
+export interface CfdiFila {
+  id: string;
+  uuid: string;
+  serieFolio: string;
+  sucursalId: string;
+  sucursal: string;
+  receptorRfc: string;
+  receptorNombre: string;
+  total: Importe;
+  estado: EstadoCfdiEmitido;
+  emitidoAt: string;
+  folioTicket: string | null;
+  xml: boolean;
+  pdf: boolean;
+}
+
+export interface PaginaCfdis {
+  total: number;
+  pagina: number;
+  porPagina: number;
+  cfdis: CfdiFila[];
+}
+
+/** `CuentaPorFacturarDto`. */
+export interface CuentaPorFacturar {
+  chequeId: string;
+  folio: string;
+  sucursalId: string;
+  sucursal: string;
+  cerradoAt: string;
+  total: Importe;
+  codigo: string;
+  expiraAt: string;
+}
+
+export interface PaginaPorFacturar {
+  total: number;
+  monto: Importe;
+  pagina: number;
+  porPagina: number;
+  cuentas: CuentaPorFacturar[];
+}
+
+/** `EnvioCfdiDto` (F2-105): la bitácora del correo de un CFDI. */
+export interface EnvioCfdi {
+  cfdiId: string;
+  uuid: string;
+  serieFolio: string;
+  email: string;
+  estado: 'enviando' | 'enviado' | 'fallido';
+  requiereReintento: boolean;
+  intentos: number;
+  error: string | null;
+  ultimoIntentoAt: string;
+}

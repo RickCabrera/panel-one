@@ -10,6 +10,9 @@ import { ArchivosPublicosController, EntregaController } from './entrega.control
 import { EntregaCfdiService } from './entrega.service';
 import { PortalesAdminController, PortalPublicoController } from './portal.controller';
 import { PortalFacturacionService } from './portal.service';
+import { TableroFacturacionController } from './tablero.controller';
+import { TableroFacturacionService } from './tablero.service';
+import { VentasModule } from '../ventas/ventas.module';
 
 /**
  * Facturación (Epic 8). F2-100: datos fiscales de la empresa y carga del CSD contra
@@ -18,10 +21,13 @@ import { PortalFacturacionService } from './portal.service';
  * facturación y la regla de vigencia por empresa (los códigos los crea la ingesta). F2-103: el
  * portal público de autofactura y su configuración por sucursal; la emisión va por
  * `EMISION_PORTAL`. F2-104: la emisión del CFDI (`CfdiService`) es ese puerto. F2-105: la entrega
- * (`EntregaCfdiService`): archivos, correo con bitácora y reintento, y las descargas.
+ * (`EntregaCfdiService`): archivos, correo con bitácora y reintento, y las descargas. F2-106: el
+ * tablero (`TableroFacturacionService`), que lee la venta de `VentasModule`.
  */
 @Module({
+  imports: [VentasModule],
   controllers: [
+    TableroFacturacionController,
     FacturacionController,
     CodigoFacturacionPublicoController,
     PortalPublicoController,
@@ -35,6 +41,7 @@ import { PortalFacturacionService } from './portal.service';
     PortalFacturacionService,
     CfdiService,
     EntregaCfdiService,
+    TableroFacturacionService,
     Espera,
     { provide: EMISION_PORTAL, useExisting: CfdiService },
   ],

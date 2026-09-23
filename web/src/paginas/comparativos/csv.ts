@@ -1,4 +1,5 @@
 import type { Rango } from '../../filtros/periodo';
+import { aDiezmilesimas, puntosPorcentuales } from '../facturacion/tablero/reglas';
 import { armarCsv, centavosCsv, ErrorCsv, importeCsv, nombreCsv, texto } from '../../csv/csv';
 import {
   deltaDe,
@@ -19,6 +20,8 @@ import {
  *   posición de quien quedó fuera del ranking.
  * - Δ con signo `-` sólo en negativos; Δ % como número sin `%` (`12.3`, `-4.0`, `0.0`).
  * - Utilidad (F2-126): la de operación del API; sin utilidad = celda vacía, igual que sin datos.
+ * - Tasa de facturación (F2-106): en porcentaje sin `%` (`68.98`) y su Δ en puntos porcentuales
+ *   (`-1.25`); sin tasa = celda vacía.
  */
 
 export const ENCABEZADOS_COMPARATIVOS: readonly string[] = [
@@ -50,6 +53,14 @@ function cifra(c: Cifras | null, m: Metrica, sucursal: string): string {
       // Sin utilidad (sin costo, cortada o ilegible) = celda VACÍA, nunca 0.
       if (c.utilidad.importe === null) return '';
       return importeCsv(c.utilidad.importe, invalido(c.utilidad.importe));
+    case 'tasaFacturacion': {
+      if (c.tasa.valor === null) return '';
+      const d = aDiezmilesimas(c.tasa.valor);
+      if (d === null) {
+        throw new ErrorCsv(`La sucursal ${sucursal} trae una tasa inválida ("${c.tasa.valor}").`);
+      }
+      return puntosPorcentuales(d);
+    }
   }
 }
 
@@ -72,7 +83,11 @@ export function comparativosACsv(filas: readonly FilaOrdenada[]): string {
         return [
           a,
           b,
-          dinero ? centavosCsv(d.diferencia) : d.diferencia.toString(),
+          dinero
+            ? centavosCsv(d.diferencia)
+            : metrica === 'tasaFacturacion'
+              ? puntosPorcentuales(d.diferencia)
+              : d.diferencia.toString(),
           porcentajeCsv(d.porcentaje),
         ];
       }),

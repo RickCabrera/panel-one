@@ -37,8 +37,9 @@ async function enviar(
   ruta: string,
   opciones: OpcionesPedir,
   token: string | null,
+  acepta = 'application/json',
 ): Promise<Response> {
-  const encabezados: Record<string, string> = { Accept: 'application/json' };
+  const encabezados: Record<string, string> = { Accept: acepta };
   if (token) encabezados.Authorization = `Bearer ${token}`;
   if (opciones.body !== undefined) encabezados['Content-Type'] = 'application/json';
   try {
@@ -91,7 +92,23 @@ function disparaRefresh(ruta: string): boolean {
  * API dice que ya no hay sesión, la sesión expira y se lanza `ErrorApi(401)`.
  */
 export async function pedir<T>(ruta: string, opciones: OpcionesPedir = {}): Promise<T> {
-  let respuesta = await enviar(ruta, opciones, tokenActual());
+  const respuesta = await responder(ruta, opciones, 'application/json');
+  if (respuesta.status === 204) return undefined as T;
+  return (await respuesta.json()) as T;
+}
+
+/**
+ * Un archivo de la API (F2-106: el XML o el PDF de un CFDI) con la misma sesión y el mismo
+ * refresh que `pedir`. Devuelve los bytes; el que llama decide cómo guardarlos.
+ */
+export async function pedirArchivo(ruta: string, opciones: OpcionesPedir = {}): Promise<Blob> {
+  const respuesta = await responder(ruta, opciones, '*/*');
+  return respuesta.blob();
+}
+
+/** El request con refresh ante 401 (ver `pedir`). Lanza `ErrorApi` si la respuesta no es ok. */
+async function responder(ruta: string, opciones: OpcionesPedir, acepta: string): Promise<Response> {
+  let respuesta = await enviar(ruta, opciones, tokenActual(), acepta);
 
   if (respuesta.status === 401 && disparaRefresh(ruta)) {
     let sesion;
@@ -104,10 +121,9 @@ export async function pedir<T>(ruta: string, opciones: OpcionesPedir = {}): Prom
       if (tokenActual() !== null) terminarSesion('expirada');
       throw new ErrorApi(401, 'Tu sesión expiró.');
     }
-    respuesta = await enviar(ruta, opciones, sesion.accessToken);
+    respuesta = await enviar(ruta, opciones, sesion.accessToken, acepta);
   }
 
   if (!respuesta.ok) throw await errorDe(respuesta);
-  if (respuesta.status === 204) return undefined as T;
-  return (await respuesta.json()) as T;
+  return respuesta;
 }

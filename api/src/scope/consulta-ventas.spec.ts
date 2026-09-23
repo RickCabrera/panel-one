@@ -59,6 +59,21 @@ const COLUMNAS_F2_222: ReadonlyArray<readonly [string, string]> = [
 const CTES_F2_222 =
   /,\n {2}partidas_empresa AS \([\s\S]*?\n {2}\),\n {2}pagos_empresa AS \([\s\S]*?\n {2}\)(?= SELECT )/;
 
+/**
+ * Las dos CTEs de F2-106 (tablero de facturación), también AL FINAL del `WITH`, con sus 12
+ * parámetros al final (scope empresa, sin sucursal ni `alturaAl`). Se quitan del snapshot y su
+ * filtro de tenant se prueba aparte, texto y valores.
+ */
+const CTES_F2_106 =
+  /,\n {2}cfdis_periodo AS \([\s\S]*?\n {2}\),\n {2}codigos_ventas AS \([\s\S]*?\n {2}\)(?= SELECT )/;
+const PARAMS_F2_106 = 12;
+
+function sinF2106(texto: string): string {
+  const resto = texto.replace(/\r\n/g, '\n');
+  expect(resto.split(CTES_F2_106)).toHaveLength(2);
+  return resto.replace(CTES_F2_106, '');
+}
+
 function sinF2222(texto: string): string {
   let resto = texto.replace(/\r\n/g, '\n');
   for (const [columnas, queda] of COLUMNAS_F2_222) {
@@ -239,9 +254,16 @@ describe('alturaAl (F2-220)', () => {
     // 4 parámetros también al final: se quitan, y lo demás sigue siendo el snapshot de siempre.
     // F2-232 sólo agregó `cliente_origen_sr_id` a las columnas: también se quita.
     // F2-233 sólo agregó `area_origen_sr_id` a `ventas`: también se quita.
-    expect(sinColumnasF2221(sinF2222(sinF2232(sinF2233(armado.sql))))).toMatchSnapshot();
-    expect(armado.values.slice(0, -4)).toMatchSnapshot();
-    expect(armado.values.slice(-4)).toEqual([FX.empresaA, FX.empresaA, FX.empresaA, FX.empresaA]);
+    // F2-106 agregó dos CTEs AL FINAL (`cfdis_periodo`, `codigos_ventas`) con sus 12 parámetros
+    // también al final: se quitan igual.
+    expect(sinColumnasF2221(sinF2222(sinF2232(sinF2233(sinF2106(armado.sql)))))).toMatchSnapshot();
+    expect(armado.values.slice(0, -4 - PARAMS_F2_106)).toMatchSnapshot();
+    expect(armado.values.slice(-4 - PARAMS_F2_106, -PARAMS_F2_106)).toEqual([
+      FX.empresaA,
+      FX.empresaA,
+      FX.empresaA,
+      FX.empresaA,
+    ]);
   });
 
   // Las CTEs nuevas se quitan del snapshot: su filtro de tenant se prueba AQUÍ, texto y valores,
@@ -289,6 +311,98 @@ describe('alturaAl (F2-220)', () => {
         expect(cuerpo).toMatch(new RegExp(`WHERE ${a}\\.empresa_id = \\?::uuid\\s*$`));
       }
       expect(armado.values.slice(-2)).toEqual([FX.empresaA, FX.empresaA]);
+    });
+  });
+
+  describe('CTEs de F2-106 (cfdis_periodo, codigos_ventas)', () => {
+    async function textoCon(
+      scope: EmpresaScope,
+      filtro: FiltroVentas = ok,
+    ): Promise<{ texto: string; valores: unknown[] }> {
+      let capturado: Prisma.Sql | undefined;
+      const consulta = new ConsultaVentas(
+        (armado) => {
+          capturado = armado;
+          return Promise.resolve([]);
+        },
+        scope,
+        filtro,
+      );
+      await consulta.consultar(sql('SELECT 1 FROM ventas'));
+      return { texto: capturado!.sql.replace(/\r\n/g, '\n'), valores: capturado!.values };
+    }
+    const cuerpoDe = (texto: string, cte: string) =>
+      new RegExp(`\\n {2}${cte} AS \\(([\\s\\S]*?)\\n {2}\\)`).exec(texto)![1];
+
+    it('cfdis_periodo: empresa pedida + tenant en cfdis Y en cheques, sólo emitidos, rango local', async () => {
+      const { texto, valores } = await textoCon(A);
+      const cuerpo = cuerpoDe(texto, 'cfdis_periodo');
+      expect(cuerpo).toContain('FROM cfdis f\n');
+      expect(cuerpo).toContain(
+        'JOIN sucursales_alcance s ON s.id = f.sucursal_id AND s.empresa_id = f.empresa_id',
+      );
+      expect(cuerpo).toContain(
+        'LEFT JOIN cheques c ON c.id = f.cheque_id AND c.empresa_id = f.empresa_id\n' +
+          '      AND c.empresa_id = ?::uuid AND c.empresa_id = ?::uuid\n',
+      );
+      expect(cuerpo).toMatch(/WHERE f\.empresa_id = \?::uuid AND f\.empresa_id = \?::uuid\s/);
+      // Una reserva `timbrando` NUNCA entra.
+      expect(cuerpo).toContain("AND f.estado IN ('vigente', 'cancelado')");
+      expect(cuerpo).toContain('f.emitido_at >= (?::date::timestamp AT TIME ZONE s.zona_horaria)');
+      expect(valores.slice(-PARAMS_F2_106, -4)).toEqual([
+        FX.empresaA,
+        FX.empresaA,
+        FX.empresaA,
+        FX.empresaA,
+        ok.desde,
+        ok.hasta,
+        ok.desde,
+        ok.hasta,
+      ]);
+    });
+
+    it('codigos_ventas: tenant en codigos_facturacion y en el EXISTS a cfdis (sólo timbrando/vigente)', async () => {
+      const { texto, valores } = await textoCon(A);
+      const cuerpo = cuerpoDe(texto, 'codigos_ventas');
+      expect(cuerpo).toContain('FROM codigos_facturacion k\n');
+      expect(cuerpo).toContain(
+        'JOIN ventas v ON v.id = k.cheque_id AND v.empresa_id = k.empresa_id',
+      );
+      expect(cuerpo).toMatch(/WHERE k\.empresa_id = \?::uuid AND k\.empresa_id = \?::uuid$/);
+      expect(cuerpo).toContain(
+        'AND x.empresa_id = ?::uuid AND x.empresa_id = ?::uuid\n' +
+          "               AND x.estado IN ('timbrando', 'vigente')",
+      );
+      expect(valores.slice(-4)).toEqual([FX.empresaA, FX.empresaA, FX.empresaA, FX.empresaA]);
+    });
+
+    it('con scope global sólo va la empresa pedida (sin tenant); con sucursal, se filtra f', async () => {
+      const { texto, valores } = await textoCon(
+        { tipo: 'global' },
+        { ...ok, sucursalId: FX.sucursalA1 },
+      );
+      const cfdis = cuerpoDe(texto, 'cfdis_periodo');
+      expect(cfdis).toMatch(/AND c\.empresa_id = \?::uuid\s*\n/);
+      expect(cfdis).toMatch(/WHERE f\.empresa_id = \?::uuid\s+AND f\.sucursal_id = \?::uuid/);
+      expect(cuerpoDe(texto, 'codigos_ventas')).toMatch(/WHERE k\.empresa_id = \?::uuid\s*$/);
+      // cheques(1) + cfdis(1) + sucursal(1) + 4 fechas + EXISTS(1) + codigos(1) = 9.
+      expect(valores.slice(-9)).toEqual([
+        FX.empresaA,
+        FX.empresaA,
+        FX.sucursalA1,
+        ok.desde,
+        ok.hasta,
+        ok.desde,
+        ok.hasta,
+        FX.empresaA,
+        FX.empresaA,
+      ]);
+    });
+
+    it('la guardia deja leer cfdis_periodo (no es la tabla real `cfdis`) y sigue rechazando la tabla', () => {
+      expect(() => guardiaCuerpo(sql('SELECT count(*) FROM cfdis_periodo'))).not.toThrow();
+      expect(() => guardiaCuerpo(sql('SELECT count(*) FROM cfdis'))).toThrow(/tabla real/);
+      expect(() => guardiaCuerpo(sql('SELECT 1 FROM codigos_facturacion'))).toThrow(/tabla real/);
     });
   });
 
