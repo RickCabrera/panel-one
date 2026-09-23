@@ -96,6 +96,15 @@ comprobó en el e2e). Por eso el gateway lleva su propio guard.
 - **Sin tope de sockets por usuario.** Cada pestaña abre los suyos (uno por alcance). No
   hay rate limit de conexiones. Aceptable para el volumen actual; revisar en F2-250 si hace
   falta.
+- **`suscribir` sin límite de frecuencia.** Cada mensaje hace hasta dos consultas a Postgres
+  (`verificarAlcance`), y un usuario autenticado podría mandarlos en ráfaga. El riesgo es
+  bajo. Si hace falta, se agrega un tope por socket (F2-250).
+- **El logout no cierra un socket ya abierto.** Sigue recibiendo avisos (sólo ids y booleanos)
+  hasta que vence su access token (≤ 15 min). HTTP hace lo mismo: el access token no se
+  revoca, sólo el refresh. No es una regresión. El cliente propio sí cierra el socket al
+  terminar la sesión.
+- **Detalle:** si la sesión vence justo entre el guard y el handler, `suscribir` contesta "No
+  encontrado" y no "No autenticado". No filtra nada.
 - **Producción sin verificar.** El upgrade a WebSocket detrás de Caddy (`handle_path /api/*`
   + `reverse_proxy`, que lo soporta sin config extra) y la CSP `connect-src 'self'` (que en
   navegadores CSP3 cubre `wss:` al mismo host) no se han probado. Si el upgrade falla,

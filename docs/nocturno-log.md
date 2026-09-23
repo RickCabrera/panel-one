@@ -7593,3 +7593,101 @@ VALIDACIÓN REAL:** ver F2-192 · **Las dos decisiones de canal SIGUEN ABIERTAS 
 
 **Qué haría distinto.** Nada grande: el endpoint de F2-233 ya daba todo, la tarea era de vista y
 de spike. Leer primero `comparativos/periodoB.ts` ahorra reinventar el periodo B.
+
+## 2026-09-23 08:05 — F2-142 · Tiempo real en el monitor (WebSocket)
+**Estado:** CERRADA al mergear el PR de `feat/F2-142` (squash a main), con el AC nocturno de la tabla "Cierre
+nocturno de las heredadas".
+
+**Qué quedó hecho.**
+- **api** (`api/src/tiempo-real/`): gateway socket.io en `/socket.io` (`@nestjs/websockets` +
+  `@nestjs/platform-socket.io` 11.2.6, `socket.io` 4.8.3).
+  - **Handshake:** exige el MISMO access token en `auth.token`, verificado con
+    `TokensService.verificarAccessConVencimiento` (nuevo; `verificarAccess` delega en él). Si no pasa →
+    `connect_error "No autenticado"`.
+  - **Vencimiento:** el socket se corta al vencer el `exp`, y el timer se limpia en `handleDisconnect`.
+  - **`suscribir`** `{empresaId, sucursalId?}` con ack: pasa por `verificarAlcance(datos.para(scope))`, y
+    fuera de alcance contesta `"No encontrado"`.
+  - **Aviso:** al final de `IngestaService.procesarLote`, si se guardó algún snapshot o cheque, sale
+    `ingesta {sucursalId, mesas, cheques}` a `empresa:<id>` y `sucursal:<id>`.
+- **web** (`web/src/tiempo-real/socket.ts` + `paginas/mesas/tiempoReal.ts`): una conexión por alcance,
+  compartida por la cabecera, el Monitor y el Panel.
+  - **Con socket vivo:** cada aviso invalida `['mesas','abiertas',empresa,sucursal]` (agrupado 1 s) y el
+    polling baja a 60 s de respaldo.
+  - **Caído:** vuelve a 20 s; al reconectar se relee una vez.
+  - **Indicador:** "Consultado HH:MM · en vivo / · cada 20 s" en el Monitor y en la pared, con
+    `data-testid="consultado"` y `data-modo`.
+  - **Proxy:** Vite con `ws: true`.
+- **Contrato:** `docs/tiempo-real.md`. En `openapi.json` sólo cambia la DESCRIPCIÓN de
+  `GET /mesas/abiertas` (el socket no es REST). F1-002 (Diurna) lleva la nota "Y además (de F2-142)":
+  verificar el upgrade detrás de Caddy y la CSP.
+
+**Decisiones que tomé y por qué.**
+- **El socket AVISA, no transporta datos.** Un solo camino de datos con scope (HTTP). "Sin perder datos"
+  sale solo, y ningún dato de ventas viaja por el socket.
+- **Una sola suscripción por socket**; una rechazada no suelta la anterior.
+- **Refresh:** un `connect_error "No autenticado"` pide UN refresh por ciclo (se repone al conectar bien).
+  Sin eso, un rechazo por otra causa se come el throttler de refresh (30/min) y saca al usuario
+  (observación del revisor).
+- **Relectura al reconectar:** sí al volver de una caída; NO en la primera conexión (la consulta acaba de
+  pedir). El hueco entre la primera lectura y la suscripción (ms) lo cubre el respaldo de 60 s.
+- **Frescura:** el semáforo NO depende del refetch. Lo sigue calculando el navegador con su reloj
+  (`useConReloj`), así que subir el respaldo a 60 s no cambia cuándo se ve "desconectada".
+- **Sin `DECISION PROVISIONAL (nocturno)`:** no se toca SoftRestaurant ni el esquema. `esquema-sr.md` no
+  cambia (no hubo hallazgo del POS).
+
+**Trampas que encontré.**
+- **Los `APP_GUARD` globales (`JwtAuthGuard`, `RolesGuard`) NO corren en los `@SubscribeMessage` de un
+  gateway** (Nest 11). El plan suponía lo contrario. El e2e lo destapó: un `suscribir` sin sesión llegaba
+  al handler. Por eso el gateway lleva `@UseGuards(SocketAuthGuard)`. **Todo gateway futuro necesita su
+  propio guard.** El `exception` de Nest devuelve en `cause` el mensaje del cliente: es el eco de lo que él
+  mandó, no una fuga (por eso el test usa `toMatchObject`).
+- `test-setup.ts` hace `vi.mock('socket.io-client', () => import('./test/socketFalso'))` para TODA la suite
+  web: ningún test abre un socket real, y por defecto nada conecta (las vistas se portan como hoy, con
+  polling). Las pruebas del tiempo real manejan `sockets[...]` con `simularConexion`, `simularCaida` y
+  `recibir`.
+- Otra vez: el heredoc de bash con código TS se rompe. Escribe los archivos con la herramienta de archivos.
+
+**Qué quedó abierto.**
+- **Producción:** upgrade a WebSocket detrás de Caddy y CSP `connect-src 'self'` sin verificar (nota en
+  F1-002). Si falla, socket.io se queda en long-polling y funciona igual.
+- **Una sola instancia del api:** con réplicas hace falta el adapter de Redis.
+- **Límites a revisar en F2-250:** `suscribir` sin límite de frecuencia y sin tope de sockets por usuario.
+  Un logout no cierra un socket ya abierto de otra pestaña hasta que vence su access token (≤ 15 min),
+  igual que HTTP.
+- **Sólo mesas:** el aviso `cheques` hoy sólo relee mesas. Refrescar ventas/Inicio con él sería otra
+  tarea.
+- **Sin prueba en navegador real** (no hay arnés). La medición es el e2e sobre la app real.
+
+**Tests.**
+- **api e2e nuevo** `tiempo-real/tiempo-real.e2e.spec.ts` (17 tests; app real en puerto real + Postgres +
+  fixtures F1-011):
+  - Handshake: sin token, basura, vacío, no-texto, VENCIDO, refresh, otro secreto y token en query string
+    se rechazan.
+  - Timer: el servidor corta al vencer y el timer se limpia; también cuando el cliente se va.
+  - Guard: sin sesión o con sesión vencida → `exception`, sin ack.
+  - `suscribir`: inválidos; otra empresa, sucursal cruzada o inexistente dan el MISMO "No encontrado"
+    (también para admin_global); ok.
+  - **AC < 5 s:** aviso afirmado con `expect(delta).toBeLessThan(5000)`; ningún test pasó de ~0.3 s en
+    local. A2, B, sin suscripción y otra empresa no reciben nada.
+  - El aviso sólo trae 3 llaves; cambiar de sala funciona.
+  - Heartbeat y otra empresa no avisan; un reenvío idéntico avisa otra vez con los datos idénticos.
+- **api unitarios** (`ingesta.service.spec.ts`, +5): un aviso por lote con los dos flags; el aviso ve el
+  cheque ya confirmado; heartbeat o todo rechazado no avisa; un evento que falla no cuenta; un aviso que
+  truena no cambia la respuesta ni los datos.
+- **Adaptado (no aflojado):** el constructor de `IngestaService` en ese spec (+`AvisosTiempoReal`).
+- **web nuevos:**
+  - `tiempo-real/socket.test.ts` (14): ruta y token vigente, conexión compartida, suscripción rechazada o
+    sin ack = no vivo, agrupado, relectura al volver, corte del servidor, sesión renovada o terminada,
+    EXACTAMENTE un refresh ante dos `connect_error`, error de red sin refresh.
+  - `paginas/Mesas.tiempoReal.test.tsx` (4, vista real): sin socket "cada 20 s"; aviso → mesa nueva en
+    pantalla < 5 s y sin polling a los 20 s mientras está vivo; matar el socket → datos quedan, indicador
+    "cada 20 s", el polling de 20 s trae lo nuevo; reconectar relee.
+- **Checks:**
+  - api: `lint` y `typecheck` limpios; `prisma validate` ok (sin migración); `npm test` **2334 verdes / 1
+    rojo PREEXISTENTE** (`prisma/esquema.spec.ts` "al crear el admin…", el de siempre; esta rama no lo
+    toca). Cero skips.
+  - web: `build` y `lint` limpios; vitest **105 archivos / 1282 verdes**; `check:bundle` 337.4 kB gzip
+    (antes 321.1; tope 400).
+
+**Qué haría distinto.** Probar primero, con un e2e de 5 líneas, si un guard global llega a un gateway,
+antes de planear sobre esa suposición.
