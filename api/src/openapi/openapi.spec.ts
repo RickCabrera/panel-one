@@ -177,6 +177,48 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(q)).toContain('sin comodines');
   });
 
+  it('F2-109: cancelar y consultar la cancelación, de admins, con 404 por alcance y sus fallas del PAC', async () => {
+    const { paths, components } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    const cancelar = paths['/facturacion/cfdis/{id}/cancelar']?.post;
+    const consultar = paths['/facturacion/cfdis/{id}/cancelacion/consultar']?.post;
+    for (const op of [cancelar, consultar]) expect(op?.security).toEqual([{ bearer: [] }]);
+    expect(codigos(cancelar)).toEqual([
+      '201',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+      '422',
+      '502',
+      '503',
+    ]);
+    expect(codigos(consultar)).toEqual(['200', '400', '401', '403', '404', '409', '502', '503']);
+    expect(JSON.stringify(cancelar?.responses?.['201'])).toContain('ResultadoCancelacionDto');
+    expect(JSON.stringify(consultar?.responses?.['200'])).toContain('ConsultaCancelacionDto');
+    expect(JSON.stringify(cancelar?.responses?.['502'])).toContain('solicitando');
+    const esquemas = components?.schemas as Record<
+      string,
+      { properties?: Record<string, { enum?: string[] }>; required?: string[] }
+    >;
+    expect(esquemas.CancelarCfdiDto.properties?.motivo?.enum).toEqual(['01', '02', '03', '04']);
+    expect(esquemas.CancelarCfdiDto.required).toEqual(['motivo']);
+    expect(esquemas.ResultadoCancelacionDto.properties?.estado?.enum).toEqual([
+      'cancelado',
+      'en_proceso',
+    ]);
+    expect(Object.keys(esquemas.CfdiFilaDto.properties ?? {})).toContain('cancelacion');
+    expect(esquemas.CancelacionFilaDto.properties?.estado?.enum).toEqual([
+      'solicitando',
+      'en_proceso',
+      'rechazada',
+    ]);
+    expect(Object.keys(esquemas.ResumenPeriodoGlobalDto.properties ?? {})).toContain(
+      'globalesCanceladas',
+    );
+  });
+
   it('F2-107: factura sin ticket y refacturación, de admins, con 404 por alcance y sus fallas del PAC', async () => {
     const { paths, components } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -981,6 +1023,9 @@ describe('Contrato OpenAPI', () => {
         // F2-107: factura sin ticket y refacturación.
         '/facturacion/cfdis/manual',
         '/facturacion/cfdis/{id}/refacturar',
+        // F2-109: cancelación de CFDI y la consulta de su solicitud.
+        '/facturacion/cfdis/{id}/cancelar',
+        '/facturacion/cfdis/{id}/cancelacion/consultar',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',

@@ -3,7 +3,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Auditoria, type Actor } from '../comun/auditoria';
 import { Reloj } from '../comun/reloj';
 import type { EmpresaScope } from '../scope/empresa-scope';
-import type { ConfiguracionGlobal, GlobalEmitida, PedidoGlobal } from '../scope/escritura-facturacion';
+import type {
+  ConfiguracionGlobal,
+  GlobalEmitida,
+  PedidoGlobal,
+} from '../scope/escritura-facturacion';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import { CfdiService } from './cfdi.service';
 import type {
@@ -163,7 +167,11 @@ export class FacturaGlobalService {
     const escritura = this.datos.facturacion(scope);
     const ahora = this.#ahora();
     const per = periodicidad ?? (await escritura.configuracionGlobal(empresaId)).periodicidad;
-    const { sucursal, dias, emitidas } = await escritura.periodosGlobal(empresaId, sucursalId, ahora);
+    const { sucursal, dias, emitidas } = await escritura.periodosGlobal(
+      empresaId,
+      sucursalId,
+      ahora,
+    );
     const periodos = enrollarPeriodos(
       dias,
       sucursal.zonaHoraria,
@@ -171,6 +179,7 @@ export class FacturaGlobalService {
       ahora,
       previasPorClave(emitidas, sucursal.zonaHoraria, per),
     );
+    const canceladas = previasPorClave(emitidas, sucursal.zonaHoraria, per, true);
     return {
       sucursal,
       periodicidad: per,
@@ -182,6 +191,7 @@ export class FacturaGlobalService {
         vigentes: r.nVigentes,
         vigentesHasta: r.vigentesHasta?.toISOString() ?? null,
         globalesPrevias: r.globalesPrevias,
+        globalesCanceladas: canceladas.get(r.periodo.clave) ?? 0,
       })),
       emitidas: emitidas.map((e) => emitidaDto(e, sucursal.zonaHoraria)),
     };
@@ -276,11 +286,15 @@ export class FacturaGlobalService {
         try {
           const escritura = this.datos.facturacion(scope);
           const ahora = this.#ahora();
-          const { sucursal, dias, emitidas: previas } = await escritura.periodosGlobal(
-            e.empresaId,
-            sucursalId,
-            ahora,
-          );
+          const {
+            sucursal,
+            dias,
+            emitidas: previas,
+          } = await escritura.periodosGlobal(e.empresaId, sucursalId, ahora);
+          // F2-109. DECISION PROVISIONAL (nocturno): un periodo cuya global se CANCELÓ no se
+          // re-emite solo (si salió mal, la automática la volvería a emitir igual): queda para
+          // emisión manual (docs/esquema-sr.md §2).
+          const canceladas = previasPorClave(previas, sucursal.zonaHoraria, e.periodicidad, true);
           pendientes = enrollarPeriodos(
             dias,
             sucursal.zonaHoraria,
@@ -292,6 +306,7 @@ export class FacturaGlobalService {
               (r) =>
                 r.estado === 'lista' &&
                 r.globalesPrevias === 0 &&
+                !canceladas.has(r.periodo.clave) &&
                 r.periodo.hasta.getTime() > e.desde.getTime(),
             )
             .map((r) => r.periodo)
@@ -338,10 +353,12 @@ function previasPorClave(
   emitidas: readonly GlobalEmitida[],
   zona: string,
   periodicidad: PeriodicidadGlobalEnum,
+  /** F2-109: `true` cuenta las CANCELADAS en vez de las vigentes (o en emisión). */
+  canceladas = false,
 ): Map<string, number> {
   const mapa = new Map<string, number>();
   for (const e of emitidas) {
-    if (e.estado === 'cancelado') continue;
+    if ((e.estado === 'cancelado') !== canceladas) continue;
     const p = periodoGuardado(e, zona);
     if (p === null || p.periodicidad !== periodicidad) continue;
     mapa.set(p.clave, (mapa.get(p.clave) ?? 0) + 1);

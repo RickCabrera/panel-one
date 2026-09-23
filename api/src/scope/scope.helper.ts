@@ -96,6 +96,8 @@ export const LLAVE_EMPRESA = {
   CfdiEnvio: 'empresaId',
   // F2-108: los tickets de cada factura global (la escribe SÓLO `EscrituraFacturacion`).
   CfdiGlobalCodigo: 'empresaId',
+  // F2-109: las solicitudes de cancelación de cada CFDI (las escribe SÓLO `EscrituraFacturacion`).
+  CfdiCancelacion: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

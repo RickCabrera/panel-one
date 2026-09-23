@@ -696,7 +696,8 @@ async function main(): Promise<void> {
     } else {
       console.log(
         `CFDI sembrados (F2-106): ${cfdis.cfdis}, ${cfdis.cancelados} cancelados (PAC falso); ` +
-          `F2-107: ${cfdis.refacturados} refacturados y ${cfdis.manuales} sin ticket.`,
+          `F2-107: ${cfdis.refacturados} refacturados y ${cfdis.manuales} sin ticket; ` +
+          `F2-109: ${cfdis.enProceso} cancelaciones en proceso y ${cfdis.rechazadas} rechazadas.`,
       );
       if (cfdis.sinArchivos > 0) {
         console.warn(

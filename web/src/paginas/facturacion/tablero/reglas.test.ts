@@ -114,6 +114,7 @@ describe('cfdisACsv', () => {
     sustituidoPor: null,
     sustitucionPendiente: false,
     motivoCancelacion: null,
+    cancelacion: null,
     ...c,
   });
 

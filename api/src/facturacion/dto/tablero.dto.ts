@@ -4,6 +4,8 @@ import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-va
 
 import { FiltroVentasQueryDto, PAGINA_MAX } from '../../ventas/dto/ventas.dto';
 import type {
+  CancelacionFila,
+  EstadoCancelacionFila,
   CfdiFila,
   CifrasCfdi,
   CuentaPorFacturar,
@@ -322,9 +324,34 @@ export class CfdiFilaDto implements CfdiFila {
   @ApiProperty({
     type: String,
     nullable: true,
-    description: 'c_MotivoCancelacion con que se canceló (F2-107: 01), si se conoce.',
+    description:
+      'c_MotivoCancelacion con que se canceló (F2-107: 01; F2-109: 01–04), si se conoce.',
   })
   motivoCancelacion!: string | null;
+
+  @ApiProperty({
+    type: () => CancelacionFilaDto,
+    nullable: true,
+    description:
+      'F2-109: la última solicitud de cancelación si NO quedó aceptada, o null. `en_proceso` = el ' +
+      'SAT espera al receptor (la factura sigue vigente y sigue contando en lo facturado); ' +
+      '`rechazada` = el receptor la rechazó; `solicitando` = el PAC no confirmó (consultar).',
+  })
+  cancelacion!: CancelacionFilaDto | null;
+}
+
+export class CancelacionFilaDto implements CancelacionFila {
+  @ApiProperty({ enum: ['solicitando', 'en_proceso', 'rechazada'] })
+  estado!: EstadoCancelacionFila;
+
+  @ApiProperty({ example: '02', description: 'c_MotivoCancelacion pedido.' })
+  motivo!: string;
+
+  @ApiProperty({ format: 'date-time' })
+  solicitadaAt!: string;
+
+  @ApiProperty({ type: String, format: 'date-time', nullable: true })
+  resueltaAt!: string | null;
 }
 
 export class PaginaCfdisDto implements PaginaCfdis {

@@ -7170,3 +7170,119 @@ sin fin: sería bueno que F2-110/F2-190 lo conviertan en alerta.
 desde el principio: un test que copia la condición del código que revisa no atrapa lo que al código le falta.
 Y pensar el orden de borrado del seed (quién cuelga de quién) antes de elegir tabla vs columna: eso decidió el
 diseño.
+
+## 2026-09-23 05:30 — F2-109 · Cancelación de CFDI
+**Estado:** CERRADA (PR de `feat/F2-109`, squash a main) con el AC nocturno de la tabla "Cierre nocturno de las
+tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190. Revisor: plan bloqueado 1 vez (B1: nada
+impedía refacturar y cancelar el mismo CFDI a la vez) y aprobado a la segunda (O10–O12); entregable bloqueado 1 vez
+(B1: el e2e del sondeo dependía de lo que hubiera en la base y fallaba con el seed demo).
+
+**Qué quedó hecho.**
+- Migración `20260928010000_cancelacion_cfdi` (`migrate diff --from-schema-datasource`, NO `migrate dev
+  --create-only`: el nombre automático sale con la fecha real, ANTERIOR a las migraciones con fecha futura del
+  repo, y truena en la base sombra). Tabla `cfdi_cancelaciones` (una fila por SOLICITUD, historial; FK al CFDI con
+  CASCADE), enum `estado_cancelacion_cfdi` (`solicitando`, `en_proceso`, `aceptada`, `rechazada`), y a mano: ÚNICO
+  PARCIAL `(cfdi_id) WHERE estado IN ('solicitando','en_proceso')` (el candado), CHECK motivo 01..04, CHECK sustituto
+  ⇔ 01, CHECK `resuelta_at` ⇔ aceptada/rechazada. Registrada en el helper de scope.
+- Puerto: `EstadoCfdi` gana `en_cancelacion`; `ResultadoCancelacion.estado` es `EstadoTrasCancelar` (`cancelado` |
+  `en_cancelacion`). Facturama: `pending` → `en_cancelacion` (supuesto); `active` tras un DELETE → desconocido.
+- PAC falso: cancela al instante SALVO receptores `XFAL010101AC0` (espera; `responderCancelacion` o 72 h de su reloj)
+  y `XFAL010101RC0` (rechaza en la primera consulta). Los dos pasan la validación del portal (persona física, 612).
+- Núcleo: `EscrituraFacturacion.abrirCancelacion` (FOR UPDATE del CFDI, reglas `conflictoDeMotivo` bajo candado),
+  `anotarCancelacion` (CONDICIONAL al estado leído; efectos + aviso sólo para quien gana), `marcarConsultada`,
+  `solicitudesAbiertas`, `anotarAvisoCancelacion`, `cancelacionAbierta`. Reglas puras en
+  `api/src/facturacion/cancelacion.ts`. `CancelacionCfdiService` (consulta ANTES de cancelar; ambiguo = se queda
+  `solicitando` + 502; conciliación a los 10 min; correo `factura-cancelada`), `CancelacionProgramador`
+  (`CANCELACION_INTERVALO_S`, 900 s, apagado en test) y `CancelacionController`:
+  `POST /facturacion/cfdis/{id}/cancelar` y `POST /facturacion/cfdis/{id}/cancelacion/consultar`.
+- Refacturación (F2-107) sobre el núcleo: `#cancelarSustituido` llama `solicitar(…'01'…)` y NUNCA lanza (todo lo
+  que no quedó cancelado es `pendiente`). `marcarCancelado` se borró. Candado cruzado: `reservarSustituto` da 409
+  con una solicitud abierta (bajo su FOR UPDATE) y `refacturar` lo contesta antes de consultar al PAC.
+- Global (F2-108): cancelar una global suelta sus tickets (guardados antes en `tickets_global`, total como texto);
+  la automática no re-emite un periodo con global cancelada; `globalesCanceladas` en la lista de periodos.
+- Entrega (F2-105): reenviar el correo de un cancelado = 409. Tablero: `CfdiFila.cancelacion` (última solicitud no
+  aceptada) por LATERAL con empresa + tenant.
+- Web: `DialogoCancelar` (motivos por origen; 01 sin sustituto deshabilita y ofrece "Refacturar en su lugar"; 01
+  con sustituto manda su UUID), botón Cancelar, insignias y "Actualizar estado" en la tabla del tablero; texto de
+  periodo con global cancelada en la pestaña Global.
+- Seed: los ~8 % cancelados pasan a motivo 02 con `cancelado_at`, su solicitud `aceptada` y el código SUELTO; 1/40
+  vigentes con una solicitud 02 en proceso o rechazada. Seed real dos veces idéntico: "251 CFDI, 34 cancelados;
+  F2-107: 8 refacturados y 4 sin ticket; F2-109: 5 en proceso y 4 rechazadas"; globales "4 con 497 tickets" (eran
+  491 en F2-108: +6 porque tickets de cancelaciones 02 ya vencidos ahora entran a la global; es la regla nueva).
+- Docs: esquema-sr §2 "Cancelación de CFDI (F2-109)" (sin hallazgo del POS: supuestos de Facturama y decisiones);
+  backlog: "Y además (de F2-109)" en F2-190 y F2-110.
+
+**Decisiones que tomé y por qué.** (todas en esquema-sr §2)
+- `DECISION PROVISIONAL (nocturno)` `cancelacion.ts#efectoEnTicket`: 02 y 03 SUELTAN el ticket (`codigo_id` nulo,
+  código `pendiente`), reusando el MISMO código (la ficha decía "nuevo código"; el impreso en el ticket es el que el
+  cliente tiene). La vigencia no se extiende. 01 no suelta (el código ya está en el sustituto). **Para Ricardo.**
+- Liberar vs. índice parcial en `cfdis.codigo_id`: liberar. Un índice parcial obligaba a pasar la relación 1-1 de
+  Prisma a 1-n y tocar todo lo que lee `codigo.cfdi` (estadoPublico, global, portal). F2-107 ya movía `codigo_id`.
+- `DECISION PROVISIONAL (nocturno)` `global.service.ts#vueltaAutomatica`: no re-emite un periodo con global
+  cancelada. **Para Ricardo.**
+- `DECISION PROVISIONAL (nocturno)` `cancelacion.ts#SOLICITUD_VENCIDA_MS`: ambigua + PAC vigente a los 10 min = no
+  registrada (se borra). Supuesto sobre la latencia de Facturama.
+- "Rechazada" se DERIVA (en proceso → vigente), no se lee del PAC. El 01 sólo acepta el UUID del sustituto PROPIO.
+  04 sólo en global; global nunca 01. Un CFDI con sustituto en emisión/vigente sólo se cancela con 01; un sustituto
+  con el anterior vigente no se cancela. Segunda refacturación del anterior sigue en 409 (texto nuevo).
+- En proceso SIGUE contando en lo facturado (vigente ante el SAT). Los cancelados del KPI siguen por fecha de
+  EMISIÓN aunque ya hay `cancelado_at` (una sola base de fechas). **Para Ricardo.**
+- Cuando una CONSULTA resuelve la cancelación, `cancelado_at` es la hora de la consulta, no la del SAT (el GET no la
+  trae en lo que sabemos; F2-190). Con cancelación inmediata sí es la fecha del DELETE.
+- Webhook no, sondeo sí (no hay dominio ni cuenta de Facturama). El sondeo rota por `updated_at` (cada consulta
+  marca la solicitud) para que las que nunca se resuelven no acaparen las 200 por vuelta (O1 del revisor).
+- `no_procedio` BORRA la fila; queda en el log y en la auditoría (`cfdi.cancelacion_no_procedio`, sin valores).
+- Correo: sólo al quedar cancelada, sin adjuntos, sólo si el CFDI tiene correo; si falla, `aviso_error` y sin
+  reintento (ALCANCE).
+
+**Trampas que encontré.**
+- **Un e2e que llama `vueltaAutomatica()` ve TODAS las empresas** (scope de sistema): con la base de desarrollo
+  sembrada (el seed demo trae solicitudes en proceso) contar "revisadas/resueltas" totales truena. Afirma SÓLO sobre
+  los fixtures (así quedó; es el B1 del entregable). Esa vuelta escribe `ultimo_error` en filas del seed demo (el PAC
+  falso no las conoce): inofensivo, pero no te sorprendas.
+- **Mutaciones a mano con una compuerta del PAC**: si un test falla ANTES de `pac.abrir()`, la compuerta se queda
+  cerrada, la siguiente emisión se cuelga y `app.close()` nunca termina: jest se queda colgado para siempre. Corre
+  mutaciones con `--forceExit --testTimeout` y `-t` a la prueba concreta, y restaura el archivo con `trap`.
+- `cp x /tmp/y 2>/dev/null || cp x otra/ruta`: en Git Bash `/tmp` SÍ existe; el respaldo quedó en `/tmp` y no donde
+  lo buscaba. Revisa dónde quedó un respaldo antes de restaurar.
+- `sembrarCfdis` se llama dos veces seguidas en su spec SIN volver a sembrar ventas: si el seed suelta códigos, la
+  segunda corrida ve menos `facturado`. Por eso al empezar REGRESA a `facturado` los códigos que la corrida anterior
+  soltó (identificados por su CFDI cancelado 02 sin código). En el seed completo no encuentra nada.
+- Heredocs otra vez: uno con comillas y backticks se rompió al escribir ESTA nota, y Python con `"\\n"` metió saltos
+  reales en un test. Escribe con la herramienta de archivos y concatena.
+- `prettier --write` sobre archivos concretos está bien; si armas la lista con `git ls-files --others`, incluye
+  `.wt-main/`: filtra por `^api/`/`^web/`. `.wt-main/` sigue sin seguimiento: nunca `git add -A`.
+- `prisma/esquema.spec.ts` ("al crear el admin…") sigue rojo en la base local de dev, igual que F2-104…F2-108.
+
+**Qué quedó abierto.**
+- F2-190 (nota): `pending`, estado explícito de rechazo, fecha de cancelación en el GET, latencia del DELETE,
+  acuse, 04 de global, cancelación con/sin aceptación en sandbox.
+- F2-110 (nota): una ambigua borrada a los 10 min que Facturama registró tarde → CFDI cancelado ante el SAT y
+  vigente aquí; conciliar vigentes contra el PAC lo cubre. Cancelar no gasta folio (supuesto).
+- Qué pasa si SR reabre o cancela una cuenta que ya entró a una global (sigue abierto desde F2-108).
+- Sin reintento del aviso por correo; sin guardar el acuse; el plazo de 72 h sólo se prueba en el spec del PAC
+  falso (el e2e prueba la aceptación manual del receptor, que recorre el mismo camino `cancelado → aceptada`).
+- En demo el PAC falso no conoce los CFDI del seed: cancelarlos da 409 `no_encontrado` (como refacturarlos).
+- Sin prueba visual en navegador: el diálogo se probó con testing-library contra el router real.
+
+**Tests.**
+- api nuevos: `facturacion/cancelacion.spec.ts` (14, reglas puras + plantilla), `cancelacion.e2e.spec.ts` (19, app
+  real + Postgres + PAC falso controlado + correo que captura, cifras A MANO: 2300 → 1300/0.5652 → … → 380/0.1652,
+  cancelados 3915.50 en 11; motivos 02/03/04 y 01 con/sin sustituto; en proceso, rechazada, ambigua y su
+  conciliación, PAC caído 503, rechazo 422; candado cruzado con la refacturación en las dos direcciones y bajo el
+  FOR UPDATE; O10; sondeo con dos vueltas simultáneas medido sobre los fixtures; global cancelada y su re-emisión
+  manual; correo sin destinatario y con falla; doble clic 201+409 con una sola llamada al PAC; alcance
+  404/403/400), PAC falso +6, contrato Facturama +2, `scoped-prisma.service.spec` +1, `openapi.spec` +1.
+- Mutaciones a mano: quitar el candado de `reservarSustituto`, el filtro de la global automática, soltar el código
+  y el `gano` del sondeo → cada una pone un test en rojo.
+- Adaptados al comportamiento nuevo, no aflojados: `seed-cfdis.spec` (cancelados sueltan código; + solicitudes),
+  `global.e2e`/`tablero.e2e` (campos nuevos en `toEqual`), `consulta-ventas.spec` (PARAMS 16 → 18 + el LATERAL),
+  contrato Facturama (`pending` ya es conocido: el de "desconocido" usa `weird`), `openapi.spec` (rutas), fixtures
+  web (`cancelacion: null`, `globalesCanceladas: 0`).
+- web nuevos: `FacturacionCancelacion.test.tsx` (6), `emision/cancelacion.test.ts` (5), +1 en `global/reglas.test`.
+- Números finales en el cuerpo del PR (jest completo sobre la base SEMBRADA; vitest 1219/1219; check:bundle
+  316.7 kB gzip).
+
+**Qué haría distinto.** Escribir los e2e que tocan procesos de "todas las empresas" (sondeos, programadores)
+midiendo sólo los fixtures desde el principio, y correr la suite DESPUÉS de sembrar la base, no antes: el 19/19 que
+reporté la primera vez era de antes del seed y la base sembrada lo tumbaba.

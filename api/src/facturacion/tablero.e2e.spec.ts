@@ -442,6 +442,8 @@ describe('Tablero de facturación (e2e, F2-106)', () => {
         sustituidoPor: null,
         sustitucionPendiente: false,
         motivoCancelacion: null,
+        // F2-109: sin solicitud de cancelación.
+        cancelacion: null,
       });
       expect(res.body.cfdis[1].estado).toBe('cancelado');
     });

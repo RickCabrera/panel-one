@@ -107,6 +107,21 @@ export interface CfdiFila {
    */
   sustitucionPendiente: boolean;
   motivoCancelacion: string | null;
+  /**
+   * F2-109: la última solicitud de cancelación si NO quedó aceptada (la aceptada ya se ve en
+   * `estado`/`motivoCancelacion`), o null. Una `en_proceso` no cambia lo facturado: la factura sigue
+   * vigente hasta que el receptor acepte.
+   */
+  cancelacion: CancelacionFila | null;
+}
+
+export type EstadoCancelacionFila = 'solicitando' | 'en_proceso' | 'rechazada';
+
+export interface CancelacionFila {
+  estado: EstadoCancelacionFila;
+  motivo: string;
+  solicitadaAt: string;
+  resueltaAt: string | null;
 }
 
 export interface PaginaCfdis {
@@ -298,10 +313,15 @@ export class TableroFacturacionService {
         sustituye_a_uuid: string | null;
         sustituido_por_uuid: string | null;
         sustituto_estado: string | null;
+        cancelacion_estado: EstadoCancelacionFila | null;
+        cancelacion_motivo: string | null;
+        cancelacion_solicitada_at: Date | null;
+        cancelacion_resuelta_at: Date | null;
       }>(Prisma.sql`SELECT id, uuid, serie, folio, sucursal_id, sucursal_nombre, receptor_rfc,
           receptor_nombre, total, estado, emitido_at, folio_ticket, con_xml, con_pdf,
           receptor_regimen, receptor_cp, receptor_uso, receptor_email, origen,
-          motivo_cancelacion, sustituye_a_uuid, sustituido_por_uuid, sustituto_estado
+          motivo_cancelacion, sustituye_a_uuid, sustituido_por_uuid, sustituto_estado,
+          cancelacion_estado, cancelacion_motivo, cancelacion_solicitada_at, cancelacion_resuelta_at
         FROM cfdis_periodo ${donde}
         ORDER BY emitido_at DESC, id DESC
         LIMIT ${op.porPagina} OFFSET ${(op.pagina - 1) * op.porPagina}`),
@@ -337,6 +357,15 @@ export class TableroFacturacionService {
         sustituidoPor: f.sustituido_por_uuid,
         sustitucionPendiente: f.estado === 'vigente' && f.sustituto_estado === 'vigente',
         motivoCancelacion: f.motivo_cancelacion ? f.motivo_cancelacion.trim() : null,
+        cancelacion:
+          f.cancelacion_estado !== null && f.cancelacion_solicitada_at !== null
+            ? {
+                estado: f.cancelacion_estado,
+                motivo: (f.cancelacion_motivo ?? '').trim(),
+                solicitadaAt: f.cancelacion_solicitada_at.toISOString(),
+                resueltaAt: f.cancelacion_resuelta_at?.toISOString() ?? null,
+              }
+            : null,
       })),
     };
   }

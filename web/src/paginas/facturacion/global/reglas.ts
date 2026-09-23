@@ -44,7 +44,12 @@ export function explicacionPeriodo(p: ResumenPeriodoGlobal, zona: string): strin
           }; ${tickets} ${p.tickets === 1 ? 'llegó' : 'llegaron'} después o ${
             p.tickets === 1 ? 'quedó' : 'quedaron'
           } fuera. Revísalo antes de emitir otra.`
-        : `${tickets} que nadie facturó a tiempo. Ya se puede emitir su factura global.`;
+        : p.globalesCanceladas > 0
+          ? // F2-109: su global se canceló y soltó los tickets; la automática no la repite.
+            `Su factura global se canceló: ${tickets} ${
+              p.tickets === 1 ? 'volvió' : 'volvieron'
+            } a quedar sin factura. La emisión automática no la repite: emítela aquí.`
+          : `${tickets} que nadie facturó a tiempo. Ya se puede emitir su factura global.`;
     case 'esperando':
       return (
         `El periodo terminó, pero ${

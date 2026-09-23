@@ -1,8 +1,12 @@
 import { RELOJ_FIJO, solicitudCfdi } from '../../../test/fixtures-cfdi';
+import { validarReceptor } from '../../facturacion/portal';
 import { ErrorTimbrado } from './puerto';
 import {
   LEYENDA_NO_FISCAL,
+  MENSAJE_CANCELACION_EN_PROCESO_PAC,
   MENSAJE_CSD_RECHAZADO,
+  PLAZO_ACEPTACION_MS,
+  RFC_CANCELACION_CON_ACEPTACION,
   MENSAJE_SUSTITUTO_NO_RELACIONADO,
   RFC_CON_ERROR,
   RFC_EMISOR_CSD_RECHAZADO,
@@ -409,5 +413,90 @@ describe('PAC falso: factura global (F2-108)', () => {
     // Sin global, no hay nodo.
     const normal = await pac.emitir(solicitudCfdi());
     expect(normal.xml).not.toContain('InformacionGlobal');
+  });
+});
+
+describe('PAC falso: cancelación que espera al receptor (F2-109)', () => {
+  const RECEPTOR_PORTAL = {
+    razonSocial: 'PERSONA DE PRUEBA',
+    regimenFiscal: '612',
+    cp: '06700',
+    usoCfdi: 'G03',
+    email: 'prueba@ejemplo.test',
+  };
+  const emitirA = (pac: TimbradoFalso, rfc: string, referencia = `ref-${rfc}`) =>
+    pac.emitir({
+      ...solicitudCfdi(),
+      referencia,
+      receptor: { ...solicitudCfdi().receptor, rfc },
+    });
+
+  it('los dos RFC reservados pasan la validación del portal (persona física, no genéricos)', () => {
+    for (const rfc of Object.values(RFC_CANCELACION_CON_ACEPTACION)) {
+      expect(validarReceptor({ ...RECEPTOR_PORTAL, rfc })).toEqual({});
+      expect(RFC_CON_ERROR[rfc]).toBeUndefined();
+    }
+  });
+
+  it('con el receptor que ACEPTA: queda en_cancelacion hasta que responde; aceptar la cancela', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const cfdi = await emitirA(pac, RFC_CANCELACION_CON_ACEPTACION.acepta);
+    await expect(pac.cancelar({ ...cfdi, motivo: '02' })).resolves.toEqual({
+      uuid: cfdi.uuid,
+      estado: 'en_cancelacion',
+      fecha: new Date(RELOJ_FIJO.ahora()),
+    });
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'en_cancelacion' });
+    expect(pac.cancelacionDe(cfdi.uuid)).toBeUndefined();
+    // Pedirla otra vez mientras espera: el PAC la rechaza.
+    await expect(pac.cancelar({ ...cfdi, motivo: '02' })).rejects.toMatchObject({
+      codigo: 'RECHAZADO_POR_PAC',
+      message: MENSAJE_CANCELACION_EN_PROCESO_PAC,
+    });
+    pac.responderCancelacion(cfdi.uuid, 'aceptar');
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'cancelado' });
+    expect(pac.cancelacionDe(cfdi.uuid)).toEqual({ motivo: '02' });
+  });
+
+  it('rechazar la regresa a vigente y se puede volver a pedir', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const cfdi = await emitirA(pac, RFC_CANCELACION_CON_ACEPTACION.acepta);
+    await pac.cancelar({ ...cfdi, motivo: '03' });
+    pac.responderCancelacion(cfdi.uuid, 'rechazar');
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'vigente' });
+    await expect(pac.cancelar({ ...cfdi, motivo: '03' })).resolves.toMatchObject({
+      estado: 'en_cancelacion',
+    });
+  });
+
+  it('el receptor que RECHAZA lo hace en la primera consulta', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const cfdi = await emitirA(pac, RFC_CANCELACION_CON_ACEPTACION.rechaza);
+    await expect(pac.cancelar({ ...cfdi, motivo: '02' })).resolves.toMatchObject({
+      estado: 'en_cancelacion',
+    });
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'vigente' });
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'vigente' });
+  });
+
+  it('sin respuesta a las 72 h procede (plazo del SAT), medido con el reloj del falso', async () => {
+    const reloj = { t: RELOJ_FIJO.ahora(), ahora: () => reloj.t };
+    const pac = new TimbradoFalso(reloj);
+    const cfdi = await emitirA(pac, RFC_CANCELACION_CON_ACEPTACION.acepta);
+    await pac.cancelar({ ...cfdi, motivo: '02' });
+    reloj.t += PLAZO_ACEPTACION_MS - 1;
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'en_cancelacion' });
+    reloj.t += 1;
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'cancelado' });
+  });
+
+  it('un receptor cualquiera cancela al instante, como antes (F2-104…F2-108 no cambian)', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const cfdi = await pac.emitir(solicitudCfdi());
+    await expect(pac.cancelar({ ...cfdi, motivo: '02' })).resolves.toMatchObject({
+      estado: 'cancelado',
+    });
+    pac.responderCancelacion(cfdi.uuid, 'rechazar');
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'cancelado' });
   });
 });

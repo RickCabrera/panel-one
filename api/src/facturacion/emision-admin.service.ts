@@ -24,6 +24,8 @@ import {
   type DatosReceptor,
 } from '../scope/escritura-facturacion';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
+import { MENSAJE_REFACTURAR_CON_CANCELACION } from './cancelacion';
+import { CancelacionCfdiService } from './cancelacion.service';
 import { FORMA_PAGO_SAT, MENSAJE_TOTAL_MANUAL, totalManual, type FormaPagoEnum } from './cfdi';
 import { CfdiService, MENSAJE_EMISION_INCIERTA_ADMIN, MENSAJE_PAC_CAIDO } from './cfdi.service';
 import { validarReceptor, type ErroresReceptor, type ReceptorPortal } from './portal';
@@ -70,6 +72,9 @@ export const MENSAJE_PAC_NO_VIGENTE: Readonly<Record<Exclude<EstadoCfdi, 'vigent
   cancelado:
     'El PAC reporta esta factura como CANCELADA. No se emitió nada: la cancelación se anotará al ' +
     'conciliar con el PAC (F2-109/F2-110).',
+  en_cancelacion:
+    'El PAC reporta una solicitud de cancelación EN PROCESO para esta factura (espera la respuesta ' +
+    'del receptor). No se emitió nada: espera a que se resuelva.',
   no_encontrado:
     'El PAC no tiene registro de esta factura (p. ej. una factura de demostración que el PAC de ' +
     'prueba no emitió en esta corrida). No se emitió nada.',
@@ -81,8 +86,8 @@ export const MENSAJE_CANCELACION_PENDIENTE =
   'El sustituto ya se emitió, pero el PAC no confirmó la cancelación de la factura anterior. ' +
   'Vuelve a pulsar Refacturar para reintentar SÓLO la cancelación (no se emite otro sustituto).';
 export const MENSAJE_SUSTITUTO_CANCELADO =
-  'El sustituto de esta factura fue cancelado. Una nueva refacturación de este comprobante no se ' +
-  'puede hacer desde aquí (F2-109).';
+  'El sustituto de esta factura fue cancelado. Una segunda refacturación del mismo comprobante no ' +
+  'se hace: cancélala con motivo 02 o 03 (el ticket vuelve a poderse facturar).';
 
 /**
  * Emisiones que pide un ADMINISTRADOR (F2-107), sobre el mismo tramo de timbrado que el portal
@@ -106,6 +111,7 @@ export class EmisionAdminService {
     private readonly reloj: Reloj,
     private readonly cfdi: CfdiService,
     private readonly auditoria: Auditoria,
+    private readonly cancelacion: CancelacionCfdiService,
     @Inject(PUERTO_TIMBRADO) private readonly pac: PuertoTimbrado,
   ) {}
 
@@ -164,6 +170,15 @@ export class EmisionAdminService {
     const escritura = this.datos.facturacion(scope);
     const viejo = await escritura.cfdiParaRefacturar(cfdiId);
     if (viejo.estado === 'cancelado') throw new ConflictException(MENSAJE_YA_CANCELADO);
+    // F2-109: con una cancelación abierta no se emite un sustituto (se decide ANTES de consultar
+    // al PAC; `reservarSustituto` lo vuelve a medir bajo candado). Con el sustituto ya emitido, la
+    // única abierta posible es SU 01, y la re-entrada de abajo contesta `pendiente`.
+    if (
+      viejo.cancelacionAbierta !== null &&
+      (!viejo.sustituto || viejo.cancelacionAbierta !== '01')
+    ) {
+      throw new ConflictException(MENSAJE_REFACTURAR_CON_CANCELACION);
+    }
 
     let nuevo: ResultadoRefacturacion['nuevo'];
     if (viejo.sustituto) {
@@ -236,49 +251,26 @@ export class EmisionAdminService {
   }
 
   /**
-   * Cancela el anterior con motivo 01 y el UUID del sustituto, y lo anota. Nunca lanza: lo que no
-   * salió queda `pendiente` (el sustituto ya existe; reintentar es seguro porque primero se
-   * consulta). Si el PAC ya lo tiene cancelado (un intento anterior que no se alcanzó a anotar),
-   * sólo se anota.
+   * Cancela el anterior con motivo 01 y el UUID del sustituto sobre el núcleo de F2-109 (la
+   * solicitud queda en `cfdi_cancelaciones`, con su candado y su sondeo). Nunca lanza: lo que no
+   * quedó cancelado (en proceso, ambiguo, PAC caído, otra solicitud abierta) es `pendiente`, y
+   * reintentar es seguro porque el núcleo consulta al PAC antes de volver a cancelar.
    */
   async #cancelarSustituido(
     viejo: CfdiParaRefacturar,
     uuidSustituto: string,
   ): Promise<EstadoCancelacionRefacturacion> {
-    const referencia = { uuid: viejo.uuid, idPac: viejo.idPac };
-    let fecha: Date;
     try {
-      const actual = await this.pac.consultarEstado(referencia);
-      if (actual.estado === 'cancelado') {
-        fecha = this.#ahora();
-      } else {
-        const r = await this.pac.cancelar({
-          ...referencia,
-          motivo: MOTIVO_SUSTITUCION,
-          folioSustitucion: uuidSustituto,
-        });
-        if (r.estado !== 'cancelado') {
-          this.#log.warn(`El PAC dejó el CFDI ${viejo.uuid} en ${r.estado} tras cancelar.`);
-          return 'pendiente';
-        }
-        fecha = r.fecha;
-      }
+      const r = await this.cancelacion.solicitar(
+        { tipo: 'empresa', empresaId: viejo.empresaId },
+        null,
+        viejo.id,
+        { motivo: MOTIVO_SUSTITUCION, uuidSustitucion: uuidSustituto },
+      );
+      return r.estado === 'cancelado' ? 'cancelado' : 'pendiente';
     } catch (error) {
       this.#log.warn(
         `Cancelación 01 del CFDI ${viejo.uuid} (sustituto ${uuidSustituto}) pendiente: ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-      );
-      return 'pendiente';
-    }
-    try {
-      await this.datos
-        .facturacion({ tipo: 'empresa', empresaId: viejo.empresaId })
-        .marcarCancelado(viejo.empresaId, viejo.id, MOTIVO_SUSTITUCION, fecha, this.#ahora());
-      return 'cancelado';
-    } catch (error) {
-      // El PAC ya lo canceló: el reintento lo encuentra cancelado y sólo lo anota.
-      this.#log.error(
-        `CFDI ${viejo.uuid} cancelado en el PAC SIN anotar: ` +
           `${error instanceof Error ? error.message : String(error)}`,
       );
       return 'pendiente';

@@ -60,6 +60,7 @@ model Empresa {
   cfdiEnvios               CfdiEnvio[]
   // F2-108: qué tickets entraron a qué factura global.
   cfdiGlobalCodigos        CfdiGlobalCodigo[]
+  cfdiCancelaciones        CfdiCancelacion[]
 
   @@map("empresas")
 }
@@ -1790,6 +1791,8 @@ model Cfdi {
   sustituidoPor Cfdi?              @relation("SustitucionCfdi")
   // F2-108: los tickets de una factura global.
   globalCodigos CfdiGlobalCodigo[]
+  // F2-109: las solicitudes de cancelación ante el SAT (historial; una abierta como mucho).
+  cancelaciones CfdiCancelacion[]
 
   @@unique([codigoId], map: "cfdis_codigo_id_key")
   @@unique([sustituyeAId], map: "cfdis_sustituye_a_id_key")
@@ -1847,6 +1850,55 @@ model CfdiEnvio {
   @@unique([cfdiId, email], map: "cfdi_envios_cfdi_id_email_key")
   @@index([empresaId, estado])
   @@map("cfdi_envios")
+}
+
+/// F2-109: en qué va una solicitud de cancelación de un CFDI ante el SAT.
+enum EstadoCancelacionCfdi {
+  // La llamada al PAC está saliendo, o su respuesta fue AMBIGUA (timeout, 5xx): hay que CONSULTAR
+  // antes de volver a pedir nada.
+  solicitando
+  // El SAT espera la respuesta del receptor (acepta, rechaza, o a las 72 h procede).
+  en_proceso
+  aceptada
+  // El receptor la rechazó: el CFDI sigue vigente y se puede volver a solicitar.
+  rechazada
+
+  @@map("estado_cancelacion_cfdi")
+}
+
+/// F2-109: una fila por SOLICITUD de cancelación (historial). A mano en la migración: el ÚNICO
+/// PARCIAL `(cfdi_id) WHERE estado IN ('solicitando','en_proceso')` (una abierta por CFDI: el candado
+/// del doble clic), y los CHECK de motivo 01..04, sustituto ⇔ 01 y `resuelta_at` ⇔ aceptada/rechazada.
+/// Una solicitud que el PAC rechazó sin hacer nada se BORRA (queda en la auditoría).
+model CfdiCancelacion {
+  id              String                @id @default(uuid()) @db.Uuid
+  empresaId       String                @map("empresa_id") @db.Uuid
+  cfdiId          String                @map("cfdi_id") @db.Uuid
+  // c_MotivoCancelacion '01'..'04'.
+  motivo          String                @db.Char(2)
+  // Sólo con motivo 01: el UUID del sustituto (relación 04).
+  uuidSustitucion String?               @map("uuid_sustitucion")
+  estado          EstadoCancelacionCfdi @default(solicitando)
+  solicitadaAt    DateTime              @map("solicitada_at") @db.Timestamptz(3)
+  resueltaAt      DateTime?             @map("resuelta_at") @db.Timestamptz(3)
+  // Código y mensaje recortado del último error del PAC al consultar (nunca el cuerpo crudo).
+  ultimoError     String?               @map("ultimo_error")
+  // Sólo al cancelar una GLOBAL: sus tickets antes de soltarlos, [{ codigoId, total }] con el
+  // total como TEXTO decimal ("123.45"), nunca número JSON.
+  ticketsGlobal   Json?                 @map("tickets_global")
+  // El aviso por correo al receptor cuando quedó cancelada.
+  avisoEnviadoAt  DateTime?             @map("aviso_enviado_at") @db.Timestamptz(3)
+  avisoError      String?               @map("aviso_error")
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime              @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "cfdi_cancelaciones_empresa_fkey")
+  // CASCADE: un CFDI emitido nunca se borra en la app (sólo seed y fixtures); así no truenan.
+  cfdi    Cfdi    @relation(fields: [cfdiId, empresaId], references: [id, empresaId], onDelete: Cascade, map: "cfdi_cancelaciones_cfdi_empresa_fkey")
+
+  @@index([empresaId, estado])
+  @@index([cfdiId])
+  @@map("cfdi_cancelaciones")
 }
 
 /// F2-108: qué tickets (códigos de facturación) entraron a qué factura global. Una fila por ticket;

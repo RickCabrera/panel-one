@@ -11,6 +11,16 @@ import type {
   InformacionGlobal,
   MotivoCancelacion,
 } from '../adaptadores/timbrado/puerto';
+import {
+  conflictoDeMotivo,
+  efectoEnTicket,
+  MENSAJE_CANCELACION_ABIERTA,
+  MENSAJE_REFACTURAR_CON_CANCELACION,
+  MENSAJE_YA_CANCELADA,
+  SOLICITUD_VENCIDA_MS,
+  type EstadoSolicitudAbierta,
+  type TicketGlobalCancelado,
+} from '../facturacion/cancelacion';
 
 import {
   esFacturable,
@@ -157,6 +167,59 @@ export interface CfdiParaRefacturar {
     serieFolio: string;
     total: Prisma.Decimal;
   } | null;
+  /** F2-109: motivo de la solicitud de cancelación ABIERTA (`solicitando`/`en_proceso`), o null. */
+  cancelacionAbierta: MotivoCancelacion | null;
+}
+
+/** F2-109: lo que se pide al abrir una solicitud de cancelación (ya validado en forma). */
+export interface PedidoCancelacion {
+  motivo: MotivoCancelacion;
+  /** Con motivo 01, el UUID del sustituto en mayúsculas; si no, null. */
+  uuidSustitucion: string | null;
+}
+
+/** F2-109: una solicitud de cancelación abierta, con lo que hace falta para hablar con el PAC. */
+export interface SolicitudAbierta {
+  solicitudId: string;
+  cfdiId: string;
+  empresaId: string;
+  estado: EstadoSolicitudAbierta;
+  motivo: MotivoCancelacion;
+  uuidSustitucion: string | null;
+  solicitadaAt: Date;
+  ultimoError: string | null;
+  uuid: string;
+  idPac: string;
+}
+
+/**
+ * Lo que devuelve abrir una solicitud: `abierta` (la fila nueva en `solicitando`), o `por_conciliar`
+ * (ya había una `solicitando` VENCIDA: hay que consultarla al PAC y resolverla antes de pedir otra).
+ */
+export type AperturaCancelacion =
+  | { tipo: 'abierta'; solicitud: SolicitudAbierta }
+  | { tipo: 'por_conciliar'; solicitud: SolicitudAbierta };
+
+/** F2-109: cómo se resolvió una solicitud abierta. */
+export type AnotacionCancelacion =
+  | { tipo: 'aceptada'; fecha: Date }
+  | { tipo: 'en_proceso' }
+  | { tipo: 'rechazada' }
+  | { tipo: 'no_procedio' };
+
+/** Lo que hace falta para el correo al receptor de una factura que quedó cancelada. */
+export interface AvisoCancelacion {
+  solicitudId: string;
+  empresaId: string;
+  email: string | null;
+  sucursal: string;
+  color: string | null;
+  emisor: string;
+  uuid: string;
+  serieFolio: string;
+  total: Prisma.Decimal;
+  motivo: MotivoCancelacion;
+  uuidSustitucion: string | null;
 }
 
 /** c_TipoRelacion de la sustitución de CFDI previos (F2-107). */
@@ -203,6 +266,41 @@ function esUnicoDe(error: unknown, columna: string): boolean {
   const texto = JSON.stringify([meta?.target, meta?.constraint]);
   const camel = columna.replace(/_([a-z])/g, (_, l: string) => l.toUpperCase());
   return texto.includes(columna) || texto.includes(camel);
+}
+
+/** Las columnas de una solicitud de cancelación que se leen (F2-109). */
+const SELECT_SOLICITUD = {
+  id: true,
+  estado: true,
+  motivo: true,
+  uuidSustitucion: true,
+  solicitadaAt: true,
+  ultimoError: true,
+} as const;
+
+function solicitudDe(
+  cfdi: { id: string; empresaId: string; uuid: string | null; idPac: string | null },
+  f: {
+    id: string;
+    estado: string;
+    motivo: string;
+    uuidSustitucion: string | null;
+    solicitadaAt: Date;
+    ultimoError: string | null;
+  },
+): SolicitudAbierta {
+  return {
+    solicitudId: f.id,
+    cfdiId: cfdi.id,
+    empresaId: cfdi.empresaId,
+    estado: f.estado as EstadoSolicitudAbierta,
+    motivo: f.motivo as MotivoCancelacion,
+    uuidSustitucion: f.uuidSustitucion,
+    solicitadaAt: f.solicitadaAt,
+    ultimoError: f.ultimoError,
+    uuid: exigir('uuid', cfdi.uuid),
+    idPac: exigir('idPac', cfdi.idPac),
+  };
 }
 
 function emisorDe(p: { rfc: string; razonSocial: string; regimenFiscal: string; cp: string }) {
@@ -967,6 +1065,10 @@ export class EscrituraFacturacion {
                 total: true,
               },
             },
+            cancelaciones: {
+              where: { estado: { in: ['solicitando', 'en_proceso'] } },
+              select: { motivo: true },
+            },
           },
         }),
       );
@@ -987,6 +1089,8 @@ export class EscrituraFacturacion {
               total: cfdi.sustituidoPor.total,
             }
           : null,
+        cancelacionAbierta:
+          (cfdi.cancelaciones[0]?.motivo as MotivoCancelacion | undefined) ?? null,
       };
     });
   }
@@ -1036,6 +1140,11 @@ export class EscrituraFacturacion {
               total: true,
               cheque: { select: { folio: true } },
               sustituidoPor: { select: { id: true } },
+              // F2-109: una solicitud de cancelación abierta bloquea la refacturación.
+              cancelaciones: {
+                where: { estado: { in: ['solicitando', 'en_proceso'] } },
+                select: { id: true },
+              },
               sucursal: {
                 select: {
                   activo: true,
@@ -1052,6 +1161,9 @@ export class EscrituraFacturacion {
         if (viejo.origen === 'global') throw new ConflictException(MENSAJE_GLOBAL_NO_SE_REFACTURA);
         if (viejo.estado !== 'vigente') throw new ConflictException(MENSAJE_YA_CANCELADO);
         if (viejo.sustituidoPor) throw new ConflictException(MENSAJE_SUSTITUCION_EN_CURSO);
+        if (viejo.cancelaciones.length > 0) {
+          throw new ConflictException(MENSAJE_REFACTURAR_CON_CANCELACION);
+        }
         const perfil = await this.#perfilQueEmite(tx, empresaId, ahora);
         const folio = await this.#siguienteFolio(tx, perfil.id, empresaId);
         const { id } = await tx.cfdi.create({
@@ -1104,33 +1216,354 @@ export class EscrituraFacturacion {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // F2-109 · Cancelación de CFDI. El PAC NUNCA corre dentro de estas transacciones: se ABRE la
+  // solicitud (candado), el servicio habla con el PAC, y después se ANOTA lo que contestó.
+  // -------------------------------------------------------------------------
+
   /**
-   * Anota la CANCELACIÓN de un CFDI que el PAC ya canceló (F2-107: motivo 01 con sustituto), sólo si
-   * sigue `vigente` (repetirlo no mueve nada). 404 fuera del scope. Devuelve si lo cambió.
+   * ABRE una solicitud de cancelación en `solicitando`. En UNA transacción: empresa con scope (404)
+   * → el CFDI se BLOQUEA (`FOR UPDATE` por id Y empresa, el mismo candado que `reservarSustituto`)
+   * y se re-lee con scope (una reserva `timbrando` es 404) → con el candado: sin otra solicitud
+   * abierta (409; una `solicitando` VENCIDA se devuelve `por_conciliar`), `vigente` (409) y el
+   * motivo aplica (`conflictoDeMotivo`, 409) → INSERT. El único parcial de las abiertas es la
+   * segunda red (409).
    */
-  async marcarCancelado(
-    empresaId: string,
+  async abrirCancelacion(
     cfdiId: string,
-    motivo: MotivoCancelacion,
-    canceladoAt: Date,
+    pedido: PedidoCancelacion,
+    ahora: Date,
+  ): Promise<AperturaCancelacion> {
+    try {
+      return await this.#enTransaccion(async (tx) => {
+        // La empresa sale del CFDI, leído CON scope: uno de otra empresa es 404 aquí mismo.
+        const { empresaId } = encontradoOr404(
+          await tx.cfdi.findFirst({
+            where: whereScoped(this.#scope, 'Cfdi', {
+              id: exigir('cfdiId', cfdiId),
+              estado: { not: 'timbrando' },
+            }),
+            select: { empresaId: true },
+          }),
+        );
+        await this.#empresa(tx, empresaId);
+        const bloqueado = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id FROM cfdis
+          WHERE id = ${cfdiId}::uuid AND empresa_id = ${empresaId}::uuid
+          FOR UPDATE`;
+        encontradoOr404(bloqueado[0] ?? null);
+        const cfdi = encontradoOr404(
+          await tx.cfdi.findFirst({
+            where: whereScoped(this.#scope, 'Cfdi', {
+              id: cfdiId,
+              empresaId,
+              estado: { not: 'timbrando' },
+            }),
+            select: {
+              id: true,
+              empresaId: true,
+              estado: true,
+              uuid: true,
+              idPac: true,
+              origen: true,
+              sustituidoPor: { select: { estado: true, uuid: true } },
+              sustituye: { select: { estado: true } },
+              cancelaciones: {
+                where: { estado: { in: ['solicitando', 'en_proceso'] } },
+                select: SELECT_SOLICITUD,
+              },
+            },
+          }),
+        );
+        const abierta = cfdi.cancelaciones[0];
+        if (abierta) {
+          if (
+            abierta.estado === 'solicitando' &&
+            ahora.getTime() - abierta.solicitadaAt.getTime() >= SOLICITUD_VENCIDA_MS
+          ) {
+            return { tipo: 'por_conciliar', solicitud: solicitudDe(cfdi, abierta) };
+          }
+          throw new ConflictException(MENSAJE_CANCELACION_ABIERTA);
+        }
+        if (cfdi.estado !== 'vigente') throw new ConflictException(MENSAJE_YA_CANCELADA);
+        const conflicto = conflictoDeMotivo(
+          { origen: cfdi.origen, sustituto: cfdi.sustituidoPor, anterior: cfdi.sustituye },
+          pedido.motivo,
+          pedido.uuidSustitucion,
+        );
+        if (conflicto !== null) throw new ConflictException(conflicto);
+        const nueva = await tx.cfdiCancelacion.create({
+          data: {
+            empresaId,
+            cfdiId,
+            motivo: pedido.motivo,
+            uuidSustitucion: pedido.motivo === '01' ? pedido.uuidSustitucion : null,
+            estado: 'solicitando',
+            solicitadaAt: ahora,
+            updatedAt: ahora,
+          },
+          select: SELECT_SOLICITUD,
+        });
+        return { tipo: 'abierta', solicitud: solicitudDe(cfdi, nueva) };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        // Otra transacción abrió una solicitud para el mismo CFDI entre la lectura y el INSERT.
+        throw new ConflictException(MENSAJE_CANCELACION_ABIERTA);
+      }
+      throw error;
+    }
+  }
+
+  /** La solicitud ABIERTA de un CFDI, o null. 404 si el CFDI no está en el scope o es una reserva. */
+  async cancelacionAbierta(cfdiId: string): Promise<SolicitudAbierta | null> {
+    return this.#enTransaccion(async (tx) => {
+      const cfdi = encontradoOr404(
+        await tx.cfdi.findFirst({
+          where: whereScoped(this.#scope, 'Cfdi', {
+            id: exigir('cfdiId', cfdiId),
+            estado: { not: 'timbrando' },
+          }),
+          select: {
+            id: true,
+            empresaId: true,
+            uuid: true,
+            idPac: true,
+            cancelaciones: {
+              where: { estado: { in: ['solicitando', 'en_proceso'] } },
+              select: SELECT_SOLICITUD,
+            },
+          },
+        }),
+      );
+      await this.#empresa(tx, cfdi.empresaId);
+      const abierta = cfdi.cancelaciones[0];
+      return abierta ? solicitudDe(cfdi, abierta) : null;
+    });
+  }
+
+  /**
+   * Las solicitudes abiertas del scope (el sondeo corre con el de sistema), las CONSULTADAS hace más
+   * tiempo primero (`updated_at`: cada consulta la marca). Así una que nunca se resuelve (el PAC no
+   * la conoce, un estado desconocido) pasa al final de la fila y no acapara el límite de la vuelta.
+   */
+  async solicitudesAbiertas(limite: number): Promise<SolicitudAbierta[]> {
+    return this.#enTransaccion(async (tx) => {
+      const filas = await tx.cfdiCancelacion.findMany({
+        where: whereScoped(this.#scope, 'CfdiCancelacion', {
+          estado: { in: ['solicitando', 'en_proceso'] },
+        }),
+        select: {
+          ...SELECT_SOLICITUD,
+          cfdi: { select: { id: true, empresaId: true, uuid: true, idPac: true } },
+        },
+        orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+        take: limite,
+      });
+      return filas.map((f) => solicitudDe(f.cfdi, f));
+    });
+  }
+
+  /**
+   * Marca una solicitud abierta como CONSULTADA sin resolverla (`updated_at` = ahora) y guarda el
+   * último error del PAC (null = el PAC contestó bien). Devuelve si el error CAMBIÓ, para loguear una
+   * vez por solicitud y no en cada vuelta del sondeo.
+   */
+  async marcarConsultada(
+    empresaId: string,
+    solicitudId: string,
+    error: string | null,
     ahora: Date,
   ): Promise<boolean> {
     return this.#enTransaccion(async (tx) => {
       await this.#empresa(tx, empresaId);
-      const { count } = await tx.cfdi.updateMany({
-        where: whereScoped(this.#scope, 'Cfdi', {
-          id: exigir('cfdiId', cfdiId),
+      const where = whereScoped(this.#scope, 'CfdiCancelacion', {
+        id: exigir('solicitudId', solicitudId),
+        empresaId,
+        estado: { in: ['solicitando', 'en_proceso'] },
+      });
+      const previa = await tx.cfdiCancelacion.findFirst({ where, select: { ultimoError: true } });
+      if (!previa) return false;
+      await tx.cfdiCancelacion.updateMany({
+        where,
+        data: { ultimoError: error, updatedAt: ahora },
+      });
+      return previa.ultimoError !== error;
+    });
+  }
+
+  /**
+   * ANOTA cómo se resolvió una solicitud abierta, CONDICIONAL al estado en que se leyó (`desde`):
+   * si dos procesos la resuelven a la vez, sólo uno gana y sólo ése aplica los efectos y manda el
+   * aviso. Todo en UNA transacción, con el CFDI BLOQUEADO:
+   * - `aceptada`: la solicitud queda `aceptada`; el CFDI pasa `vigente → cancelado` (sólo si sigue
+   *   vigente) con motivo y `cancelado_at` = la fecha del PAC; y el ticket (`efectoEnTicket`): se
+   *   suelta el código del CFDI (sólo si ESTE CFDI todavía lo tiene) o, en una global, sus tickets
+   *   (guardados antes en `tickets_global`).
+   * - `en_proceso` / `rechazada`: sólo la solicitud. El CFDI sigue `vigente`.
+   * - `no_procedio`: la solicitud se BORRA (el PAC no hizo nada; queda en la auditoría y el log).
+   */
+  async anotarCancelacion(
+    empresaId: string,
+    solicitudId: string,
+    desde: EstadoSolicitudAbierta,
+    r: AnotacionCancelacion,
+    ahora: Date,
+  ): Promise<{ gano: boolean; aviso: AvisoCancelacion | null }> {
+    return this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      const sol = await tx.cfdiCancelacion.findFirst({
+        where: whereScoped(this.#scope, 'CfdiCancelacion', {
+          id: exigir('solicitudId', solicitudId),
           empresaId,
-          estado: 'vigente',
+          estado: desde,
         }),
+        select: { id: true, cfdiId: true, motivo: true, uuidSustitucion: true },
+      });
+      if (!sol) return { gano: false, aviso: null };
+      await tx.$queryRaw`
+        SELECT id FROM cfdis
+        WHERE id = ${sol.cfdiId}::uuid AND empresa_id = ${empresaId}::uuid
+        FOR UPDATE`;
+      const deLaSolicitud = whereScoped(this.#scope, 'CfdiCancelacion', {
+        id: sol.id,
+        empresaId,
+        estado: desde,
+      });
+      if (r.tipo === 'no_procedio') {
+        const { count } = await tx.cfdiCancelacion.deleteMany({ where: deLaSolicitud });
+        return { gano: count === 1, aviso: null };
+      }
+      if (r.tipo === 'en_proceso' || r.tipo === 'rechazada') {
+        const { count } = await tx.cfdiCancelacion.updateMany({
+          where: deLaSolicitud,
+          data:
+            r.tipo === 'en_proceso'
+              ? { estado: 'en_proceso', ultimoError: null, updatedAt: ahora }
+              : { estado: 'rechazada', resueltaAt: ahora, ultimoError: null, updatedAt: ahora },
+        });
+        return { gano: count === 1, aviso: null };
+      }
+
+      const { count } = await tx.cfdiCancelacion.updateMany({
+        where: deLaSolicitud,
+        data: { estado: 'aceptada', resueltaAt: ahora, ultimoError: null, updatedAt: ahora },
+      });
+      if (count !== 1) return { gano: false, aviso: null };
+      const motivo = sol.motivo as MotivoCancelacion;
+      const deEsteCfdi = whereScoped(this.#scope, 'Cfdi', { id: sol.cfdiId, empresaId });
+      const cfdi = encontradoOr404(
+        await tx.cfdi.findFirst({
+          where: deEsteCfdi,
+          select: {
+            codigoId: true,
+            origen: true,
+            uuid: true,
+            serie: true,
+            folio: true,
+            total: true,
+            receptor: true,
+            perfil: { select: { razonSocial: true } },
+            sucursal: { select: { nombre: true, portalFacturacion: { select: { color: true } } } },
+          },
+        }),
+      );
+      const cancelo = await tx.cfdi.updateMany({
+        where: { ...deEsteCfdi, estado: 'vigente' },
         data: {
           estado: 'cancelado',
           motivoCancelacion: motivo,
-          canceladoAt,
+          canceladoAt: r.fecha,
           updatedAt: ahora,
         },
       });
-      return count === 1;
+      // Ya estaba cancelado (no debería pasar: una sola solicitud abierta por CFDI): se anota la
+      // solicitud, pero ni se tocan tickets ni se avisa dos veces.
+      if (cancelo.count !== 1) return { gano: true, aviso: null };
+
+      const efecto = efectoEnTicket(motivo, cfdi.origen, cfdi.codigoId !== null);
+      if (efecto === 'soltar_codigo' && cfdi.codigoId !== null) {
+        // El candado de emisión (`cfdis.codigo_id` único) se suelta: el ticket puede tener otro CFDI.
+        await tx.cfdi.updateMany({
+          where: deEsteCfdi,
+          data: { codigoId: null, updatedAt: ahora },
+        });
+        await tx.codigoFacturacion.updateMany({
+          where: whereScoped(this.#scope, 'CodigoFacturacion', {
+            id: cfdi.codigoId,
+            empresaId,
+            estado: 'facturado',
+          }),
+          data: { estado: 'pendiente', updatedAt: ahora },
+        });
+      } else if (efecto === 'soltar_global') {
+        const deLaGlobal = whereScoped(this.#scope, 'CfdiGlobalCodigo', {
+          cfdiId: sol.cfdiId,
+          empresaId,
+        });
+        const tickets = await tx.cfdiGlobalCodigo.findMany({
+          where: deLaGlobal,
+          select: { codigoId: true, total: true },
+          orderBy: { codigoId: 'asc' },
+        });
+        const guardados: TicketGlobalCancelado[] = tickets.map((t) => ({
+          codigoId: t.codigoId,
+          total: t.total.toFixed(2),
+        }));
+        await tx.cfdiCancelacion.updateMany({
+          where: whereScoped(this.#scope, 'CfdiCancelacion', { id: sol.id, empresaId }),
+          data: { ticketsGlobal: guardados as unknown as Prisma.InputJsonValue },
+        });
+        await tx.cfdiGlobalCodigo.deleteMany({ where: deLaGlobal });
+        if (tickets.length > 0) {
+          await tx.codigoFacturacion.updateMany({
+            where: whereScoped(this.#scope, 'CodigoFacturacion', {
+              id: { in: tickets.map((t) => t.codigoId) },
+              empresaId,
+              estado: 'en_global',
+            }),
+            data: { estado: 'pendiente', updatedAt: ahora },
+          });
+        }
+      }
+      return {
+        gano: true,
+        aviso: {
+          solicitudId: sol.id,
+          empresaId,
+          email: emailDelReceptor(cfdi.receptor),
+          sucursal: cfdi.sucursal.nombre,
+          color: cfdi.sucursal.portalFacturacion?.color ?? null,
+          emisor: cfdi.perfil.razonSocial,
+          uuid: exigir('uuid', cfdi.uuid),
+          serieFolio: `${cfdi.serie}-${cfdi.folio}`,
+          total: cfdi.total,
+          motivo,
+          uuidSustitucion: sol.uuidSustitucion,
+        },
+      };
+    });
+  }
+
+  /** Anota cómo salió el aviso por correo de una cancelación. Nunca toca otra cosa. */
+  async anotarAvisoCancelacion(
+    empresaId: string,
+    solicitudId: string,
+    resultado: { ok: true } | { ok: false; error: string },
+    ahora: Date,
+  ): Promise<void> {
+    await this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      await tx.cfdiCancelacion.updateMany({
+        where: whereScoped(this.#scope, 'CfdiCancelacion', {
+          id: exigir('solicitudId', solicitudId),
+          empresaId,
+          estado: 'aceptada',
+        }),
+        data: resultado.ok
+          ? { avisoEnviadoAt: ahora, avisoError: null, updatedAt: ahora }
+          : { avisoError: resultado.error, updatedAt: ahora },
+      });
     });
   }
 

@@ -11021,7 +11021,7 @@
             }
           },
           "409": {
-            "description": "No hay nada que reintentar (el envío ya salió, se está enviando ahora, o no existe), o el CFDI no tiene sus archivos guardados (se recupera del PAC).",
+            "description": "No hay nada que reintentar (el envío ya salió, se está enviando ahora, o no existe), o el CFDI no tiene sus archivos guardados (se recupera del PAC), o está CANCELADO (F2-109).",
             "content": {
               "application/json": {
                 "schema": {
@@ -11811,6 +11811,242 @@
           }
         ],
         "summary": "Emite la factura global de un periodo (F2-108).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/cfdis/{id}/cancelar": {
+      "post": {
+        "description": "Primero CONSULTA al PAC (una cancelación que ya ocurrió sólo se anota) y, si sigue vigente, la pide con el motivo. Si el receptor tiene que aceptarla queda `en_proceso` (la factura sigue vigente); al quedar cancelada: deja de sumar a lo facturado, se avisa al receptor por correo, y con motivo 02/03 el ticket vuelve a poderse facturar (su código regresa a `pendiente`); una global cancelada suelta sus tickets para otra global. El motivo 01 exige el UUID del sustituto que dejó la refacturación.",
+        "operationId": "CancelacionController_cancelar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelarCfdiDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCancelacionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Motivo inválido, motivo 01 sin `uuidSustitucion`, o id que no es UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorFacturaAdminDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El CFDI no existe, es una reserva o no está en tu alcance (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya está cancelada; ya tiene una solicitud abierta; el motivo no aplica (01 sin sustituto o con otro UUID, 04 fuera de una global, 01 en una global, otro motivo con una refacturación en curso o hecha, o un sustituto cuyo anterior sigue vigente); o el PAC no la conoce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "El PAC rechazó la cancelación.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "El PAC no confirmó (la cancelación pudo registrarse): la solicitud se queda `solicitando` y NO se vuelve a pedir; se consulta con `cancelacion/consultar` (o el sondeo) pasados 10 min.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "El PAC no está disponible: no se canceló nada (no queda solicitud).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Solicita la cancelación de un CFDI vigente ante el SAT (F2-109).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/cfdis/{id}/cancelacion/consultar": {
+      "post": {
+        "description": "Lo mismo que hace el sondeo automático, a pedido. Una solicitud `solicitando` de menos de 10 min no se toca (puede ir una llamada en vuelo).",
+        "operationId": "CancelacionController_consultar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultaCancelacionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "El id no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El CFDI no existe, es una reserva o no está en tu alcance (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La factura no tiene una solicitud abierta, o el PAC no la conoce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "El PAC no confirmó (la cancelación pudo registrarse): la solicitud se queda `solicitando` y NO se vuelve a pedir; se consulta con `cancelacion/consultar` (o el sondeo) pasados 10 min.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "El PAC no está disponible: no se canceló nada (no queda solicitud).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Consulta al PAC la solicitud de cancelación abierta de un CFDI y la resuelve (F2-109).",
         "tags": [
           "facturacion"
         ]
@@ -20908,6 +21144,39 @@
           "email"
         ]
       },
+      "CancelacionFilaDto": {
+        "type": "object",
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "solicitando",
+              "en_proceso",
+              "rechazada"
+            ]
+          },
+          "motivo": {
+            "type": "string",
+            "example": "02",
+            "description": "c_MotivoCancelacion pedido."
+          },
+          "solicitadaAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resueltaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "estado",
+          "motivo",
+          "solicitadaAt",
+          "resueltaAt"
+        ]
+      },
       "CfdiFilaDto": {
         "type": "object",
         "properties": {
@@ -21000,7 +21269,17 @@
           "motivoCancelacion": {
             "type": "string",
             "nullable": true,
-            "description": "c_MotivoCancelacion con que se canceló (F2-107: 01), si se conoce."
+            "description": "c_MotivoCancelacion con que se canceló (F2-107: 01; F2-109: 01–04), si se conoce."
+          },
+          "cancelacion": {
+            "nullable": true,
+            "description": "F2-109: la última solicitud de cancelación si NO quedó aceptada, o null. `en_proceso` = el SAT espera al receptor (la factura sigue vigente y sigue contando en lo facturado); `rechazada` = el receptor la rechazó; `solicitando` = el PAC no confirmó (consultar).",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CancelacionFilaDto"
+              }
+            ]
           }
         },
         "required": [
@@ -21022,7 +21301,8 @@
           "sustituyeA",
           "sustituidoPor",
           "sustitucionPendiente",
-          "motivoCancelacion"
+          "motivoCancelacion",
+          "cancelacion"
         ]
       },
       "PaginaCfdisDto": {
@@ -22593,6 +22873,10 @@
           "globalesPrevias": {
             "type": "number",
             "description": "Globales vigentes (o en emisión) que YA tiene el periodo. > 0 = la siguiente es complementaria (tickets que llegaron tarde); el programador no la emite solo."
+          },
+          "globalesCanceladas": {
+            "type": "number",
+            "description": "F2-109: cuántas globales CANCELADAS tiene el periodo. Con alguna, la emisión automática ya no lo emite sola (sus tickets se soltaron): queda para emitir a mano."
           }
         },
         "required": [
@@ -22610,7 +22894,8 @@
           "total",
           "vigentes",
           "vigentesHasta",
-          "globalesPrevias"
+          "globalesPrevias",
+          "globalesCanceladas"
         ]
       },
       "GlobalEmitidaDto": {
@@ -22941,6 +23226,100 @@
           "tickets",
           "etiqueta",
           "descargas"
+        ]
+      },
+      "CancelarCfdiDto": {
+        "type": "object",
+        "properties": {
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "01",
+              "02",
+              "03",
+              "04"
+            ],
+            "description": "c_MotivoCancelacion del SAT: 01 con errores CON relación (exige el sustituto), 02 con errores sin relación, 03 no se llevó a cabo la operación, 04 operación nominativa relacionada en una factura global (sólo para una global). Una global no se cancela con 01."
+          },
+          "uuidSustitucion": {
+            "type": "object",
+            "nullable": true,
+            "format": "uuid",
+            "description": "Obligatorio con motivo 01 (400 si falta): el folio fiscal del SUSTITUTO de esta factura, el que emitió la refacturación con relación 04. Uno que no sea ese es 409."
+          }
+        },
+        "required": [
+          "motivo"
+        ]
+      },
+      "ResultadoCancelacionDto": {
+        "type": "object",
+        "properties": {
+          "cfdiId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uuid": {
+            "type": "string",
+            "description": "Folio fiscal (UUID) de la factura cancelada."
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "01",
+              "02",
+              "03",
+              "04"
+            ]
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "cancelado",
+              "en_proceso"
+            ],
+            "description": "`en_proceso`: el SAT espera la respuesta del receptor (acepta, rechaza, o a las 72 h procede). Mientras tanto la factura sigue VIGENTE y sigue contando en lo facturado."
+          },
+          "mensaje": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "cfdiId",
+          "uuid",
+          "motivo",
+          "estado",
+          "mensaje"
+        ]
+      },
+      "ConsultaCancelacionDto": {
+        "type": "object",
+        "properties": {
+          "cfdiId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "solicitando",
+              "en_proceso",
+              "aceptada",
+              "rechazada",
+              "no_procedio"
+            ],
+            "description": "En qué quedó la solicitud tras consultar al PAC: `aceptada` = la factura quedó cancelada; `rechazada` = el receptor la rechazó (sigue vigente, se puede volver a pedir); `no_procedio` = el PAC nunca la registró (sigue vigente); `solicitando`/`en_proceso` = sin cambio todavía."
+          },
+          "mensaje": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "cfdiId",
+          "estado",
+          "mensaje"
         ]
       }
     }

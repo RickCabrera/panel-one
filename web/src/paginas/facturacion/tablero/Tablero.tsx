@@ -37,6 +37,9 @@ import {
   usePorFacturar,
   useTablero,
 } from './consultas';
+import { cancelacionAbierta, puedeCancelar, textoCancelacion } from '../emision/cancelacion';
+import { consultarCancelacion } from '../emision/consultas';
+import { DialogoCancelar } from '../emision/DialogoCancelar';
 import { DialogoRefacturar } from '../emision/DialogoRefacturar';
 import { GraficaSerie } from './graficas';
 import {
@@ -316,6 +319,7 @@ function TablaCfdis({
   const [aviso, setAviso] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
   const [refacturando, setRefacturando] = useState<CfdiFila | null>(null);
+  const [cancelando, setCancelando] = useState<CfdiFila | null>(null);
   const consulta = useCfdis(filtro, rango, { q, estado, origen, pagina });
   const porId = new Map(sucursales.map((s) => [s.id, s]));
 
@@ -513,18 +517,33 @@ function TablaCfdis({
                             )}
                           </td>
                           <td className="px-2 py-1 whitespace-nowrap">
-                            {/* Una global no se refactura: su receptor es público en general. */}
-                            {c.estado === 'vigente' &&
-                              c.origen !== 'global' &&
-                              (c.sustituidoPor === null || c.sustitucionPendiente) && (
+                            <span className="flex gap-1">
+                              {/* Una global no se refactura: su receptor es público en general. */}
+                              {c.estado === 'vigente' &&
+                                c.origen !== 'global' &&
+                                (c.sustituidoPor === null || c.sustitucionPendiente) && (
+                                  <button
+                                    type="button"
+                                    className={BOTON}
+                                    onClick={() => setRefacturando(c)}
+                                  >
+                                    {c.sustitucionPendiente
+                                      ? 'Reintentar cancelación'
+                                      : 'Refacturar'}
+                                  </button>
+                                )}
+                              {/* F2-109: con una solicitud abierta se consulta, no se pide otra. */}
+                              {puedeCancelar(c) && (
                                 <button
                                   type="button"
                                   className={BOTON}
-                                  onClick={() => setRefacturando(c)}
+                                  onClick={() => setCancelando(c)}
                                 >
-                                  {c.sustitucionPendiente ? 'Reintentar cancelación' : 'Refacturar'}
+                                  Cancelar
                                 </button>
                               )}
+                              {cancelacionAbierta(c) && <ActualizarCancelacion c={c} />}
+                            </span>
                           </td>
                         </tr>
                       );
@@ -539,6 +558,16 @@ function TablaCfdis({
       </SegunEstado>
       {refacturando && (
         <DialogoRefacturar cfdi={refacturando} onCerrar={() => setRefacturando(null)} />
+      )}
+      {cancelando && (
+        <DialogoCancelar
+          cfdi={cancelando}
+          onCerrar={() => setCancelando(null)}
+          onRefacturar={() => {
+            setRefacturando(cancelando);
+            setCancelando(null);
+          }}
+        />
       )}
     </Tarjeta>
   );
@@ -573,7 +602,46 @@ function EstadoFila({ c }: { c: CfdiFila }) {
       {c.sustitucionPendiente && (
         <span className="text-xs text-peligro">Cancelación pendiente: no suma a lo facturado</span>
       )}
+      {c.cancelacion && c.estado === 'vigente' && (
+        <span className="text-xs text-aviso">{textoCancelacion(c.cancelacion)}</span>
+      )}
     </div>
+  );
+}
+
+/**
+ * "Actualizar estado" de una cancelación abierta (F2-109): el api consulta al PAC y la resuelve; la
+ * tabla se recarga y el resultado se dice en la misma fila.
+ */
+function ActualizarCancelacion({ c }: { c: CfdiFila }) {
+  const cliente = useQueryClient();
+  const [enviando, setEnviando] = useState(false);
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  async function actualizar() {
+    if (enviando) return;
+    setEnviando(true);
+    setMensaje(null);
+    try {
+      const r = await consultarCancelacion(c.id);
+      setMensaje(r.estado === 'aceptada' ? 'Cancelada.' : r.mensaje);
+      void cliente.invalidateQueries({ queryKey: LLAVE_TABLERO });
+    } catch (error) {
+      setMensaje(error instanceof ErrorApi ? error.message : 'Error inesperado.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+  return (
+    <span className="flex flex-col">
+      <button type="button" className={BOTON} disabled={enviando} onClick={() => void actualizar()}>
+        {enviando ? 'Consultando…' : 'Actualizar estado'}
+      </button>
+      {mensaje && (
+        <span role="status" className="max-w-48 text-xs whitespace-normal text-tinta-suave">
+          {mensaje}
+        </span>
+      )}
+    </span>
   );
 }
 

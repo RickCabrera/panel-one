@@ -60,13 +60,14 @@ const CTES_F2_222 =
   /,\n {2}partidas_empresa AS \([\s\S]*?\n {2}\),\n {2}pagos_empresa AS \([\s\S]*?\n {2}\)(?= SELECT )/;
 
 /**
- * Las dos CTEs de F2-106 (tablero de facturación), también AL FINAL del `WITH`, con sus 16
- * parámetros al final (12 de F2-106 + 4 de los dos LEFT JOIN de la sustitución de F2-107) (scope empresa, sin sucursal ni `alturaAl`). Se quitan del snapshot y su
+ * Las dos CTEs de F2-106 (tablero de facturación), también AL FINAL del `WITH`, con sus 18
+ * parámetros al final (12 de F2-106 + 4 de los dos LEFT JOIN de la sustitución de F2-107 + 2 del
+ * LATERAL de la última solicitud de cancelación de F2-109) (scope empresa, sin sucursal ni `alturaAl`). Se quitan del snapshot y su
  * filtro de tenant se prueba aparte, texto y valores.
  */
 const CTES_F2_106 =
   /,\n {2}cfdis_periodo AS \([\s\S]*?\n {2}\),\n {2}codigos_ventas AS \([\s\S]*?\n {2}\)(?= SELECT )/;
-const PARAMS_F2_106 = 16;
+const PARAMS_F2_106 = 18;
 
 function sinF2106(texto: string): string {
   const resto = texto.replace(/\r\n/g, '\n');
@@ -355,6 +356,12 @@ describe('alturaAl (F2-220)', () => {
         'LEFT JOIN cfdis n ON n.sustituye_a_id = f.id AND n.empresa_id = f.empresa_id\n' +
           '      AND n.empresa_id = ?::uuid AND n.empresa_id = ?::uuid\n',
       );
+      // F2-109: la última solicitud de cancelación, con empresa + tenant.
+      expect(cuerpo).toContain(
+        'FROM cfdi_cancelaciones x\n' +
+          '      WHERE x.cfdi_id = f.id AND x.empresa_id = f.empresa_id\n' +
+          '        AND x.empresa_id = ?::uuid AND x.empresa_id = ?::uuid\n',
+      );
       // Un vigente con sustituto vigente no suma a lo facturado.
       expect(cuerpo).toContain(
         "(f.estado = 'vigente' AND (n.id IS NULL OR n.estado <> 'vigente')) AS cuenta_facturado",
@@ -366,6 +373,8 @@ describe('alturaAl (F2-220)', () => {
       expect(cuerpo).toContain("AND f.estado IN ('vigente', 'cancelado')");
       expect(cuerpo).toContain('f.emitido_at >= (?::date::timestamp AT TIME ZONE s.zona_horaria)');
       expect(valores.slice(-PARAMS_F2_106, -4)).toEqual([
+        FX.empresaA,
+        FX.empresaA,
         FX.empresaA,
         FX.empresaA,
         FX.empresaA,

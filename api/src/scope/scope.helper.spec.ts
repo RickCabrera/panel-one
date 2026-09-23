@@ -95,6 +95,7 @@ describe('whereEmpresa / whereScoped', () => {
       Cfdi: 'empresaId',
       CfdiEnvio: 'empresaId',
       CfdiGlobalCodigo: 'empresaId',
+      CfdiCancelacion: 'empresaId',
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });

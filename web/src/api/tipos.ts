@@ -1741,6 +1741,45 @@ export interface CfdiFila {
   /** Vigente con un sustituto vigente: la cancelación 01 sigue pendiente (no suma a lo facturado). */
   sustitucionPendiente: boolean;
   motivoCancelacion: string | null;
+  /**
+   * F2-109: la última solicitud de cancelación si NO quedó aceptada, o null. `en_proceso` = el SAT
+   * espera al receptor (la factura sigue vigente y cuenta); `rechazada` = el receptor la rechazó;
+   * `solicitando` = el PAC no confirmó (hay que consultar).
+   */
+  cancelacion: CancelacionFila | null;
+}
+
+/** `CancelacionFilaDto` (F2-109). */
+export interface CancelacionFila {
+  estado: 'solicitando' | 'en_proceso' | 'rechazada';
+  motivo: string;
+  solicitadaAt: string;
+  resueltaAt: string | null;
+}
+
+/** c_MotivoCancelacion del SAT (F2-109). */
+export type MotivoCancelacion = '01' | '02' | '03' | '04';
+
+/** `CancelarCfdiDto` (F2-109): con motivo 01, el UUID del sustituto. */
+export interface SolicitudCancelacion {
+  motivo: MotivoCancelacion;
+  uuidSustitucion?: string;
+}
+
+/** `ResultadoCancelacionDto` (F2-109). */
+export interface ResultadoCancelacion {
+  cfdiId: string;
+  uuid: string;
+  motivo: MotivoCancelacion;
+  estado: 'cancelado' | 'en_proceso';
+  mensaje: string | null;
+}
+
+/** `ConsultaCancelacionDto` (F2-109): en qué quedó la solicitud tras consultar al PAC. */
+export interface ConsultaCancelacion {
+  cfdiId: string;
+  estado: 'solicitando' | 'en_proceso' | 'aceptada' | 'rechazada' | 'no_procedio';
+  mensaje: string | null;
 }
 
 /** F2-107; F2-108 agrega `global` (factura a público en general). */
@@ -1865,6 +1904,8 @@ export interface ResumenPeriodoGlobal extends PeriodoGlobal {
   vigentes: number;
   vigentesHasta: string | null;
   globalesPrevias: number;
+  /** F2-109: globales CANCELADAS del periodo; con alguna, la automática ya no lo emite sola. */
+  globalesCanceladas: number;
 }
 
 /** `GlobalEmitidaDto`. */

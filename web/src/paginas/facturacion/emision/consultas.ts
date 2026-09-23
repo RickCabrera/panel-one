@@ -1,8 +1,11 @@
 import { pedir } from '../../../api/cliente';
 import type {
+  ConsultaCancelacion,
   FacturaEmitidaAdmin,
   ReceptorCfdi,
+  ResultadoCancelacion,
   ResultadoRefacturacion,
+  SolicitudCancelacion,
   SolicitudFacturaManual,
 } from '../../../api/tipos';
 
@@ -19,5 +22,23 @@ export function refacturarCfdi(
   return pedir<ResultadoRefacturacion>(`/facturacion/cfdis/${cfdiId}/refacturar`, {
     method: 'POST',
     body: { receptor },
+  });
+}
+
+/** Cancelación ante el SAT (F2-109). Con motivo 01, el UUID del sustituto. */
+export function cancelarCfdi(
+  cfdiId: string,
+  body: SolicitudCancelacion,
+): Promise<ResultadoCancelacion> {
+  return pedir<ResultadoCancelacion>(`/facturacion/cfdis/${cfdiId}/cancelar`, {
+    method: 'POST',
+    body,
+  });
+}
+
+/** "Actualizar estado" de una cancelación abierta (F2-109): el api consulta al PAC. */
+export function consultarCancelacion(cfdiId: string): Promise<ConsultaCancelacion> {
+  return pedir<ConsultaCancelacion>(`/facturacion/cfdis/${cfdiId}/cancelacion/consultar`, {
+    method: 'POST',
   });
 }

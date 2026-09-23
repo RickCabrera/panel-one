@@ -125,11 +125,20 @@ export interface SolicitudCancelacion extends ReferenciaCfdi {
   folioSustitucion?: string;
 }
 
-export type EstadoCfdi = 'vigente' | 'cancelado' | 'no_encontrado';
+/**
+ * El estado de un CFDI en el PAC. `en_cancelacion` (F2-109) = VIGENTE ante el SAT con una solicitud
+ * de cancelación que espera la respuesta del receptor (acepta, rechaza, o a las 72 h se da por
+ * aceptada). "Rechazada" no es un estado del PAC: lo deriva quien pidió la cancelación cuando el
+ * PAC vuelve a decir `vigente`.
+ */
+export type EstadoCfdi = 'vigente' | 'en_cancelacion' | 'cancelado' | 'no_encontrado';
+
+/** Cómo queda un CFDI justo después de pedir su cancelación (F2-109). */
+export type EstadoTrasCancelar = 'cancelado' | 'en_cancelacion';
 
 export interface ResultadoCancelacion {
   uuid: string;
-  estado: EstadoCfdi;
+  estado: EstadoTrasCancelar;
   fecha: Date;
 }
 

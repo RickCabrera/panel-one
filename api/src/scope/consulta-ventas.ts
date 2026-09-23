@@ -69,6 +69,10 @@ import type { EmpresaScope } from './empresa-scope';
  *   F2-108: `origen` también puede ser `global` (factura a público en general, sin cheque) y
  *   `es_global` lo dice. `cuenta_facturado` NO cambia de significado (una global vigente también
  *   cuenta); quien agrega decide si separa la global (el tablero la separa: `es_global`).
+ *   F2-109: `cancelacion_estado`/`_motivo`/`_solicitada_at`/`_resuelta_at` = la ÚLTIMA solicitud
+ *   de cancelación del CFDI si NO quedó aceptada (`solicitando`, `en_proceso` o `rechazada`); si
+ *   quedó aceptada, nulos (ya se ve en `estado` y `motivo_cancelacion`). Una en proceso NO cambia
+ *   `cuenta_facturado`: la factura sigue vigente ante el SAT hasta que el receptor acepte.
  * - `codigos_ventas(cheque_id, empresa_id, sucursal_id, folio, cerrado_at, total, codigo, estado,
  *   expira_at, con_cfdi)` (F2-106): el código de facturación de cada cuenta de `ventas`, con su
  *   estado GUARDADO y `con_cfdi` = tiene un CFDI `vigente` o una reserva `timbrando` (uno
@@ -437,7 +441,14 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
            f.origen::text AS origen, f.motivo_cancelacion, a.uuid AS sustituye_a_uuid,
            n.uuid AS sustituido_por_uuid, n.estado::text AS sustituto_estado,
            (f.estado = 'vigente' AND (n.id IS NULL OR n.estado <> 'vigente')) AS cuenta_facturado,
-           (f.origen::text = 'global') AS es_global
+           (f.origen::text = 'global') AS es_global,
+           CASE WHEN q.estado::text = 'aceptada' THEN NULL ELSE q.estado::text END
+             AS cancelacion_estado,
+           CASE WHEN q.estado::text = 'aceptada' THEN NULL ELSE q.motivo END AS cancelacion_motivo,
+           CASE WHEN q.estado::text = 'aceptada' THEN NULL ELSE q.solicitada_at END
+             AS cancelacion_solicitada_at,
+           CASE WHEN q.estado::text = 'aceptada' THEN NULL ELSE q.resuelta_at END
+             AS cancelacion_resuelta_at
     FROM cfdis f
     JOIN sucursales_alcance s ON s.id = f.sucursal_id AND s.empresa_id = f.empresa_id
     LEFT JOIN cheques c ON c.id = f.cheque_id AND c.empresa_id = f.empresa_id
@@ -446,6 +457,14 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
       AND a.empresa_id = ${empresa} ${filtroTenant(scope, 'a')}
     LEFT JOIN cfdis n ON n.sustituye_a_id = f.id AND n.empresa_id = f.empresa_id
       AND n.empresa_id = ${empresa} ${filtroTenant(scope, 'n')}
+    LEFT JOIN LATERAL (
+      SELECT x.estado, x.motivo, x.solicitada_at, x.resuelta_at
+      FROM cfdi_cancelaciones x
+      WHERE x.cfdi_id = f.id AND x.empresa_id = f.empresa_id
+        AND x.empresa_id = ${empresa} ${filtroTenant(scope, 'x')}
+      ORDER BY x.solicitada_at DESC, x.id DESC
+      LIMIT 1
+    ) q ON true
     WHERE f.empresa_id = ${empresa} ${filtroTenant(scope, 'f')} ${sucursalCfdi}
       AND f.estado IN ('vigente', 'cancelado')
       AND f.emitido_at >= ${inicioGrueso} AND f.emitido_at < ${finGrueso}

@@ -226,6 +226,33 @@ export const MENSAJE_SUSTITUTO_NO_RELACIONADO =
   'El CFDI sustituto no existe, no está vigente o no declara la relación 04 con el CFDI que se ' +
   'quiere cancelar.';
 
+/**
+ * F2-109: RFC de RECEPTOR reservados para las cancelaciones que ESPERAN al receptor. En el SAT real
+ * lo decide la regla de aceptación (monto, tipo de receptor, tiempo desde la emisión) y la aplica el
+ * PAC; el falso no la modela: cancela al instante salvo con estos dos, que pasan la validación del
+ * portal (persona física, no genéricos) para poder probarlos de punta a punta y en modo demo.
+ * - `acepta`: la cancelación queda `en_cancelacion` hasta que el receptor responda
+ *   (`responderCancelacion`) o venza el plazo de 72 h (se da por aceptada, como el SAT).
+ * - `rechaza`: queda `en_cancelacion` y en la PRIMERA consulta el receptor ya la rechazó.
+ */
+export const RFC_CANCELACION_CON_ACEPTACION = {
+  acepta: 'XFAL010101AC0',
+  rechaza: 'XFAL010101RC0',
+} as const;
+
+/** El plazo del SAT para que el receptor responda; sin respuesta, la cancelación procede. */
+export const PLAZO_ACEPTACION_MS = 72 * 3600 * 1000;
+
+export const MENSAJE_CANCELACION_EN_PROCESO_PAC =
+  'Este CFDI ya tiene una solicitud de cancelación en proceso.';
+
+interface SolicitudPendiente {
+  motivo: MotivoCancelacion;
+  folioSustitucion?: string;
+  solicitadaMs: number;
+  rechazaAlConsultar: boolean;
+}
+
 /** Cómo quedó cancelado un CFDI en el PAC falso (para que los tests lo verifiquen). */
 export interface CancelacionFalsa {
   motivo: MotivoCancelacion;
@@ -247,6 +274,9 @@ export class TimbradoFalso implements PuertoTimbrado {
   private readonly estados = new Map<string, EstadoCfdi>();
   private readonly relaciones = new Map<string, CfdiRelacionados>();
   private readonly cancelaciones = new Map<string, CancelacionFalsa>();
+  /** F2-109: el RFC del receptor de cada emisión y las cancelaciones que esperan al receptor. */
+  private readonly receptores = new Map<string, string>();
+  private readonly pendientes = new Map<string, SolicitudPendiente>();
 
   constructor(private readonly reloj: Pick<Reloj, 'ahora'>) {}
 
@@ -271,6 +301,7 @@ export class TimbradoFalso implements PuertoTimbrado {
     const uuid = uuidDeterminista(solicitud.referencia);
     const fechaTimbrado = new Date(this.reloj.ahora());
     if (!this.estados.has(uuid)) this.estados.set(uuid, 'vigente');
+    this.receptores.set(uuid, solicitud.receptor.rfc);
     if (solicitud.relacionados) {
       this.relaciones.set(uuid, {
         tipoRelacion: solicitud.relacionados.tipoRelacion,
@@ -314,16 +345,59 @@ export class TimbradoFalso implements PuertoTimbrado {
         );
       }
     }
-    this.estados.set(solicitud.uuid, 'cancelado');
-    this.cancelaciones.set(solicitud.uuid, {
-      motivo: solicitud.motivo,
-      ...(solicitud.folioSustitucion ? { folioSustitucion: solicitud.folioSustitucion } : {}),
-    });
+    if (this.estados.get(solicitud.uuid) === 'en_cancelacion') {
+      return Promise.reject(
+        new ErrorTimbrado('RECHAZADO_POR_PAC', MENSAJE_CANCELACION_EN_PROCESO_PAC),
+      );
+    }
+    const receptor = this.receptores.get(solicitud.uuid);
+    if (
+      receptor === RFC_CANCELACION_CON_ACEPTACION.acepta ||
+      receptor === RFC_CANCELACION_CON_ACEPTACION.rechaza
+    ) {
+      this.estados.set(solicitud.uuid, 'en_cancelacion');
+      this.pendientes.set(solicitud.uuid, {
+        motivo: solicitud.motivo,
+        ...(solicitud.folioSustitucion ? { folioSustitucion: solicitud.folioSustitucion } : {}),
+        solicitadaMs: this.reloj.ahora(),
+        rechazaAlConsultar: receptor === RFC_CANCELACION_CON_ACEPTACION.rechaza,
+      });
+      return Promise.resolve({
+        uuid: solicitud.uuid,
+        estado: 'en_cancelacion',
+        fecha: new Date(this.reloj.ahora()),
+      });
+    }
+    this.#cancelar(solicitud.uuid, solicitud);
     return Promise.resolve({
       uuid: solicitud.uuid,
       estado: 'cancelado',
       fecha: new Date(this.reloj.ahora()),
     });
+  }
+
+  #cancelar(uuid: string, s: { motivo: MotivoCancelacion; folioSustitucion?: string }): void {
+    this.estados.set(uuid, 'cancelado');
+    this.pendientes.delete(uuid);
+    this.cancelaciones.set(uuid, {
+      motivo: s.motivo,
+      ...(s.folioSustitucion ? { folioSustitucion: s.folioSustitucion } : {}),
+    });
+  }
+
+  /**
+   * F2-109, sólo para tests: el receptor responde una cancelación `en_cancelacion`. Aceptar la
+   * cancela; rechazar la regresa a `vigente`. Sin solicitud pendiente no hace nada.
+   */
+  responderCancelacion(uuid: string, respuesta: 'aceptar' | 'rechazar'): void {
+    const p = this.pendientes.get(uuid);
+    if (!p) return;
+    if (respuesta === 'aceptar') {
+      this.#cancelar(uuid, p);
+    } else {
+      this.pendientes.delete(uuid);
+      this.estados.set(uuid, 'vigente');
+    }
   }
 
   /** Los relacionados con que se emitió un UUID (sólo para verificar en tests). */
@@ -336,7 +410,18 @@ export class TimbradoFalso implements PuertoTimbrado {
     return this.cancelaciones.get(uuid);
   }
 
+  /**
+   * El estado del CFDI. Una cancelación que espera al receptor se resuelve AL CONSULTAR (F2-109):
+   * el receptor reservado que rechaza la rechaza en la primera consulta, y sin respuesta a las
+   * 72 h (reloj del falso) procede, como el "plazo vencido" del SAT.
+   */
   consultarEstado({ uuid }: ReferenciaCfdi): Promise<{ uuid: string; estado: EstadoCfdi }> {
+    const p = this.pendientes.get(uuid);
+    if (p?.rechazaAlConsultar) {
+      this.responderCancelacion(uuid, 'rechazar');
+    } else if (p && this.reloj.ahora() - p.solicitadaMs >= PLAZO_ACEPTACION_MS) {
+      this.#cancelar(uuid, p);
+    }
     return Promise.resolve({ uuid, estado: this.estados.get(uuid) ?? 'no_encontrado' });
   }
 }
