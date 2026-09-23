@@ -7800,3 +7800,85 @@ Agrega los archivos por nombre, nunca `git add -A`.
 
 **Qué haría distinto.** Commitear en la rama en cuanto algo compila, y escribir el log a la mitad del
 trabajo, no al final.
+
+## 2026-09-23 11:40 — F2-147 · Landing pública y onboarding
+**Estado:** CERRADA al mergear el PR de `feat/F2-147` (squash a main). El `[x]` lleva **PENDIENTE DE
+VALIDACIÓN REAL: ver F2-191** (contacto real por Brevo, `AGENTE_URL_DESCARGA`, Lighthouse detrás de Caddy).
+
+**Qué quedó hecho.** Diseño completo en `docs/onboarding.md`.
+- **api (`src/onboarding/`):**
+  - `POST /empresas/alta-guiada` (sólo admin_global): empresa + 1..20 sucursales CON su key + primer
+    `admin_empresa` opcional, en UNA transacción (`ScopedPrismaService.altaEnTransaccion`, que construye
+    `EscrituraAdmin(tx, scope)`; `crearSucursal` ganó `apiKeyHash` opcional). Email duplicado → 409 y no
+    queda nada. Keys en claro una vez, `no-store`; la contraseña no vuelve.
+  - `GET /empresas/:id/arranque` (admins): checklist DEDUCIDO (sucursales, llaves, agente = fila en
+    `agente_contacto`, ventas = ≥1 cheque, usuario = admin_empresa activo). Sin tabla nueva, sin migración.
+    Función pura en `arranque.ts`.
+  - `POST /publico/contacto` (público): throttlers nuevos `contacto` (3/min) y `contacto-hora` (20/h), por
+    `PuertoCorreo` a `CONTACTO_DESTINO`, todo escapado, honeypot `sitio`.
+  - Auditoría nueva: `empresa.alta_guiada`. `limpiarFixtures(prisma, extras)` ahora barre empresas extra.
+- **web:** `/admin/alta` (asistente de 5 pasos, botón en Administración › Empresas), `/ayuda/agente`
+  (guía corta; resume `docs/instalacion-agente.md`: si cambia el instalador, cambian las dos), tarjeta
+  `ChecklistArranque` en Inicio para admins mientras falte algo.
+- **Landing:** `web/landing/` → `web/dist-landing/` con `vite.landing.config.ts` (build aparte, sin React,
+  no entra al precache de la PWA ni a `check:bundle`). `npm run build` arma las dos. `check:landing` en CI;
+  `lighthouse:landing` local.
+- **backlog:** notas "Y además (de F2-147)" en F1-002 (Caddy: landing en dominio raíz, `/api` en el mismo
+  origen, `URL_PANEL`) y F2-191 (`CONTACTO_DESTINO`, `AGENTE_URL_DESCARGA`).
+
+**Cómo se midió el AC nocturno.**
+- Lighthouse 13.5.0 local, Chrome del sistema, perfil móvil: **Performance 100 · Accessibility 100 · Best
+  Practices 100 · SEO 100** (SEO dio 91 hasta agregar `landing/public/robots.txt`).
+- Cronómetro (`AltaGuiada.test.tsx`), modelo conservador sobre las interacciones REALES de `userEvent`:
+  7 campos, 96 caracteres, 12 clics, 2 desplegables, 6 pantallas → **≈289 s** (tope 600). Es estimación,
+  no persona: eso es F1-091.
+
+**Decisiones que tomé y por qué.**
+- **DECISIÓN ABIERTA PARA RICARDO — precios:** no hay precios en ningún lado. La landing dice "Precio por
+  confirmar" en los tres planes (comentario `DECISION PROVISIONAL (nocturno)` en `web/landing/index.html`,
+  sección `#precios`); un test impide publicar una cifra.
+- **Capturas = ilustraciones SVG** con datos de demostración, marcadas como tales. Capturas reales del
+  panel quedan para F2-194/F2-250.
+- **`CONTACTO_DESTINO` ausente en producción → 503**, sin tumbar el api (`onboarding.config.ts`,
+  `DECISION PROVISIONAL`). Fuera de producción usa `contacto@monitor.local`.
+- **`URL_PANEL` por defecto `/login`** (`vite.landing.config.ts`, `DECISION PROVISIONAL`): no se sabe si el
+  panel irá en otro subdominio.
+- "Autofactura desde el ticket" en la landing va con la salvedad de que depende de la versión de SR (F2-102
+  no está resuelto).
+- El seed NO se tocó: sus empresas muestran la lista con llaves/agente pendientes y ventas hecho, y el
+  detalle lo explica ("datos de demostración o de un agente anterior"). Tocar `agente_contacto` del seed
+  movería `GET /agentes/estado` y las alertas de sin contacto.
+- `esquema-sr.md` sin cambios: la tarea no lee ni escribe SoftRestaurant.
+
+**Trampas que encontré.**
+- Un bloque de e2e con varios POST al contacto se come su propio throttler (3/min): cada test del bloque
+  levanta su app.
+- Lighthouse en Windows sale con 1 porque chrome-launcher no puede borrar su perfil temporal (EPERM)
+  DESPUÉS de guardar el reporte. El script lo tolera sólo si el reporte está completo y sin `runtimeError`.
+- Python `str.replace` con `'\n'` metió un salto real en un test TS (archivo con CRLF): usa la herramienta
+  Edit para literales con escapes.
+- `api/src/openapi/openapi.spec.ts` ya no pasaba `prettier --check` en main; no lo reformateé entero.
+
+**Rojos preexistentes (NO de esta tarea, no tocados).**
+- `prisma/esquema.spec.ts` "argon2id verificable": el de siempre (ver F2-146).
+- **FLAKE de `reportes/reportes.e2e.spec.ts` "token alterado: 404"** (F2-141), ~1 de cada 16 corridas: la
+  firma HMAC de 32 bytes en base64url tiene 43 caracteres y el último sólo lleva 4 bits útiles (siempre
+  A, E, I…). Si termina en `A`, el test lo cambia a `B`, que decodifica a los MISMOS bytes → token válido
+  → 200. Arreglo: alterar un carácter de la mitad del token, no el último. Tarea chica para la cola o F2-250.
+
+**Qué quedó abierto.**
+- Sugerencias del revisor no hechas: `arranque()` hace un `findFirst` de cheques por sucursal (bien para
+  ≤20; un `groupBy` lo haría en una consulta); un unitario del `ForbiddenException` de `altaGuiada` con
+  scope no global (la ruta lo tapa en el e2e).
+- Real (F2-191): contacto por Brevo, zip del instalador en `AGENTE_URL_DESCARGA`, Lighthouse en el dominio.
+
+**Tests.**
+- api: `src/onboarding` 38 verdes (e2e de alta, arranque por los tres roles, contacto, unitarios);
+  contrato Brevo con la plantilla `contacto-landing` (snapshot revisado a mano: escapado). Suite completa
+  2462 verdes + openapi adaptado; rojos sólo los dos preexistentes de arriba. Cero skips. lint, typecheck y
+  `prisma validate` limpios.
+- web: `AltaGuiada.test.tsx`, `onboarding/ChecklistArranque.test.tsx`, `landing/*.test.ts`, caso nuevo en
+  `sw-logica.test.ts` (el SW ignora alta-guiada y contacto). build, lint, 112 archivos de vitest verdes,
+  `check:bundle` 344.3 kB, `check:pwa` y `check:landing` (8.1 kB gzip) ok.
+
+**Qué haría distinto.** Correr Lighthouse temprano: el robots.txt y el EPERM de Windows salieron al final.
