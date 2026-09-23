@@ -26,8 +26,11 @@ export interface ReceptorCfdi {
 export interface ConceptoCfdi {
   /** c_ClaveProdServ (p. ej. "90101500", servicios de restaurante). */
   claveProdServ: string;
-  /** Clave del producto en el POS. */
-  noIdentificacion: string;
+  /**
+   * Lo que identifica al concepto (el folio del ticket). Opcional en el CFDI: una factura sin
+   * ticket (F2-107) no tiene qué citar.
+   */
+  noIdentificacion?: string;
   cantidad: Prisma.Decimal;
   /** c_ClaveUnidad (p. ej. "E48" unidad de servicio, "H87" pieza). */
   claveUnidad: string;
@@ -69,6 +72,17 @@ export interface SolicitudCfdi {
   subtotal: Prisma.Decimal;
   totalImpuestosTrasladados: Prisma.Decimal;
   total: Prisma.Decimal;
+  /**
+   * CFDI relacionados (F2-107). Hoy sólo la sustitución: `TipoRelacion` 04 con el UUID del CFDI
+   * que éste sustituye (el que después se cancela con motivo 01).
+   */
+  relacionados?: CfdiRelacionados;
+}
+
+/** c_TipoRelacion 04: sustitución de los CFDI previos. */
+export interface CfdiRelacionados {
+  tipoRelacion: '04';
+  uuids: string[];
 }
 
 /**

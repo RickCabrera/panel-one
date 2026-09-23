@@ -34,6 +34,7 @@ import type { CfdiParaEntregar, EntregaCfdiService } from './entrega.service';
 
 const RESERVA: ReservaCfdi = {
   reservaId: 'reserva-1',
+  origen: 'ticket',
   serie: 'A',
   folio: 12,
   emisor: {
@@ -43,7 +44,7 @@ const RESERVA: ReservaCfdi = {
     cp: '06700',
   },
   sucursal: { zonaHoraria: 'America/Mexico_City', nombre: 'Sucursal Sintética', colorPortal: null },
-  cheque: { folio: 'T-1', total: new Prisma.Decimal('315.50') },
+  cheque: { folio: 'T-1' },
   formaPago: '01',
   importes: {
     subtotal: new Prisma.Decimal('271.98'),

@@ -5,6 +5,8 @@ import { CodigosFacturacionService } from './codigos.service';
 import { FacturacionController } from './facturacion.controller';
 import { FacturacionService } from './facturacion.service';
 import { CfdiService, Espera } from './cfdi.service';
+import { EmisionAdminController } from './emision-admin.controller';
+import { EmisionAdminService } from './emision-admin.service';
 import { EMISION_PORTAL } from './emision-portal';
 import { ArchivosPublicosController, EntregaController } from './entrega.controller';
 import { EntregaCfdiService } from './entrega.service';
@@ -22,7 +24,8 @@ import { VentasModule } from '../ventas/ventas.module';
  * portal público de autofactura y su configuración por sucursal; la emisión va por
  * `EMISION_PORTAL`. F2-104: la emisión del CFDI (`CfdiService`) es ese puerto. F2-105: la entrega
  * (`EntregaCfdiService`): archivos, correo con bitácora y reintento, y las descargas. F2-106: el
- * tablero (`TableroFacturacionService`), que lee la venta de `VentasModule`.
+ * tablero (`TableroFacturacionService`), que lee la venta de `VentasModule`. F2-107: factura sin
+ * ticket y refacturación (`EmisionAdminService`), sobre el mismo tramo de emisión.
  */
 @Module({
   imports: [VentasModule],
@@ -34,6 +37,7 @@ import { VentasModule } from '../ventas/ventas.module';
     PortalesAdminController,
     EntregaController,
     ArchivosPublicosController,
+    EmisionAdminController,
   ],
   providers: [
     FacturacionService,
@@ -42,6 +46,7 @@ import { VentasModule } from '../ventas/ventas.module';
     CfdiService,
     EntregaCfdiService,
     TableroFacturacionService,
+    EmisionAdminService,
     Espera,
     { provide: EMISION_PORTAL, useExisting: CfdiService },
   ],

@@ -97,6 +97,7 @@ export class TableroFacturacionController {
     return this.tablero.cfdis(scope, filtroDe(q), {
       q: q.q,
       estado: q.estado,
+      origen: q.origen,
       pagina: q.pagina ?? 1,
       porPagina: q.porPagina ?? POR_PAGINA_CFDIS_DEFAULT,
     });

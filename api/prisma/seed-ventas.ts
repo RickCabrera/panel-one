@@ -688,7 +688,8 @@ async function main(): Promise<void> {
       console.warn('AVISO: la empresa demo no tiene perfil fiscal: no se sembraron CFDI (F2-106).');
     } else {
       console.log(
-        `CFDI sembrados (F2-106): ${cfdis.cfdis}, ${cfdis.cancelados} cancelados (PAC falso).`,
+        `CFDI sembrados (F2-106): ${cfdis.cfdis}, ${cfdis.cancelados} cancelados (PAC falso); ` +
+          `F2-107: ${cfdis.refacturados} refacturados y ${cfdis.manuales} sin ticket.`,
       );
       if (cfdis.sinArchivos > 0) {
         console.warn(

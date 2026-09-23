@@ -78,7 +78,11 @@ export const EMAIL_MAX = 254;
  * todo bien). La web aplica las mismas reglas para contestar al instante, pero la que manda es
  * ésta. El RFC se valida ya normalizado (mayúsculas, sin espacios alrededor).
  */
-export function validarReceptor(r: ReceptorPortal): ErroresReceptor {
+export function validarReceptor(
+  r: ReceptorPortal,
+  /** F2-107: el administrador puede facturar sin correo (entonces no se envía). */
+  opciones: { emailOpcional?: boolean } = {},
+): ErroresReceptor {
   const errores: ErroresReceptor = {};
   const rfc = normalizarRfc(r.rfc);
   const tipo = tipoPersona(rfc);
@@ -128,7 +132,8 @@ export function validarReceptor(r: ReceptorPortal): ErroresReceptor {
 
   const email = r.email.trim();
   if (email.length === 0) {
-    errores.email = 'Escribe el correo al que te enviaremos la factura.';
+    if (!opciones.emailOpcional)
+      errores.email = 'Escribe el correo al que te enviaremos la factura.';
   } else if (email.length > EMAIL_MAX || !REGEX_EMAIL.test(email)) {
     errores.email = 'El correo no tiene la forma correcta (p. ej. nombre@dominio.com).';
   }

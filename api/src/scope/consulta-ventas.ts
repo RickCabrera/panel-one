@@ -51,13 +51,20 @@ import type { EmpresaScope } from './empresa-scope';
  * - `pagos_ventas(cheque_id, empresa_id, sucursal_id, forma_raw, monto)`.
  * - `catalogo_formas(empresa_id, forma_raw, forma)`: catálogo de la empresa.
  * - `cfdis_periodo(id, empresa_id, sucursal_id, cheque_id, uuid, serie, folio, total, estado,
- *   emitido_at, mes_local, hora_local, receptor_rfc, receptor_nombre, con_xml, con_pdf,
- *   folio_ticket, sucursal_nombre)` (F2-106): los CFDI EMITIDOS (`vigente` o `cancelado`; una
+ *   emitido_at, mes_local, hora_local, receptor_rfc, receptor_nombre, receptor_regimen,
+ *   receptor_cp, receptor_uso, receptor_email, con_xml, con_pdf,
+ *   folio_ticket, sucursal_nombre, origen, motivo_cancelacion, sustituye_a_uuid,
+ *   sustituido_por_uuid, sustituto_estado, cuenta_facturado)` (F2-106, F2-107): los CFDI EMITIDOS (`vigente` o `cancelado`; una
  *   reserva `timbrando` NUNCA entra) cuyo `emitido_at` cae en el rango, cortado en la zona de SU
  *   sucursal como `ventas` (también con `alturaAl`). `mes_local` (`YYYY-MM`) y `hora_local` son los
  *   de la emisión en esa zona. `folio_ticket` es el del cheque (nulo si el CFDI no tiene cheque:
- *   LEFT JOIN, para F2-107). PII (`receptor_rfc`, `receptor_nombre`): sólo en cuerpos de endpoints
+ *   LEFT JOIN, para F2-107). PII (`receptor_*`): sólo en cuerpos de endpoints
  *   de ADMINISTRADORES; un endpoint abierto a visor sólo puede agregarla.
+ *   F2-107: `origen` (`ticket`/`manual`), la sustitución (`sustituye_a_uuid` = el CFDI al que
+ *   sustituye; `sustituido_por_uuid`/`sustituto_estado` = su sustituto, que puede estar FUERA del
+ *   rango o ser una reserva) y `cuenta_facturado`: `vigente` Y sin un sustituto `vigente`.
+ *   DECISION PROVISIONAL (nocturno): mientras la cancelación 01 del anterior sigue pendiente hay
+ *   DOS vigentes por la misma venta; lo facturado cuenta sólo el sustituto (`cuenta_facturado`).
  * - `codigos_ventas(cheque_id, empresa_id, sucursal_id, folio, cerrado_at, total, codigo, estado,
  *   expira_at, con_cfdi)` (F2-106): el código de facturación de cada cuenta de `ventas`, con su
  *   estado GUARDADO y `con_cfdi` = tiene un CFDI `vigente` o una reserva `timbrando` (uno
@@ -419,12 +426,21 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
            to_char(f.emitido_at AT TIME ZONE s.zona_horaria, 'YYYY-MM') AS mes_local,
            extract(hour FROM f.emitido_at AT TIME ZONE s.zona_horaria)::int AS hora_local,
            f.receptor->>'rfc' AS receptor_rfc, f.receptor->>'razonSocial' AS receptor_nombre,
+           f.receptor->>'regimenFiscal' AS receptor_regimen, f.receptor->>'cp' AS receptor_cp,
+           f.receptor->>'usoCfdi' AS receptor_uso, f.receptor->>'email' AS receptor_email,
            (f.xml_clave IS NOT NULL) AS con_xml, (f.pdf_clave IS NOT NULL) AS con_pdf,
-           c.folio AS folio_ticket, s.nombre AS sucursal_nombre
+           c.folio AS folio_ticket, s.nombre AS sucursal_nombre,
+           f.origen::text AS origen, f.motivo_cancelacion, a.uuid AS sustituye_a_uuid,
+           n.uuid AS sustituido_por_uuid, n.estado::text AS sustituto_estado,
+           (f.estado = 'vigente' AND (n.id IS NULL OR n.estado <> 'vigente')) AS cuenta_facturado
     FROM cfdis f
     JOIN sucursales_alcance s ON s.id = f.sucursal_id AND s.empresa_id = f.empresa_id
     LEFT JOIN cheques c ON c.id = f.cheque_id AND c.empresa_id = f.empresa_id
       AND c.empresa_id = ${empresa} ${filtroTenant(scope, 'c')}
+    LEFT JOIN cfdis a ON a.id = f.sustituye_a_id AND a.empresa_id = f.empresa_id
+      AND a.empresa_id = ${empresa} ${filtroTenant(scope, 'a')}
+    LEFT JOIN cfdis n ON n.sustituye_a_id = f.id AND n.empresa_id = f.empresa_id
+      AND n.empresa_id = ${empresa} ${filtroTenant(scope, 'n')}
     WHERE f.empresa_id = ${empresa} ${filtroTenant(scope, 'f')} ${sucursalCfdi}
       AND f.estado IN ('vigente', 'cancelado')
       AND f.emitido_at >= ${inicioGrueso} AND f.emitido_at < ${finGrueso}

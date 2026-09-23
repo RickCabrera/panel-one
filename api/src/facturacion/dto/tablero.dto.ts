@@ -8,11 +8,14 @@ import type {
   CifrasCfdi,
   CuentaPorFacturar,
   EstadoCfdiEmitido,
+  OrigenCfdi,
   PaginaCfdis,
+  ReceptorFila,
   PaginaPorFacturar,
   SucursalTablero,
   TableroFacturacion,
 } from '../tablero.service';
+import { ORIGENES_CFDI } from '../tablero.service';
 
 /**
  * Contratos del tablero de facturación (F2-106). Dinero como texto con 2 decimales; la tasa con 4.
@@ -70,6 +73,14 @@ export class CfdisQueryDto extends PaginaQueryDto {
   @IsOptional()
   @IsIn(ESTADOS_CFDI_EMITIDO)
   estado?: EstadoCfdiEmitido;
+
+  @ApiPropertyOptional({
+    enum: ORIGENES_CFDI,
+    description: 'F2-107: `manual` = facturas sin ticket. Sin él, los dos.',
+  })
+  @IsOptional()
+  @IsIn(ORIGENES_CFDI)
+  origen?: OrigenCfdi;
 }
 
 export class PorFacturarQueryDto extends PaginaQueryDto {}
@@ -191,6 +202,26 @@ export class TableroFacturacionDto implements TableroFacturacion {
   porHora!: HoraTableroDto[];
 }
 
+export class ReceptorFilaDto implements ReceptorFila {
+  @ApiProperty({ example: 'EKU9003173C9' })
+  rfc!: string;
+
+  @ApiProperty({ example: 'ESCUELA KEMPER URGATE' })
+  razonSocial!: string;
+
+  @ApiProperty({ example: '601' })
+  regimenFiscal!: string;
+
+  @ApiProperty({ example: '42501' })
+  cp!: string;
+
+  @ApiProperty({ example: 'G03' })
+  usoCfdi!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  email!: string | null;
+}
+
 export class CfdiFilaDto implements CfdiFila {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -222,7 +253,11 @@ export class CfdiFilaDto implements CfdiFila {
   @ApiProperty({ format: 'date-time' })
   emitidoAt!: string;
 
-  @ApiProperty({ type: String, nullable: true, description: 'Folio del ticket del POS.' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Folio del ticket del POS. Null en una factura sin ticket (F2-107).',
+  })
   folioTicket!: string | null;
 
   @ApiProperty({ description: 'Hay XML guardado (`GET /facturacion/cfdis/{id}/xml`).' })
@@ -230,6 +265,43 @@ export class CfdiFilaDto implements CfdiFila {
 
   @ApiProperty({ description: 'Hay PDF guardado (`GET /facturacion/cfdis/{id}/pdf`).' })
   pdf!: boolean;
+
+  @ApiProperty({ enum: ORIGENES_CFDI, description: 'F2-107: `manual` = factura sin ticket.' })
+  origen!: OrigenCfdi;
+
+  @ApiProperty({
+    type: () => ReceptorFilaDto,
+    description: 'Los datos con que se timbró (precargan la refacturación, F2-107).',
+  })
+  receptor!: ReceptorFilaDto;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'UUID del CFDI al que éste SUSTITUYE (relación 04, F2-107).',
+  })
+  sustituyeA!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'UUID de su sustituto ya timbrado (F2-107), aunque caiga fuera del rango.',
+  })
+  sustituidoPor!: string | null;
+
+  @ApiProperty({
+    description:
+      'Vigente CON un sustituto vigente: la cancelación 01 sigue pendiente. No suma a lo ' +
+      'facturado del tablero (suma el sustituto); el filtro `estado=vigente` sí lo lista.',
+  })
+  sustitucionPendiente!: boolean;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'c_MotivoCancelacion con que se canceló (F2-107: 01), si se conoce.',
+  })
+  motivoCancelacion!: string | null;
 }
 
 export class PaginaCfdisDto implements PaginaCfdis {
