@@ -7881,4 +7881,9 @@ VALIDACIÓN REAL: ver F2-191** (contacto real por Brevo, `AGENTE_URL_DESCARGA`, 
   `sw-logica.test.ts` (el SW ignora alta-guiada y contacto). build, lint, 112 archivos de vitest verdes,
   `check:bundle` 344.3 kB, `check:pwa` y `check:landing` (8.1 kB gzip) ok.
 
+**CI del PR #70.** Primera corrida: Web, Agente y Guardia verdes; API con **un solo rojo, el flake de
+`reportes.e2e` "token alterado: 404"** (2464 verdes; el argon2id sí pasó en CI). No se tocó el test: se
+re-corrió el CI con el push de esta nota (intento 1 de 2 del protocolo). El token de baja firma el id de
+una suscripción que crea el test (uuid aleatorio), así que cada corrida tiene su propia probabilidad de 1/16.
+
 **Qué haría distinto.** Correr Lighthouse temprano: el robots.txt y el EPERM de Windows salieron al final.
