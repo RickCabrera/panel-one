@@ -9349,6 +9349,19 @@
                 "cancelado"
               ]
             }
+          },
+          {
+            "name": "origen",
+            "required": false,
+            "in": "query",
+            "description": "F2-107: `manual` = facturas sin ticket. Sin él, los dos.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ticket",
+                "manual"
+              ]
+            }
           }
         ],
         "responses": {
@@ -11080,6 +11093,252 @@
           }
         },
         "summary": "Descarga un XML o PDF de CFDI por enlace firmado y temporal (F2-105).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/cfdis/manual": {
+      "post": {
+        "description": "Queda con `origen = manual`, ligada a la sucursal y sin cheque. Mismo concepto e importes que la factura de un ticket (subtotal = total / 1.16). La `solicitudId` hace que un doble clic o un reenvío no emitan dos veces (409 con el CFDI que ya salió).",
+        "operationId": "EmisionAdminController_manual",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FacturaManualDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacturaEmitidaAdminDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Receptor o total inválidos (un mensaje por campo), o cuerpo mal formado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorFacturaAdminDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa o la sucursal no existen, están inactivas o no están en tu alcance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Esta `solicitudId` ya se usó (emitida o en emisión).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorCapturaRepetidaDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "El PAC rechazó el CFDI.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "El PAC no confirmó a tiempo (la factura pudo emitirse): no la vuelvas a pedir sin revisar la tabla de facturas; o el PAC no contestó al consultar el estado (no se emitió nada).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "La empresa no puede emitir (sin perfil fiscal activo o CSD vigente), o el PAC no está disponible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Factura sin ticket: emite un CFDI por un importe capturado a mano (F2-107).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/cfdis/{id}/refacturar": {
+      "post": {
+        "description": "En el orden que exige el SAT: consulta al PAC que el CFDI siga vigente, emite el SUSTITUTO (receptor corregido, mismos importes, `TipoRelacion` 04 con el UUID anterior) y cancela el anterior con motivo 01 y el UUID del sustituto. Si la cancelación no sale, responde 201 con `cancelacion = pendiente`: repetir la petición reintenta SÓLO la cancelación. Un CFDI vigente con sustituto vigente ya no suma a lo facturado del tablero.",
+        "operationId": "EmisionAdminController_refacturar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefacturarDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoRefacturacionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Receptor inválido (un mensaje por campo), o el id no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorFacturaAdminDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El CFDI no existe, es una reserva o no está en tu alcance (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya está cancelado, tiene un sustituto en emisión o cancelado, o el PAC no lo ve vigente (`no_encontrado`/`cancelado`): no se emitió nada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "El PAC rechazó el CFDI.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "El PAC no confirmó a tiempo (la factura pudo emitirse): no la vuelvas a pedir sin revisar la tabla de facturas; o el PAC no contestó al consultar el estado (no se emitió nada).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "La empresa no puede emitir (sin perfil fiscal activo o CSD vigente), o el PAC no está disponible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Refactura un CFDI vigente: sustituto con relación 04 + cancelación motivo 01 (F2-107).",
         "tags": [
           "facturacion"
         ]
@@ -20115,6 +20374,43 @@
           "porHora"
         ]
       },
+      "ReceptorFilaDto": {
+        "type": "object",
+        "properties": {
+          "rfc": {
+            "type": "string",
+            "example": "EKU9003173C9"
+          },
+          "razonSocial": {
+            "type": "string",
+            "example": "ESCUELA KEMPER URGATE"
+          },
+          "regimenFiscal": {
+            "type": "string",
+            "example": "601"
+          },
+          "cp": {
+            "type": "string",
+            "example": "42501"
+          },
+          "usoCfdi": {
+            "type": "string",
+            "example": "G03"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "rfc",
+          "razonSocial",
+          "regimenFiscal",
+          "cp",
+          "usoCfdi",
+          "email"
+        ]
+      },
       "CfdiFilaDto": {
         "type": "object",
         "properties": {
@@ -20163,7 +20459,7 @@
           "folioTicket": {
             "type": "string",
             "nullable": true,
-            "description": "Folio del ticket del POS."
+            "description": "Folio del ticket del POS. Null en una factura sin ticket (F2-107)."
           },
           "xml": {
             "type": "boolean",
@@ -20172,6 +20468,41 @@
           "pdf": {
             "type": "boolean",
             "description": "Hay PDF guardado (`GET /facturacion/cfdis/{id}/pdf`)."
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "ticket",
+              "manual"
+            ],
+            "description": "F2-107: `manual` = factura sin ticket."
+          },
+          "receptor": {
+            "description": "Los datos con que se timbró (precargan la refacturación, F2-107).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReceptorFilaDto"
+              }
+            ]
+          },
+          "sustituyeA": {
+            "type": "string",
+            "nullable": true,
+            "description": "UUID del CFDI al que éste SUSTITUYE (relación 04, F2-107)."
+          },
+          "sustituidoPor": {
+            "type": "string",
+            "nullable": true,
+            "description": "UUID de su sustituto ya timbrado (F2-107), aunque caiga fuera del rango."
+          },
+          "sustitucionPendiente": {
+            "type": "boolean",
+            "description": "Vigente CON un sustituto vigente: la cancelación 01 sigue pendiente. No suma a lo facturado del tablero (suma el sustituto); el filtro `estado=vigente` sí lo lista."
+          },
+          "motivoCancelacion": {
+            "type": "string",
+            "nullable": true,
+            "description": "c_MotivoCancelacion con que se canceló (F2-107: 01), si se conoce."
           }
         },
         "required": [
@@ -20187,7 +20518,13 @@
           "emitidoAt",
           "folioTicket",
           "xml",
-          "pdf"
+          "pdf",
+          "origen",
+          "receptor",
+          "sustituyeA",
+          "sustituidoPor",
+          "sustitucionPendiente",
+          "motivoCancelacion"
         ]
       },
       "PaginaCfdisDto": {
@@ -21234,6 +21571,329 @@
           "intentos",
           "error",
           "ultimoIntentoAt"
+        ]
+      },
+      "ReceptorAdminDto": {
+        "type": "object",
+        "properties": {
+          "rfc": {
+            "type": "string",
+            "example": "EKU9003173C9",
+            "description": "Se normaliza a mayúsculas."
+          },
+          "razonSocial": {
+            "type": "string",
+            "example": "ESCUELA KEMPER URGATE",
+            "description": "Como aparece en la constancia de situación fiscal."
+          },
+          "regimenFiscal": {
+            "type": "string",
+            "example": "601"
+          },
+          "cp": {
+            "type": "string",
+            "example": "42501"
+          },
+          "usoCfdi": {
+            "type": "string",
+            "example": "G03"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "example": "facturas@ejemplo.mx",
+            "description": "Opcional: sin correo la factura no se envía (se descarga del tablero)."
+          }
+        },
+        "required": [
+          "rfc",
+          "razonSocial",
+          "regimenFiscal",
+          "cp",
+          "usoCfdi"
+        ]
+      },
+      "FacturaManualDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La sucursal que expide (lugar de expedición)."
+          },
+          "solicitudId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Llave de idempotencia de ESTA captura (la genera el formulario). Repetirla nunca emite dos veces: responde 409 con el CFDI que ya salió de ella."
+          },
+          "total": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Total en pesos (IVA incluido), texto con hasta 2 decimales, > 0 y < 1,000,000."
+          },
+          "formaPago": {
+            "type": "string",
+            "enum": [
+              "efectivo",
+              "tarjeta",
+              "transferencia"
+            ]
+          },
+          "receptor": {
+            "$ref": "#/components/schemas/ReceptorAdminDto"
+          }
+        },
+        "required": [
+          "empresaId",
+          "sucursalId",
+          "solicitudId",
+          "total",
+          "formaPago",
+          "receptor"
+        ]
+      },
+      "FacturaEmitidaAdminDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uuid": {
+            "type": "string",
+            "example": "5FB2822E-396D-4725-8521-CDC4BDD20CCF"
+          },
+          "serieFolio": {
+            "type": "string",
+            "example": "A-1024"
+          },
+          "total": {
+            "type": "string",
+            "example": "1234.50"
+          },
+          "origen": {
+            "type": "string",
+            "enum": [
+              "ticket",
+              "manual"
+            ]
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "description": "Adonde se envió; null = sin correo."
+          },
+          "descargas": {
+            "$ref": "#/components/schemas/DescargasFacturaDto"
+          }
+        },
+        "required": [
+          "id",
+          "uuid",
+          "serieFolio",
+          "total",
+          "origen",
+          "email",
+          "descargas"
+        ]
+      },
+      "CamposFacturaAdminDto": {
+        "type": "object",
+        "properties": {
+          "rfc": {
+            "type": "string"
+          },
+          "razonSocial": {
+            "type": "string"
+          },
+          "regimenFiscal": {
+            "type": "string"
+          },
+          "cp": {
+            "type": "string"
+          },
+          "usoCfdi": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "total": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorFacturaAdminDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 400
+          },
+          "message": {
+            "description": "Los mismos mensajes de `campos`, en lista.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": "string",
+            "example": "Bad Request"
+          },
+          "campos": {
+            "description": "Un mensaje en español por cada campo con error (sólo los que fallan).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CamposFacturaAdminDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "statusCode",
+          "message",
+          "error",
+          "campos"
+        ]
+      },
+      "ErrorCapturaRepetidaDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 409
+          },
+          "message": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "example": "Conflict"
+          },
+          "cfdiId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "El CFDI que ya salió de esta `solicitudId` (sólo en ese caso)."
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "timbrando",
+              "vigente",
+              "cancelado"
+            ]
+          }
+        },
+        "required": [
+          "statusCode",
+          "message",
+          "error"
+        ]
+      },
+      "RefacturarDto": {
+        "type": "object",
+        "properties": {
+          "receptor": {
+            "description": "Los datos CORREGIDOS del receptor para el sustituto. Si el sustituto ya existe (reintento de la cancelación) se validan pero no se usan.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReceptorAdminDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "receptor"
+        ]
+      },
+      "CfdiAnteriorDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "vigente",
+              "cancelado"
+            ],
+            "description": "`vigente` mientras la cancelación siga pendiente."
+          }
+        },
+        "required": [
+          "id",
+          "uuid",
+          "estado"
+        ]
+      },
+      "CfdiSustitutoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "serieFolio": {
+            "type": "string",
+            "example": "A-1025"
+          },
+          "total": {
+            "type": "string",
+            "example": "315.50"
+          }
+        },
+        "required": [
+          "id",
+          "uuid",
+          "serieFolio",
+          "total"
+        ]
+      },
+      "ResultadoRefacturacionDto": {
+        "type": "object",
+        "properties": {
+          "anterior": {
+            "$ref": "#/components/schemas/CfdiAnteriorDto"
+          },
+          "nuevo": {
+            "description": "El sustituto, con relación 04.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CfdiSustitutoDto"
+              }
+            ]
+          },
+          "cancelacion": {
+            "type": "string",
+            "enum": [
+              "cancelado",
+              "pendiente"
+            ],
+            "description": "`pendiente`: el sustituto ya se emitió pero el PAC no confirmó la cancelación 01 del anterior. Repetir la petición reintenta SÓLO la cancelación."
+          },
+          "mensaje": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "anterior",
+          "nuevo",
+          "cancelacion",
+          "mensaje"
         ]
       }
     }

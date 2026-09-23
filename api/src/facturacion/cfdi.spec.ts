@@ -6,7 +6,9 @@ import {
   formaDominante,
   formaPagoSat,
   importesDeTotal,
+  solicitudDeConsumo,
   solicitudDesdeCheque,
+  totalManual,
   type FormaPagoEnum,
 } from './cfdi';
 import { esRfcValidoSat, RFC_GENERICOS } from './sat';
@@ -181,4 +183,58 @@ describe('RFC reservados del PAC falso que llegan desde el portal (F2-104)', () 
       expect(RFC_GENERICOS).not.toContain(rfc);
     },
   );
+});
+
+describe('factura sin ticket y sustituto (F2-107)', () => {
+  it('totalManual: texto con hasta 2 decimales, > 0 y < 1,000,000; nunca number', () => {
+    expect(totalManual('1234.5')?.toFixed(2)).toBe('1234.50');
+    expect(totalManual(' 0.01 ')?.toFixed(2)).toBe('0.01');
+    expect(totalManual('999999.99')?.toFixed(2)).toBe('999999.99');
+    for (const malo of [
+      '0',
+      '0.00',
+      '-5',
+      '1.234',
+      '1e3',
+      '1,000.00',
+      '1000000',
+      '',
+      'abc',
+      '.5',
+    ]) {
+      expect(totalManual(malo)).toBeNull();
+    }
+  });
+
+  it('solicitudDeConsumo: sin ticket no lleva noIdentificacion; con relacionados, relación 04', () => {
+    const base = {
+      reservaId: 'r-1',
+      serie: 'A',
+      folio: 7,
+      fecha: new Date('2026-09-21T20:00:00Z'),
+      emisor: { rfc: 'EKU9003173C9', razonSocial: 'EKU', regimenFiscal: '601', cp: '06700' },
+      sucursal: { zonaHoraria: 'America/Mexico_City' },
+      total: new Prisma.Decimal('116.00'),
+      receptor: {
+        rfc: 'XIA190128J61',
+        razonSocial: 'XENON INDUSTRIAL ARTICLES',
+        regimenFiscal: '601',
+        cp: '76343',
+        usoCfdi: 'G03',
+      },
+      formaPago: '01',
+    };
+    const manual = solicitudDeConsumo(base);
+    expect(manual.conceptos[0]).not.toHaveProperty('noIdentificacion');
+    expect(manual.relacionados).toBeUndefined();
+    expect(manual.subtotal.toFixed(2)).toBe('100.00');
+    expect(manual.totalImpuestosTrasladados.toFixed(2)).toBe('16.00');
+    const sustituto = solicitudDeConsumo({
+      ...base,
+      noIdentificacion: 'T-9',
+      relacionados: { tipoRelacion: '04', uuids: ['AAAA'] },
+    });
+    expect(sustituto.conceptos[0].noIdentificacion).toBe('T-9');
+    expect(sustituto.relacionados).toEqual({ tipoRelacion: '04', uuids: ['AAAA'] });
+  });
 });

@@ -315,6 +315,13 @@ export function generarCfdisSeed(
   }));
 }
 
+/** La fila tal cual va a la tabla: el UUID relacionado sólo sirve para el XML. */
+function sinRelacion(c: CfdiSeedConRelacion): CfdiSeed {
+  const fila: Partial<CfdiSeedConRelacion> = { ...c };
+  delete fila.relacionadoUuid;
+  return fila as CfdiSeed;
+}
+
 /** La llave de solicitud de la factura manual `i` del seed de una sucursal (determinista). */
 export function solicitudManualSeed(sucursalId: string, i: number): string {
   return uuidDe(`cfdi-manual-seed-solicitud:${sucursalId}:${i}`);
@@ -476,8 +483,8 @@ export async function sembrarCfdis(
       // Un solo DELETE: la FK del sustituto (NO ACTION) se revisa al final de la sentencia.
       await tx.cfdi.deleteMany({ where: { empresaId: op.empresaId, ...delSeed } });
       await tx.cfdi.createMany({
-        data: cfdis.map(({ relacionadoUuid: _relacionado, ...c }) => ({
-          ...c,
+        data: cfdis.map((c) => ({
+          ...sinRelacion(c),
           receptor: { ...c.receptor },
           xmlClave: claves.get(c.id)!.xml,
           pdfClave: claves.get(c.id)!.pdf,

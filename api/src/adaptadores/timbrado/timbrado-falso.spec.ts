@@ -3,6 +3,7 @@ import { ErrorTimbrado } from './puerto';
 import {
   LEYENDA_NO_FISCAL,
   MENSAJE_CSD_RECHAZADO,
+  MENSAJE_SUSTITUTO_NO_RELACIONADO,
   RFC_CON_ERROR,
   RFC_EMISOR_CSD_RECHAZADO,
   SELLO_FALSO,
@@ -316,5 +317,68 @@ describe('PAC falso: alta del CSD (F2-100)', () => {
       message: MENSAJE_CSD_RECHAZADO,
       reintentable: false,
     });
+  });
+});
+
+describe('PAC falso: sustitución (F2-107)', () => {
+  const emitirSustituto = (pac: TimbradoFalso, anterior: string, referencia: string) =>
+    pac.emitir({
+      ...solicitudCfdi(),
+      referencia,
+      relacionados: { tipoRelacion: '04', uuids: [anterior] },
+    });
+
+  it('el XML del sustituto trae CfdiRelacionados 04 ANTES del Emisor, bien formado', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const anterior = await pac.emitir(solicitudCfdi());
+    const nuevo = await emitirSustituto(pac, anterior.uuid, 'sustituto-1');
+    const elementos = analizarXml(nuevo.xml).map((e) => e.nombre);
+    const rel = elementos.indexOf('cfdi:CfdiRelacionados');
+    expect(rel).toBeGreaterThan(0);
+    expect(elementos[rel + 1]).toBe('cfdi:CfdiRelacionado');
+    expect(elementos.indexOf('cfdi:Emisor')).toBeGreaterThan(rel);
+    expect(nuevo.xml).toContain(
+      `<cfdi:CfdiRelacionados TipoRelacion="04"><cfdi:CfdiRelacionado UUID="${anterior.uuid}"/>`,
+    );
+    expect(pac.relacionadosDe(nuevo.uuid)).toEqual({ tipoRelacion: '04', uuids: [anterior.uuid] });
+    // Sin relacionados, nada.
+    expect(anterior.xml).not.toContain('CfdiRelacionados');
+  });
+
+  it('motivo 01 con un sustituto que SÍ lo relaciona: cancela y guarda motivo y sustituto', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const anterior = await pac.emitir(solicitudCfdi());
+    const nuevo = await emitirSustituto(pac, anterior.uuid, 'sustituto-1');
+    await expect(
+      pac.cancelar({ ...anterior, motivo: '01', folioSustitucion: nuevo.uuid }),
+    ).resolves.toMatchObject({ uuid: anterior.uuid, estado: 'cancelado' });
+    expect(pac.cancelacionDe(anterior.uuid)).toEqual({
+      motivo: '01',
+      folioSustitucion: nuevo.uuid,
+    });
+    await expect(pac.consultarEstado(nuevo)).resolves.toMatchObject({ estado: 'vigente' });
+  });
+
+  it('motivo 01 se RECHAZA si el sustituto no existe, no lo relaciona o ya no está vigente', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const anterior = await pac.emitir(solicitudCfdi());
+    const ajeno = await pac.emitir({ ...solicitudCfdi(), referencia: 'otro-sin-relacion' });
+    const rechazo = { codigo: 'RECHAZADO_POR_PAC', message: MENSAJE_SUSTITUTO_NO_RELACIONADO };
+    // Inexistente.
+    await expect(
+      pac.cancelar({ ...anterior, motivo: '01', folioSustitucion: uuidDeterminista('nadie') }),
+    ).rejects.toMatchObject(rechazo);
+    // Existe pero no relaciona al anterior.
+    await expect(
+      pac.cancelar({ ...anterior, motivo: '01', folioSustitucion: ajeno.uuid }),
+    ).rejects.toMatchObject(rechazo);
+    // Relaciona, pero lo cancelaron antes.
+    const nuevo = await emitirSustituto(pac, anterior.uuid, 'sustituto-1');
+    await pac.cancelar({ ...nuevo, motivo: '02' });
+    await expect(
+      pac.cancelar({ ...anterior, motivo: '01', folioSustitucion: nuevo.uuid }),
+    ).rejects.toMatchObject(rechazo);
+    await expect(pac.consultarEstado(anterior)).resolves.toMatchObject({ estado: 'vigente' });
+    expect(pac.cancelacionDe(anterior.uuid)).toBeUndefined();
   });
 });
