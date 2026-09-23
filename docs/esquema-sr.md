@@ -431,6 +431,33 @@ los CFDI propios. Lo que hereda de los supuestos de arriba:
   sólo marca `facturado` una cuenta cuya forma de pago dominante tiene clave SAT (una de vales no se
   factura en línea, igual que en la emisión real).
 
+**Factura sin ticket y refacturación (F2-107).** No lee nada nuevo de SR (no hubo hallazgo del
+POS): son emisiones propias sobre el mismo tramo de timbrado del portal. Supuestos y decisiones:
+
+- ⚠️ **SUPUESTO — NO VALIDADO (Facturama, F2-190):** la relación del sustituto viaja como
+  `Relations: { Type: '04', Cfdis: [{ Uuid }] }` en el `POST /api-lite/3/cfdis`, y un concepto sin
+  `IdentificationNumber` (factura sin ticket) timbra. Sale de la documentación pública.
+- `DECISION PROVISIONAL (nocturno)` (`api/src/scope/escritura-facturacion.ts#reservarSustituto`):
+  **la refacturación corrige SÓLO los datos del receptor**; importes, forma de pago, sucursal y
+  cheque se copian del CFDI anterior. Cambiar el importe es cancelar (F2-109) y emitir otro.
+- Orden del SAT: primero se timbra el SUSTITUTO con relación 04 y después se cancela el anterior
+  con motivo 01 y el UUID del sustituto. Antes de emitir se CONSULTA al PAC que el anterior siga
+  vigente: si no (`cancelado`, `no_encontrado`), no se emite nada (409).
+- El código de facturación del ticket PASA al sustituto al confirmarlo (`codigo_id` es único): el
+  código `facturado` apunta a la factura válida.
+- `DECISION PROVISIONAL (nocturno)` (`api/src/scope/consulta-ventas.ts`, `cuenta_facturado`):
+  **mientras la cancelación 01 del anterior sigue pendiente hay DOS CFDI vigentes por la misma
+  venta; lo facturado cuenta sólo el sustituto.** Un vigente con sustituto vigente no suma (KPIs,
+  barras por sucursal, mes y hora); la tabla sí lo lista, marcado. Como lo facturado va por fecha de
+  EMISIÓN, un sustituto emitido en otro mes MUEVE lo facturado a ese mes (ojo al cuadrar contra un
+  corte ya cerrado).
+- Una factura sin ticket (`origen = manual`) cuenta como facturado de su sucursal por su fecha de
+  emisión; no tiene cheque, así que puede empujar la tasa por arriba de 100 % (ya podía).
+- El correo del receptor es OPCIONAL para el administrador: sin correo no se crea envío (F2-105).
+- En modo demo, el PAC falso guarda su estado en memoria: los CFDI del SEED no los conoce y
+  refacturarlos da 409 `no_encontrado`. Los emitidos en la corrida (portal o sin ticket) sí se
+  refacturan.
+
 ---
 
 ## 3. Partidas de cuentas cerradas

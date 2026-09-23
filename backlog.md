@@ -1486,6 +1486,17 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 > = `cheques.total` sin propina, IVA 16 %, tarjeta = `04` (¿débito `28`?), y qué hacer con vales
 > (hoy `otro` → no se factura en línea). Todo en esquema-sr §2 "La emisión del CFDI" y §4.
 
+> **Y además (de F2-107).** Contra el sandbox: (1) **refacturación**: emitir un sustituto con
+> `Relations: { Type: '04', Cfdis: [{ Uuid }] }` (supuesto de la doc pública; snapshot "el
+> sustituto lleva `Relations` 04" en `timbrado.contrato.spec.ts`) y cancelar el anterior con
+> `motive=01&uuidReplacement=<sustituto>`: que el SAT acepte la relación y que el anterior quede
+> cancelado; y qué contesta Facturama mientras una cancelación está "en proceso" (hoy cualquier
+> estado que no sea `active`/`canceled` es `ESTADO_DESCONOCIDO` y la refacturación queda
+> `pendiente`). (2) **Factura sin ticket**: un CFDI sin `IdentificationNumber` en el concepto
+> timbra. (3) Confirmar que consultar el estado ANTES de emitir el sustituto (`GET
+> /api-lite/cfdis/{id}`) es barato y no gasta folio. Supuestos en esquema-sr §2 "Factura sin
+> ticket y refacturación".
+
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus
 registros DNS y el volumen persistente del servidor.** Cambiar `CORREO_IMPL` y `ARCHIVOS_IMPL`
@@ -1978,6 +1989,14 @@ deja continuar.
 > cancelado, o un índice único parcial `WHERE estado <> 'cancelado'`) y probar que el candado
 > sigue valiendo. `estadoPublico` hoy trata un CFDI `cancelado` del código como nada (no lo lee).
 
+> **Y además (de F2-107).** Ya existen `cfdis.motivo_cancelacion` (CHECK 01–04, sólo en
+> `cancelado`) y `cfdis.cancelado_at`: la refacturación los llena con motivo 01. Con ellos las
+> cancelaciones del tablero se pueden ubicar por `cancelado_at` (hoy van por emisión). El flujo de
+> motivo 01 con sustituto ya está en `EmisionAdminService.refacturar` (sustituto 04 → cancelación);
+> la cancelación 01 desde aquí debería reusarlo en vez de pedir un UUID a mano. Sin resolver: un
+> sustituto que después se cancela deja al anterior con `sustituidoPor` cancelado y la refacturación
+> contesta 409 (`sustituye_a_id` es único); decidir si se permite una segunda sustitución.
+
 ### F2-110 · Control de folios del PAC
 `[ ]` Contador de folios consumidos por empresa y global (cada timbre exitoso, incluida
 global y sustituciones, decrementa saldo local configurado al comprar paquete a Facturama).
@@ -2002,6 +2021,15 @@ periodo.
 > o liberarla si no. (2) **Folios**: la reserva toma `perfiles_fiscales.folio_actual + 1`; un
 > rechazo del SAT deja hueco a propósito. El conteo de timbres consumidos debe salir de los
 > `cfdis` `vigente`/`cancelado`, no de `folio_actual`.
+
+> **Y además (de F2-107).** La conciliación de reservas colgadas de arriba cubre también: (1) el
+> **sustituto** de una refacturación que se quedó en `timbrando` (el CFDI anterior contesta 409 "ya
+> tiene un sustituto en emisión" hasta que se resuelva) y (2) la **captura manual** colgada (la misma
+> `solicitudId` contesta 409 con estado `timbrando`). Los dos mensajes del 409 remiten a esta tarea.
+> (3) Una refacturación con la cancelación 01 **pendiente** (anterior `vigente` con sustituto
+> `vigente`, `sustitucionPendiente` en la tabla) se reintenta a mano desde el tablero; conciliarla
+> en automático (consultar al PAC y anotar la cancelación) cabe en el mismo proceso. (4) Los
+> sustitutos y las facturas sin ticket son timbres: cuentan para el saldo de folios.
 
 ## EPIC 9 — Inventario y compras
 
