@@ -1938,7 +1938,7 @@ validada a mano coincide con la vista; productos sin receta quedan listados apar
 el cálculo.
 
 ### F2-126 · Compras, gastos y utilidad
-`[ ]` Ingesta de compras de SR (o captura manual si la instalación no las registra) y captura
+`[x]` **ALCANCE:** sin captura manual de compras. Las compras no entran a la utilidad; si hace falta capturarlas a mano es decisión abierta en F2-193. **PENDIENTE DE VALIDACIÓN REAL:** el lector de compras es F2-241, y el cuadre ±1 % con el contador del piloto (qué es `subtotal`, costo estándar o por inventarios, gastos sin IVA) es F2-193 (ver §10 "Compras, gastos y utilidad" de esquema-sr). Ingesta de compras de SR (o captura manual si la instalación no las registra) y captura
 de gastos por sucursal con categorías. Vista "Gastos y utilidad": ventas (Fase 1) − costo de
 lo vendido (consumo teórico F2-125 a costo) − gastos = utilidad bruta por periodo/sucursal,
 con gráfica y export.
