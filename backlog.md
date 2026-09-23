@@ -1997,7 +1997,7 @@ restaurante").
 > NO debe entrar a la global: ya podría tener CFDI propio. `estadoPublico` lo reporta `en_proceso`.
 
 ### F2-109 · Cancelación de CFDI
-`[ ]` Flujo de cancelación desde el dashboard: elegir motivo SAT (01–04; si 01, exigir UUID
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (`pending` de Facturama, estado de rechazo, fecha de cancelación en el GET, latencia del DELETE y los 10 min de la ambigua, cancelación con/sin aceptación en sandbox; decisiones abiertas: 02/03 sueltan el ticket reusando su código, la global automática no re-emite un periodo con global cancelada, KPI de cancelados por emisión; esquema-sr §2 "Cancelación de CFDI (F2-109)"). Flujo de cancelación desde el dashboard: elegir motivo SAT (01–04; si 01, exigir UUID
 sustituto), llamar API de cancelación de Facturama, reflejar estados intermedios (en proceso
 / aceptada / rechazada por receptor) vía polling o webhook de Facturama, notificar por
 correo al receptor. El cheque vuelve a ser facturable si la cancelación procede (nuevo
