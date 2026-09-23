@@ -1288,7 +1288,7 @@ F1-091, con una persona real.
 > `instalar.ps1` deja también `ArkonAgenteActualizador` en `RUNNING` como **LocalSystem**
 > (`DECISION PROVISIONAL (nocturno)` en `funciones-instalador.ps1`); publicar en el panel una
 > versión con la bandera de la sucursal encendida la instala sola (`sc query ArkonAgente` sigue
-> `RUNNING`, el panel la ve "Al día" y `logsctualizador-*.log` cuenta el swap); una versión que
+> `RUNNING`, el panel la ve "Al día" y `logs\actualizador-*.log` cuenta el swap); una versión que
 > se cae al arrancar regresa sola a la anterior (queda `agente.exe.fallido`); con el agente
 > detenido a mano durante el swap no quedan dos procesos `agente.exe` del agente
 > (`Get-Process agente | Select Path`); matar el watchdog a media sustitución (entre mover

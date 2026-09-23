@@ -7909,7 +7909,7 @@ instalador elevado se probaron sólo con fakes y carpetas temporales (verificaci
   tope 128 MB y del tamaño anunciado, SHA al vuelo), `EstadoActualizacion` (SQLite `actualizacion\estado.db`:
   backoff 1 h→24 h por (versión, SHA) y binarios ya aplicados), `Actualizador` (el watchdog) y
   `ServicioActualizador`. `agente.exe actualizador` = segundo servicio `ArkonAgenteActualizador`,
-  instalado como COPIA en `Program Files\ArkonAgentectualizador\`. `instalar.ps1` registra los dos.
+  instalado como COPIA en `Program Files\ArkonAgente\actualizador\`. `instalar.ps1` registra los dos.
 - **web:** pestaña Administración › Actualizaciones (sólo admin_global): publicar (el `pedir` ganó
   `binario`), retirar con confirmación, y la bandera por sucursal con su estado en palabras. Textos de la
   alerta nueva.
