@@ -127,6 +127,7 @@ que lo intente termina SALTANDO una tarea que era perfectamente construible.
 | 42 | F2-143 · Auto-update remoto del agente | G · Extras | /agent + /api |
 | 43 | F2-240 · Lector de catálogos de SoftRestaurant | H · Agente | /agent |
 | 44 | F2-241 · Lectores de inventario y recetas | H · Agente | /agent |
+| 44b | F2-241b · Lectores de movimientos, recetas y compras | H · Agente | /agent |
 | 45 | F2-250 · Cierre de Ronda 2: auditoría de paridad y pendientes | I · Cierre | todos |
 
 > **Este orden ya respeta el grafo de dependencias.** No lo reordenes. El bloque A existe
@@ -1038,7 +1039,7 @@ configurado tiene permisos de escritura.
 > SQLite. Ver `docs/esquema-sr.md` §9 y §13.
 
 ### F2-241 · Lectores de inventario y recetas
-`[ ]` **Bloque H** · /agent
+`[x]` **Bloque H** · /agent · **PARCIAL:** falta el lector de movimientos (pólizas de `movsinv`/`movsinvcancelados` con cursor persistido en SQLite y ventana de relectura, traspasos como dos pólizas), el de recetas (`costos`) y el de compras (`compras` + `comprasmovtos`), con sus envíos a `/ingesta/movimientos`, `/ingesta/recetas` y `/ingesta/compras`: todo en **F2-241b**. Hecho: los cinco catálogos de inventario (el forzado se atiende con los once), las existencias cada 30 min, `Enlist=false` y las guardias de solo lectura sobre el IL. **PENDIENTE DE VALIDACIÓN REAL:** ver F2-192/F2-193 (tablas vistas sólo en metadatos y vacías; qué costo usa SR; varias empresas en una base; esquema-sr §9–§12).
 
 Lo mismo para lo que come el bloque E: insumos, grupos de insumos, unidades, almacenes y
 presentaciones; existencias por almacén con costo promedio, leídas cada 30 minutos; movimientos
@@ -2390,3 +2391,79 @@ refacturación con la 01 pendiente se cierra sola; (4) un CFDI sin archivos los 
 vueltas simultáneas no confirman ni liberan dos veces (candado en base); (6) el saldo de folios deja
 de contar la reserva conciliada; (7) el contrato del método nuevo queda fijado por test de contrato;
 (8) una reserva recién tomada (menos de N minutos) NO se toca.
+
+### F2-241b · Lectores de movimientos, recetas y compras
+`[ ]` **Bloque H** · /agent · Resto del corte de F2-241 (ver su línea PARCIAL y la entrada de
+`docs/nocturno-log.md` del 2026-09-23 "F2-241"). F2-241 ya dejó: los cinco catálogos de inventario, las
+existencias (`Inventario/`, `Cola/ColaExistencias.cs`, `Cola/EnviadorExistencias.cs`), `Enlist=false` y
+`SoloLecturaTests`. **El mapeo de tablas ya está hecho** en `docs/esquema-sr.md` §10 (tabla "Tablas de
+SR (F2-241)"): movimientos en `movsinv` (SIN PK, `cantidad` con signo según los triggers) y
+`movsinvcancelados`, conceptos en `conceptos` (17 filas, tipo 1 entrada / 2 salida), recetas en
+`costos`, compras en `compras` + `comprasmovtos`, traspasos en `traspasosalmacen`.
+
+Lectura de movimientos de inventario con su póliza, **incrementales por cursor persistido en
+SQLite** (no hay PK ni rowversion en `movsinv`: cursor por `fecha`) con **ventana de relectura**
+para capturar correcciones tardías, como hace F1-022 con los cheques; recetas con la explosión de
+insumos por producto; compras si la instalación las registra. Mismas reglas de dominio que F2-240 y
+F2-241: solo lectura, `WITH (NOLOCK)`, `CrearComando` con timeout corto, cero escrituras en el POS,
+cada tabla nueva en las dos listas de `diagnostico.sql`, y lo que esquema-sr no cubra se resuelve
+con la opción más conservadora marcada `DECISION PROVISIONAL (nocturno)`.
+
+**Listo cuando:** `dotnet test` cubre cada lector contra fixtures, incluyendo **insumos sin receta**,
+**una póliza con partidas en cero**, una receta que SR ya no tiene (viaja con `renglones: []`), una
+compra cancelada y un traspaso partido en DOS pólizas; **el cursor de movimientos sobrevive reiniciar
+el servicio y no reprocesa desde el principio**; la ventana de relectura reenvía completa una póliza
+corregida y manda `cancelada = true` la que pasó a `movsinvcancelados`; los lotes se parten por
+partidas/renglones según los topes de cada contrato; una query que tarde más del timeout se cancela y
+se registra sin tumbar el ciclo; y `SoloLecturaTests` sigue verde con las consultas nuevas.
+
+> **Y además (de F2-124).** Los traspasos de SR viajan como pólizas F2-122 y el panel concilia contra
+> ellas los traspasos que se capturan en la web: (1) un documento de traspaso de SR se manda como
+> DOS pólizas —`traspaso_salida` (cantidades negativas) en el almacén de origen y `traspaso_entrada`
+> (positivas) en el de destino, cada una desde el agente de SU sucursal— con la `referencia` del
+> documento en las dos; (2) la `fecha` con la hora real del movimiento, no medianoche; (3) si SR
+> cancela el traspaso, mandar las dos pólizas con `cancelada = true` (así el panel lo desconcilia);
+> (4) documentar en §10 cómo guarda SR un traspaso entre sucursales (un documento o dos) y si hay
+> almacenes compartidos. Ver `docs/esquema-sr.md` §10 ("Traspasos").
+
+> **Y además (de F2-122).** El panel ya acepta los movimientos por `POST /ingesta/movimientos`: un
+> **lote de pólizas**, cada una con TODAS sus partidas (`{ leidoAt, polizas: [{ origenSrId, folio,
+> tipo, tipoSr, almacenOrigenSrId, fecha, referencia, cancelada, partidas: [{ insumoOrigenSrId,
+> cantidad, costoUnitario }] }] }`). Obligaciones del lector: (1) la póliza viaja **completa** —
+> reenviarla con otras partidas las REEMPLAZA, así que una póliza a medias borra renglones; (2)
+> cantidad **con signo** (+ entra, − sale) en texto NUMERIC(12,3) y costo con la regla de dinero (el
+> importe lo calcula el API); (3) traducir el tipo de SR al enum del panel y mandar el crudo en
+> `tipoSr` (lo que no sepa traducir, `otro`); (4) un almacén por póliza: un traspaso de SR con origen
+> y destino son DOS pólizas con ids distintos; (5) una póliza cancelada o desaparecida en SR se
+> manda `cancelada = true`, nunca se deja de mandar (el panel no borra); (6) `leidoAt` = cuándo se
+> leyó (un lote viejo reintentado no revierte uno nuevo) y la `fecha` del movimiento del MISMO reloj
+> que el `capturadoAt` de las existencias (el cuadre del kardex corta ahí); (7) a lo más 200 pólizas
+> y **5000 partidas en total** por lote — partir por partidas; (8) el cursor incremental y la
+> ventana de relectura reenvían pólizas corregidas completas. Documentar en §10 si SR agrupa sus
+> movimientos en documentos y cómo ordena los folios (el desempate del kardex es el folio como
+> texto). Ver `docs/esquema-sr.md` §10 y §13.
+
+> **Y además (de F2-125).** El panel ya acepta las recetas por `POST /ingesta/recetas`: un **lote de
+> recetas**, cada una con TODOS sus renglones (`{ leidoAt, recetas: [{ productoOrigenSrId,
+> renglones: [{ insumoOrigenSrId, cantidad }] }] }`). Obligaciones del lector: (1) la receta viaja
+> **completa** — reenviarla con otros renglones los REEMPLAZA; (2) una receta que SR ya no tenga se
+> manda con `renglones: []`, nunca se deja de mandar (el panel no la borra y seguiría usando la
+> vieja); (3) cantidad en la **unidad del insumo** del catálogo y por **UNA unidad vendida**, texto
+> NUMERIC(12,4) sin signo — más de 4 decimales se rechaza, no redondear; (4) `productoOrigenSrId` e
+> `insumoOrigenSrId` = los mismos ids de los catálogos `productos` e `insumos` de la sucursal; (5) a
+> lo más 500 recetas y 5000 renglones por lote. Documentar en §10 dónde guarda SR la receta, si usa
+> una unidad de receta con factor, si tiene subrecetas (elaborados) y si explota modificadores o
+> paquetes — cualquiera de esas es cambio de contrato. Ver `docs/esquema-sr.md` §10 ("Recetas") y §13.
+
+> **Y además (de F2-126).** El panel ya acepta las compras a proveedor por `POST /ingesta/compras`:
+> un **lote de compras**, cada una con TODAS sus partidas (`{ leidoAt, compras: [{ origenSrId, folio,
+> proveedorOrigenSrId?, almacenOrigenSrId?, fecha, cancelada, partidas: [{ insumoOrigenSrId,
+> cantidad, costoUnitario }] }] }`). Obligaciones del lector: (1) la compra viaja **completa** —
+> reenviarla con otras partidas las REEMPLAZA; (2) `cancelada = true` en vez de dejar de mandarla (el
+> panel no la borra); (3) cantidad > 0 en la **unidad del insumo** del catálogo (NUMERIC(12,3)) y
+> costo por unidad **SIN IVA**, en texto; (4) proveedor y almacén por los ids del espejo de la misma
+> sucursal, o nulos; (5) a lo más 200 compras y 5000 partidas por lote. Documentar en §10 si SR guarda
+> la compra como documento propio o sólo como póliza de entrada (hoy se supone documento aparte y el
+> panel NO los concilia), y si el costo de SR trae IVA. Ver `docs/esquema-sr.md` §10 ("Compras,
+> gastos y utilidad") y §13.
+
