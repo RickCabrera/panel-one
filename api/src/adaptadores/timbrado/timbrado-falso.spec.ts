@@ -500,3 +500,82 @@ describe('PAC falso: cancelación que espera al receptor (F2-109)', () => {
     await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'cancelado' });
   });
 });
+
+describe('TimbradoFalso: conciliación con el PAC (F2-110b)', () => {
+  const consulta = (folio = '1024') => ({
+    rfcEmisor: 'EKU9003173C9',
+    serie: 'A',
+    folio,
+    zonaHoraria: 'America/Mexico_City',
+  });
+
+  it('buscarPorFolio encuentra lo que emitió (por emisor, serie y folio) y null lo que no', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const cfdi = await pac.emitir(solicitudCfdi());
+    await expect(pac.buscarPorFolio(consulta())).resolves.toEqual({
+      uuid: cfdi.uuid,
+      idPac: cfdi.idPac,
+      estado: 'vigente',
+      fechaTimbrado: cfdi.fechaTimbrado,
+    });
+    await expect(pac.buscarPorFolio(consulta('1025'))).resolves.toBeNull();
+    await expect(
+      pac.buscarPorFolio({ ...consulta(), rfcEmisor: 'AAA010101AAA' }),
+    ).resolves.toBeNull();
+  });
+
+  it('buscarPorFolio reporta el estado actual (cancelado)', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const cfdi = await pac.emitir(solicitudCfdi());
+    await pac.cancelar({ ...cfdi, motivo: '02' });
+    await expect(pac.buscarPorFolio(consulta())).resolves.toMatchObject({ estado: 'cancelado' });
+  });
+
+  it('descargarArchivos devuelve el MISMO XML y PDF que la emisión; un UUID ajeno es no encontrado', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const cfdi = await pac.emitir(solicitudCfdi());
+    const archivos = await pac.descargarArchivos(cfdi);
+    expect(archivos.xml).toBe(cfdi.xml);
+    expect(archivos.pdf.equals(cfdi.pdf)).toBe(true);
+    await expect(
+      pac.descargarArchivos({ uuid: 'NO-EXISTE', idPac: 'NO-EXISTE' }),
+    ).rejects.toMatchObject({ codigo: 'CFDI_NO_ENCONTRADO' });
+  });
+
+  it('programarSinRespuesta(true): timbra pero contesta PAC_SIN_RESPUESTA (ambiguo); se encuentra por folio', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    pac.programarSinRespuesta(true);
+    const error = await pac.emitir(solicitudCfdi()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ErrorTimbrado);
+    expect(error).toMatchObject({ codigo: 'PAC_SIN_RESPUESTA', reintentable: false });
+    const encontrado = await pac.buscarPorFolio(consulta());
+    expect(encontrado?.uuid).toBe(uuidDeterminista(solicitudCfdi().referencia));
+    // Un solo uso: la siguiente emisión contesta normal.
+    await expect(pac.emitir(solicitudCfdi({ folio: '1025' }))).resolves.toMatchObject({
+      uuid: expect.stringMatching(UUID_V4),
+    });
+  });
+
+  it('programarSinRespuesta(false): contesta PAC_SIN_RESPUESTA y NUNCA la timbró', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    pac.programarSinRespuesta(false);
+    await expect(pac.emitir(solicitudCfdi())).rejects.toMatchObject({
+      codigo: 'PAC_SIN_RESPUESTA',
+    });
+    await expect(pac.buscarPorFolio(consulta())).resolves.toBeNull();
+    const uuid = uuidDeterminista(solicitudCfdi().referencia);
+    await expect(pac.consultarEstado({ uuid, idPac: uuid })).resolves.toMatchObject({
+      estado: 'no_encontrado',
+    });
+  });
+
+  it('cancelarEnPac: la cancelación que el PAC registra TARDE; sin emisión conocida no hace nada', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    const cfdi = await pac.emitir(solicitudCfdi());
+    pac.cancelarEnPac('DESCONOCIDO');
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'vigente' });
+    pac.cancelarEnPac(cfdi.uuid, '03');
+    await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'cancelado' });
+    expect(pac.cancelacionDe(cfdi.uuid)).toEqual({ motivo: '03' });
+  });
+});

@@ -4,7 +4,10 @@ import { fechaLocalCfdi, instanteDesdeLocal } from './cfdi-comun';
 import { errorSatConocido, MENSAJE_RECHAZO_GENERICO } from './errores-sat';
 import {
   ErrorTimbrado,
+  type ArchivosPac,
+  type CfdiEncontrado,
   type CfdiTimbrado,
+  type ConsultaFolio,
   type CsdRegistrado,
   type EstadoCfdi,
   type EstadoTrasCancelar,
@@ -196,6 +199,81 @@ export function peticionDescarga(
   return { metodo: 'GET', url: `${base}/cfdi/${formato}/issuedLite/${encodeURIComponent(idPac)}` };
 }
 
+/*
+ * F2-110b. SUPUESTO NO VALIDADO (F2-190): la lista de CFDI emitidos del multiemisor se consulta con
+ * `GET /api-lite/cfdis?type=issuedLite&rfcIssuer=<rfc>&serie=<serie>&folioStart=<f>&folioEnd=<f>&status=all`
+ * y contesta un ARREGLO `[{ Id, Serie, Folio, Uuid, Status, Date, ... }]` (documentación pública,
+ * no una llamada real).
+ *
+ * De esta respuesta depende LIBERAR una reserva (y con ella volver a facturar el ticket): si el PAC
+ * ignorara un filtro o paginara, "no vino nuestro folio" no probaría nada. Por eso SÓLO una lista
+ * VACÍA (200 con `[]`) es "no lo tiene" (un 404 tampoco: ver `buscarPorFolio`); cualquier fila ajena (otra serie, otro folio, otro emisor si la
+ * fila lo trae) o más de una fila nuestra es `ESTADO_DESCONOCIDO` (reintentable) y nadie decide.
+ */
+export function peticionBuscarPorFolio(base: string, c: ConsultaFolio): PeticionHttp {
+  const query = new URLSearchParams({
+    type: 'issuedLite',
+    rfcIssuer: c.rfcEmisor,
+    serie: c.serie,
+    folioStart: c.folio,
+    folioEnd: c.folio,
+    status: 'all',
+  });
+  return { metodo: 'GET', url: `${base}/api-lite/cfdis?${query}` };
+}
+
+export const MENSAJE_LISTA_AMBIGUA_PAC =
+  'La búsqueda por folio en el PAC trajo resultados que no son exactamente ese CFDI: no se ' +
+  'concluye nada (se vuelve a consultar).';
+
+interface FilaListaCfdi {
+  Id?: string;
+  Serie?: string;
+  Folio?: string | number;
+  Uuid?: string;
+  Status?: string;
+  Date?: string;
+  RfcIssuer?: string;
+  Issuer?: { Rfc?: string };
+}
+
+function esNuestra(f: FilaListaCfdi, c: ConsultaFolio): boolean {
+  const rfc = f.RfcIssuer ?? f.Issuer?.Rfc;
+  return (
+    String(f.Serie ?? '') === c.serie &&
+    String(f.Folio ?? '') === c.folio &&
+    (rfc === undefined || rfc.toUpperCase() === c.rfcEmisor.toUpperCase())
+  );
+}
+
+/** Nuestro CFDI en la respuesta de la lista, null si la lista vino VACÍA, o desconocido. */
+export function cfdiDeLista(cuerpo: unknown, c: ConsultaFolio): CfdiEncontrado | null {
+  if (!Array.isArray(cuerpo)) {
+    throw new ErrorTimbrado('ESTADO_DESCONOCIDO', MENSAJE_LISTA_AMBIGUA_PAC, true);
+  }
+  const filas = cuerpo as FilaListaCfdi[];
+  if (filas.length === 0) return null;
+  if (filas.length > 1 || !esNuestra(filas[0], c)) {
+    throw new ErrorTimbrado('ESTADO_DESCONOCIDO', MENSAJE_LISTA_AMBIGUA_PAC, true);
+  }
+  const [f] = filas;
+  if (!f.Id || !f.Uuid) {
+    throw new ErrorTimbrado('ESTADO_DESCONOCIDO', MENSAJE_LISTA_AMBIGUA_PAC, true);
+  }
+  const estado = estadoDeFacturama(f.Status);
+  if (estado === 'no_encontrado') {
+    throw new ErrorTimbrado('ESTADO_DESCONOCIDO', MENSAJE_LISTA_AMBIGUA_PAC, true);
+  }
+  return {
+    uuid: f.Uuid.toUpperCase(),
+    idPac: f.Id,
+    estado,
+    // DECISION PROVISIONAL (nocturno): `Date` de la lista se lee como hora LOCAL de la sucursal
+    // (como `TaxStamp.Date`); si no se puede leer, null y quien confirma busca otra (el XML).
+    fechaTimbrado: instanteDesdeLocal(f.Date ?? '', c.zonaHoraria),
+  };
+}
+
 export const MENSAJE_PAC_NO_DISPONIBLE =
   'El servicio de timbrado no está disponible. Intenta de nuevo en unos minutos.';
 export const MENSAJE_PAC_SIN_RESPUESTA =
@@ -361,6 +439,26 @@ export class TimbradoFacturama implements PuertoTimbrado {
     if (r.status === 404) return { uuid: cfdi.uuid, estado: 'no_encontrado' };
     if (!ok(r)) throw errorDe(r);
     return { uuid: cfdi.uuid, estado: estadoDeFacturama((r.cuerpo as CuerpoCfdi).Status) };
+  }
+
+  async buscarPorFolio(consulta: ConsultaFolio): Promise<CfdiEncontrado | null> {
+    const r = await this.enviar(peticionBuscarPorFolio(this.base, consulta));
+    // DECISION PROVISIONAL (nocturno): un 404 NO es "no la tiene". Una ruta de LISTA contesta `[]`
+    // cuando no hay resultados; un 404 apunta a una ruta mal armada (el supuesto de F2-190), y
+    // tomarlo como vacío liberaría TODA reserva ambigua a los 30 min (CFDI duplicado ante el SAT).
+    if (r.status === 404) {
+      throw new ErrorTimbrado('ESTADO_DESCONOCIDO', MENSAJE_LISTA_AMBIGUA_PAC, true);
+    }
+    if (!ok(r)) throw errorDe(r);
+    return cfdiDeLista(r.cuerpo, consulta);
+  }
+
+  async descargarArchivos(cfdi: ReferenciaCfdi): Promise<ArchivosPac> {
+    const [xml, pdf] = await Promise.all([
+      this.descargar('xml', cfdi.idPac),
+      this.descargar('pdf', cfdi.idPac),
+    ]);
+    return { xml: xml.toString('utf8'), pdf };
   }
 
   /** Facturama devuelve el archivo como `{ Content: <base64> }`. */

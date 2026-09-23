@@ -8,9 +8,12 @@ import { MENSAJES_SAT } from './errores-sat';
 import { pdfMinimo } from './pdf-minimo';
 import {
   ErrorTimbrado,
+  type ArchivosPac,
+  type CfdiEncontrado,
   type CfdiRelacionados,
   type CfdiTimbrado,
   type CodigoErrorTimbrado,
+  type ConsultaFolio,
   type CsdRegistrado,
   type EstadoCfdi,
   type MotivoCancelacion,
@@ -253,6 +256,20 @@ interface SolicitudPendiente {
   rechazaAlConsultar: boolean;
 }
 
+/** F2-110b: lo que el falso recuerda de cada emisión, para buscarla por folio y re-descargarla. */
+interface EmisionGuardada {
+  uuid: string;
+  fechaTimbrado: Date;
+  solicitud: SolicitudCfdi;
+}
+
+export const MENSAJE_SIN_RESPUESTA_FALSO =
+  'No hubo respuesta del servicio de timbrado. Revisa el estado antes de reintentar.';
+
+function llaveFolio(rfcEmisor: string, serie: string, folio: string): string {
+  return `${rfcEmisor}|${serie}|${folio}`;
+}
+
 /** Cómo quedó cancelado un CFDI en el PAC falso (para que los tests lo verifiquen). */
 export interface CancelacionFalsa {
   motivo: MotivoCancelacion;
@@ -277,6 +294,11 @@ export class TimbradoFalso implements PuertoTimbrado {
   /** F2-109: el RFC del receptor de cada emisión y las cancelaciones que esperan al receptor. */
   private readonly receptores = new Map<string, string>();
   private readonly pendientes = new Map<string, SolicitudPendiente>();
+  /** F2-110b: cada emisión por `rfc|serie|folio`, y el mismo registro por UUID. */
+  private readonly porFolio = new Map<string, EmisionGuardada>();
+  private readonly porUuid = new Map<string, EmisionGuardada>();
+  /** F2-110b: la SIGUIENTE emisión no contesta (`timbra` = el PAC sí la timbró). Un solo uso. */
+  private sinRespuesta: { timbra: boolean } | null = null;
 
   constructor(private readonly reloj: Pick<Reloj, 'ahora'>) {}
 
@@ -298,15 +320,31 @@ export class TimbradoFalso implements PuertoTimbrado {
     if (error) {
       return Promise.reject(new ErrorTimbrado(error.codigo, error.mensaje, error.reintentable));
     }
+    const sinRespuesta = this.sinRespuesta;
+    this.sinRespuesta = null;
+    if (sinRespuesta && !sinRespuesta.timbra) {
+      return Promise.reject(
+        new ErrorTimbrado('PAC_SIN_RESPUESTA', MENSAJE_SIN_RESPUESTA_FALSO, false),
+      );
+    }
     const uuid = uuidDeterminista(solicitud.referencia);
     const fechaTimbrado = new Date(this.reloj.ahora());
     if (!this.estados.has(uuid)) this.estados.set(uuid, 'vigente');
+    const guardada: EmisionGuardada = { uuid, fechaTimbrado, solicitud };
+    this.porFolio.set(llaveFolio(solicitud.emisor.rfc, solicitud.serie, solicitud.folio), guardada);
+    this.porUuid.set(uuid, guardada);
     this.receptores.set(uuid, solicitud.receptor.rfc);
     if (solicitud.relacionados) {
       this.relaciones.set(uuid, {
         tipoRelacion: solicitud.relacionados.tipoRelacion,
         uuids: [...solicitud.relacionados.uuids],
       });
+    }
+    if (sinRespuesta) {
+      // Timbró, pero la respuesta nunca llegó: quien emite no sabe el UUID (F2-110b).
+      return Promise.reject(
+        new ErrorTimbrado('PAC_SIN_RESPUESTA', MENSAJE_SIN_RESPUESTA_FALSO, false),
+      );
     }
     return Promise.resolve({
       uuid,
@@ -398,6 +436,49 @@ export class TimbradoFalso implements PuertoTimbrado {
       this.pendientes.delete(uuid);
       this.estados.set(uuid, 'vigente');
     }
+  }
+
+  /**
+   * F2-110b, sólo para tests: la SIGUIENTE `emitir` contesta `PAC_SIN_RESPUESTA` (ambiguo). Con
+   * `timbra` el PAC sí la timbró (se puede encontrar por folio); sin él, nunca la vio.
+   */
+  programarSinRespuesta(timbra: boolean): void {
+    this.sinRespuesta = { timbra };
+  }
+
+  /**
+   * F2-110b, sólo para tests: el PAC registra una cancelación que al pedirla se dio por no
+   * registrada (llegó TARDE). Sin emisión conocida no hace nada.
+   */
+  cancelarEnPac(uuid: string, motivo: MotivoCancelacion = '02'): void {
+    if (!this.estados.has(uuid)) return;
+    this.#cancelar(uuid, { motivo });
+  }
+
+  buscarPorFolio(c: ConsultaFolio): Promise<CfdiEncontrado | null> {
+    const g = this.porFolio.get(llaveFolio(c.rfcEmisor, c.serie, c.folio));
+    if (!g) return Promise.resolve(null);
+    const estado = this.estados.get(g.uuid) ?? 'vigente';
+    return Promise.resolve({
+      uuid: g.uuid,
+      idPac: g.uuid,
+      estado: estado === 'no_encontrado' ? 'vigente' : estado,
+      fechaTimbrado: new Date(g.fechaTimbrado),
+    });
+  }
+
+  /** Mismo XML y PDF que devolvió `emitir` (deterministas desde la solicitud guardada). */
+  descargarArchivos({ uuid }: ReferenciaCfdi): Promise<ArchivosPac> {
+    const g = this.porUuid.get(uuid);
+    if (!g) {
+      return Promise.reject(
+        new ErrorTimbrado('CFDI_NO_ENCONTRADO', 'No existe un CFDI emitido con ese folio fiscal.'),
+      );
+    }
+    return Promise.resolve({
+      xml: xmlCfdiFalso(g.solicitud, g.uuid, g.fechaTimbrado),
+      pdf: pdfCfdiFalso(g.solicitud, g.uuid),
+    });
   }
 
   /** Los relacionados con que se emitió un UUID (sólo para verificar en tests). */

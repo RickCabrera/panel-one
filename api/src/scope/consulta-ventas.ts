@@ -70,7 +70,8 @@ import type { EmpresaScope } from './empresa-scope';
  *   `es_global` lo dice. `cuenta_facturado` NO cambia de significado (una global vigente también
  *   cuenta); quien agrega decide si separa la global (el tablero la separa: `es_global`).
  *   F2-109: `cancelacion_estado`/`_motivo`/`_solicitada_at`/`_resuelta_at` = la ÚLTIMA solicitud
- *   de cancelación del CFDI si NO quedó aceptada (`solicitando`, `en_proceso` o `rechazada`); si
+ *   de cancelación del CFDI si NO quedó aceptada (`solicitando`, `en_proceso`, `rechazada` o,
+ *   F2-110b, `sin_confirmar`); si
  *   quedó aceptada, nulos (ya se ve en `estado` y `motivo_cancelacion`). Una en proceso NO cambia
  *   `cuenta_facturado`: la factura sigue vigente ante el SAT hasta que el receptor acepte.
  * - `codigos_ventas(cheque_id, empresa_id, sucursal_id, folio, cerrado_at, total, codigo, estado,

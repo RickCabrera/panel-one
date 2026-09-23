@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import type { CfdiFila, Sucursal, TableroFacturacion } from '../../../api/tipos';
+import type {
+  CfdiFila,
+  ResumenConciliacion,
+  Sucursal,
+  TableroFacturacion,
+} from '../../../api/tipos';
 import { BOM, ErrorCsv } from '../../../csv/csv';
 import {
   aDiezmilesimas,
@@ -11,6 +16,7 @@ import {
   puntosHora,
   puntosPorcentuales,
   tasaTexto,
+  textoConciliacion,
 } from './reglas';
 
 // Reglas puras del tablero de facturación (F2-106).
@@ -137,5 +143,53 @@ describe('cfdisACsv', () => {
     expect(() => cfdisACsv([cfdi({ total: 'abc' })], new Map([['s1', CDMX]]))).toThrow(
       /total inválido/,
     );
+  });
+});
+
+describe('textoConciliacion (F2-110b)', () => {
+  const vacio: ResumenConciliacion = {
+    reservas: { revisadas: 0, confirmadas: 0, liberadas: 0, enEspera: 0 },
+    cancelaciones: { revisadas: 0, canceladas: 0, descartadas: 0 },
+    sustituciones: { revisadas: 0, cerradas: 0 },
+    archivos: { revisados: 0, recuperados: 0 },
+    fallidas: 0,
+    requierenRevision: [],
+  };
+
+  it('sin nada pendiente lo dice, no una lista de ceros', () => {
+    expect(textoConciliacion(vacio)).toEqual([
+      expect.stringMatching(/^No había nada pendiente con el PAC/),
+    ]);
+  });
+
+  it('una frase por cada cosa que pasó, en singular y plural', () => {
+    const frases = textoConciliacion({
+      reservas: { revisadas: 4, confirmadas: 1, liberadas: 2, enEspera: 1 },
+      cancelaciones: { revisadas: 2, canceladas: 2, descartadas: 0 },
+      sustituciones: { revisadas: 1, cerradas: 1 },
+      archivos: { revisados: 1, recuperados: 1 },
+      fallidas: 3,
+      requierenRevision: ['A-1', 'A-7'],
+    });
+    expect(frases).toEqual([
+      '1 factura que el PAC sí timbró quedó confirmada y se entregó.',
+      '2 emisiones que el PAC nunca timbró se liberaron: sus tickets se pueden volver a facturar.',
+      '1 emisión no aparece en el PAC todavía: se vuelve a buscar en 15 minutos antes de liberarla.',
+      '2 cancelaciones que el PAC registró tarde quedaron anotadas.',
+      '1 refacturación terminó: la factura anterior quedó cancelada con motivo 01.',
+      '1 factura recuperó su XML y PDF del PAC.',
+      '3 casos no se pudieron resolver (el PAC falló o no dio una respuesta clara): se reintentan solos.',
+      'Revisar a mano en el PAC: A-1, A-7 (confirmadas, pero el PAC ya las reporta canceladas).',
+    ]);
+  });
+
+  it('revisar casos que siguen igual NO es "nada pendiente": dice que siguen pendientes', () => {
+    const r = structuredClone(vacio);
+    r.cancelaciones.revisadas = 3;
+    expect(textoConciliacion(r)).toEqual([
+      'Se revisaron 3 casos con el PAC y todavía no cambia nada: se vuelve a revisar solo.',
+    ]);
+    r.cancelaciones.revisadas = 1;
+    expect(textoConciliacion(r)[0]).toMatch(/^Se revisó 1 caso con el PAC/);
   });
 });

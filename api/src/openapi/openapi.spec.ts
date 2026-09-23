@@ -177,6 +177,28 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(q)).toContain('sin comodines');
   });
 
+  it('F2-110b: conciliación con el PAC, de admins, con el resumen por tipo', async () => {
+    const { paths, components } = await generarDocumento();
+    const op = paths['/facturacion/conciliacion']?.post;
+    expect(op?.security).toEqual([{ bearer: [] }]);
+    expect(Object.keys(op?.responses ?? {}).sort()).toEqual(['200', '401', '403']);
+    expect(JSON.stringify(op?.responses?.['200'])).toContain('ResumenConciliacionDto');
+    expect(JSON.stringify(op?.responses?.['403'])).toContain('visor');
+    const esquemas = components?.schemas as Record<
+      string,
+      { properties?: Record<string, unknown>; required?: string[] }
+    >;
+    expect(Object.keys(esquemas.ResumenConciliacionDto.properties ?? {})).toEqual([
+      'reservas',
+      'cancelaciones',
+      'sustituciones',
+      'archivos',
+      'fallidas',
+      'requierenRevision',
+    ]);
+    expect(JSON.stringify(esquemas.ResumenConciliacionDto)).not.toContain('monto');
+  });
+
   it('F2-110: control de folios, sólo admin_global (403 por la ruta), con reporte mensual', async () => {
     const { paths, components } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -255,6 +277,8 @@ describe('Contrato OpenAPI', () => {
       'solicitando',
       'en_proceso',
       'rechazada',
+      // F2-110b: la que el PAC no registró a tiempo; la conciliación la sigue revisando.
+      'sin_confirmar',
     ]);
     expect(Object.keys(esquemas.ResumenPeriodoGlobalDto.properties ?? {})).toContain(
       'globalesCanceladas',
@@ -1074,6 +1098,8 @@ describe('Contrato OpenAPI', () => {
         '/facturacion/folios/paquetes',
         '/facturacion/folios/paquetes/{id}',
         '/facturacion/folios/reporte',
+        // F2-110b: conciliación con el PAC a pedido.
+        '/facturacion/conciliacion',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',

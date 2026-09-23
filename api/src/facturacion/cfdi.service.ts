@@ -77,7 +77,8 @@ export const MENSAJE_EMISION_INCIERTA =
  * 3. CONFIRMAR (CFDI vigente + código facturado + receptor frecuente, en una transacción), o
  *    LIBERAR la reserva si el PAC rechazó sin timbrar. Si el resultado es AMBIGUO (el PAC pudo
  *    timbrar y no lo sabemos), la reserva se QUEDA en `timbrando`: el código dice `en_proceso` y
- *    nadie puede pedir otro CFDI para él. Resolverla consultando al PAC es de F2-110b.
+ *    nadie puede pedir otro CFDI para él. La resuelve la conciliación con el PAC (F2-110b,
+ *    `ConciliacionPacService`): la confirma si el PAC la timbró, o la libera si no la tiene.
  *
  * 4. ENTREGAR (F2-105, `EntregaCfdiService`): archivos, enlaces firmados y correo. Nunca hace
  *    fallar la emisión.

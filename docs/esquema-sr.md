@@ -625,10 +625,63 @@ Facturama y decisiones propias, todos por validar en F2-190.
 - **Reporte mensual**: vigentes + cancelados por empresa, con el MES de `emitido_at` en la zona de la
   SUCURSAL que emitió (como el tablero de F2-106), por origen y con los sustitutos aparte. La tarjeta
   "consumo por empresa" sale de la MISMA consulta (mes en curso y 12 meses locales de cada sucursal).
-- ⚠️ Una reserva colgada en `timbrando` resta saldo hasta que se concilie (F2-110b): el "disponible"
-  puede salir por debajo del real mientras tanto. La vista dice cuántas hay en emisión.
+- ⚠️ Una reserva colgada en `timbrando` resta saldo hasta que se concilie (F2-110b: la conciliación
+  la confirma o la libera; mientras espera su segunda búsqueda vacía SIGUE contando). La vista dice
+  cuántas hay en emisión.
 - Pendiente de F2-190: ¿la API de Facturama expone el saldo y la vigencia de los folios? Si sí,
   conciliar el saldo local contra el suyo.
+
+**Conciliación con el PAC (F2-110b).** No lee nada de SR (no hubo hallazgo del POS): son supuestos
+sobre Facturama y decisiones propias, todos por validar en F2-190. Resuelve lo que la emisión o la
+cancelación dejaron SIN SABER: reservas colgadas en `timbrando` (los cuatro orígenes), cancelaciones
+que se dieron por no registradas, refacturaciones con la 01 pendiente y CFDI vigentes sin XML/PDF.
+Corre sola cada 15 min (`CONCILIACION_INTERVALO_S`) y a pedido desde el tablero (un admin_empresa
+sólo concilia su empresa).
+
+- ⚠️ **SUPUESTO — buscar un CFDI por serie y folio.** La reserva ambigua no tiene `uuid` ni `idPac`,
+  así que se busca en la LISTA de emitidos: `GET /api-lite/cfdis?type=issuedLite&rfcIssuer=…&serie=…
+  &folioStart=f&folioEnd=f&status=all`, que contestaría un arreglo `[{ Id, Serie, Folio, Uuid,
+  Status, Date }]` (documentación pública, no una llamada real). Fijado por test de contrato
+  (`timbrado.contrato.spec.ts`).
+- **Liberar exige evidencia fuerte** (de eso depende volver a facturar el ticket, y un error ahí
+  DUPLICA un CFDI ante el SAT): SÓLO una lista VACÍA (200 con `[]`) cuenta como "no la tiene"; un 404
+  NO (`DECISION PROVISIONAL (nocturno)`: una ruta de lista contesta `[]`; un 404 apunta a una ruta mal
+  armada, y tomarlo como vacío liberaría toda reserva ambigua a los 30 min); cualquier
+  fila ajena (otra serie, otro folio, otro emisor si la fila lo trae), dos filas nuestras o un
+  cuerpo que no es arreglo es `ESTADO_DESCONOCIDO` y nadie decide. Y hacen falta DOS búsquedas vacías
+  separadas al menos 15 min (`cfdis.conciliacion_vacia_at` guarda la primera). Si en medio aparece, se
+  confirma. ⚠️ Una reserva liberada que el PAC listara DESPUÉS de la segunda búsqueda no se detecta
+  (nota en F2-190 y F2-250).
+- `DECISION PROVISIONAL (nocturno)` — **plazos** (`facturacion/conciliacion.ts`): una reserva o un CFDI
+  de menos de 15 min no se toca (puede ir una llamada en vuelo; tope HTTP 30 s); un CFDI revisado no
+  se vuelve a revisar antes de 15 min (`cfdis.conciliacion_at`, que además es el CANDADO en base: un
+  UPDATE condicional, sólo gana una vuelta); una cancelación `sin_confirmar` se consulta hasta 7 días.
+- `DECISION PROVISIONAL (nocturno)` — **fecha del CFDI confirmado**: la que dé la lista (`Date`, leída
+  como hora LOCAL de la sucursal, como `TaxStamp.Date`); si no, la `FechaTimbrado` del TFD del XML
+  descargado; y si tampoco, la de la RESERVA (el `Fecha` que se mandó al PAC: el timbre no puede ser
+  anterior). Con la última, el mes en que cuenta el folio podría diferir del real.
+- **Cancelación que Facturama registra tarde.** Antes (F2-109) una `solicitando` que a los 10 min el
+  PAC veía VIGENTE se BORRABA ("no procedió"); ahora queda `sin_confirmar` (valor nuevo de
+  `estado_cancelacion_cfdi`): no cuenta como abierta (se puede volver a pedir, igual que antes) y la
+  conciliación la consulta: si el PAC ya la ve `cancelado` se ACEPTA con todos los efectos de F2-109
+  (ticket o global sueltos, aviso al receptor) y la fecha de la consulta (el GET no trae la de la
+  cancelación); `en_cancelacion` → `en_proceso`; vigente pasados 7 días → se borra. Al abrir una
+  solicitud nueva (bajo el candado del CFDI) y al aceptar cualquiera se borran las `sin_confirmar` del
+  mismo CFDI: la nueva CONSULTA al PAC antes de cancelar, así que nunca quedan dos aceptadas ni dos
+  avisos. ⚠️ Una cancelación hecha FUERA del sistema (en el portal de Facturama) no se detecta: no se
+  barren todos los vigentes contra el PAC (costo: una llamada por CFDI por vuelta). Nota en F2-250.
+- ⚠️ **Confirmar un CFDI que el PAC ya reporta cancelado.** Si la reserva colgada aparece en el PAC
+  pero `cancelado`/`en_cancelacion`, se confirma igual (existe ante el SAT) y se reporta en
+  `requierenRevision` (la tarjeta del tablero lo dice): su cancelación no pasó por aquí. No se inventa
+  una solicitud. Nota en F2-250.
+- **Refacturación con la 01 pendiente**: se reintenta con el núcleo de F2-109 (`solicitar`, que
+  CONSULTA primero: si el PAC ya la canceló sólo la anota, sin otro DELETE). No se reintenta si el
+  receptor RECHAZÓ una 01 (decide una persona) ni si hay una solicitud abierta o `sin_confirmar`.
+- **Archivos**: `descargarArchivos` (el mismo `GET /cfdi/{xml|pdf}/issuedLite/{id}` de la emisión) y se
+  guardan con la entrega de F2-105; el correo al receptor sólo sale si nunca se reclamó uno.
+- Una reserva confirmada por la conciliación se ENTREGA (archivos + el correo que nunca salió).
+- Los pasos 3 (01 pendiente) y 4 (archivos) comparten el candado `conciliacion_at`: un CFDI que esté en
+  los dos casos se resuelve en vueltas distintas, con 15 min entre una y otra.
 
 ---
 

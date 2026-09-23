@@ -12382,6 +12382,54 @@
           "facturacion"
         ]
       }
+    },
+    "/facturacion/conciliacion": {
+      "post": {
+        "description": "Lo mismo que hace el programador cada 15 min, a pedido y sólo dentro de tu alcance (un admin_empresa concilia su empresa; un admin_global, todas). Resuelve: reservas colgadas en `timbrando` de más de 15 min (si el PAC las timbró se confirman; si no las tiene en dos búsquedas separadas 15 min, se liberan), cancelaciones `sin_confirmar` que el PAC registró tarde, refacturaciones con la cancelación 01 pendiente, y facturas vigentes sin XML/PDF. Un error del PAC no falla la llamada: el elemento se cuenta en `fallidas` y se reintenta solo.",
+        "operationId": "ConciliacionController_conciliar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumenConciliacionDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Concilia contra el PAC lo que la emisión o la cancelación dejaron sin saber (F2-110b).",
+        "tags": [
+          "facturacion"
+        ]
+      }
     }
   },
   "info": {
@@ -21483,7 +21531,8 @@
             "enum": [
               "solicitando",
               "en_proceso",
-              "rechazada"
+              "rechazada",
+              "sin_confirmar"
             ]
           },
           "motivo": {
@@ -21604,7 +21653,7 @@
           },
           "cancelacion": {
             "nullable": true,
-            "description": "F2-109: la última solicitud de cancelación si NO quedó aceptada, o null. `en_proceso` = el SAT espera al receptor (la factura sigue vigente y sigue contando en lo facturado); `rechazada` = el receptor la rechazó; `solicitando` = el PAC no confirmó (consultar).",
+            "description": "F2-109: la última solicitud de cancelación si NO quedó aceptada, o null. `en_proceso` = el SAT espera al receptor (la factura sigue vigente y sigue contando en lo facturado); `rechazada` = el receptor la rechazó; `solicitando` = el PAC no confirmó (consultar); `sin_confirmar` (F2-110b) = a los 10 min el PAC la veía vigente: sigue vigente y se puede volver a pedir, y la conciliación la vuelve a consultar (si el PAC la registró tarde, queda cancelada sola).",
             "type": "object",
             "allOf": [
               {
@@ -23640,7 +23689,7 @@
               "rechazada",
               "no_procedio"
             ],
-            "description": "En qué quedó la solicitud tras consultar al PAC: `aceptada` = la factura quedó cancelada; `rechazada` = el receptor la rechazó (sigue vigente, se puede volver a pedir); `no_procedio` = el PAC nunca la registró (sigue vigente); `solicitando`/`en_proceso` = sin cambio todavía."
+            "description": "En qué quedó la solicitud tras consultar al PAC: `aceptada` = la factura quedó cancelada; `rechazada` = el receptor la rechazó (sigue vigente, se puede volver a pedir); `no_procedio` = el PAC no la registró (sigue vigente y se puede volver a pedir; F2-110b: la solicitud queda `sin_confirmar` y la conciliación la vuelve a consultar hasta 7 días, por si el PAC la registró tarde); `solicitando`/`en_proceso` = sin cambio todavía."
           },
           "mensaje": {
             "type": "string",
@@ -23961,6 +24010,128 @@
           "hasta",
           "filas",
           "totales"
+        ]
+      },
+      "ReservasConciliadasDto": {
+        "type": "object",
+        "properties": {
+          "revisadas": {
+            "type": "number",
+            "description": "Reservas colgadas en `timbrando` que esta vuelta revisó."
+          },
+          "confirmadas": {
+            "type": "number",
+            "description": "El PAC SÍ las timbró: quedaron vigentes (ticket facturado, tickets de la global en la global, el sustituto con el código) y se entregaron (archivos y correo)."
+          },
+          "liberadas": {
+            "type": "number",
+            "description": "El PAC no las tiene en DOS búsquedas separadas al menos 15 min: se liberaron (el ticket se puede volver a facturar; la global suelta sus tickets). Su folio queda como hueco."
+          },
+          "enEspera": {
+            "type": "number",
+            "description": "El PAC no las tiene en UNA búsqueda: esperan la segunda (una sola búsqueda vacía no libera)."
+          }
+        },
+        "required": [
+          "revisadas",
+          "confirmadas",
+          "liberadas",
+          "enEspera"
+        ]
+      },
+      "CancelacionesConciliadasDto": {
+        "type": "object",
+        "properties": {
+          "revisadas": {
+            "type": "number",
+            "description": "Solicitudes `sin_confirmar` que se volvieron a consultar."
+          },
+          "canceladas": {
+            "type": "number",
+            "description": "El PAC las registró tarde: la factura quedó cancelada (con sus efectos y el aviso al receptor)."
+          },
+          "descartadas": {
+            "type": "number",
+            "description": "Se descartaron: la factura ya estaba cancelada por otra solicitud, o el PAC la sigue viendo vigente pasados 7 días."
+          }
+        },
+        "required": [
+          "revisadas",
+          "canceladas",
+          "descartadas"
+        ]
+      },
+      "SustitucionesConciliadasDto": {
+        "type": "object",
+        "properties": {
+          "revisadas": {
+            "type": "number",
+            "description": "Refacturaciones con la cancelación 01 pendiente que se revisaron."
+          },
+          "cerradas": {
+            "type": "number",
+            "description": "La factura anterior quedó cancelada con motivo 01."
+          }
+        },
+        "required": [
+          "revisadas",
+          "cerradas"
+        ]
+      },
+      "ArchivosConciliadosDto": {
+        "type": "object",
+        "properties": {
+          "revisados": {
+            "type": "number",
+            "description": "Facturas vigentes sin XML o PDF guardado que se revisaron."
+          },
+          "recuperados": {
+            "type": "number",
+            "description": "Facturas cuyos archivos se recuperaron del PAC y se guardaron."
+          }
+        },
+        "required": [
+          "revisados",
+          "recuperados"
+        ]
+      },
+      "ResumenConciliacionDto": {
+        "type": "object",
+        "properties": {
+          "reservas": {
+            "$ref": "#/components/schemas/ReservasConciliadasDto"
+          },
+          "cancelaciones": {
+            "$ref": "#/components/schemas/CancelacionesConciliadasDto"
+          },
+          "sustituciones": {
+            "$ref": "#/components/schemas/SustitucionesConciliadasDto"
+          },
+          "archivos": {
+            "$ref": "#/components/schemas/ArchivosConciliadosDto"
+          },
+          "fallidas": {
+            "type": "number",
+            "description": "Elementos donde el PAC falló o contestó algo que no permite decidir. No se tocaron: la siguiente vuelta los reintenta."
+          },
+          "requierenRevision": {
+            "example": [
+              "A-1024"
+            ],
+            "description": "Serie-folio de reservas que se confirmaron aunque el PAC ya las reporta canceladas (o en cancelación): su cancelación no pasó por aquí y hay que revisarlas a mano en el PAC.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "reservas",
+          "cancelaciones",
+          "sustituciones",
+          "archivos",
+          "fallidas",
+          "requierenRevision"
         ]
       }
     }

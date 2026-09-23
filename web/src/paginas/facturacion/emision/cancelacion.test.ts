@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { CfdiFila } from '../../../api/tipos';
 import {
   MENSAJE_01_SIN_SUSTITUTO,
   MENSAJE_CON_SUSTITUTO,
@@ -12,7 +13,7 @@ import {
 
 const SUS = 'AAAAAAAA-396D-4725-8521-CDC4BDD20C99';
 const TICKET = { origen: 'ticket' as const, sustituidoPor: null, sustitucionPendiente: false };
-const abierta = (estado: 'solicitando' | 'en_proceso' | 'rechazada') => ({
+const abierta = (estado: NonNullable<CfdiFila['cancelacion']>['estado']) => ({
   estado,
   motivo: '02',
   solicitadaAt: '2026-09-21T16:00:00.000Z',
@@ -48,6 +49,11 @@ describe('cancelación (F2-109): reglas del formulario', () => {
     expect(puedeCancelar({ estado: 'vigente', cancelacion: null })).toBe(true);
     expect(puedeCancelar({ estado: 'cancelado', cancelacion: null })).toBe(false);
     expect(puedeCancelar({ estado: 'vigente', cancelacion: abierta('rechazada') })).toBe(true);
+    // F2-110b: la que el PAC no confirmó ya no está abierta: se puede volver a pedir.
+    expect(puedeCancelar({ estado: 'vigente', cancelacion: abierta('sin_confirmar') })).toBe(true);
+    expect(cancelacionAbierta({ estado: 'vigente', cancelacion: abierta('sin_confirmar') })).toBe(
+      false,
+    );
     for (const e of ['solicitando', 'en_proceso'] as const) {
       expect(puedeCancelar({ estado: 'vigente', cancelacion: abierta(e) })).toBe(false);
       expect(cancelacionAbierta({ estado: 'vigente', cancelacion: abierta(e) })).toBe(true);
@@ -61,5 +67,8 @@ describe('cancelación (F2-109): reglas del formulario', () => {
     expect(textoCancelacion(abierta('en_proceso'))).toMatch(/en proceso.*receptor/);
     expect(textoCancelacion(abierta('solicitando'))).toMatch(/sin confirmar.*consulta/);
     expect(textoCancelacion(abierta('rechazada'))).toMatch(/rechazó/);
+    expect(textoCancelacion(abierta('sin_confirmar'))).toMatch(
+      /no registró.*sigue vigente.*volver a pedir/,
+    );
   });
 });

@@ -47,7 +47,9 @@ export type AccionAuditada =
   // F2-110: el control de folios del PAC (sólo admin_global; recurso de plataforma).
   | 'folios.paquete_alta'
   | 'folios.paquete_baja'
-  | 'folios.configurar';
+  | 'folios.configurar'
+  // F2-110b: una vuelta de conciliación con el PAC pedida desde el tablero.
+  | 'facturacion.conciliacion';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
@@ -67,7 +69,9 @@ export interface EventoAuditoria {
     | 'portal_facturacion'
     | 'cfdi'
     | 'paquete_folios'
-    | 'configuracion_folios';
+    | 'configuracion_folios'
+    // F2-110b: una vuelta de conciliación con el PAC pedida desde el tablero.
+    | 'conciliacion_pac';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

@@ -82,6 +82,8 @@ class PacControlado implements PuertoTimbrado {
   }
 
   registrarCsd: PuertoTimbrado['registrarCsd'] = (s) => this.falso.registrarCsd(s);
+  buscarPorFolio: PuertoTimbrado['buscarPorFolio'] = (c) => this.falso.buscarPorFolio(c);
+  descargarArchivos: PuertoTimbrado['descargarArchivos'] = (c) => this.falso.descargarArchivos(c);
 
   async emitir(s: SolicitudCfdi): Promise<CfdiTimbrado> {
     this.emisiones.push(s);
@@ -598,12 +600,19 @@ describe('Cancelación de CFDI (e2e, F2-109)', () => {
       ultimoError: null,
       updatedAt: new Date('2026-09-18T16:09:00.000Z'),
     });
-    // A los 10 min el PAC la ve vigente: nunca llegó; se libera (sin pedir otra cancelación).
+    // A los 10 min el PAC la ve vigente: se da por no registrada (sin pedir otra cancelación).
+    // F2-110b: ya no se BORRA: queda `sin_confirmar` (deja de estar abierta; la conciliación la
+    // vuelve a consultar por si el PAC la registró tarde) y la tabla lo dice.
     en('2026-09-18T10:11:00-06:00');
     expect((await consultar(c5.id)).body.estado).toBe('no_procedio');
-    expect(await solicitudes(c5.id)).toEqual([]);
+    expect((await solicitudes(c5.id)).map((s) => s.estado)).toEqual(['sin_confirmar']);
+    expect(await fila(c5.id)).toMatchObject({
+      estado: 'vigente',
+      cancelacion: { estado: 'sin_confirmar' },
+    });
     expect(pac.cancelaciones).toHaveLength(cancelaciones);
-    // PAC no disponible (no procesó): 503 y no queda solicitud.
+    // PAC no disponible (no procesó): 503 y no queda solicitud (la nueva descarta la `sin_confirmar`
+    // al abrirse, F2-110b, y la nueva no procedió).
     pac.fallasCancelar = [new ErrorTimbrado('PAC_NO_DISPONIBLE', 'no disponible (prueba)', true)];
     const caido = await cancelar(c5.id, { motivo: '02' });
     expect(caido.status).toBe(503);

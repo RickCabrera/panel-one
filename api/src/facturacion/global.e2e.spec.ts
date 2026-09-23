@@ -74,6 +74,8 @@ class PacControlado implements PuertoTimbrado {
   }
 
   registrarCsd: PuertoTimbrado['registrarCsd'] = (s) => this.falso.registrarCsd(s);
+  buscarPorFolio: PuertoTimbrado['buscarPorFolio'] = (c) => this.falso.buscarPorFolio(c);
+  descargarArchivos: PuertoTimbrado['descargarArchivos'] = (c) => this.falso.descargarArchivos(c);
 
   async emitir(s: SolicitudCfdi): Promise<CfdiTimbrado> {
     this.emisiones.push(s);

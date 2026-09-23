@@ -189,6 +189,28 @@ exports[`Contrato Facturama: alta del CSD (F2-100) reemplazo: PUT /api-lite/csds
 ]
 `;
 
+exports[`Contrato Facturama: conciliación con el PAC (F2-110b) buscarPorFolio: la petición exacta (GET a la lista, filtrada por emisor, serie y folio) 1`] = `
+[
+  {
+    "metodo": "GET",
+    "url": "https://apisandbox.facturama.mx/api-lite/cfdis?type=issuedLite&rfcIssuer=EKU9003173C9&serie=A&folioStart=1024&folioEnd=1024&status=all",
+  },
+]
+`;
+
+exports[`Contrato Facturama: conciliación con el PAC (F2-110b) descargarArchivos: las dos descargas por idPac y el contenido decodificado 1`] = `
+[
+  {
+    "metodo": "GET",
+    "url": "https://apisandbox.facturama.mx/cfdi/xml/issuedLite/fcm-777",
+  },
+  {
+    "metodo": "GET",
+    "url": "https://apisandbox.facturama.mx/cfdi/pdf/issuedLite/fcm-777",
+  },
+]
+`;
+
 exports[`Contrato Facturama: factura global (F2-108) el cuerpo del POST, exacto 1`] = `
 {
   "cuerpo": {

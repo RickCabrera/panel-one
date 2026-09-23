@@ -1,4 +1,9 @@
-import type { CfdiFila, Sucursal, TableroFacturacion } from '../../../api/tipos';
+import type {
+  CfdiFila,
+  ResumenConciliacion,
+  Sucursal,
+  TableroFacturacion,
+} from '../../../api/tipos';
 import { armarCsv, ErrorCsv, importeCsv, texto, textoExcel } from '../../../csv/csv';
 import { aCentavos, paraGrafica } from '../../../dinero/dinero';
 import { fechaHoraEn } from '../../tickets/formato';
@@ -113,6 +118,73 @@ export function motivoSinFacturas(t: TableroFacturacion): string | null {
     return 'No hay ventas en este periodo: no hay nada que facturar. Elige otro periodo o revisa que la sucursal esté sincronizando.';
   }
   return 'No se emitió ninguna factura en este periodo. Los clientes facturan desde el portal de autofactura con el código de su ticket; para que puedan hacerlo, la empresa necesita sus datos fiscales y un CSD vigente (pestaña Datos fiscales).';
+}
+
+/**
+ * F2-110b: el resumen de una vuelta de conciliación con el PAC, en frases. Sin nada que resolver lo
+ * dice (nunca una lista de ceros).
+ */
+export function textoConciliacion(r: ResumenConciliacion): string[] {
+  const n = (x: number, uno: string, varios: string) => `${x} ${x === 1 ? uno : varios}`;
+  const frases: string[] = [];
+  const { reservas: res, cancelaciones: can, sustituciones: sus, archivos: arc } = r;
+  if (res.confirmadas > 0) {
+    frases.push(
+      `${n(res.confirmadas, 'factura que el PAC sí timbró quedó confirmada y se entregó', 'facturas que el PAC sí timbró quedaron confirmadas y se entregaron')}.`,
+    );
+  }
+  if (res.liberadas > 0) {
+    frases.push(
+      `${n(res.liberadas, 'emisión que el PAC nunca timbró se liberó', 'emisiones que el PAC nunca timbró se liberaron')}: sus tickets se pueden volver a facturar.`,
+    );
+  }
+  if (res.enEspera > 0) {
+    frases.push(
+      `${n(res.enEspera, 'emisión no aparece', 'emisiones no aparecen')} en el PAC todavía: se vuelve a buscar en 15 minutos antes de liberarla.`,
+    );
+  }
+  if (can.canceladas > 0) {
+    frases.push(
+      `${n(can.canceladas, 'cancelación que el PAC registró tarde quedó anotada', 'cancelaciones que el PAC registró tarde quedaron anotadas')}.`,
+    );
+  }
+  if (can.descartadas > 0) {
+    frases.push(
+      `${n(can.descartadas, 'cancelación sin confirmar se descartó', 'cancelaciones sin confirmar se descartaron')} (la factura sigue vigente o ya estaba cancelada).`,
+    );
+  }
+  if (sus.cerradas > 0) {
+    frases.push(
+      `${n(sus.cerradas, 'refacturación terminó', 'refacturaciones terminaron')}: la factura anterior quedó cancelada con motivo 01.`,
+    );
+  }
+  if (arc.recuperados > 0) {
+    frases.push(
+      `${n(arc.recuperados, 'factura recuperó', 'facturas recuperaron')} su XML y PDF del PAC.`,
+    );
+  }
+  if (r.fallidas > 0) {
+    frases.push(
+      `${n(r.fallidas, 'caso no se pudo resolver', 'casos no se pudieron resolver')} (el PAC falló o no dio una respuesta clara): se reintentan solos.`,
+    );
+  }
+  if (r.requierenRevision.length > 0) {
+    frases.push(
+      `Revisar a mano en el PAC: ${r.requierenRevision.join(', ')} (confirmadas, pero el PAC ya las reporta canceladas).`,
+    );
+  }
+  if (frases.length === 0) {
+    const revisados = res.revisadas + can.revisadas + sus.revisadas + arc.revisados;
+    // Revisar algo que sigue igual no es "nada pendiente": se dice que sigue pendiente.
+    frases.push(
+      revisados > 0
+        ? `Se ${revisados === 1 ? 'revisó 1 caso' : `revisaron ${revisados} casos`} con el PAC ` +
+            'y todavía no cambia nada: se vuelve a revisar solo.'
+        : 'No había nada pendiente con el PAC: ninguna emisión colgada, cancelación sin ' +
+            'confirmar, refacturación a medias ni factura sin archivos.',
+    );
+  }
+  return frases;
 }
 
 export const ENCABEZADOS_CSV = [

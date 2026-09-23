@@ -8,6 +8,7 @@ import type {
   OrigenCfdi,
   PaginaCfdis,
   PaginaPorFacturar,
+  ResumenConciliacion,
   TableroFacturacion,
 } from '../../../api/tipos';
 import type { Rango } from '../../../filtros/periodo';
@@ -123,6 +124,11 @@ export function useEnviosPendientes(empresaId: string | null) {
 
 export function reintentarEnvio(cfdiId: string): Promise<EnvioCfdi> {
   return pedir<EnvioCfdi>(`/facturacion/cfdis/${cfdiId}/envios/reintento`, { method: 'POST' });
+}
+
+/** Una vuelta de conciliación con el PAC, a pedido (F2-110b). El alcance lo pone el api. */
+export function conciliarConPac(): Promise<ResumenConciliacion> {
+  return pedir<ResumenConciliacion>('/facturacion/conciliacion', { method: 'POST' });
 }
 
 /** El XML o el PDF de un CFDI, con la sesión (`GET /facturacion/cfdis/{id}/xml|pdf`). */
