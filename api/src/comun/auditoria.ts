@@ -33,7 +33,10 @@ export type AccionAuditada =
   | 'portal_facturacion.logo'
   | 'portal_facturacion.quitar_logo'
   // F2-105: reintento manual del correo de una factura.
-  | 'cfdi.reenvio';
+  | 'cfdi.reenvio'
+  // F2-107: factura sin ticket y refacturación (sustituto 04 + cancelación 01).
+  | 'cfdi.manual'
+  | 'cfdi.refacturacion';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;

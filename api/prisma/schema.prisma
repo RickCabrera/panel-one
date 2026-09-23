@@ -1696,45 +1696,73 @@ enum EstadoEmisionCfdi {
   @@map("estado_emision_cfdi")
 }
 
+enum OrigenCfdi {
+  // Emitido desde un cheque (portal de autofactura, F2-104).
+  ticket
+  // Captura manual del administrador, sin cheque (F2-107).
+  manual
+
+  @@map("origen_cfdi")
+}
+
 model Cfdi {
-  id             String            @id @default(uuid()) @db.Uuid
-  empresaId      String            @map("empresa_id") @db.Uuid
-  sucursalId     String            @map("sucursal_id") @db.Uuid
-  chequeId       String            @map("cheque_id") @db.Uuid
+  id                String            @id @default(uuid()) @db.Uuid
+  empresaId         String            @map("empresa_id") @db.Uuid
+  sucursalId        String            @map("sucursal_id") @db.Uuid
+  // Nulo sólo en una factura sin ticket (`origen = manual`, F2-107); un CHECK a mano lo cuida.
+  chequeId          String?           @map("cheque_id") @db.Uuid
   // El candado por código (doble clic no emite dos veces): ÚNICO. Nulo = CFDI sin código
   // (F2-107, factura sin ticket); en Postgres los nulos no chocan entre sí.
-  codigoId       String?           @map("codigo_id") @db.Uuid
-  perfilFiscalId String            @map("perfil_fiscal_id") @db.Uuid
-  serie          String
-  folio          Int
+  codigoId          String?           @map("codigo_id") @db.Uuid
+  perfilFiscalId    String            @map("perfil_fiscal_id") @db.Uuid
+  serie             String
+  folio             Int
   // Nulos mientras `timbrando`; un CHECK a mano los exige en cuanto deja de serlo.
-  uuid           String?
-  idPac          String?           @map("id_pac")
+  uuid              String?
+  idPac             String?           @map("id_pac")
   // { rfc, razonSocial, regimenFiscal, cp, usoCfdi, email } tal como se timbró.
-  receptor       Json
+  receptor          Json
   // c_FormaPago con que se timbró (p. ej. "01").
-  formaPago      String            @map("forma_pago") @db.Char(2)
-  subtotal       Decimal           @db.Decimal(12, 2)
-  iva            Decimal           @db.Decimal(12, 2)
-  total          Decimal           @db.Decimal(12, 2)
-  estado         EstadoEmisionCfdi @default(timbrando)
+  formaPago         String            @map("forma_pago") @db.Char(2)
+  subtotal          Decimal           @db.Decimal(12, 2)
+  iva               Decimal           @db.Decimal(12, 2)
+  total             Decimal           @db.Decimal(12, 2)
+  estado            EstadoEmisionCfdi @default(timbrando)
   // Fecha de timbrado (UTC). Nula mientras `timbrando`.
-  emitidoAt      DateTime?         @map("emitido_at") @db.Timestamptz(3)
+  emitidoAt         DateTime?         @map("emitido_at") @db.Timestamptz(3)
   // CLAVES del XML y el PDF en `PuertoArchivos` (F2-105), no URLs: la URL de descarga se firma
   // al pedirla y vence. Nulas mientras no se guardaron (reserva, o el disco falló al timbrar).
-  xmlClave       String?           @map("xml_clave")
-  pdfClave       String?           @map("pdf_clave")
-  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime          @map("updated_at") @db.Timestamptz(3)
+  xmlClave          String?           @map("xml_clave")
+  pdfClave          String?           @map("pdf_clave")
+  // F2-107. `ticket` (del portal) o `manual` (factura sin ticket, sin cheque ni código).
+  origen            OrigenCfdi        @default(ticket)
+  // Llave de idempotencia de la captura manual (la genera el formulario): doble clic = un CFDI.
+  solicitudId       String?           @map("solicitud_id") @db.Uuid
+  // Refacturación (F2-107): el CFDI al que SUSTITUYE éste, con `TipoRelacion` 04. ÚNICO: un solo
+  // sustituto por CFDI (el candado de dos refacturaciones a la vez).
+  sustituyeAId      String?           @map("sustituye_a_id") @db.Uuid
+  tipoRelacion      String?           @map("tipo_relacion") @db.Char(2)
+  // c_MotivoCancelacion con que se canceló ante el PAC (F2-107 motivo 01; F2-109 el resto). Los
+  // cancelados del seed de F2-106 no lo tienen.
+  motivoCancelacion String?           @map("motivo_cancelacion") @db.Char(2)
+  canceladoAt       DateTime?         @map("cancelado_at") @db.Timestamptz(3)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime          @map("updated_at") @db.Timestamptz(3)
 
-  empresa  Empresa            @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "cfdis_empresa_fkey")
-  sucursal Sucursal           @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_sucursal_empresa_fkey")
-  cheque   Cheque             @relation(fields: [chequeId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_cheque_empresa_fkey")
-  codigo   CodigoFacturacion? @relation(fields: [codigoId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_codigo_empresa_fkey")
-  perfil   PerfilFiscal       @relation(fields: [perfilFiscalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_perfil_empresa_fkey")
-  envios   CfdiEnvio[]
+  empresa       Empresa            @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "cfdis_empresa_fkey")
+  sucursal      Sucursal           @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_sucursal_empresa_fkey")
+  cheque        Cheque?            @relation(fields: [chequeId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_cheque_empresa_fkey")
+  codigo        CodigoFacturacion? @relation(fields: [codigoId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_codigo_empresa_fkey")
+  perfil        PerfilFiscal       @relation(fields: [perfilFiscalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "cfdis_perfil_empresa_fkey")
+  envios        CfdiEnvio[]
+  sustituye     Cfdi?              @relation("SustitucionCfdi", fields: [sustituyeAId, empresaId], references: [id, empresaId], onDelete: NoAction, onUpdate: NoAction, map: "cfdis_sustituye_a_empresa_fkey")
+  sustituidoPor Cfdi?              @relation("SustitucionCfdi")
 
   @@unique([codigoId], map: "cfdis_codigo_id_key")
+  @@unique([sustituyeAId], map: "cfdis_sustituye_a_id_key")
+  // Prisma pide la llave completa de la FK en una relación 1-1; equivale al único de arriba.
+  @@unique([sustituyeAId, empresaId], map: "cfdis_sustituye_a_id_empresa_id_key")
+  @@unique([empresaId, solicitudId], map: "cfdis_empresa_id_solicitud_id_key")
   // Prisma pide la llave completa de la FK en una relación 1-1; equivale al único de arriba.
   @@unique([codigoId, empresaId], map: "cfdis_codigo_id_empresa_id_key")
   @@unique([uuid], map: "cfdis_uuid_key")

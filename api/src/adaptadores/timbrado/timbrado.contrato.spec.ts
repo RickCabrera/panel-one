@@ -441,3 +441,35 @@ describe('Contrato Facturama: errores de la emisión (F2-104)', () => {
     ).rejects.toMatchObject({ codigo: 'CSD_RECHAZADO' });
   });
 });
+
+describe('Contrato Facturama: sustitución y factura sin ticket (F2-107)', () => {
+  const UUID_ANTERIOR = '1B4E28BA-2FA1-41D2-883F-0016D3CCA427';
+
+  it('el sustituto lleva `Relations` 04 con el UUID anterior (snapshot revisado a mano)', async () => {
+    const http = new ClienteQueCaptura(respuestaEmision);
+    await new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir({
+      ...solicitudCfdi(),
+      relacionados: { tipoRelacion: '04', uuids: [UUID_ANTERIOR] },
+    });
+    const cuerpo = http.peticiones[0].cuerpo as Record<string, unknown>;
+    expect(cuerpo.Relations).toEqual({ Type: '04', Cfdis: [{ Uuid: UUID_ANTERIOR }] });
+    expect(http.peticiones[0]).toMatchSnapshot();
+  });
+
+  it('sin relacionados NO manda `Relations` (el CFDI de un ticket sale igual que antes)', async () => {
+    const http = new ClienteQueCaptura(respuestaEmision);
+    await new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir(solicitudCfdi());
+    expect(http.peticiones[0].cuerpo).not.toHaveProperty('Relations');
+  });
+
+  it('sin ticket: el concepto va sin `IdentificationNumber`', async () => {
+    const http = new ClienteQueCaptura(respuestaEmision);
+    const base = solicitudCfdi();
+    const concepto = { ...base.conceptos[0] };
+    delete concepto.noIdentificacion;
+    await new TimbradoFacturama(BASE, http, RELOJ_FIJO).emitir({ ...base, conceptos: [concepto] });
+    const items = (http.peticiones[0].cuerpo as { Items: Array<Record<string, unknown>> }).Items;
+    expect(items[0]).not.toHaveProperty('IdentificationNumber');
+    expect(items[0]).toMatchObject({ ProductCode: '90101500', UnitCode: 'E48' });
+  });
+});

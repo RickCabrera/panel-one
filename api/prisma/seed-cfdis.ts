@@ -11,7 +11,7 @@ import {
 import {
   formaPagoSat,
   importesDeTotal,
-  solicitudDesdeCheque,
+  solicitudDeConsumo,
   type FormaPagoEnum,
 } from '../src/facturacion/cfdi';
 import { claveArchivoCfdi, TIPO_PDF, TIPO_XML } from '../src/facturacion/entrega';
@@ -35,9 +35,27 @@ import { uuidDe } from './seed-alertas';
  *   cheque.
  * - XML y PDF: los del PAC falso (`xmlCfdiFalso`/`pdfCfdiFalso`), guardados por `PuertoArchivos` en
  *   la clave de F2-105. Si el puerto falla, el CFDI queda sin clave (como en producción) y se avisa.
+ *
+ * F2-107, para que el tablero tenga qué distinguir:
+ * - ~1 de cada `CADA_REFACTURACION` facturados (por hash, de los que no salieron cancelados) se
+ *   siembra como REFACTURACIÓN: el anterior `cancelado` con motivo 01, `cancelado_at` y SIN código;
+ *   el sustituto `vigente` `RETRASO_SUSTITUTO_MIN` después, relación 04, receptor corregido, y el
+ *   código del ticket (como lo deja la refacturación real). Si el sustituto caería en el futuro, no
+ *   hay par.
+ * - `MANUALES_POR_SUCURSAL` facturas SIN TICKET por sucursal (`origen = manual`, sin cheque), con su
+ *   `solicitud_id` determinista, días antes de `ahora`.
+ * - OJO en modo demo: el PAC falso guarda su estado en memoria y no conoce estos CFDI; refacturar uno
+ *   del seed da 409 (`no_encontrado`). Sí se pueden refacturar los que se emitan en la corrida.
  */
 
 export const PORCENTAJE_CANCELADO = 8;
+/** F2-107: 1 de cada tantos facturados vigentes se siembra refacturado. */
+export const CADA_REFACTURACION = 30;
+export const RETRASO_SUSTITUTO_MIN = 90;
+export const MANUALES_POR_SUCURSAL = 2;
+/** Días antes de `ahora` en que se emite cada factura manual del seed (a las 13:00 UTC − horas). */
+const DIAS_MANUALES = [2, 9] as const;
+const FORMAS_MANUALES = ['01', '04', '03'] as const;
 const MIN_RETRASO_MIN = 10;
 const MAX_RETRASO_MIN = 3 * 24 * 60;
 
@@ -121,8 +139,8 @@ export interface CfdiSeed {
   id: string;
   empresaId: string;
   sucursalId: string;
-  chequeId: string;
-  codigoId: string;
+  chequeId: string | null;
+  codigoId: string | null;
   perfilFiscalId: string;
   serie: string;
   folio: number;
@@ -137,81 +155,197 @@ export interface CfdiSeed {
   emitidoAt: Date;
   createdAt: Date;
   updatedAt: Date;
+  origen: 'ticket' | 'manual';
+  solicitudId: string | null;
+  sustituyeAId: string | null;
+  tipoRelacion: '04' | null;
+  motivoCancelacion: '01' | null;
+  canceladoAt: Date | null;
+}
+
+/** Un CFDI del seed con lo que hace falta para su XML (el UUID relacionado no es columna). */
+export interface CfdiSeedConRelacion extends CfdiSeed {
+  relacionadoUuid: string | null;
+}
+
+/** Lo que `generarCfdisSeed` necesita de cada sucursal para las facturas manuales (F2-107). */
+export interface SucursalParaCfdi {
+  id: string;
+  empresaId: string;
 }
 
 function hash(texto: string): Buffer {
   return createHash('sha256').update(texto).digest();
 }
 
+/** Un monto determinista de $150.00 a $2,999.99 para una factura manual del seed. */
+function totalManualSeed(h: Buffer): Prisma.Decimal {
+  const centavos = 15_000 + (h.readUInt32BE(8) % 285_000);
+  return new Prisma.Decimal(centavos).div(100);
+}
+
+type SinFolio = Omit<CfdiSeedConRelacion, 'folio' | 'createdAt' | 'updatedAt'>;
+
 export function generarCfdisSeed(
   codigos: readonly CodigoParaCfdi[],
   op: OpcionesCfdis,
-): CfdiSeed[] {
-  const sinFolio = codigos
-    .filter((c) => c.estado === 'facturado')
-    .map((c) => {
-      const cierre = c.cheque.cerradoAt;
-      if (cierre === null)
-        throw new Error(`Seed de CFDI: el cheque ${c.cheque.id} no tiene cierre.`);
-      const formaPago = formaPagoSat(c.cheque.pagos, op.catalogoFormas);
-      if (formaPago === null) {
-        // `seed-codigos.ts` no marca `facturado` un cheque que no se factura en línea.
-        throw new Error(`Seed de CFDI: el código ${c.id} está facturado sin forma de pago SAT.`);
-      }
-      const h = hash(`cfdi-seed:${c.id}`);
-      const retrasoMin =
-        MIN_RETRASO_MIN + (h.readUInt32BE(0) % (MAX_RETRASO_MIN - MIN_RETRASO_MIN + 1));
-      const emitido = Math.max(
-        cierre.getTime(),
-        Math.min(
-          cierre.getTime() + retrasoMin * 60_000,
-          c.expiraAt.getTime() - 60_000,
-          op.ahora.getTime(),
-        ),
-      );
-      const id = uuidDe(`cfdi-seed:${c.id}`);
+  sucursales: readonly SucursalParaCfdi[] = [],
+): CfdiSeedConRelacion[] {
+  const sinFolio: SinFolio[] = [];
+  for (const c of codigos.filter((k) => k.estado === 'facturado')) {
+    const cierre = c.cheque.cerradoAt;
+    if (cierre === null) throw new Error(`Seed de CFDI: el cheque ${c.cheque.id} no tiene cierre.`);
+    const formaPago = formaPagoSat(c.cheque.pagos, op.catalogoFormas);
+    if (formaPago === null) {
+      // `seed-codigos.ts` no marca `facturado` un cheque que no se factura en línea.
+      throw new Error(`Seed de CFDI: el código ${c.id} está facturado sin forma de pago SAT.`);
+    }
+    const h = hash(`cfdi-seed:${c.id}`);
+    const retrasoMin =
+      MIN_RETRASO_MIN + (h.readUInt32BE(0) % (MAX_RETRASO_MIN - MIN_RETRASO_MIN + 1));
+    const emitido = Math.max(
+      cierre.getTime(),
+      Math.min(
+        cierre.getTime() + retrasoMin * 60_000,
+        c.expiraAt.getTime() - 60_000,
+        op.ahora.getTime(),
+      ),
+    );
+    const id = uuidDe(`cfdi-seed:${c.id}`);
+    const uuid = uuidDeterminista(id);
+    const cancelado = h[5] % 100 < PORCENTAJE_CANCELADO;
+    const receptor = RECEPTORES_CFDI_SEED[h[4] % RECEPTORES_CFDI_SEED.length];
+    const base: SinFolio = {
+      id,
+      empresaId: c.cheque.empresaId,
+      sucursalId: c.cheque.sucursalId,
+      chequeId: c.cheque.id,
+      codigoId: c.id,
+      perfilFiscalId: op.perfil.id,
+      serie: op.perfil.serie,
+      uuid,
+      idPac: uuid,
+      receptor,
+      formaPago,
+      ...importesDeTotal(c.cheque.total),
+      estado: cancelado ? 'cancelado' : 'vigente',
+      emitidoAt: new Date(emitido),
+      origen: 'ticket',
+      solicitudId: null,
+      sustituyeAId: null,
+      tipoRelacion: null,
+      motivoCancelacion: null,
+      canceladoAt: null,
+      relacionadoUuid: null,
+    };
+    const sustitucion = new Date(emitido + RETRASO_SUSTITUTO_MIN * 60_000);
+    const refacturado =
+      !cancelado &&
+      h.readUInt16BE(6) % CADA_REFACTURACION === 0 &&
+      sustitucion.getTime() <= op.ahora.getTime();
+    if (!refacturado) {
+      sinFolio.push(base);
+      continue;
+    }
+    // F2-107: el anterior queda cancelado (motivo 01) y SIN código; el sustituto se lo queda.
+    const idSustituto = uuidDe(`cfdi-seed-sustituto:${c.id}`);
+    const uuidSustituto = uuidDeterminista(idSustituto);
+    sinFolio.push({
+      ...base,
+      codigoId: null,
+      estado: 'cancelado',
+      motivoCancelacion: '01',
+      canceladoAt: sustitucion,
+    });
+    sinFolio.push({
+      ...base,
+      id: idSustituto,
+      uuid: uuidSustituto,
+      idPac: uuidSustituto,
+      receptor: RECEPTORES_CFDI_SEED[(h[4] + 1) % RECEPTORES_CFDI_SEED.length],
+      emitidoAt: sustitucion,
+      sustituyeAId: id,
+      tipoRelacion: '04',
+      relacionadoUuid: uuid,
+    });
+  }
+
+  // F2-107: facturas SIN ticket, por sucursal (en orden de id: determinista).
+  for (const suc of [...sucursales].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    for (let i = 0; i < MANUALES_POR_SUCURSAL; i++) {
+      const h = hash(`cfdi-manual-seed:${suc.id}:${i}`);
+      const id = uuidDe(`cfdi-manual-seed:${suc.id}:${i}`);
       const uuid = uuidDeterminista(id);
-      return {
+      const dias = DIAS_MANUALES[i % DIAS_MANUALES.length];
+      const emitido = new Date(
+        op.ahora.getTime() - dias * 86_400_000 - (1 + (h[0] % 8)) * 3_600_000,
+      );
+      sinFolio.push({
         id,
-        empresaId: c.cheque.empresaId,
-        sucursalId: c.cheque.sucursalId,
-        chequeId: c.cheque.id,
-        codigoId: c.id,
+        empresaId: suc.empresaId,
+        sucursalId: suc.id,
+        chequeId: null,
+        codigoId: null,
         perfilFiscalId: op.perfil.id,
         serie: op.perfil.serie,
         uuid,
         idPac: uuid,
         receptor: RECEPTORES_CFDI_SEED[h[4] % RECEPTORES_CFDI_SEED.length],
-        formaPago,
-        ...importesDeTotal(c.cheque.total),
-        estado: h[5] % 100 < PORCENTAJE_CANCELADO ? ('cancelado' as const) : ('vigente' as const),
-        emitidoAt: new Date(emitido),
-      };
-    })
-    .sort((a, b) => a.emitidoAt.getTime() - b.emitidoAt.getTime() || (a.id < b.id ? -1 : 1));
+        formaPago: FORMAS_MANUALES[h[5] % FORMAS_MANUALES.length],
+        ...importesDeTotal(totalManualSeed(h)),
+        estado: 'vigente',
+        emitidoAt: emitido,
+        origen: 'manual',
+        solicitudId: solicitudManualSeed(suc.id, i),
+        sustituyeAId: null,
+        tipoRelacion: null,
+        motivoCancelacion: null,
+        canceladoAt: null,
+        relacionadoUuid: null,
+      });
+    }
+  }
+
+  sinFolio.sort((a, b) => a.emitidoAt.getTime() - b.emitidoAt.getTime() || (a.id < b.id ? -1 : 1));
   return sinFolio.map((c, i) => ({
     ...c,
     folio: op.folioInicial + i,
     createdAt: c.emitidoAt,
-    updatedAt: c.emitidoAt,
+    updatedAt: c.canceladoAt ?? c.emitidoAt,
   }));
+}
+
+/** La fila tal cual va a la tabla: el UUID relacionado sólo sirve para el XML. */
+function sinRelacion(c: CfdiSeedConRelacion): CfdiSeed {
+  const fila: Partial<CfdiSeedConRelacion> = { ...c };
+  delete fila.relacionadoUuid;
+  return fila as CfdiSeed;
+}
+
+/** La llave de solicitud de la factura manual `i` del seed de una sucursal (determinista). */
+export function solicitudManualSeed(sucursalId: string, i: number): string {
+  return uuidDe(`cfdi-manual-seed-solicitud:${sucursalId}:${i}`);
 }
 
 /** El XML y el PDF del PAC falso de un CFDI del seed, con sus claves de F2-105. */
 export function archivosDe(
-  c: CfdiSeed,
-  op: { perfil: PerfilParaCfdi; zona: string; folioTicket: string; totalCheque: Prisma.Decimal },
+  c: CfdiSeedConRelacion,
+  op: { perfil: PerfilParaCfdi; zona: string; folioTicket: string | null },
 ): Array<{ clave: string; contenido: Buffer; tipo: string }> {
-  const solicitud = solicitudDesdeCheque({
+  const solicitud = solicitudDeConsumo({
     reservaId: c.id,
     serie: c.serie,
     folio: c.folio,
     fecha: c.emitidoAt,
     emisor: op.perfil,
     sucursal: { zonaHoraria: op.zona },
-    cheque: { folio: op.folioTicket, total: op.totalCheque },
+    total: c.total,
+    ...(op.folioTicket !== null ? { noIdentificacion: op.folioTicket } : {}),
     receptor: c.receptor,
     formaPago: c.formaPago,
+    ...(c.relacionadoUuid
+      ? { relacionados: { tipoRelacion: '04' as const, uuids: [c.relacionadoUuid] } }
+      : {}),
   });
   return [
     {
@@ -230,6 +364,9 @@ export function archivosDe(
 export interface ResultadoSembrarCfdis {
   cfdis: number;
   cancelados: number;
+  /** F2-107: pares de refacturación y facturas sin ticket sembrados. */
+  refacturados: number;
+  manuales: number;
   sinArchivos: number;
   /** Sin perfil fiscal no hay emisor: no se siembra nada. */
   sinPerfil: boolean;
@@ -254,11 +391,34 @@ export async function sembrarCfdis(
     where: { empresaId: op.empresaId },
     select: { id: true, serie: true, rfc: true, razonSocial: true, regimenFiscal: true, cp: true },
   });
-  if (!perfil) return { cfdis: 0, cancelados: 0, sinArchivos: 0, sinPerfil: true };
+  if (!perfil) {
+    return {
+      cfdis: 0,
+      cancelados: 0,
+      refacturados: 0,
+      manuales: 0,
+      sinArchivos: 0,
+      sinPerfil: true,
+    };
+  }
 
-  const delSeed = { cheque: { folioSr: { startsWith: op.prefijo } } };
+  const sucursales = await prisma.sucursal.findMany({
+    where: { empresaId: op.empresaId },
+    select: { id: true, empresaId: true, zonaHoraria: true },
+  });
+  const solicitudesSeed = sucursales.flatMap((suc) =>
+    Array.from({ length: MANUALES_POR_SUCURSAL }, (_, i) => solicitudManualSeed(suc.id, i)),
+  );
+  // Del seed: los de sus cheques (sustitutos incluidos) y sus facturas manuales.
+  const delSeed: Prisma.CfdiWhereInput = {
+    OR: [
+      { cheque: { folioSr: { startsWith: op.prefijo } } },
+      { origen: 'manual', solicitudId: { in: solicitudesSeed } },
+    ],
+  };
+  const deChequesSeed = { cheque: { folioSr: { startsWith: op.prefijo } } };
   const codigos = await prisma.codigoFacturacion.findMany({
-    where: { empresaId: op.empresaId, estado: 'facturado', ...delSeed },
+    where: { empresaId: op.empresaId, estado: 'facturado', ...deChequesSeed },
     select: {
       id: true,
       estado: true,
@@ -276,34 +436,32 @@ export async function sembrarCfdis(
       },
     },
   });
-  const sucursales = await prisma.sucursal.findMany({
-    where: { empresaId: op.empresaId },
-    select: { id: true, zonaHoraria: true },
-  });
   const zonas = new Map(sucursales.map((s) => [s.id, s.zonaHoraria]));
   const otros = await prisma.cfdi.aggregate({
     where: { empresaId: op.empresaId, serie: perfil.serie, NOT: delSeed },
     _max: { folio: true },
   });
-  const cfdis = generarCfdisSeed(codigos, {
-    perfil,
-    zonas,
-    catalogoFormas: op.catalogoFormas,
-    ahora: op.ahora,
-    folioInicial: (otros._max.folio ?? 0) + 1,
-  });
+  const cfdis = generarCfdisSeed(
+    codigos,
+    {
+      perfil,
+      zonas,
+      catalogoFormas: op.catalogoFormas,
+      ahora: op.ahora,
+      folioInicial: (otros._max.folio ?? 0) + 1,
+    },
+    sucursales,
+  );
 
   // Archivos ANTES de las filas: así cada fila nace con las claves que SÍ se guardaron.
   const cheques = new Map(codigos.map((c) => [c.cheque.id, c.cheque]));
   const claves = new Map<string, { xml: string | null; pdf: string | null }>();
   let sinArchivos = 0;
   for (const c of cfdis) {
-    const cheque = cheques.get(c.chequeId)!;
     const [xml, pdf] = archivosDe(c, {
       perfil,
       zona: zonas.get(c.sucursalId)!,
-      folioTicket: cheque.folio,
-      totalCheque: cheque.total,
+      folioTicket: c.chequeId === null ? null : cheques.get(c.chequeId)!.folio,
     });
     let guardadas: { xml: string | null; pdf: string | null } = { xml: null, pdf: null };
     if (op.archivos) {
@@ -322,10 +480,11 @@ export async function sembrarCfdis(
   await prisma.$transaction(
     async (tx) => {
       await tx.cfdiEnvio.deleteMany({ where: { empresaId: op.empresaId, cfdi: delSeed } });
+      // Un solo DELETE: la FK del sustituto (NO ACTION) se revisa al final de la sentencia.
       await tx.cfdi.deleteMany({ where: { empresaId: op.empresaId, ...delSeed } });
       await tx.cfdi.createMany({
         data: cfdis.map((c) => ({
-          ...c,
+          ...sinRelacion(c),
           receptor: { ...c.receptor },
           xmlClave: claves.get(c.id)!.xml,
           pdfClave: claves.get(c.id)!.pdf,
@@ -344,6 +503,8 @@ export async function sembrarCfdis(
   return {
     cfdis: cfdis.length,
     cancelados: cfdis.filter((c) => c.estado === 'cancelado').length,
+    refacturados: cfdis.filter((c) => c.sustituyeAId !== null).length,
+    manuales: cfdis.filter((c) => c.origen === 'manual').length,
     sinArchivos,
     sinPerfil: false,
   };

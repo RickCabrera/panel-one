@@ -8,10 +8,12 @@ import { MENSAJES_SAT } from './errores-sat';
 import { pdfMinimo } from './pdf-minimo';
 import {
   ErrorTimbrado,
+  type CfdiRelacionados,
   type CfdiTimbrado,
   type CodigoErrorTimbrado,
   type CsdRegistrado,
   type EstadoCfdi,
+  type MotivoCancelacion,
   type PuertoTimbrado,
   type ReferenciaCfdi,
   type ResultadoCancelacion,
@@ -165,6 +167,14 @@ export function xmlCfdiFalso(s: SolicitudCfdi, uuid: string, fechaTimbrado: Date
         LugarExpedicion: s.lugarExpedicion,
       },
     )}>` +
+    // F2-107: los relacionados van ANTES del Emisor (orden del Anexo 20).
+    (s.relacionados
+      ? `<cfdi:CfdiRelacionados${atributos({ TipoRelacion: s.relacionados.tipoRelacion })}>` +
+        s.relacionados.uuids
+          .map((u) => `<cfdi:CfdiRelacionado${atributos({ UUID: u })}/>`)
+          .join('') +
+        '</cfdi:CfdiRelacionados>'
+      : '') +
     `<cfdi:Emisor${atributos({ Rfc: s.emisor.rfc, Nombre: s.emisor.nombre, RegimenFiscal: s.emisor.regimenFiscal })}/>` +
     `<cfdi:Receptor${atributos({
       Rfc: s.receptor.rfc,
@@ -204,15 +214,31 @@ export function pdfCfdiFalso(s: SolicitudCfdi, uuid: string): Buffer {
   ]);
 }
 
+export const MENSAJE_SUSTITUTO_NO_RELACIONADO =
+  'El CFDI sustituto no existe, no está vigente o no declara la relación 04 con el CFDI que se ' +
+  'quiere cancelar.';
+
+/** Cómo quedó cancelado un CFDI en el PAC falso (para que los tests lo verifiquen). */
+export interface CancelacionFalsa {
+  motivo: MotivoCancelacion;
+  folioSustitucion?: string;
+}
+
 /**
  * PAC falso determinista (F2-202). Mismo cheque → mismo UUID, mismo XML y mismo PDF
  * (con el mismo reloj). El estado de las cancelaciones vive EN MEMORIA del proceso:
  * el estado fiscal que importa lo guarda nuestra base (F2-109), y el del PAC falso no
  * necesita sobrevivir un reinicio. `consultarEstado` de un UUID que este proceso no
- * emitió contesta `no_encontrado`.
+ * emitió contesta `no_encontrado` (así que en modo demo un CFDI del SEED no se puede cancelar
+ * ni refacturar: el falso no lo emitió).
+ *
+ * F2-107: guarda los CFDI relacionados de cada emisión y, como el SAT, una cancelación con motivo
+ * 01 sólo procede si el sustituto existe, está vigente y declara la relación 04 con el cancelado.
  */
 export class TimbradoFalso implements PuertoTimbrado {
   private readonly estados = new Map<string, EstadoCfdi>();
+  private readonly relaciones = new Map<string, CfdiRelacionados>();
+  private readonly cancelaciones = new Map<string, CancelacionFalsa>();
 
   constructor(private readonly reloj: Pick<Reloj, 'ahora'>) {}
 
@@ -237,6 +263,12 @@ export class TimbradoFalso implements PuertoTimbrado {
     const uuid = uuidDeterminista(solicitud.referencia);
     const fechaTimbrado = new Date(this.reloj.ahora());
     if (!this.estados.has(uuid)) this.estados.set(uuid, 'vigente');
+    if (solicitud.relacionados) {
+      this.relaciones.set(uuid, {
+        tipoRelacion: solicitud.relacionados.tipoRelacion,
+        uuids: [...solicitud.relacionados.uuids],
+      });
+    }
     return Promise.resolve({
       uuid,
       // El falso no tiene id propio: usa el UUID.
@@ -261,12 +293,39 @@ export class TimbradoFalso implements PuertoTimbrado {
         new ErrorTimbrado('CFDI_NO_ENCONTRADO', 'No existe un CFDI emitido con ese folio fiscal.'),
       );
     }
+    if (solicitud.motivo === '01') {
+      const sustituto = solicitud.folioSustitucion!;
+      const relacion = this.relaciones.get(sustituto);
+      if (
+        this.estados.get(sustituto) !== 'vigente' ||
+        relacion?.tipoRelacion !== '04' ||
+        !relacion.uuids.includes(solicitud.uuid)
+      ) {
+        return Promise.reject(
+          new ErrorTimbrado('RECHAZADO_POR_PAC', MENSAJE_SUSTITUTO_NO_RELACIONADO),
+        );
+      }
+    }
     this.estados.set(solicitud.uuid, 'cancelado');
+    this.cancelaciones.set(solicitud.uuid, {
+      motivo: solicitud.motivo,
+      ...(solicitud.folioSustitucion ? { folioSustitucion: solicitud.folioSustitucion } : {}),
+    });
     return Promise.resolve({
       uuid: solicitud.uuid,
       estado: 'cancelado',
       fecha: new Date(this.reloj.ahora()),
     });
+  }
+
+  /** Los relacionados con que se emitió un UUID (sólo para verificar en tests). */
+  relacionadosDe(uuid: string): CfdiRelacionados | undefined {
+    return this.relaciones.get(uuid);
+  }
+
+  /** Motivo y sustituto con que se canceló un UUID (sólo para verificar en tests). */
+  cancelacionDe(uuid: string): CancelacionFalsa | undefined {
+    return this.cancelaciones.get(uuid);
   }
 
   consultarEstado({ uuid }: ReferenciaCfdi): Promise<{ uuid: string; estado: EstadoCfdi }> {

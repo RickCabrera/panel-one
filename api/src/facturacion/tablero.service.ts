@@ -54,6 +54,18 @@ export interface TableroFacturacion {
 }
 
 export type EstadoCfdiEmitido = 'vigente' | 'cancelado';
+export type OrigenCfdi = 'ticket' | 'manual';
+export const ORIGENES_CFDI: readonly OrigenCfdi[] = ['ticket', 'manual'];
+
+/** Los datos del receptor con que se timbró (para precargar la refacturación, F2-107). */
+export interface ReceptorFila {
+  rfc: string;
+  razonSocial: string;
+  regimenFiscal: string;
+  cp: string;
+  usoCfdi: string;
+  email: string | null;
+}
 
 export interface CfdiFila {
   id: string;
@@ -69,6 +81,19 @@ export interface CfdiFila {
   folioTicket: string | null;
   xml: boolean;
   pdf: boolean;
+  /** F2-107: `manual` = factura sin ticket. */
+  origen: OrigenCfdi;
+  receptor: ReceptorFila;
+  /** UUID del CFDI al que éste sustituye (relación 04), o null. */
+  sustituyeA: string | null;
+  /** UUID de su sustituto ya timbrado, o null. */
+  sustituidoPor: string | null;
+  /**
+   * Vigente con un sustituto vigente: la cancelación 01 sigue pendiente. NO suma a lo facturado
+   * (`cuenta_facturado`); el filtro `estado=vigente` de la tabla SÍ lo lista.
+   */
+  sustitucionPendiente: boolean;
+  motivoCancelacion: string | null;
 }
 
 export interface PaginaCfdis {
@@ -81,6 +106,7 @@ export interface PaginaCfdis {
 export interface OpcionesCfdis {
   q?: string;
   estado?: EstadoCfdiEmitido;
+  origen?: OrigenCfdi;
   pagina: number;
   porPagina: number;
 }
@@ -135,8 +161,8 @@ export class TableroFacturacionService {
           cancelado: unknown;
           num_cancelados: number;
         }>(Prisma.sql`SELECT s.id AS sucursal_id,
-            COALESCE(sum(f.total) FILTER (WHERE f.estado = 'vigente'), 0) AS facturado,
-            (count(f.id) FILTER (WHERE f.estado = 'vigente'))::int AS num_vigentes,
+            COALESCE(sum(f.total) FILTER (WHERE f.cuenta_facturado), 0) AS facturado,
+            (count(f.id) FILTER (WHERE f.cuenta_facturado))::int AS num_vigentes,
             COALESCE(sum(f.total) FILTER (WHERE f.estado = 'cancelado'), 0) AS cancelado,
             (count(f.id) FILTER (WHERE f.estado = 'cancelado'))::int AS num_cancelados
           FROM sucursales_alcance s
@@ -144,11 +170,11 @@ export class TableroFacturacionService {
           GROUP BY s.id`),
         q.consultar<{ clave: string; facturado: unknown; num_cfdi: number }>(
           Prisma.sql`SELECT mes_local AS clave, sum(total) AS facturado, count(*)::int AS num_cfdi
-            FROM cfdis_periodo WHERE estado = 'vigente' GROUP BY mes_local`,
+            FROM cfdis_periodo WHERE cuenta_facturado GROUP BY mes_local`,
         ),
         q.consultar<{ clave: number; facturado: unknown; num_cfdi: number }>(
           Prisma.sql`SELECT hora_local AS clave, sum(total) AS facturado, count(*)::int AS num_cfdi
-            FROM cfdis_periodo WHERE estado = 'vigente' GROUP BY hora_local`,
+            FROM cfdis_periodo WHERE cuenta_facturado GROUP BY hora_local`,
         ),
         q.consultar<{ cuentas: number; monto: unknown }>(
           Prisma.sql`SELECT count(*)::int AS cuentas, COALESCE(sum(k.total), 0) AS monto
@@ -219,7 +245,8 @@ export class TableroFacturacionService {
             OR strpos(upper(serie) || folio::text, ${t}) > 0
             OR strpos(upper(COALESCE(folio_ticket, '')), ${t}) > 0)`;
     const estado = op.estado === undefined ? Prisma.sql`true` : Prisma.sql`estado = ${op.estado}`;
-    const donde = Prisma.sql`WHERE ${busqueda} AND ${estado}`;
+    const origen = op.origen === undefined ? Prisma.sql`true` : Prisma.sql`origen = ${op.origen}`;
+    const donde = Prisma.sql`WHERE ${busqueda} AND ${estado} AND ${origen}`;
     const [[{ total }], filas] = await Promise.all([
       q.consultar<{ total: number }>(
         Prisma.sql`SELECT count(*)::int AS total FROM cfdis_periodo ${donde}`,
@@ -239,8 +266,19 @@ export class TableroFacturacionService {
         folio_ticket: string | null;
         con_xml: boolean;
         con_pdf: boolean;
+        receptor_regimen: string | null;
+        receptor_cp: string | null;
+        receptor_uso: string | null;
+        receptor_email: string | null;
+        origen: OrigenCfdi;
+        motivo_cancelacion: string | null;
+        sustituye_a_uuid: string | null;
+        sustituido_por_uuid: string | null;
+        sustituto_estado: string | null;
       }>(Prisma.sql`SELECT id, uuid, serie, folio, sucursal_id, sucursal_nombre, receptor_rfc,
-          receptor_nombre, total, estado, emitido_at, folio_ticket, con_xml, con_pdf
+          receptor_nombre, total, estado, emitido_at, folio_ticket, con_xml, con_pdf,
+          receptor_regimen, receptor_cp, receptor_uso, receptor_email, origen,
+          motivo_cancelacion, sustituye_a_uuid, sustituido_por_uuid, sustituto_estado
         FROM cfdis_periodo ${donde}
         ORDER BY emitido_at DESC, id DESC
         LIMIT ${op.porPagina} OFFSET ${(op.pagina - 1) * op.porPagina}`),
@@ -263,6 +301,19 @@ export class TableroFacturacionService {
         folioTicket: f.folio_ticket,
         xml: f.con_xml,
         pdf: f.con_pdf,
+        origen: f.origen,
+        receptor: {
+          rfc: f.receptor_rfc ?? '',
+          razonSocial: f.receptor_nombre ?? '',
+          regimenFiscal: f.receptor_regimen ?? '',
+          cp: f.receptor_cp ?? '',
+          usoCfdi: f.receptor_uso ?? '',
+          email: f.receptor_email,
+        },
+        sustituyeA: f.sustituye_a_uuid,
+        sustituidoPor: f.sustituido_por_uuid,
+        sustitucionPendiente: f.estado === 'vigente' && f.sustituto_estado === 'vigente',
+        motivoCancelacion: f.motivo_cancelacion ? f.motivo_cancelacion.trim() : null,
       })),
     };
   }

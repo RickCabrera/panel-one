@@ -69,6 +69,19 @@ function cfdi(n: number, c: Partial<CfdiFila> = {}): CfdiFila {
     folioTicket: `T-${n}`,
     xml: true,
     pdf: true,
+    origen: 'ticket',
+    receptor: {
+      rfc: 'EKU9003173C9',
+      razonSocial: 'ESCUELA KEMPER URGATE',
+      regimenFiscal: '601',
+      cp: '42501',
+      usoCfdi: 'G03',
+      email: 'kemper@ejemplo.test',
+    },
+    sustituyeA: null,
+    sustituidoPor: null,
+    sustitucionPendiente: false,
+    motivoCancelacion: null,
     ...c,
   };
 }

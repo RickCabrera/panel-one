@@ -188,3 +188,85 @@ exports[`Contrato Facturama: alta del CSD (F2-100) reemplazo: PUT /api-lite/csds
   },
 ]
 `;
+
+exports[`Contrato Facturama: sustitución y factura sin ticket (F2-107) el sustituto lleva \`Relations\` 04 con el UUID anterior (snapshot revisado a mano) 1`] = `
+{
+  "cuerpo": {
+    "CfdiType": "I",
+    "Currency": "MXN",
+    "Date": "2026-09-21T20:15:30",
+    "ExpeditionPlace": "06700",
+    "Exportation": "01",
+    "Folio": "1024",
+    "Issuer": {
+      "FiscalRegime": "601",
+      "Name": "ESCUELA KEMPER URGATE",
+      "Rfc": "EKU9003173C9",
+    },
+    "Items": [
+      {
+        "Description": "Tacos al pastor (orden)",
+        "IdentificationNumber": "P001",
+        "ProductCode": "90101500",
+        "Quantity": 2,
+        "Subtotal": 172.42,
+        "TaxObject": "02",
+        "Taxes": [
+          {
+            "Base": 172.42,
+            "IsRetention": false,
+            "Name": "IVA",
+            "Rate": 0.16,
+            "Total": 27.59,
+          },
+        ],
+        "Total": 200.01,
+        "Unit": "Servicio",
+        "UnitCode": "E48",
+        "UnitPrice": 86.21,
+      },
+      {
+        "Description": "Refresco",
+        "IdentificationNumber": "P020",
+        "ProductCode": "90101500",
+        "Quantity": 1,
+        "Subtotal": 30.17,
+        "TaxObject": "02",
+        "Taxes": [
+          {
+            "Base": 30.17,
+            "IsRetention": false,
+            "Name": "IVA",
+            "Rate": 0.16,
+            "Total": 4.83,
+          },
+        ],
+        "Total": 35,
+        "Unit": "Pieza",
+        "UnitCode": "H87",
+        "UnitPrice": 30.17,
+      },
+    ],
+    "PaymentForm": "04",
+    "PaymentMethod": "PUE",
+    "Receiver": {
+      "CfdiUse": "G03",
+      "FiscalRegime": "612",
+      "Name": "Cliente "de prueba" & <Hijos>",
+      "Rfc": "XOJI740919U48",
+      "TaxZipCode": "76028",
+    },
+    "Relations": {
+      "Cfdis": [
+        {
+          "Uuid": "1B4E28BA-2FA1-41D2-883F-0016D3CCA427",
+        },
+      ],
+      "Type": "04",
+    },
+    "Serie": "A",
+  },
+  "metodo": "POST",
+  "url": "https://apisandbox.facturama.mx/api-lite/3/cfdis",
+}
+`;

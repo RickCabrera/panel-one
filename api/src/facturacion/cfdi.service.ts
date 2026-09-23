@@ -19,9 +19,9 @@ import {
 } from '../adaptadores/timbrado/puerto';
 import { Reloj } from '../comun/reloj';
 import type { EmpresaScope } from '../scope/empresa-scope';
-import { perfilEmite, type ReservaCfdi } from '../scope/escritura-facturacion';
+import { perfilEmite, type DatosReceptor, type ReservaCfdi } from '../scope/escritura-facturacion';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
-import { solicitudDesdeCheque } from './cfdi';
+import { solicitudDeConsumo } from './cfdi';
 import type { EmisionPortal, FacturaPortal, SolicitudFacturaPortal } from './emision-portal';
 import { EntregaCfdiService } from './entrega.service';
 
@@ -49,6 +49,20 @@ const REINTENTABLES: ReadonlySet<CodigoErrorTimbrado> = new Set([
 export const MENSAJE_PAC_CAIDO =
   'El servicio de timbrado no está disponible en este momento. Tus datos no se guardaron: ' +
   'intenta de nuevo en unos minutos.';
+/** Una emisión ya confirmada (F2-104/F2-107): lo que se le devuelve a quien la pidió. */
+export interface CfdiEmitido {
+  id: string;
+  uuid: string;
+  serieFolio: string;
+  /** Dinero como texto con 2 decimales. */
+  total: string;
+  descargas: { xml: string | null; pdf: string | null };
+}
+
+/** El caso AMBIGUO dicho al administrador (F2-107): no hay ticket ni restaurante al cual remitir. */
+export const MENSAJE_EMISION_INCIERTA_ADMIN =
+  'El servicio de timbrado no confirmó a tiempo y la factura pudo haberse emitido. No la vuelvas ' +
+  'a capturar: revisa en unos minutos la tabla de facturas (o en el PAC) antes de reintentar.';
 export const MENSAJE_EMISION_INCIERTA =
   'Tu factura se está emitiendo, pero el servicio de timbrado no confirmó a tiempo. No la ' +
   'vuelvas a solicitar: si en unos minutos no te llega, pídela en el restaurante con tu ticket.';
@@ -114,17 +128,42 @@ export class CfdiService implements EmisionPortal {
       { codigoId: s.codigoId, chequeId: s.chequeId, sucursalId: s.sucursalId, receptor },
       ahora,
     );
+    const emitida = await this.emitirReserva(s.empresaId, reserva, receptor, {
+      incierta: MENSAJE_EMISION_INCIERTA,
+      fecha: ahora,
+    });
+    return {
+      uuid: emitida.uuid,
+      serieFolio: emitida.serieFolio,
+      total: emitida.total,
+      email: s.receptor.email,
+      descargas: emitida.descargas,
+    };
+  }
 
+  /**
+   * El tramo común de TODA emisión (portal F2-104; sin ticket y sustituto F2-107), a partir de una
+   * reserva ya tomada: timbrar (reintento sólo de lo seguro) → confirmar o liberar → entregar. Los
+   * errores se clasifican igual para las tres; sólo cambia el texto del caso AMBIGUO (`incierta`),
+   * porque al cliente del portal y al administrador se les dice qué hacer distinto.
+   */
+  async emitirReserva(
+    empresaId: string,
+    reserva: ReservaCfdi,
+    receptor: DatosReceptor,
+    op: { incierta: string; fecha: Date },
+  ): Promise<CfdiEmitido> {
+    const escritura = this.datos.facturacion({ tipo: 'empresa', empresaId });
     let timbre: CfdiTimbrado;
     try {
-      timbre = await this.#timbrar(solicitudDe(reserva, receptor, ahora));
+      timbre = await this.#timbrar(solicitudDe(reserva, receptor, op.fecha));
     } catch (error) {
-      throw await this.#fallaDelPac(error, s.empresaId, reserva.reservaId);
+      throw await this.#fallaDelPac(error, empresaId, reserva.reservaId, op.incierta);
     }
 
     try {
       await escritura.confirmarCfdi(
-        s.empresaId,
+        empresaId,
         reserva.reservaId,
         { uuid: timbre.uuid, idPac: timbre.idPac, fechaTimbrado: timbre.fechaTimbrado },
         receptor,
@@ -137,14 +176,14 @@ export class CfdiService implements EmisionPortal {
         `CFDI timbrado SIN confirmar: reserva ${reserva.reservaId}, UUID ${timbre.uuid}, ` +
           `idPac ${timbre.idPac}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      throw new BadGatewayException(MENSAJE_EMISION_INCIERTA);
+      throw new BadGatewayException(op.incierta);
     }
 
     const serieFolio = `${reserva.serie}-${reserva.folio}`;
     const total = reserva.importes.total.toFixed(2);
     // F2-105: fuera de toda transacción y sin lanzar (el CFDI ya existe ante el SAT).
     const descargas = await this.entrega.entregar({
-      empresaId: s.empresaId,
+      empresaId,
       cfdiId: reserva.reservaId,
       uuid: timbre.uuid,
       idPac: timbre.idPac,
@@ -159,7 +198,7 @@ export class CfdiService implements EmisionPortal {
       pdf: timbre.pdf,
     });
 
-    return { uuid: timbre.uuid, serieFolio, total, email: s.receptor.email, descargas };
+    return { id: reserva.reservaId, uuid: timbre.uuid, serieFolio, total, descargas };
   }
 
   /** Timbra con reintento y backoff SÓLO en lo que es seguro reintentar. */
@@ -186,7 +225,12 @@ export class CfdiService implements EmisionPortal {
    * Qué se hace con la reserva y qué se le contesta al cliente cuando el PAC no timbró (o no se
    * sabe). El texto crudo del PAC sólo va al log.
    */
-  async #fallaDelPac(error: unknown, empresaId: string, reservaId: string): Promise<Error> {
+  async #fallaDelPac(
+    error: unknown,
+    empresaId: string,
+    reservaId: string,
+    incierta: string,
+  ): Promise<Error> {
     const definitivo = error instanceof ErrorTimbrado && error.codigo !== 'PAC_SIN_RESPUESTA';
     if (!definitivo) {
       // AMBIGUO (timeout, 5xx que no es 503, o un error que no es del puerto): el PAC pudo haber
@@ -195,7 +239,7 @@ export class CfdiService implements EmisionPortal {
         `Timbrado AMBIGUO de la reserva ${reservaId}; se queda en timbrando: ` +
           `${error instanceof Error ? error.message : String(error)}`,
       );
-      return new BadGatewayException(MENSAJE_EMISION_INCIERTA);
+      return new BadGatewayException(incierta);
     }
     try {
       await this.datos
@@ -224,26 +268,18 @@ export class CfdiService implements EmisionPortal {
   }
 }
 
-function solicitudDe(
-  r: ReservaCfdi,
-  receptor: {
-    rfc: string;
-    razonSocial: string;
-    regimenFiscal: string;
-    cp: string;
-    usoCfdi: string;
-  },
-  fecha: Date,
-): SolicitudCfdi {
-  return solicitudDesdeCheque({
+function solicitudDe(r: ReservaCfdi, receptor: DatosReceptor, fecha: Date): SolicitudCfdi {
+  return solicitudDeConsumo({
     reservaId: r.reservaId,
     serie: r.serie,
     folio: r.folio,
     fecha,
     emisor: r.emisor,
     sucursal: r.sucursal,
-    cheque: r.cheque,
+    total: r.importes.total,
+    ...(r.cheque ? { noIdentificacion: r.cheque.folio } : {}),
     receptor,
     formaPago: r.formaPago,
+    ...(r.relacionados ? { relacionados: r.relacionados } : {}),
   });
 }

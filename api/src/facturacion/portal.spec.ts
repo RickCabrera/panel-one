@@ -179,3 +179,19 @@ describe('portal: validarReceptor (campo por campo, en español)', () => {
     expect(validarReceptor({ ...BUENO, email: 'a b@c.mx' }).email).toMatch(/forma correcta/);
   });
 });
+
+describe('validarReceptor con correo opcional (F2-107, administrador)', () => {
+  it('sin correo pasa sólo con `emailOpcional`; un correo mal formado sigue fallando', () => {
+    expect(validarReceptor({ ...BUENO, email: '' })).toHaveProperty('email');
+    expect(validarReceptor({ ...BUENO, email: '' }, { emailOpcional: true })).toEqual({});
+    expect(validarReceptor({ ...BUENO, email: 'no-es-correo' }, { emailOpcional: true })).toEqual({
+      email: 'El correo no tiene la forma correcta (p. ej. nombre@dominio.com).',
+    });
+  });
+
+  it('las demás reglas no cambian (RFC genérico rechazado)', () => {
+    expect(
+      validarReceptor({ ...BUENO, rfc: 'XAXX010101000', email: '' }, { emailOpcional: true }),
+    ).toHaveProperty('rfc');
+  });
+});

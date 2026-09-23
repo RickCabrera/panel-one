@@ -97,11 +97,24 @@ export function errorCsdDe(r: RespuestaHttp, s: SolicitudCsd): ErrorTimbrado {
   return new ErrorTimbrado('CSD_RECHAZADO', `El PAC rechazó el CSD. ${texto}`.trim());
 }
 
+/*
+ * CFDI relacionados (F2-107). SUPUESTO NO VALIDADO (F2-190): Facturama recibe la relación como
+ * `Relations: { Type: '04', Cfdis: [{ Uuid }] }` (documentación pública, no una llamada real). Sólo
+ * va en el cuerpo cuando hay relacionados: el CFDI de un ticket sale igual que antes.
+ */
 export function peticionEmitir(base: string, s: SolicitudCfdi): PeticionHttp {
   return {
     metodo: 'POST',
     url: `${base}/api-lite/3/cfdis`,
     cuerpo: {
+      ...(s.relacionados
+        ? {
+            Relations: {
+              Type: s.relacionados.tipoRelacion,
+              Cfdis: s.relacionados.uuids.map((uuid) => ({ Uuid: uuid })),
+            },
+          }
+        : {}),
       Serie: s.serie,
       Folio: s.folio,
       Date: fechaLocalCfdi(s.fecha, s.zonaHoraria),

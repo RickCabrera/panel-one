@@ -132,6 +132,39 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(q)).toContain('sin comodines');
   });
 
+  it('F2-107: factura sin ticket y refacturación, de admins, con 404 por alcance y sus fallas del PAC', async () => {
+    const { paths, components } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    const manual = paths['/facturacion/cfdis/manual']?.post;
+    const refacturar = paths['/facturacion/cfdis/{id}/refacturar']?.post;
+    for (const op of [manual, refacturar]) {
+      expect(op?.security).toEqual([{ bearer: [] }]);
+      expect(codigos(op)).toEqual(['201', '400', '401', '403', '404', '409', '422', '502', '503']);
+    }
+    expect(JSON.stringify(manual?.responses?.['409'])).toContain('solicitudId');
+    expect(JSON.stringify(refacturar?.responses?.['201'])).toContain('ResultadoRefacturacionDto');
+    const esquemas = components?.schemas as Record<string, { properties?: object }>;
+    // La fila de la tabla distingue el origen y la sustitución.
+    expect(Object.keys(esquemas.CfdiFilaDto.properties ?? {})).toEqual(
+      expect.arrayContaining([
+        'origen',
+        'receptor',
+        'sustituyeA',
+        'sustituidoPor',
+        'sustitucionPendiente',
+        'motivoCancelacion',
+      ]),
+    );
+    // El total viaja como texto, nunca número.
+    expect(JSON.stringify(esquemas.FacturaManualDto.properties)).toContain(
+      '"total":{"type":"string"',
+    );
+    const origen = paths['/facturacion/cfdis']?.get?.parameters?.find(
+      (x) => 'name' in x && x.name === 'origen',
+    );
+    expect(JSON.stringify(origen)).toContain('manual');
+  });
+
   it('F2-103/F2-104: el portal es público y con 429; el POST emite (201) y documenta sus fallas; admin con roles y 404', async () => {
     const { paths, components } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -896,6 +929,9 @@ describe('Contrato OpenAPI', () => {
         '/facturacion/cfdis',
         '/facturacion/por-facturar',
         '/facturacion/tablero',
+        // F2-107: factura sin ticket y refacturación.
+        '/facturacion/cfdis/manual',
+        '/facturacion/cfdis/{id}/refacturar',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',

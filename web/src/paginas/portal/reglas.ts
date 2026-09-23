@@ -69,6 +69,8 @@ export function erroresReceptor(
   r: ReceptorPortal,
   regimenes: readonly RegimenFiscal[],
   usos: readonly UsoCfdi[],
+  /** F2-107: el administrador puede facturar sin correo (como el api). */
+  opciones: { emailOpcional?: boolean } = {},
 ): ErroresReceptor {
   const e: ErroresReceptor = {};
   const rfc = normalizarRfc(r.rfc);
@@ -114,8 +116,9 @@ export function erroresReceptor(
   }
 
   const email = r.email.trim();
-  if (email.length === 0) e.email = 'Escribe el correo al que te enviaremos la factura.';
-  else if (email.length > 254 || !REGEX_EMAIL.test(email)) {
+  if (email.length === 0) {
+    if (!opciones.emailOpcional) e.email = 'Escribe el correo al que te enviaremos la factura.';
+  } else if (email.length > 254 || !REGEX_EMAIL.test(email)) {
     e.email = 'El correo no tiene la forma correcta (p. ej. nombre@dominio.com).';
   }
   return e;

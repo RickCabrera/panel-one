@@ -12,7 +12,13 @@ import {
 } from 'recharts';
 
 import { ErrorApi } from '../../../api/cliente';
-import type { CfdiFila, EstadoCfdiEmitido, Sucursal, TableroFacturacion } from '../../../api/tipos';
+import type {
+  CfdiFila,
+  EstadoCfdiEmitido,
+  OrigenCfdi,
+  Sucursal,
+  TableroFacturacion,
+} from '../../../api/tipos';
 import { descargar, ErrorCsv, nombreCsv } from '../../../csv/csv';
 import { pesos, pesosCompactos } from '../../../dinero/dinero';
 import type { Rango } from '../../../filtros/periodo';
@@ -31,6 +37,7 @@ import {
   usePorFacturar,
   useTablero,
 } from './consultas';
+import { DialogoRefacturar } from '../emision/DialogoRefacturar';
 import { GraficaSerie } from './graficas';
 import {
   cfdisACsv,
@@ -289,10 +296,12 @@ function TablaCfdis({
   const [texto, setTexto] = useState('');
   const [q, setQ] = useState('');
   const [estado, setEstado] = useState<EstadoCfdiEmitido | null>(null);
+  const [origen, setOrigen] = useState<OrigenCfdi | null>(null);
   const [pagina, setPagina] = useState(1);
   const [aviso, setAviso] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
-  const consulta = useCfdis(filtro, rango, { q, estado, pagina });
+  const [refacturando, setRefacturando] = useState<CfdiFila | null>(null);
+  const consulta = useCfdis(filtro, rango, { q, estado, origen, pagina });
   const porId = new Map(sucursales.map((s) => [s.id, s]));
 
   function buscar(e: FormEvent) {
@@ -306,7 +315,7 @@ function TablaCfdis({
     setExportando(true);
     setAviso(null);
     try {
-      const todos = await todosLosCfdis(filtro, rango, { q, estado });
+      const todos = await todosLosCfdis(filtro, rango, { q, estado, origen });
       const sucursal = filtro.sucursalId ? porId.get(filtro.sucursalId)?.nombre : undefined;
       descargar(nombreCsv('facturas', rango.desde, rango.hasta, sucursal), cfdisACsv(todos, porId));
     } catch (e) {
@@ -354,6 +363,21 @@ function TablaCfdis({
             <option value="cancelado">Canceladas</option>
           </select>
         </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Origen
+          <select
+            className={CONTROL}
+            value={origen ?? ''}
+            onChange={(e) => {
+              setOrigen((e.target.value || null) as OrigenCfdi | null);
+              setPagina(1);
+            }}
+          >
+            <option value="">Todas</option>
+            <option value="ticket">De ticket</option>
+            <option value="manual">Sin ticket (manual)</option>
+          </select>
+        </label>
         <button type="submit" className={BOTON}>
           Buscar
         </button>
@@ -378,7 +402,7 @@ function TablaCfdis({
         {(p) =>
           p.total === 0 ? (
             <Vacio>
-              {q || estado
+              {q || estado || origen
                 ? 'Ninguna factura del periodo coincide con la búsqueda.'
                 : 'No se emitió ninguna factura en este periodo.'}
             </Vacio>
@@ -397,6 +421,9 @@ function TablaCfdis({
                       <th className={TH}>Estado</th>
                       <th className={TH}>Ticket</th>
                       <th className={TH}>Descargas</th>
+                      <th className={TH}>
+                        <span className="sr-only">Acciones</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -405,7 +432,17 @@ function TablaCfdis({
                       const fh = zona ? fechaHoraEn(zona, c.emitidoAt) : null;
                       return (
                         <tr key={c.id} className="border-t border-linea">
-                          <td className="px-2 py-1 whitespace-nowrap">{c.serieFolio}</td>
+                          <td className="px-2 py-1 whitespace-nowrap">
+                            {c.serieFolio}
+                            {c.origen === 'manual' && (
+                              <span
+                                className="ml-1 rounded border border-linea-fuerte px-1 text-xs text-tinta-suave"
+                                title="Factura sin ticket, capturada a mano (F2-107)."
+                              >
+                                Manual
+                              </span>
+                            )}
+                          </td>
                           <td className="px-2 py-1 font-mono text-xs">{c.uuid}</td>
                           <td className="px-2 py-1 whitespace-nowrap">
                             {fh ? `${fechaParaTabla(fh.fecha)} ${fh.hora}` : 'Sin dato'}
@@ -417,11 +454,7 @@ function TablaCfdis({
                           </td>
                           <td className={NUM}>{pesos(c.total)}</td>
                           <td className="px-2 py-1">
-                            {c.estado === 'vigente' ? (
-                              'Vigente'
-                            ) : (
-                              <span className="text-peligro">Cancelada</span>
-                            )}
+                            <EstadoFila c={c} />
                           </td>
                           <td className="px-2 py-1">{c.folioTicket ?? '—'}</td>
                           <td className="px-2 py-1 whitespace-nowrap">
@@ -455,6 +488,18 @@ function TablaCfdis({
                               </span>
                             )}
                           </td>
+                          <td className="px-2 py-1 whitespace-nowrap">
+                            {c.estado === 'vigente' &&
+                              (c.sustituidoPor === null || c.sustitucionPendiente) && (
+                                <button
+                                  type="button"
+                                  className={BOTON}
+                                  onClick={() => setRefacturando(c)}
+                                >
+                                  {c.sustitucionPendiente ? 'Reintentar cancelación' : 'Refacturar'}
+                                </button>
+                              )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -466,7 +511,43 @@ function TablaCfdis({
           )
         }
       </SegunEstado>
+      {refacturando && (
+        <DialogoRefacturar cfdi={refacturando} onCerrar={() => setRefacturando(null)} />
+      )}
     </Tarjeta>
+  );
+}
+
+const corto = (uuid: string) => uuid.slice(0, 8);
+
+/**
+ * El estado de una factura en la tabla, con la sustitución (F2-107): a quién sustituye, quién la
+ * sustituye, y si su cancelación 01 sigue pendiente (entonces NO suma a lo facturado).
+ */
+function EstadoFila({ c }: { c: CfdiFila }) {
+  return (
+    <div className="flex flex-col">
+      {c.estado === 'vigente' ? (
+        <span>Vigente</span>
+      ) : (
+        <span className="text-peligro">
+          Cancelada{c.motivoCancelacion ? ` (motivo ${c.motivoCancelacion})` : ''}
+        </span>
+      )}
+      {c.sustituyeA && (
+        <span className="text-xs text-tinta-tenue" title={c.sustituyeA}>
+          Sustituye a {corto(c.sustituyeA)}…
+        </span>
+      )}
+      {c.sustituidoPor && (
+        <span className="text-xs text-tinta-tenue" title={c.sustituidoPor}>
+          Sustituida por {corto(c.sustituidoPor)}…
+        </span>
+      )}
+      {c.sustitucionPendiente && (
+        <span className="text-xs text-peligro">Cancelación pendiente: no suma a lo facturado</span>
+      )}
+    </div>
   );
 }
 

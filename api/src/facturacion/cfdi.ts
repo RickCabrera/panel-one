@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 
-import type { SolicitudCfdi } from '../adaptadores/timbrado/puerto';
+import type { CfdiRelacionados, SolicitudCfdi } from '../adaptadores/timbrado/puerto';
 
 /**
  * Reglas puras de la emisión de un CFDI de consumo (F2-104): de un cheque de Fase 1 a la
@@ -116,13 +116,29 @@ export interface DatosEmision {
 }
 
 /**
- * La solicitud al PAC: un solo concepto "Consumo de alimentos y bebidas" (90101500, E48) por el
- * subtotal, IVA trasladado a la tasa, `PUE`, MXN, lugar de expedición = CP del perfil fiscal.
- * `noIdentificacion` = el folio del ticket (el que ve el cliente), para que la factura se pueda
- * cruzar con el ticket impreso.
+ * La solicitud al PAC de un CFDI de consumo: un solo concepto "Consumo de alimentos y bebidas"
+ * (90101500, E48) por el subtotal, IVA trasladado a la tasa, `PUE`, MXN, lugar de expedición = CP
+ * del perfil fiscal. Es la base de las tres emisiones: ticket (F2-104), sin ticket y sustituto
+ * (F2-107).
  */
-export function solicitudDesdeCheque(d: DatosEmision): SolicitudCfdi {
-  const { subtotal, iva, total } = importesDeTotal(d.cheque.total);
+export interface DatosConsumo {
+  /** Id de la reserva (`cfdis.id`): el PAC falso deriva de aquí el UUID. */
+  reservaId: string;
+  serie: string;
+  folio: number;
+  fecha: Date;
+  emisor: DatosEmision['emisor'];
+  sucursal: { zonaHoraria: string };
+  total: Prisma.Decimal;
+  /** El folio del ticket; ausente en una factura sin ticket. */
+  noIdentificacion?: string;
+  receptor: DatosEmision['receptor'];
+  formaPago: string;
+  relacionados?: CfdiRelacionados;
+}
+
+export function solicitudDeConsumo(d: DatosConsumo): SolicitudCfdi {
+  const { subtotal, iva, total } = importesDeTotal(d.total);
   return {
     referencia: d.reservaId,
     serie: d.serie,
@@ -148,7 +164,7 @@ export function solicitudDesdeCheque(d: DatosEmision): SolicitudCfdi {
     conceptos: [
       {
         ...CONCEPTO_CONSUMO,
-        noIdentificacion: d.cheque.folio,
+        ...(d.noIdentificacion !== undefined ? { noIdentificacion: d.noIdentificacion } : {}),
         cantidad: D(1),
         valorUnitario: subtotal,
         importe: subtotal,
@@ -159,5 +175,48 @@ export function solicitudDesdeCheque(d: DatosEmision): SolicitudCfdi {
     subtotal,
     totalImpuestosTrasladados: iva,
     total,
+    ...(d.relacionados
+      ? {
+          relacionados: {
+            tipoRelacion: d.relacionados.tipoRelacion,
+            uuids: [...d.relacionados.uuids],
+          },
+        }
+      : {}),
   };
+}
+
+/**
+ * La solicitud del CFDI de un ticket (F2-104). `noIdentificacion` = el folio del ticket (el que ve
+ * el cliente), para que la factura se pueda cruzar con el ticket impreso.
+ */
+export function solicitudDesdeCheque(d: DatosEmision): SolicitudCfdi {
+  return solicitudDeConsumo({
+    reservaId: d.reservaId,
+    serie: d.serie,
+    folio: d.folio,
+    fecha: d.fecha,
+    emisor: d.emisor,
+    sucursal: d.sucursal,
+    total: d.cheque.total,
+    noIdentificacion: d.cheque.folio,
+    receptor: d.receptor,
+    formaPago: d.formaPago,
+  });
+}
+
+/**
+ * Un total capturado a mano (F2-107), como TEXTO: hasta 6 enteros y 2 decimales, mayor que cero.
+ * Nunca pasa por `number`. Null si no es válido.
+ */
+export const TOTAL_MANUAL = /^\d{1,6}(\.\d{1,2})?$/;
+export const MENSAJE_TOTAL_MANUAL =
+  'El total va en pesos con hasta dos decimales (p. ej. 1234.50), mayor que cero y menor que ' +
+  '1,000,000.';
+
+export function totalManual(texto: string): Prisma.Decimal | null {
+  const t = texto.trim();
+  if (!TOTAL_MANUAL.test(t)) return null;
+  const total = D(t);
+  return total.gt(0) ? total : null;
 }

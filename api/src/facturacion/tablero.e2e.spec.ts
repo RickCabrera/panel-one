@@ -431,6 +431,13 @@ describe('Tablero de facturación (e2e, F2-106)', () => {
         folioTicket: 'T-A1-2',
         xml: true,
         pdf: true,
+        // F2-107: origen, receptor completo y sustitución.
+        origen: 'ticket',
+        receptor: { ...RECEPTORES.eku },
+        sustituyeA: null,
+        sustituidoPor: null,
+        sustitucionPendiente: false,
+        motivoCancelacion: null,
       });
       expect(res.body.cfdis[1].estado).toBe('cancelado');
     });
