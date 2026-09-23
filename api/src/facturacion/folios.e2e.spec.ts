@@ -12,12 +12,9 @@ import {
 import request from 'supertest';
 
 import { crearFixtures, FX, limpiarFixtures, USUARIOS } from '../../test/fixtures-auth';
-import { PUERTO_CORREO, PUERTO_TIMBRADO } from '../adaptadores/adaptadores.module';
-import type {
-  Destinatario,
-  PlantillaCorreo,
-  PuertoCorreo,
-} from '../adaptadores/correo/puerto';
+import { PUERTO_CORREO, PUERTO_PUSH, PUERTO_TIMBRADO } from '../adaptadores/adaptadores.module';
+import type { PushFalso } from '../adaptadores/push/push-falso';
+import type { Destinatario, PlantillaCorreo, PuertoCorreo } from '../adaptadores/correo/puerto';
 import type { CfdiTimbrado, PuertoTimbrado, SolicitudCfdi } from '../adaptadores/timbrado/puerto';
 import { TimbradoFalso } from '../adaptadores/timbrado/timbrado-falso';
 import { hashApiKey } from '../agentes/api-key';
@@ -475,6 +472,34 @@ describe('Control de folios del PAC (e2e, F2-110)', () => {
 
   it('aviso de umbral (reloj falso): falla el correo → se reintenta; dos vueltas → UN correo', async () => {
     const n = await destinatarios();
+    // F2-146: un navegador del admin_global con el push de folios prendido, y uno de un
+    // admin_empresa con la columna en true (p. ej. un admin_global degradado): ése NO recibe.
+    const push = app.get<PushFalso>(PUERTO_PUSH);
+    const navegador = async (u: Usuario, nombre: string) => {
+      const { versionSesion } = await prisma.usuario.findUniqueOrThrow({ where: { id: u.id } });
+      await prisma.preferenciaPush.upsert({
+        where: { usuarioId: u.id },
+        create: { usuarioId: u.id, empresaId: u.empresaId, foliosBajo: true },
+        update: { foliosBajo: true },
+      });
+      const endpoint = `https://fcm.googleapis.com/fcm/send/folios-${nombre}`;
+      await prisma.dispositivoPush.create({
+        data: {
+          usuarioId: u.id,
+          empresaId: u.empresaId,
+          endpoint,
+          p256dh: 'BA',
+          auth: 'AA',
+          versionSesion,
+          creadoAt: new Date(reloj.ahora()),
+          renovadoAt: new Date(reloj.ahora()),
+        },
+      });
+      return endpoint;
+    };
+    const delGlobal = await navegador(USUARIOS.adminGlobal, 'global');
+    const delAdminEmpresa = await navegador(USUARIOS.adminEmpresaA, 'admin-empresa');
+    const pushes = (endpoint: string) => push.enviados.filter((e) => e.endpoint === endpoint);
     correo.falla = true;
     expect((await avisos()).umbral).toBe('fallido');
     expect(
@@ -489,6 +514,14 @@ describe('Control de folios del PAC (e2e, F2-110)', () => {
     expect(enviados[0].plantilla.asunto).toBe('Folios de timbrado AGOTADOS');
     expect((await avisos()).umbral).toBe('ya_avisado');
     expect(correo.de(PLANTILLA_FOLIOS_BAJO)).toHaveLength(n);
+    // F2-146: el push sale UNA vez, sólo cuando el correo salió (no en el reclamo que falló, ni
+    // en la vuelta simultánea, ni en la siguiente), y sólo al admin_global.
+    expect(pushes(delGlobal)).toHaveLength(1);
+    expect(pushes(delGlobal)[0].mensaje).toMatchObject({
+      titulo: 'Se acabaron los folios',
+      url: '/facturacion?tab=folios',
+    });
+    expect(pushes(delAdminEmpresa)).toHaveLength(0);
   });
 
   it('con saldo 1, dos reservas SIMULTÁNEAS de dos empresas: exactamente una pasa', async () => {

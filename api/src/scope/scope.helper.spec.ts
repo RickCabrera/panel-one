@@ -47,6 +47,9 @@ describe('whereEmpresa / whereScoped', () => {
       // F2-141: reportes programados.
       SuscripcionReporte: 'empresaId',
       EnvioReporte: 'empresaId',
+      DispositivoPush: 'empresaId',
+      PreferenciaPush: 'empresaId',
+      EnvioPushResumen: 'empresaId',
       // F2-230: catálogos espejo.
       GrupoProducto: 'empresaId',
       Producto: 'empresaId',

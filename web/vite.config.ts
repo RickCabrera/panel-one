@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import { loadEnv, type ProxyOptions } from 'vite';
 import { defineConfig } from 'vitest/config';
 
+import { pluginServiceWorker } from './pwa-plugin.ts';
+
 /**
  * La SPA habla con la API SIEMPRE en el mismo origen, bajo `/api`. En local lo hace
  * este proxy; en producción lo tendrá que hacer Caddy igual (F1-002).
@@ -34,7 +36,8 @@ export default defineConfig(({ mode }) => {
   const proxy = proxyApi(entorno.API_PROXY_TARGET || 'http://localhost:3000');
 
   return {
-    plugins: [react(), tailwindcss()],
+    // F2-146: el service worker de la PWA (`dist/sw.js`, sólo en build).
+    plugins: [react(), tailwindcss(), pluginServiceWorker()],
     server: { port: 5173, proxy },
     preview: { proxy },
     test: {

@@ -49,6 +49,15 @@ export interface NuevaAlerta {
   detalle: Prisma.InputJsonObject;
 }
 
+/** Una alerta recién abierta: lo que el push necesita para armar su texto (F2-146). */
+export interface AlertaRecienAbierta {
+  id: string;
+  empresaId: string;
+  sucursalId: string;
+  tipo: TipoAlerta;
+  detalle: Prisma.JsonValue;
+}
+
 type Tx = Prisma.TransactionClient;
 
 export class TransaccionAlertas {
@@ -96,12 +105,15 @@ export class TransaccionAlertas {
    * Abre alertas. Una condición que ya tiene su fila abierta NO se duplica: el único
    * `(sucursal, tipo, llave_abierta)` la descarta (`skipDuplicates`). Una sucursal de otra
    * empresa la rechaza la FK compuesta `(sucursal_id, empresa_id)`: error, nunca fila.
+   *
+   * Devuelve SÓLO las filas que esta llamada abrió de verdad (las descartadas no vienen):
+   * F2-146 manda el push de cada una, después del commit.
    */
-  async abrir(filas: readonly NuevaAlerta[], ahora: Date): Promise<number> {
+  async abrir(filas: readonly NuevaAlerta[], ahora: Date): Promise<AlertaRecienAbierta[]> {
     if (filas.length === 0) {
-      return 0;
+      return [];
     }
-    const { count } = await this.#tx.alerta.createMany({
+    return this.#tx.alerta.createManyAndReturn({
       data: filas.map((f) => ({
         empresaId: this.empresaId,
         sucursalId: f.sucursalId,
@@ -114,8 +126,8 @@ export class TransaccionAlertas {
         abiertaAt: ahora,
       })),
       skipDuplicates: true,
+      select: { id: true, empresaId: true, sucursalId: true, tipo: true, detalle: true },
     });
-    return count;
   }
 
   /** Cierra (nunca borra) las alertas indicadas que sigan abiertas y sean de esta empresa. */

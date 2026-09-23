@@ -7,6 +7,7 @@ import {
   AdaptadoresModule,
   PUERTO_ARCHIVOS,
   PUERTO_CORREO,
+  PUERTO_PUSH,
   PUERTO_TIMBRADO,
 } from './adaptadores.module';
 import { ArchivosDisco } from './archivos/archivos-disco';
@@ -14,6 +15,9 @@ import type { PuertoArchivos } from './archivos/puerto';
 import { CorreoBrevo } from './correo/correo-brevo';
 import { CorreoFalso } from './correo/correo-falso';
 import type { PuertoCorreo } from './correo/puerto';
+import { PushFalso } from './push/push-falso';
+import { PushWebPush } from './push/push-webpush';
+import type { PuertoPush } from './push/puerto';
 import type { PuertoTimbrado } from './timbrado/puerto';
 import { TimbradoFacturama } from './timbrado/timbrado-facturama';
 import { TimbradoFalso } from './timbrado/timbrado-falso';
@@ -29,6 +33,7 @@ class ServicioDeNegocio {
     @Inject(PUERTO_TIMBRADO) readonly timbrado: PuertoTimbrado,
     @Inject(PUERTO_CORREO) readonly correo: PuertoCorreo,
     @Inject(PUERTO_ARCHIVOS) readonly archivos: PuertoArchivos,
+    @Inject(PUERTO_PUSH) readonly push: PuertoPush,
   ) {}
 }
 
@@ -44,6 +49,12 @@ const VARIABLES = [
   'ARCHIVOS_RAIZ',
   'ARCHIVOS_SECRETO',
   'ARCHIVOS_URL_BASE',
+  'PUSH_IMPL',
+  'VAPID_PUBLIC_KEY',
+  'VAPID_PRIVATE_KEY',
+  'VAPID_SUBJECT',
+  'PUSH_DIR_FALSO',
+  'PUSH_HOSTS_PERMITIDOS',
   'MODO_DEMO',
 ] as const;
 
@@ -58,6 +69,11 @@ const REALES: Record<string, string> = {
   ARCHIVOS_RAIZ: process.platform === 'win32' ? 'C:\\datos\\archivos' : '/datos/archivos',
   ARCHIVOS_SECRETO: 'secreto-sintetico-de-archivos-de-32-o-mas-000',
   ARCHIVOS_URL_BASE: 'https://panel.ejemplo.test/api/archivos',
+  // Llaves VAPID SINTÉTICAS: sólo tienen el largo correcto.
+  PUSH_IMPL: 'webpush',
+  VAPID_PUBLIC_KEY: Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 7)]).toString('base64url'),
+  VAPID_PRIVATE_KEY: Buffer.alloc(32, 9).toString('base64url'),
+  VAPID_SUBJECT: 'mailto:soporte@ejemplo.test',
 };
 
 describe('AdaptadoresModule (F2-202)', () => {
@@ -87,12 +103,15 @@ describe('AdaptadoresModule (F2-202)', () => {
     return modulo.get(ServicioDeNegocio);
   }
 
-  it('sin variables, el servicio recibe los tres falsos', async () => {
+  it('sin variables, el servicio recibe los cuatro falsos', async () => {
     entorno({});
     const s = await servicio();
     expect(s.timbrado).toBeInstanceOf(TimbradoFalso);
     expect(s.correo).toBeInstanceOf(CorreoFalso);
     expect(s.archivos).toBeInstanceOf(ArchivosDisco);
+    expect(s.push).toBeInstanceOf(PushFalso);
+    // Sin llaves VAPID, el falso no ofrece clave: la web dice "no configuradas".
+    expect(s.push.clavePublica).toBeNull();
   });
 
   it('PAC_IMPL=facturama cambia SÓLO el timbrado, sin tocar el servicio', async () => {
@@ -106,12 +125,23 @@ describe('AdaptadoresModule (F2-202)', () => {
     expect(s.correo).toBeInstanceOf(CorreoFalso);
   });
 
-  it('con las tres reales, el mismo servicio recibe las tres reales', async () => {
+  it('con las cuatro reales, el mismo servicio recibe las cuatro reales', async () => {
     entorno(REALES);
     const s = await servicio();
     expect(s.timbrado).toBeInstanceOf(TimbradoFacturama);
     expect(s.correo).toBeInstanceOf(CorreoBrevo);
     expect(s.archivos).toBeInstanceOf(ArchivosDisco);
+    expect(s.push).toBeInstanceOf(PushWebPush);
+    expect(s.push.clavePublica).toBe(REALES.VAPID_PUBLIC_KEY);
+  });
+
+  it('PUSH_IMPL=webpush cambia SÓLO el push', async () => {
+    const { PUSH_IMPL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = REALES;
+    entorno({ PUSH_IMPL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT });
+    const s = await servicio();
+    expect(s.push).toBeInstanceOf(PushWebPush);
+    expect(s.timbrado).toBeInstanceOf(TimbradoFalso);
+    expect(s.correo).toBeInstanceOf(CorreoFalso);
   });
 
   it('NODE_ENV=production con un puerto en falso: el módulo NO compila y nombra la variable', async () => {

@@ -25,5 +25,7 @@
   "include": ["src"],
   // Los `*.node.test.ts` corren en Node (leen archivos, arrancan ESLint): los tipa
   // tsconfig.node.json, así los tipos de Node no se cuelan al código del navegador.
-  "exclude": ["src/**/*.node.test.ts"]
+  // `src/pwa/sw.ts` corre en el service worker (lib WebWorker, que choca con DOM): lo tipa
+  // tsconfig.sw.json (F2-146).
+  "exclude": ["src/**/*.node.test.ts", "src/pwa/sw.ts"]
 }

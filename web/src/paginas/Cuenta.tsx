@@ -6,11 +6,13 @@ import { useUsuario } from '../auth/contexto';
 import { NOMBRE_ROL } from '../auth/roles';
 import { establecerSesion, esperarRefreshEnVuelo } from '../auth/sesion';
 import { CLASE_INPUT, CLASE_PRIMARIO } from './admin/estilos';
+import { Notificaciones } from './cuenta/Notificaciones';
 import { ReportesCorreo } from './cuenta/ReportesCorreo';
 
 /**
  * Mi cuenta (F1-060): cambio de contraseña propio, para CUALQUIER rol. Y (F2-141) los
- * reportes por correo del propio usuario (`cuenta/ReportesCorreo.tsx`). La API
+ * reportes por correo del propio usuario (`cuenta/ReportesCorreo.tsx`), y (F2-146) sus
+ * notificaciones push (`cuenta/Notificaciones.tsx`). La API
  * devuelve una sesión nueva (y rota la cookie): los otros navegadores de este
  * usuario pierden su refresh, y éste sigue dentro sin volver a entrar.
  *
@@ -121,6 +123,7 @@ export function Cuenta() {
         </button>
       </form>
       <ReportesCorreo />
+      <Notificaciones />
     </section>
   );
 }

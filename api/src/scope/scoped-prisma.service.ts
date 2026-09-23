@@ -16,6 +16,7 @@ import { EscrituraGastos } from './escritura-gastos';
 import { EscrituraFolios, LecturaFoliosPlataforma } from './folios-plataforma';
 import { IngestaMovimientos } from './escritura-movimientos';
 import { IngestaRecetas } from './escritura-recetas';
+import { EscrituraPush } from './escritura-push';
 import { EscrituraReportes } from './escritura-reportes';
 import { EscrituraTraspasos } from './escritura-traspasos';
 import { EscrituraSucursal } from './escritura-sucursal';
@@ -311,6 +312,15 @@ export class ScopedPrismaService {
    */
   reportes(scope: EmpresaScope): EscrituraReportes {
     return new EscrituraReportes(this.#prisma, scope);
+  }
+
+  /**
+   * Las escrituras de las notificaciones push (F2-146): el navegador y las preferencias
+   * propias, el descarte de navegadores muertos y el reclamo del resumen diario (ver
+   * `escritura-push.ts`).
+   */
+  push(scope: EmpresaScope): EscrituraPush {
+    return new EscrituraPush(this.#prisma, scope);
   }
 
   /**

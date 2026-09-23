@@ -3760,6 +3760,285 @@
         ]
       }
     },
+    "/cuenta/notificaciones": {
+      "get": {
+        "description": "Incluye la llave pública VAPID para suscribir el navegador.",
+        "operationId": "NotificacionesController_obtener",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Qué notificaciones tiene activas el usuario y cuántos navegadores registró.",
+        "tags": [
+          "cuenta"
+        ]
+      }
+    },
+    "/cuenta/notificaciones/preferencias": {
+      "put": {
+        "description": "Aplica a todos los navegadores del usuario. Las alertas usan además el umbral y el encendido de la regla de la EMPRESA (centro de alertas): una regla apagada no avisa.",
+        "operationId": "NotificacionesController_preferencias",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferenciasPushDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Activa o apaga cada notificación por separado.",
+        "tags": [
+          "cuenta"
+        ]
+      }
+    },
+    "/cuenta/notificaciones/dispositivos": {
+      "post": {
+        "description": "Idempotente. El panel lo llama cada vez que abre en un navegador suscrito: un navegador sin renovarse en 7 días, o registrado antes de un cambio de contraseña, deja de recibir.",
+        "operationId": "NotificacionesController_registrar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrarDispositivoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Registra (o renueva) este navegador para recibir notificaciones.",
+        "tags": [
+          "cuenta"
+        ]
+      },
+      "delete": {
+        "operationId": "NotificacionesController_quitar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuitarDispositivoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El navegador no está registrado a tu nombre. Misma respuesta si no existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Da de baja este navegador (desactivar, o cerrar sesión).",
+        "tags": [
+          "cuenta"
+        ]
+      }
+    },
+    "/cuenta/notificaciones/prueba": {
+      "post": {
+        "operationId": "NotificacionesController_prueba",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoPruebaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 5 pruebas por minuto desde la misma IP."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Manda una notificación de prueba a los navegadores del usuario.",
+        "tags": [
+          "cuenta"
+        ]
+      }
+    },
     "/cuenta/reportes": {
       "get": {
         "description": "Sin suscripción guardada, los dos en false. Incluye la zona y la hora de envío y los últimos 10 envíos.",
@@ -15827,6 +16106,146 @@
           "empresaId",
           "activa",
           "umbral"
+        ]
+      },
+      "PreferenciasPushDto": {
+        "type": "object",
+        "properties": {
+          "mesaAbierta": {
+            "type": "boolean",
+            "description": "Mesa abierta más del umbral de la empresa (default 60 min)."
+          },
+          "sucursalSinReporte": {
+            "type": "boolean",
+            "description": "Sucursal sin reportar más del umbral de la empresa (default 10 min)."
+          },
+          "foliosBajo": {
+            "type": "boolean",
+            "description": "Saldo de folios del PAC bajo el umbral. Sólo admin_global; otro rol = 400."
+          },
+          "cierreDia": {
+            "type": "boolean",
+            "description": "Resumen de cierre del día: la venta de ayer, a las 07:00 de la zona de la empresa."
+          }
+        },
+        "required": [
+          "mesaAbierta",
+          "sucursalSinReporte",
+          "foliosBajo",
+          "cierreDia"
+        ]
+      },
+      "TipoNotificacion": {
+        "type": "string",
+        "enum": [
+          "mesa_abierta",
+          "sucursal_sin_reporte",
+          "folios_bajo",
+          "cierre_dia"
+        ],
+        "description": "Los tipos que el rol del usuario puede activar."
+      },
+      "NotificacionesDto": {
+        "type": "object",
+        "properties": {
+          "clavePublica": {
+            "type": "string",
+            "nullable": true,
+            "description": "Llave pública VAPID (base64url) para `pushManager.subscribe`. Null: el servidor no tiene notificaciones configuradas."
+          },
+          "preferencias": {
+            "description": "Sin guardar: todas en false.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferenciasPushDto"
+              }
+            ]
+          },
+          "disponibles": {
+            "type": "array",
+            "description": "Los tipos que el rol del usuario puede activar.",
+            "items": {
+              "$ref": "#/components/schemas/TipoNotificacion"
+            }
+          },
+          "dispositivos": {
+            "type": "number",
+            "description": "Navegadores registrados del usuario."
+          }
+        },
+        "required": [
+          "clavePublica",
+          "preferencias",
+          "disponibles",
+          "dispositivos"
+        ]
+      },
+      "LlavesSuscripcionDto": {
+        "type": "object",
+        "properties": {
+          "p256dh": {
+            "type": "string",
+            "description": "Llave pública ECDH P-256 del navegador (base64url, 65 bytes)."
+          },
+          "auth": {
+            "type": "string",
+            "description": "Secreto de autenticación del navegador (base64url, 16 bytes)."
+          }
+        },
+        "required": [
+          "p256dh",
+          "auth"
+        ]
+      },
+      "RegistrarDispositivoDto": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "description": "URL del servicio de push del navegador. https, puerto 443, sin usuario ni IP, y de un servicio conocido (FCM, Mozilla, WNS, Apple, o `PUSH_HOSTS_PERMITIDOS`).",
+            "maxLength": 1024
+          },
+          "keys": {
+            "$ref": "#/components/schemas/LlavesSuscripcionDto"
+          }
+        },
+        "required": [
+          "endpoint",
+          "keys"
+        ]
+      },
+      "QuitarDispositivoDto": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "endpoint"
+        ]
+      },
+      "ResultadoPruebaDto": {
+        "type": "object",
+        "properties": {
+          "entregados": {
+            "type": "number",
+            "description": "Navegadores a los que el servicio de push aceptó el envío."
+          },
+          "descartados": {
+            "type": "number",
+            "description": "Navegadores dados de baja: suscripción caducada o de una sesión que ya terminó."
+          },
+          "fallidos": {
+            "type": "number",
+            "description": "Envíos que el servicio de push rechazó por otra causa."
+          }
+        },
+        "required": [
+          "entregados",
+          "descartados",
+          "fallidos"
         ]
       },
       "TipoReporte": {

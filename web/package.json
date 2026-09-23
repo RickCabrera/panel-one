@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "check:bundle": "node scripts/tamano-bundle.mjs"
+    "check:bundle": "node scripts/tamano-bundle.mjs",
+    "check:pwa": "node scripts/revisar-pwa.mjs",
+    "iconos:pwa": "node scripts/iconos-pwa.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.103.1",

@@ -4,6 +4,7 @@ import { PUERTO_CORREO } from '../adaptadores/adaptadores.module';
 import type { PlantillaCorreo, PuertoCorreo } from '../adaptadores/correo/puerto';
 import { Auditoria, type Actor } from '../comun/auditoria';
 import { Reloj } from '../comun/reloj';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import type { ConteoMensual } from '../scope/folios-plataforma';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
@@ -67,6 +68,7 @@ export class FoliosService {
     private readonly reloj: Reloj,
     private readonly auditoria: Auditoria,
     @Inject(PUERTO_CORREO) private readonly correo: PuertoCorreo,
+    private readonly notificaciones: NotificacionesService,
   ) {}
 
   #ahora(): Date {
@@ -206,6 +208,15 @@ export class FoliosService {
         });
         if (await this.#mandar(destinatarios, plantilla)) {
           r.umbral = 'enviado';
+          // F2-146: el push va SÓLO cuando el correo salió. Si el correo falla, el reclamo se
+          // suelta y se reintenta: mandar el push al reclamar lo repetiría en cada reintento.
+          // Best-effort: `foliosBajo` nunca lanza.
+          await this.notificaciones.foliosBajo({
+            estado: e.estado,
+            disponible: e.disponible,
+            vigenteTotal: e.vigenteTotal,
+            umbralPct: e.umbralPct,
+          });
         } else {
           await escritura.soltarAvisoUmbral(ahora);
           r.umbral = 'fallido';

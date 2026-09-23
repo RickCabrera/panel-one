@@ -17,6 +17,7 @@ import { IngestaModule } from './ingesta/ingesta.module';
 import { MesasModule } from './mesas/mesas.module';
 import { OrganizacionModule } from './organizacion/organizacion.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { ReportesModule } from './reportes/reportes.module';
 import { ScopeModule } from './scope/scope.module';
 import { SistemaModule } from './sistema/sistema.module';
@@ -39,6 +40,7 @@ import { VentasModule } from './ventas/ventas.module';
     SistemaModule,
     AlertasModule,
     ReportesModule,
+    NotificacionesModule,
     CatalogosModule,
     InventarioModule,
     FinanzasModule,

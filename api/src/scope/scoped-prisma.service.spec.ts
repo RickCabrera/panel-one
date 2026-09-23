@@ -109,7 +109,11 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'conteoFisico',
       // F2-202: bandeja del correo falso, filtrada por empresa_id como las demás.
       'correoEnviado',
+      // F2-146: navegadores suscritos a push; se escriben por `push(scope)`.
+      'dispositivoPush',
       'empresa',
+      // F2-146: candado del resumen diario por push; se escribe por `push(scope)`.
+      'envioPushResumen',
       // F2-141: reportes programados; sus escrituras van por `reportes(scope)`.
       'envioReporte',
       // F2-121: existencias; se escriben por `existenciasDeSucursal(agente)` y
@@ -137,6 +141,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // F2-103: el portal de autofactura; se escribe por `facturacion(scope)` y lo público va por
       // `portalPublico`/`logoPortal`, no por aquí.
       'portalFacturacion',
+      // F2-146: preferencias de push; se escriben por `push(scope)`.
+      'preferenciaPush',
       'producto',
       'productoMetadata',
       'proveedorCatalogo',

@@ -49,7 +49,10 @@ export type AccionAuditada =
   | 'folios.paquete_baja'
   | 'folios.configurar'
   // F2-110b: una vuelta de conciliación con el PAC pedida desde el tablero.
-  | 'facturacion.conciliacion';
+  | 'facturacion.conciliacion'
+  // F2-146: preferencias de notificaciones push y un navegador que cambia de usuario.
+  | 'preferencia_push.editar'
+  | 'dispositivo_push.reasignar';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
@@ -71,7 +74,10 @@ export interface EventoAuditoria {
     | 'paquete_folios'
     | 'configuracion_folios'
     // F2-110b: una vuelta de conciliación con el PAC pedida desde el tablero.
-    | 'conciliacion_pac';
+    | 'conciliacion_pac'
+    // F2-146: notificaciones push.
+    | 'preferencia_push'
+    | 'dispositivo_push';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */
