@@ -1,3 +1,5 @@
+import { deflateSync } from 'node:zlib';
+
 import type { PrismaClient } from '@prisma/client';
 
 import type { PrismaService } from '../src/prisma/prisma.service';
@@ -102,4 +104,98 @@ export async function sembrarFacturacion(
     await escritura.guardarReceptor(op.empresaId, { ...r }, op.ahora);
   }
   return { perfil, receptores: RECEPTORES_SEED.length };
+}
+
+/**
+ * Portales de autofactura del seed (F2-103): uno por sucursal demo, con su enlace y su color.
+ * Centro lleva un logo PNG sintético (generado aquí, determinista); Norte va sin logo para ver
+ * los dos casos en el portal. El panel manda: un portal que editó una persona
+ * (`actualizado_por` no nulo) no se pisa.
+ */
+export interface PortalSeed {
+  sucursalId: string;
+  slug: string;
+  color: string;
+  conLogo: boolean;
+}
+
+export async function sembrarPortales(
+  prisma: PrismaClient,
+  op: { empresaId: string; portales: readonly PortalSeed[]; ahora: Date },
+): Promise<{ sembrados: number; respetados: number }> {
+  const scoped = new ScopedPrismaService(prisma as unknown as PrismaService);
+  const scope = { tipo: 'empresa', empresaId: op.empresaId } as const;
+  const escritura = scoped.facturacion(scope);
+  let sembrados = 0;
+  let respetados = 0;
+  for (const p of op.portales) {
+    const actual = await scoped.para(scope).portalFacturacion.findFirst({
+      where: { sucursalId: p.sucursalId },
+      select: { actualizadoPor: true },
+    });
+    if (actual && actual.actualizadoPor !== null) {
+      respetados++;
+      continue;
+    }
+    await escritura.guardarPortal(
+      p.sucursalId,
+      { slug: p.slug, color: p.color, activo: true },
+      null,
+      op.ahora,
+    );
+    await escritura.guardarLogoPortal(
+      p.sucursalId,
+      p.conLogo ? { bytes: logoSintetico(p.color), tipo: 'image/png' } : null,
+      null,
+      op.ahora,
+    );
+    sembrados++;
+  }
+  return { sembrados, respetados };
+}
+
+/**
+ * Un PNG de 48×48 con un círculo del color de la marca sobre fondo blanco: un logo de mentira
+ * que se ve como logo. Determinista (mismo color = mismos bytes). No es marca de nadie.
+ */
+export function logoSintetico(color: string): Buffer {
+  const lado = 48;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  const filas: Buffer[] = [];
+  for (let y = 0; y < lado; y++) {
+    const fila = Buffer.alloc(1 + lado * 3); // byte 0: filtro "None"
+    for (let x = 0; x < lado; x++) {
+      const dentro = (x - 23.5) ** 2 + (y - 23.5) ** 2 <= 21 ** 2;
+      fila.set(dentro ? [r, g, b] : [255, 255, 255], 1 + x * 3);
+    }
+    filas.push(fila);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(lado, 0);
+  ihdr.writeUInt32BE(lado, 4);
+  ihdr.set([8, 2, 0, 0, 0], 8); // 8 bits, RGB, sin entrelazado
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    trozoPng('IHDR', ihdr),
+    trozoPng('IDAT', deflateSync(Buffer.concat(filas), { level: 9 })),
+    trozoPng('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+function trozoPng(tipo: string, datos: Buffer): Buffer {
+  const largo = Buffer.alloc(4);
+  largo.writeUInt32BE(datos.length, 0);
+  const cuerpo = Buffer.concat([Buffer.from(tipo, 'latin1'), datos]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(cuerpo), 0);
+  return Buffer.concat([largo, cuerpo, crc]);
+}
+
+function crc32(bytes: Buffer): number {
+  let c = 0xffffffff;
+  for (const byte of bytes) {
+    c ^= byte;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  }
+  return (c ^ 0xffffffff) >>> 0;
 }

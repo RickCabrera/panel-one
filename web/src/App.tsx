@@ -29,6 +29,7 @@ import { Mesas } from './paginas/Mesas';
 import { Productos } from './paginas/Productos';
 import { MesasPared } from './paginas/MesasPared';
 import { NoEncontrada } from './paginas/NoEncontrada';
+import { PortalFactura } from './paginas/PortalFactura';
 import { Reportes } from './paginas/Reportes';
 import { Resumen } from './paginas/Resumen';
 import { Tickets } from './paginas/Tickets';
@@ -68,6 +69,8 @@ export function Rutas() {
       <Route path="/login" element={<Login />} />
       {/* F2-141: la baja desde el correo es PÚBLICA (sin sesión): fuera de RutaProtegida. */}
       <Route path="/reportes/baja" element={<BajaReportes />} />
+      {/* F2-103: el portal de autofactura es PÚBLICO (el cliente llega desde el QR del ticket). */}
+      <Route path="/f/:slug" element={<PortalFactura />} />
       {/* F2-223: la vista de pared va FUERA de Layout (sin menú ni cabecera). */}
       <Route
         path="/mesas/pared"

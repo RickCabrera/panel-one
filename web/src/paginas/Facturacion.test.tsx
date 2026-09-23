@@ -7,6 +7,7 @@ import type {
   PerfilFiscal,
   RegimenFiscal,
   RespuestaPerfilFiscal,
+  SucursalPortal,
   UsuarioActual,
 } from '../api/tipos';
 import { Proveedores, Rutas } from '../App';
@@ -74,6 +75,7 @@ function api(
     'GET /agentes/estado': () => json(200, []),
     'GET /facturacion/perfil-fiscal': () => json(200, respuesta),
     'GET /facturacion/regimenes-fiscales': () => json(200, REGIMENES),
+    'GET /facturacion/portales': () => json(200, []),
     ...extra,
   });
 }
@@ -326,5 +328,89 @@ describe('roles', () => {
     const nav = await screen.findByRole('navigation', { name: 'Principal' });
     const enlace = await within(nav).findByRole('link', { name: 'Facturación' });
     expect(new URL(enlace.getAttribute('href')!, 'http://x').pathname).toBe('/facturacion');
+  });
+});
+
+describe('portal de autofactura (F2-103)', () => {
+  const SIN_PORTAL: SucursalPortal = {
+    sucursalId: SUCURSAL_A1.id,
+    sucursal: 'Sucursal Centro',
+    sucursalActiva: true,
+    portal: null,
+  };
+  const CON_PORTAL: SucursalPortal = {
+    ...SIN_PORTAL,
+    portal: {
+      slug: 'demo-centro',
+      color: '#0f766e',
+      activo: true,
+      tieneLogo: false,
+      actualizadoAt: '2026-09-22T18:00:00.000Z',
+    },
+  };
+
+  it('sin portal: sugiere el enlace por el nombre y lo crea con PUT', async () => {
+    const user = userEvent.setup();
+    const falsa = api(usuario('admin_empresa'), undefined, {
+      'GET /facturacion/portales': () => json(200, [SIN_PORTAL]),
+      [`PUT /facturacion/portales/${SUCURSAL_A1.id}`]: () => json(200, CON_PORTAL),
+    });
+    montar();
+    const form = await screen.findByRole('form', { name: 'Portal de Sucursal Centro' });
+    expect(form).toHaveTextContent('Sin portal todavía');
+    expect(within(form).getByLabelText('Enlace')).toHaveValue('centro');
+    await user.clear(within(form).getByLabelText('Enlace'));
+    await user.type(within(form).getByLabelText('Enlace'), 'demo-centro');
+    await user.click(within(form).getByRole('button', { name: 'Crear portal' }));
+    const nuevo = await screen.findByRole('form', { name: 'Portal de Sucursal Centro' });
+    await waitFor(() =>
+      expect(within(nuevo).getByRole('link', { name: 'Abrir /f/demo-centro' })).toHaveAttribute(
+        'href',
+        '/f/demo-centro',
+      ),
+    );
+    const put = falsa.llamadas.find((l) => l.metodo === 'PUT');
+    expect(put?.cuerpo).toEqual({ slug: 'demo-centro', color: '#0f766e', activo: true });
+    expect(
+      falsa.llamadas.find((l) => l.ruta === '/facturacion/portales')?.query.get('empresaId'),
+    ).toBe(A);
+  });
+
+  it('un enlace inválido se marca sin ir al api; el 409 del api se muestra tal cual', async () => {
+    const user = userEvent.setup();
+    const falsa = api(usuario('admin_empresa'), undefined, {
+      'GET /facturacion/portales': () => json(200, [CON_PORTAL]),
+      [`PUT /facturacion/portales/${SUCURSAL_A1.id}`]: () =>
+        json(409, { statusCode: 409, message: 'Ese enlace ya lo usa otro portal.' }),
+    });
+    montar();
+    const form = await screen.findByRole('form', { name: 'Portal de Sucursal Centro' });
+    const enlace = within(form).getByLabelText('Enlace');
+    await user.clear(enlace);
+    await user.type(enlace, 'ab');
+    await user.click(within(form).getByRole('button', { name: 'Guardar' }));
+    expect(enlace).toHaveAttribute('aria-invalid', 'true');
+    expect(enlace).toHaveAccessibleDescription(/De 3 a 40 caracteres/);
+    expect(falsa.contar('PUT', `/facturacion/portales/${SUCURSAL_A1.id}`)).toBe(0);
+
+    await user.type(enlace, 'c-ocupado');
+    await user.click(within(form).getByRole('button', { name: 'Guardar' }));
+    expect(await within(form).findByRole('alert')).toHaveTextContent(
+      'Ese enlace ya lo usa otro portal.',
+    );
+  });
+
+  it('el logo: un archivo de más de 200 KB se rechaza sin subirlo', async () => {
+    const user = userEvent.setup();
+    const falsa = api(usuario('admin_empresa'), undefined, {
+      'GET /facturacion/portales': () => json(200, [CON_PORTAL]),
+    });
+    montar();
+    const form = await screen.findByRole('form', { name: 'Portal de Sucursal Centro' });
+    expect(form).toHaveTextContent('Sin logo: el portal muestra las iniciales.');
+    const grande = new File([new Uint8Array(200 * 1024 + 1)], 'logo.png', { type: 'image/png' });
+    await user.upload(within(form).getByLabelText('Subir logo'), grande);
+    expect(await within(form).findByRole('alert')).toHaveTextContent('El logo pesa más de 200 KB.');
+    expect(falsa.contar('PUT', `/facturacion/portales/${SUCURSAL_A1.id}/logo`)).toBe(0);
   });
 });

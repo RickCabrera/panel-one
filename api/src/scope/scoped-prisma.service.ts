@@ -167,6 +167,70 @@ export type LecturaCodigoPublico = Prisma.CodigoFacturacionGetPayload<{
 }>;
 
 /**
+ * Lo que el portal de autofactura (F2-103) lee de un código: lo de la consulta pública más el
+ * desglose (subtotal, impuestos) y los ids que necesita la emisión (F2-104: el candado por código
+ * y el cheque). Los ids nunca salen al público; el servicio arma la respuesta con lista blanca.
+ */
+const SELECCION_CODIGO_PORTAL = {
+  id: true,
+  codigo: true,
+  estado: true,
+  expiraAt: true,
+  chequeId: true,
+  sucursalId: true,
+  cheque: {
+    select: {
+      abiertoAt: true,
+      cerradoAt: true,
+      subtotal: true,
+      impuestos: true,
+      total: true,
+      cancelado: true,
+    },
+  },
+  sucursal: {
+    select: {
+      nombre: true,
+      zonaHoraria: true,
+      activo: true,
+      empresa: { select: { activo: true } },
+    },
+  },
+} as const satisfies Prisma.CodigoFacturacionSelect;
+
+export type LecturaCodigoPortal = Prisma.CodigoFacturacionGetPayload<{
+  select: typeof SELECCION_CODIGO_PORTAL;
+}>;
+
+/**
+ * Un portal que se puede mostrar: el portal activo, y su sucursal y su empresa activas. El mismo
+ * filtro para la marca y para el logo: cualquiera de los tres dado de baja = no existe.
+ */
+function wherePortalVisible(slug: string): Prisma.PortalFacturacionWhereInput {
+  return { slug, activo: true, sucursal: { activo: true, empresa: { activo: true } } };
+}
+
+/** Lo que el portal público sabe de sí mismo (F2-103). Sin el logo: ése va por su ruta. */
+export interface LecturaPortalPublico {
+  slug: string;
+  color: string;
+  tieneLogo: boolean;
+  sucursal: string;
+  /**
+   * La empresa del portal, OPACA para el servicio: sólo sirve para pasarla a
+   * `codigoFacturacionDelPortal`, que la pone en el WHERE. No hay otra consulta que la acepte.
+   */
+  empresaId: string;
+}
+
+function exigirTexto(nombre: string, valor: unknown): string {
+  if (typeof valor !== 'string' || valor.length === 0) {
+    throw new Error(`Consulta del portal de autofactura: ${nombre} vacío o ausente.`);
+  }
+  return valor;
+}
+
+/**
  * EL helper obligatorio de scope multiempresa. Todo servicio de datos de
  * negocio lee a través de `para(scope)`; importar `PrismaService` directamente
  * fuera de la allowlist de `eslint.config.mjs` rompe el lint.
@@ -335,6 +399,63 @@ export class ScopedPrismaService {
     return this.#prisma.codigoFacturacion.findFirst({
       where: { codigo },
       select: SELECCION_CODIGO_PUBLICO,
+    });
+  }
+
+  /**
+   * El portal público de una sucursal por su slug (F2-103), sin usuario ni tenant: el slug es una
+   * URL pública. Null si no existe o si el portal, su sucursal o su empresa están dados de baja.
+   */
+  async portalPublico(slug: string): Promise<LecturaPortalPublico | null> {
+    const fila = await this.#prisma.portalFacturacion.findFirst({
+      where: wherePortalVisible(exigirTexto('slug', slug)),
+      select: {
+        slug: true,
+        color: true,
+        logoTipo: true,
+        empresaId: true,
+        sucursal: { select: { nombre: true } },
+      },
+    });
+    if (!fila) return null;
+    return {
+      slug: fila.slug,
+      color: fila.color,
+      tieneLogo: fila.logoTipo !== null,
+      sucursal: fila.sucursal.nombre,
+      empresaId: fila.empresaId,
+    };
+  }
+
+  /** El logo del portal (F2-103), con el MISMO filtro de visibilidad que `portalPublico`. */
+  async logoPortal(slug: string): Promise<{ logo: Buffer; tipo: string } | null> {
+    const fila = await this.#prisma.portalFacturacion.findFirst({
+      where: wherePortalVisible(exigirTexto('slug', slug)),
+      select: { logo: true, logoTipo: true },
+    });
+    if (!fila || fila.logo === null || fila.logoTipo === null) return null;
+    return { logo: Buffer.from(fila.logo), tipo: fila.logoTipo };
+  }
+
+  /**
+   * Un código de facturación visto DESDE EL PORTAL de una empresa (F2-103): el `empresaId` va en
+   * el WHERE, así un código de otra empresa es "no existe" sin que el servicio tenga que acordarse
+   * de compararlo. El `empresaId` sale de `portalPublico`. Lista blanca `SELECCION_CODIGO_PORTAL`.
+   *
+   * DECISION PROVISIONAL (nocturno): el portal de una sucursal acepta los códigos de CUALQUIER
+   * sucursal de su empresa (un emisor por empresa, F2-100), nunca los de otra empresa. La opción
+   * más estricta (sólo los de su sucursal) es decisión abierta (docs/esquema-sr.md §2).
+   */
+  codigoFacturacionDelPortal(
+    codigo: string,
+    empresaId: string,
+  ): Promise<LecturaCodigoPortal | null> {
+    return this.#prisma.codigoFacturacion.findFirst({
+      where: {
+        codigo: exigirTexto('codigo', codigo),
+        empresaId: exigirTexto('empresaId', empresaId),
+      },
+      select: SELECCION_CODIGO_PORTAL,
     });
   }
 

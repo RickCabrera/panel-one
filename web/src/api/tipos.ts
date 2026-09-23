@@ -278,6 +278,19 @@ export interface Ticket {
   /** En el orden del POS. */
   partidas: PartidaTicket[];
   pagos: PagoTicket[];
+  /** F2-103: el código de facturación de la cuenta; null = no tiene (no facturable). */
+  codigoFacturacion: CodigoFacturacionTicket | null;
+}
+
+/** Estado PÚBLICO de un código de facturación (F2-101/F2-103). */
+export type EstadoCodigoFacturacion =
+  'pendiente' | 'facturado' | 'en_global' | 'expirado' | 'cancelado';
+
+/** `CodigoFacturacionTicketDto` (F2-103). */
+export interface CodigoFacturacionTicket {
+  codigo: string;
+  estado: EstadoCodigoFacturacion;
+  mensaje: string;
 }
 
 /** `PaginaTicketsDto`. */
@@ -1573,4 +1586,85 @@ export interface RegimenFiscal {
   descripcion: string;
   fisica: boolean;
   moral: boolean;
+}
+
+// --- F2-103: portal público de autofactura -------------------------------------------
+
+/** `PortalPublicoDto`. */
+export interface PortalPublico {
+  slug: string;
+  sucursal: string;
+  color: string;
+  /** Ruta del logo en el api (relativa a su base); null = sin logo. */
+  logoUrl: string | null;
+  /** En F2-103 siempre false: la emisión es F2-104. */
+  emisionDisponible: boolean;
+}
+
+/** `ConsultaCodigoPortalDto`. `ticket` sólo con `pendiente`. */
+export interface ConsultaCodigoPortal {
+  codigo: string;
+  estado: EstadoCodigoFacturacion;
+  mensaje: string;
+  ticket: TicketPortal | null;
+}
+
+export interface TicketPortal {
+  sucursal: string;
+  /** UTC. */
+  fecha: string;
+  zonaHoraria: string;
+  total: Importe;
+  /** UTC, exclusivo. */
+  expiraAt: string;
+  /** Null = subtotal + impuestos no suman el total: se muestra sólo el total. */
+  desglose: { subtotal: Importe; impuestos: Importe } | null;
+}
+
+/** `UsoCfdiDto`. */
+export interface UsoCfdi {
+  clave: string;
+  descripcion: string;
+  fisica: boolean;
+  moral: boolean;
+  regimenes: string[];
+}
+
+/** `CatalogosSatDto`. */
+export interface CatalogosSat {
+  regimenesFiscales: RegimenFiscal[];
+  usosCfdi: UsoCfdi[];
+}
+
+/** Lo que se captura del receptor (`ReceptorPortalDto`). */
+export interface ReceptorPortal {
+  rfc: string;
+  razonSocial: string;
+  regimenFiscal: string;
+  cp: string;
+  usoCfdi: string;
+  email: string;
+}
+
+/** `FacturaPortalDto` (contrato fijo; hoy ningún camino del api lo produce: F2-104). */
+export interface FacturaPortal {
+  uuid: string;
+  serieFolio: string;
+  total: Importe;
+  email: string;
+  descargas: { xml: string | null; pdf: string | null };
+}
+
+/** `SucursalPortalDto` (administración). */
+export interface SucursalPortal {
+  sucursalId: string;
+  sucursal: string;
+  sucursalActiva: boolean;
+  portal: {
+    slug: string;
+    color: string;
+    activo: boolean;
+    tieneLogo: boolean;
+    actualizadoAt: string;
+  } | null;
 }

@@ -7,6 +7,8 @@ export class ErrorApi extends Error {
   constructor(
     readonly status: number,
     mensaje: string,
+    /** El cuerpo JSON del error, tal cual (F2-103: los `campos` del portal). */
+    readonly cuerpo?: unknown,
   ) {
     super(mensaje);
     this.name = 'ErrorApi';
@@ -55,14 +57,15 @@ async function enviar(
 
 async function errorDe(respuesta: Response): Promise<ErrorApi> {
   let mensaje = `Error ${respuesta.status}`;
+  let cuerpo: Partial<ErrorCuerpo> | undefined;
   try {
-    const cuerpo = (await respuesta.json()) as Partial<ErrorCuerpo>;
+    cuerpo = (await respuesta.json()) as Partial<ErrorCuerpo>;
     if (Array.isArray(cuerpo.message)) mensaje = cuerpo.message.join('. ');
     else if (typeof cuerpo.message === 'string') mensaje = cuerpo.message;
   } catch {
     // Cuerpo que no es JSON: se queda el mensaje genérico.
   }
-  return new ErrorApi(respuesta.status, mensaje);
+  return new ErrorApi(respuesta.status, mensaje, cuerpo);
 }
 
 /**

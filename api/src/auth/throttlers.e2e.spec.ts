@@ -11,6 +11,7 @@ import { UsuariosAdminController } from '../administracion/administracion.contro
 import { AgenteController } from '../agentes/agente.controller';
 import { AppModule } from '../app.module';
 import { CodigoFacturacionPublicoController } from '../facturacion/codigos.controller';
+import { PortalPublicoController } from '../facturacion/portal.controller';
 import { IngestaController } from '../ingesta/ingesta.controller';
 import { BajaReportesController } from '../reportes/reportes.controller';
 import { configurarApp } from '../configurar-app';
@@ -192,6 +193,32 @@ describe('Cada ruta con ThrottlerGuard aplica exactamente sus cubos', () => {
       ['codigo-facturacion'],
     ],
     ['POST /reportes/baja', BajaReportesController.prototype.baja, ['baja-reportes']],
+    // F2-103: el portal público. La consulta del código comparte el cubo de F2-101 (por ruta).
+    [
+      'GET /facturacion/catalogos-sat',
+      PortalPublicoController.prototype.catalogos,
+      ['portal-facturacion'],
+    ],
+    [
+      'GET /facturacion/portal/:slug',
+      PortalPublicoController.prototype.marca,
+      ['portal-facturacion'],
+    ],
+    [
+      'GET /facturacion/portal/:slug/logo',
+      PortalPublicoController.prototype.logo,
+      ['portal-facturacion'],
+    ],
+    [
+      'GET /facturacion/portal/:slug/codigo/:codigo',
+      PortalPublicoController.prototype.consultarCodigo,
+      ['codigo-facturacion'],
+    ],
+    [
+      'POST /facturacion/portal/:slug/facturas',
+      PortalPublicoController.prototype.solicitarFactura,
+      ['facturas-portal'],
+    ],
   ];
 
   it.each(RUTAS)('%s', (_ruta, metodo, propios) => {

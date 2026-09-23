@@ -15,6 +15,8 @@ export const THROTTLER_REFRESH = 'refresh';
 export const THROTTLER_RESET = 'reset';
 export const THROTTLER_BAJA = 'baja-reportes';
 export const THROTTLER_CODIGO = 'codigo-facturacion';
+export const THROTTLER_PORTAL = 'portal-facturacion';
+export const THROTTLER_FACTURAS_PORTAL = 'facturas-portal';
 
 /** `POST /auth/login` y `POST /cuenta/password`: 5 intentos por minuto por IP. */
 export const OPCIONES_THROTTLER_LOGIN: ThrottlerOptions = {
@@ -81,6 +83,26 @@ export const OPCIONES_THROTTLER_CODIGO: ThrottlerOptions = {
   limit: 10,
 };
 
+/**
+ * `GET /facturacion/portal/:slug` y su logo (F2-103): 60 por minuto por IP. Públicas, sin datos
+ * de nadie (nombre de la sucursal y su marca); el límite sólo corta a quien las martille.
+ */
+export const OPCIONES_THROTTLER_PORTAL: ThrottlerOptions = {
+  name: THROTTLER_PORTAL,
+  ttl: 60_000,
+  limit: 60,
+};
+
+/**
+ * `POST /facturacion/portal/:slug/facturas` (F2-103): 5 por minuto por IP. Pública y es la que
+ * (con F2-104) gasta un folio del PAC: una persona factura un ticket en un intento o dos.
+ */
+export const OPCIONES_THROTTLER_FACTURAS_PORTAL: ThrottlerOptions = {
+  name: THROTTLER_FACTURAS_PORTAL,
+  ttl: 60_000,
+  limit: 5,
+};
+
 /** Todos los throttlers registrados en `AuthModule`. Uno nuevo va aquí. */
 export const THROTTLERS = [
   THROTTLER_LOGIN,
@@ -89,6 +111,8 @@ export const THROTTLERS = [
   THROTTLER_RESET,
   THROTTLER_BAJA,
   THROTTLER_CODIGO,
+  THROTTLER_PORTAL,
+  THROTTLER_FACTURAS_PORTAL,
   THROTTLER_AGENTE,
 ] as const;
 export type NombreThrottler = (typeof THROTTLERS)[number];

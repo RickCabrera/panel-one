@@ -124,6 +124,9 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // F2-100: datos fiscales; se escriben por `facturacion(scope)`, no por aquí.
       'perfilFiscal',
       'polizaInventario',
+      // F2-103: el portal de autofactura; se escribe por `facturacion(scope)` y lo público va por
+      // `portalPublico`/`logoPortal`, no por aquí.
+      'portalFacturacion',
       'producto',
       'productoMetadata',
       'proveedorCatalogo',

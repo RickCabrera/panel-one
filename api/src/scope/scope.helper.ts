@@ -87,6 +87,8 @@ export const LLAVE_EMPRESA = {
   // F2-101: códigos cortos de facturación y la regla de vigencia (dato propio).
   CodigoFacturacion: 'empresaId',
   ConfiguracionFacturacion: 'empresaId',
+  // F2-103: el portal público de autofactura de cada sucursal (slug y marca, dato propio).
+  PortalFacturacion: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

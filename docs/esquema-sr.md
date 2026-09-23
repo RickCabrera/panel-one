@@ -351,6 +351,28 @@ savepoint. Lo que eso supone de esta sección, nada visto en una instalación re
   reciben código si el agente los vuelve a mandar. Hoy no hay piloto, así que no hay tales cheques
   fuera del seed (que sí los siembra).
 
+**El portal público de autofactura (F2-103, tabla `portales_facturacion`).** Dato NUESTRO, nunca se
+escribe a SR: el enlace `/f/:slug`, el color y el logo de cada sucursal. Lo que el portal lee del
+cheque, y lo que eso supone de esta sección (nada visto en una instalación real, F2-190):
+
+- ⚠️ **SUPUESTO — NO VALIDADO (`DECISION PROVISIONAL (nocturno)` en
+  `api/src/facturacion/portal.service.ts#desgloseDe`): el portal muestra `subtotal` e `impuestos`
+  del cheque SÓLO si suman exactamente su `total`.** No se sabe si `subtotal` es antes o después del
+  descuento ni si `total` lleva la propina (ver el supuesto de `subtotal` arriba). Si no cuadran, se
+  muestra sólo el total, que es lo que el cliente pagó. `impuestos` se rotula "Impuestos", no "IVA":
+  no se sabe si SR mete ahí también el IEPS. **El desglose del CFDI NO sale de aquí**: lo calcula la
+  emisión (F2-104) con su propia regla.
+- ⚠️ **DECISIÓN ABIERTA (`DECISION PROVISIONAL (nocturno)` en
+  `ScopedPrismaService.codigoFacturacionDelPortal`): el portal de una sucursal acepta los códigos de
+  CUALQUIER sucursal de su misma empresa** (un emisor por empresa, §8/F2-100), y nunca los de otra
+  empresa (mismo 404 que un código inexistente). La alternativa más estricta es "sólo los de su
+  sucursal". Ojo: el 404 no esconde que un código existe (la consulta global de F2-101 ya lo dice a
+  cualquiera); sólo evita que el portal de una empresa muestre tickets de otra. Para Ricardo.
+- **Estados que el portal explica** (`pendiente`, `facturado`, `en_global`, `expirado`,
+  `cancelado`): los mismos de F2-101, derivados igual. Un `facturado` NO afirma que se envió nada:
+  hoy no hay CFDI guardados ni correos (F2-104/F2-105), y ~15 % de los códigos del seed están
+  `facturado` sin ningún CFDI detrás.
+
 ---
 
 ## 3. Partidas de cuentas cerradas

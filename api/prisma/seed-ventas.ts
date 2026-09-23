@@ -31,7 +31,7 @@ import { sembrarConteos } from './seed-conteos';
 import { sembrarExistencias } from './seed-existencias';
 import { CODIGO_EJEMPLO, VIGENCIA_DEFAULT } from '../src/facturacion/codigo';
 import { generarCodigosSeed } from './seed-codigos';
-import { sembrarFacturacion } from './seed-facturacion';
+import { sembrarFacturacion, sembrarPortales } from './seed-facturacion';
 import { sembrarGastos } from './seed-gastos';
 import { sembrarMovimientos } from './seed-movimientos';
 import { sembrarRecetas } from './seed-recetas';
@@ -653,6 +653,16 @@ async function main(): Promise<void> {
       `Datos fiscales sembrados (F2-100): perfil ${facturacion.perfil}, ` +
         `${facturacion.receptores} receptores frecuentes.`,
     );
+    // Portales de autofactura (F2-103): enlace y color por sucursal; Centro con logo sintético.
+    const portales = await sembrarPortales(prisma, {
+      empresaId: op.empresaId,
+      portales: PORTALES_SEED,
+      ahora,
+    });
+    console.log(
+      `Portales de autofactura sembrados (F2-103): ${portales.sembrados}, ` +
+        `${portales.respetados} respetados (editados en el panel). Abre /f/demo-centro.`,
+    );
     // El resto del universo todavía no tiene tabla: se genera (y se valida en los
     // specs) para que la tarea que la cree lo persista desde aquí.
     console.log('Seed maestro (generado; lo persiste la tarea que crea cada tabla):');
@@ -663,6 +673,12 @@ async function main(): Promise<void> {
     await prisma.$disconnect();
   }
 }
+
+/** Los portales de las sucursales demo (F2-103). */
+export const PORTALES_SEED = [
+  { sucursalId: SEED_IDS.sucursalCentro, slug: 'demo-centro', color: '#0f766e', conLogo: true },
+  { sucursalId: SEED_IDS.sucursalNorte, slug: 'demo-norte', color: '#9333ea', conLogo: false },
+] as const;
 
 if (require.main === module) {
   main().catch((err: unknown) => {
