@@ -11,6 +11,7 @@ import { EscrituraCatalogos, IngestaCatalogos } from './escritura-catalogos';
 import { EscrituraConteos } from './escritura-conteos';
 import { EscrituraExistencias, IngestaExistencias } from './escritura-existencias';
 import { IngestaCompras } from './escritura-compras';
+import { EscrituraFacturacion } from './escritura-facturacion';
 import { EscrituraGastos } from './escritura-gastos';
 import { IngestaMovimientos } from './escritura-movimientos';
 import { IngestaRecetas } from './escritura-recetas';
@@ -272,6 +273,14 @@ export class ScopedPrismaService {
    */
   gastos(scope: EmpresaScope): EscrituraGastos {
     return new EscrituraGastos(this.#prisma, scope);
+  }
+
+  /**
+   * Perfil fiscal, metadata del CSD y receptores frecuentes (F2-100), con el scope del usuario. Es
+   * dato NUESTRO: nunca se escribe a SoftRestaurant. Del CSD sólo pasa metadata.
+   */
+  facturacion(scope: EmpresaScope): EscrituraFacturacion {
+    return new EscrituraFacturacion(this.#prisma, scope);
   }
 
   /**

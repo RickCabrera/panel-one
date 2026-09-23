@@ -8,7 +8,7 @@
  * snapshot ni log las vea.
  */
 export interface PeticionHttp {
-  metodo: 'GET' | 'POST' | 'DELETE';
+  metodo: 'GET' | 'POST' | 'PUT' | 'DELETE';
   /** URL completa, con query string si lleva. */
   url: string;
   /** Cuerpo JSON. Ausente en GET/DELETE. */

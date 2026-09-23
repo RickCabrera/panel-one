@@ -842,7 +842,21 @@ motivo de rechazo ni en el log.
   `id` (uuid) del espejo, nunca el nombre.
 - ❓ **DECISIÓN ABIERTA PARA RICARDO: ¿el `visor` debe ver teléfono, correo y RFC en la ficha?**
   Hoy sí (igual que `GET /catalogos/clientes` desde F2-230). No se endureció sin decisión.
-- El enlace con `ReceptorFrecuente` (por RFC) queda para F2-100, que crea ese modelo.
+- **Enlace con `ReceptorFrecuente` (F2-100).** La ficha muestra el receptor de facturación de la
+  MISMA empresa cuyo RFC coincide con el del cliente. ⚠️ **SUPUESTO NO VALIDADO (F2-192): el RFC del
+  cliente en SR viene "tal cual" lo capturó el cajero** (minúsculas, espacios alrededor); por eso se
+  compara NORMALIZADO (trim + mayúsculas), y el receptor se guarda ya normalizado. No se quitan
+  guiones ni espacios intermedios: un RFC capturado como `EKU-900317-3C9` no liga (lado seguro: no
+  inventar un enlace). Los RFC genéricos (`XAXX010101000` público en general, `XEXX010101000`
+  extranjero) nunca ligan ni se guardan como receptor frecuente. El contrato de ingesta de clientes
+  tiene tope de 13 caracteres en `rfc`: un RFC con espacios de relleno que pase de 13 se rechaza en la
+  ingesta (comportamiento de F2-230, no cambia aquí). Nada de esto lee ni escribe a SR: los
+  receptores son dato NUESTRO (los alimentará el portal, F2-103).
+- **Registro de las `DECISION PROVISIONAL (nocturno)` de F2-100** (no son de SR, pero F2-250 las
+  busca aquí): **un emisor por empresa** (`perfiles_fiscales.empresa_id` único,
+  `api/prisma/schema.prisma`). Los supuestos del SAT sobre el CSD (`.key` PKCS#8 cifrado, RFC en
+  `x500UniqueIdentifier`, número de certificado en el serial) están en la cabecera de
+  `api/src/facturacion/csd.ts` y se validan en F2-190.
 
 ---
 

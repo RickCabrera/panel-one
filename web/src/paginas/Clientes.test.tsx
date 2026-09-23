@@ -130,6 +130,7 @@ const FICHA: FichaCliente = {
     activoPos: null,
     vistoAt: '2026-09-01T10:00:00.000Z',
   },
+  receptor: null,
   periodo: {
     visitas: 3,
     venta: '183.34',
@@ -285,6 +286,53 @@ describe('Clientes (F2-232)', () => {
     expect(destino.searchParams.get('periodo')).toBe('mes-anterior');
     // Ningún dato personal en el enlace.
     expect(destino.search).not.toMatch(/Ana|555|ejemplo/);
+  });
+
+  it('F2-100: sin RFC no hay bloque de facturación; con RFC, el receptor o "sin datos"', async () => {
+    api();
+    montar(RUTA);
+    const [ana] = await filas();
+    await userEvent.click(within(ana).getByRole('button', { name: 'Ana Cliente' }));
+    await screen.findByTestId('ficha-cliente');
+    expect(screen.queryByTestId('ficha-cliente-receptor')).toBeNull();
+    cleanup();
+
+    const conRfc = (receptor: FichaCliente['receptor']): FichaCliente => ({
+      ...FICHA,
+      cliente: { ...FICHA.cliente, rfc: 'EKU9003173C9' },
+      receptor,
+    });
+    api(CON_CLIENTES, {
+      [`GET /catalogos/clientes/${ID_ANA}/ficha`]: () => json(200, conRfc(null)),
+    });
+    montar(RUTA);
+    await userEvent.click(within((await filas())[0]).getByRole('button', { name: 'Ana Cliente' }));
+    expect(await screen.findByTestId('ficha-cliente-receptor')).toHaveTextContent(
+      'Sin datos de facturación guardados para este RFC.',
+    );
+    cleanup();
+
+    api(CON_CLIENTES, {
+      [`GET /catalogos/clientes/${ID_ANA}/ficha`]: () =>
+        json(
+          200,
+          conRfc({
+            rfc: 'EKU9003173C9',
+            razonSocial: 'ESCUELA KEMPER URGATE',
+            regimenFiscal: '601',
+            cp: '42501',
+            usoCfdi: 'G03',
+            email: null,
+          }),
+        ),
+    });
+    montar(RUTA);
+    await userEvent.click(within((await filas())[0]).getByRole('button', { name: 'Ana Cliente' }));
+    const bloque = await screen.findByTestId('ficha-cliente-receptor');
+    expect(bloque).toHaveTextContent('ESCUELA KEMPER URGATE');
+    expect(bloque).toHaveTextContent('601 · 42501');
+    expect(bloque).toHaveTextContent('G03');
+    expect(bloque).toHaveTextContent('Sin correo guardado');
   });
 
   it('Tickets recibe el cliente de la URL: lo manda a la API y lo muestra como filtro sin el nombre', async () => {

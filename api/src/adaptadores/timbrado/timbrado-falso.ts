@@ -9,12 +9,14 @@ import {
   ErrorTimbrado,
   type CfdiTimbrado,
   type CodigoErrorTimbrado,
+  type CsdRegistrado,
   type EstadoCfdi,
   type PuertoTimbrado,
   type ReferenciaCfdi,
   type ResultadoCancelacion,
   type SolicitudCancelacion,
   type SolicitudCfdi,
+  type SolicitudCsd,
 } from './puerto';
 
 /**
@@ -50,6 +52,14 @@ export const RFC_CON_ERROR: Readonly<
     reintentable: true,
   },
 };
+
+/**
+ * RFC de EMISOR reservado (F2-100): el PAC falso rechaza su CSD, para probar que un rechazo del
+ * PAC no guarda nada. Formato de persona FÍSICA válido (4 letras); no es de nadie.
+ */
+export const RFC_EMISOR_CSD_RECHAZADO = 'XFAL010101CSD';
+export const MENSAJE_CSD_RECHAZADO =
+  'El PAC rechazó el CSD: no corresponde a un certificado vigente del SAT para ese RFC.';
 
 /** UUID v4 bien formado (versión 4, variante RFC 4122) derivado de `semilla`: determinista. */
 export function uuidDeterminista(semilla: string): string {
@@ -191,6 +201,19 @@ export class TimbradoFalso implements PuertoTimbrado {
   private readonly estados = new Map<string, EstadoCfdi>();
 
   constructor(private readonly reloj: Pick<Reloj, 'ahora'>) {}
+
+  /**
+   * Alta del CSD (F2-100). El falso NO guarda nada del CSD (ni en memoria): contesta con el RFC
+   * como id del emisor, que es como identifica al emisor el multiemisor de Facturama. La
+   * validación de la llave, la contraseña y la vigencia la hace el servicio ANTES de llamar aquí
+   * (`facturacion/csd.ts`), así que vale igual con el PAC real.
+   */
+  registrarCsd(solicitud: SolicitudCsd): Promise<CsdRegistrado> {
+    if (solicitud.rfc === RFC_EMISOR_CSD_RECHAZADO) {
+      return Promise.reject(new ErrorTimbrado('CSD_RECHAZADO', MENSAJE_CSD_RECHAZADO));
+    }
+    return Promise.resolve({ idOrganizacion: solicitud.rfc });
+  }
 
   emitir(solicitud: SolicitudCfdi): Promise<CfdiTimbrado> {
     const error = RFC_CON_ERROR[solicitud.receptor.rfc];

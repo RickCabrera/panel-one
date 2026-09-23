@@ -6209,3 +6209,121 @@ esquema-sr y no commitear `.wt-main/`; las tres primeras se aplicaron antes del 
 
 **Qué haría distinto.** Mirar la varianza del seed ANTES de fijar el criterio del AC: el problema de
 "no hay insumo estable" se veía en cinco minutos con un volcado del universo.
+
+## 2026-09-22 20:45 — F2-100 · Datos fiscales y CSD por empresa
+**Estado:** CERRADA si el PR se mergea. **PENDIENTE DE VALIDACIÓN REAL**: ver F2-190 (su "Y además
+(de F2-100)"). Carriles /api + /web (+ docs). Revisor: gate del plan APROBADO en el 1.er pase con 4
+obligatorias (incorporadas); gate del entregable BLOQUEADO 1 vez (control del buscador de secretos
+contaba el perfil del seed, ver Trampas) y re-aprobado tras corregirlo (ver abajo el resultado).
+
+**Qué quedó hecho.**
+- **api**: tablas `perfiles_fiscales` (una por empresa, con metadata del CSD: número, RFC,
+  vigencia, quién/cuándo) y `receptores_frecuentes` (por empresa, RFC normalizado), migración
+  `20260923021415_perfil_fiscal`. Módulo `src/facturacion/`: `GET/PUT /facturacion/perfil-fiscal`,
+  `POST /facturacion/perfil-fiscal/csd`, `GET /facturacion/regimenes-fiscales` (catálogo SAT con
+  moral/física, `sat.ts`). Escrituras por `ScopedPrismaService.facturacion(scope)` →
+  `scope/escritura-facturacion.ts`. `PuertoTimbrado.registrarCsd` nuevo (falso + Facturama con su
+  snapshot de contrato). Validación LOCAL del CSD en `facturacion/csd.ts` (node:crypto, sin
+  dependencias). Ficha de Clientes con `receptor` (el "Y además (de F2-232)"). OpenAPI regenerado.
+- **Orden de la carga del CSD** (no lo cambies sin pensar): empresa en alcance (404, SIEMPRE antes
+  que el 409) → hay perfil (409) → validación local (400) → PAC (400/503) → SÓLO ENTONCES metadata.
+  Si algo falla, la fila queda idéntica (el e2e compara la fila completa en cada caso).
+- **Seed** (`prisma/seed-facturacion.ts`, llamado desde `seed-ventas.ts`): perfil de la empresa demo
+  (RFC de pruebas del SAT `EKU9003173C9`) con metadata de CSD **SINTÉTICA** — no hay .cer, .key ni
+  emisor registrado detrás; `facturama_org_id` = RFC, como lo dejaría el PAC falso — que vence 20
+  días después del "hoy" del seed (para ver la alerta). Dos receptores frecuentes que ligan con los
+  clientes C001 y C002 del seed; C003 (`IIA040805DZ4`) queda sin receptor a propósito. El seed no
+  pisa un perfil con otro RFC ni un CSD que haya cargado una persona (`csd_cargado_por` no nulo).
+- **web** `/facturacion` (sólo admins; la entrada "Facturación" del menú ya navega): datos fiscales
+  con validación campo por campo, régimen filtrado por tipo de persona, aviso al cambiar el RFC con
+  CSD cargado ("Guardar y quitar el CSD"), tarjeta del CSD con vigencia y alerta (< 30 días ámbar,
+  vencido rojo) CALCULADA EN LA VISTA (`facturacion/reglas.ts#estadoVigencia`), carga del .cer/.key
+  en base64 y contraseña que se borra del formulario al terminar, salga bien o mal. Aviso "PAC
+  simulado" cuando el api corre con `PAC_IMPL=falso` (`pacSimulado` en la respuesta). Ficha de
+  Clientes con bloque "Datos de facturación".
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)`: **un emisor por empresa** (`perfiles_fiscales.empresa_id`
+  único, `api/prisma/schema.prisma`). Registrada en esquema-sr §8 y en F2-190.
+- **Sin CFDI de prueba al guardar** (AC original). Contra el falso no valida nada, y en producción
+  gastaría un folio real. ❓ Decisión abierta para Ricardo, en F2-190.
+- **Cambiar el RFC con CSD cargado VACÍA la metadata del CSD y `facturama_org_id`** (era de otro
+  RFC). Alternativa descartada: rechazar el cambio (deja un callejón: no puedes cambiar el RFC por
+  el CSD y no puedes subir el CSD nuevo por el RFC).
+- `reemplazar` (PUT en Facturama) = ya había `facturama_org_id`. Supuesto no validado (F2-190).
+- `idOrganizacion` = RFC en los dos adaptadores (multiemisor identifica por RFC; supuesto).
+- `errorCsdDe` (Facturama) LIMPIA el mensaje del PAC: quita la contraseña, el base64 de los dos
+  archivos y cualquier tira ≥ 24 chars con pinta de base64 (obligatoria 1 del revisor: ASP.NET suele
+  repetir el valor recibido en sus errores).
+- Contraseña incorrecta: si la ESTRUCTURA del .key (EncryptedPrivateKeyInfo) es válida, cualquier
+  fallo al descifrar = contraseña incorrecta (OpenSSL no da un código estable). Un PKCS#8 SIN
+  cifrar se rechaza como "no es un .key del SAT".
+- Supuestos del SAT (formato del .key, RFC en `x500UniqueIdentifier` antes de " / ", número de
+  certificado = serial en ASCII, no se distingue CSD de e.firma): cabecera de `csd.ts`, F2-190.
+- Enlace receptor ↔ cliente: RFC normalizado (trim + mayúsculas), MISMA empresa, genéricos
+  (`XAXX…`, `XEXX…`) nunca ligan ni se guardan. Guiones o espacios intermedios NO se quitan (lado
+  seguro). Supuesto en esquema-sr §8. El receptor se muestra a quien ve la ficha (la decisión
+  abierta de esquema-sr §8 sobre el visor aplica igual).
+- `GET /facturacion/regimenes-fiscales` sin `@Roles`: catálogo público del SAT. Lo demás, sólo
+  admins (visor = 403 por rol, antes de mirar la empresa).
+
+**Trampas que encontré.** (LEE ESTO si tocas los tests de facturación)
+- **Node no CREA certificados X.509.** `test/fixtures-csd.ts` trae un codificador DER mínimo que
+  arma un CSD sintético en memoria (UTCTime < 2050, GeneralizedTime después; llave cifrada con
+  `des-ede3-cbc` como las del SAT). Ningún .cer ni .key vive en el repo. `csdSintetico({ llaves })`
+  reutiliza un par RSA (generarlo cuesta ~100 ms).
+- **El bloqueo del revisor:** el control positivo del test de secretos (e2e, "AC: el .key y su
+  contraseña NUNCA tocan…") contaba en TODA `perfiles_fiscales` el número de certificado, que era el
+  mismo del seed → 2 en vez de 1 con la base de dev sembrada. Ahora el e2e usa su propio número
+  (`30001000000500002100`) y el control va acotado a la empresa A. No lo aflojes a `>= 1`.
+- **No corras dos suites de jest a la vez contra la misma base**: comparten las fixtures de F1-011
+  (`limpiarFixtures`) y la segunda revienta con FK violadas al borrar sucursales. Me pasó por dejar la
+  suite completa en segundo plano mientras corría el e2e suelto.
+- **`npx jest <rutas>` SIN `--runInBand` corre suites en paralelo** contra la misma base y da
+  rojos falsos (FK al limpiar fixtures) en `scoped-prisma`, `consulta-ventas` y este e2e. Usa
+  `npx jest --runInBand …` o `npm test` (que ya lo trae).
+- El RFC del contrato de ingesta de clientes tiene tope de 13 chars: un RFC "con espacios" de más
+  se rechaza en la ingesta (por eso el e2e usa `'eku9003173c9 '`, 13 chars).
+- `XFAL010101CSD` (RFC reservado del falso para "el PAC rechaza el CSD") es de persona FÍSICA
+  (4 letras): su perfil necesita un régimen de física (612).
+- El 404 del helper de scope trae `{ statusCode, message: 'Recurso no encontrado', error }`, no el
+  404 por defecto de Nest.
+- En el web, las etiquetas que envuelven también la ayuda rompen `getByLabelText`: se usa
+  `<label htmlFor>` + `aria-describedby`. Y en los tests, el primer POST registrado es
+  `/auth/refresh`: filtra por ruta.
+- Heredocs de bash con `'''` o `${...}` dentro de un script Python se rompen: escribe el script con
+  Write y córrelo con `python archivo.py`.
+- `.wt-main/` sigue sin rastrear en la raíz. ACCIÓN PARA RICARDO: borrarla. Nunca `git add -A`.
+
+**Qué quedó abierto.**
+- F2-190 ("Y además (de F2-100)"): rutas/cuerpo del alta de CSD en Facturama, supuestos del SAT con
+  un CSD real, CFDI de prueba (decisión de Ricardo), un emisor por empresa, y el **CSD huérfano**
+  (el PAC registra y luego `guardarCsd` da 409 por un cambio de RFC a media carga).
+- Captura/edición de receptores frecuentes en la web: la hará el portal (F2-103), que ya tiene su
+  escritor (`guardarReceptor`).
+- La alerta de vigencia vive en la vista; una alerta PUSH/correo de vencimiento es de F2-110.
+- Sigue el rojo preexistente de `prisma/esquema.spec.ts` (argon2id: FK al borrar el usuario en la
+  base local de dev), igual que F2-120…F2-127.
+
+**Tests.**
+- api nuevos: `facturacion/csd.spec.ts` (16, puro: los 8 motivos de rechazo, metadata, PEM, >2049,
+  frontera de vencimiento), `facturacion/facturacion.e2e.spec.ts` (20: 404 idéntico en 3 rutas con
+  empresa ajena SIN perfil, 403 visor, 401, validaciones de perfil, 8 CSD inválidos con fila
+  idéntica, PAC rechaza, PAC 503, alta y reemplazo, cambio de RFC, test de secretos en todas las
+  tablas + log + stdout/stderr + respuestas, y 4 del receptor en la ficha), `prisma/
+  seed-facturacion.spec.ts` (3), contrato Facturama (+5: POST, PUT, error limpio, 503, 404), PAC
+  falso (+2), `openapi.spec` (+1 y rutas).
+- Mutaciones a mano: loguear `dto.contrasena` → rojo; guardar la contraseña en `facturama_org_id` →
+  rojo.
+- Adaptados, no aflojados: `scope.helper.spec`, `scoped-prisma.service.spec` (modelos nuevos),
+  `openapi.spec` (`receptor` en la ficha, rutas), web `menu.test` (Facturación navega),
+  `Clientes.test` (`receptor: null` en el fixture).
+- web nuevos: `facturacion/reglas.test.ts` (8), `Facturacion.test.tsx` (12), `Clientes.test` (+1).
+- Números: /api lint, typecheck y `prisma validate` limpios; migración aplicada; openapi
+  regenerado. Jest completo 1770/1771 (105 suites): el único rojo es el preexistente
+  `prisma/esquema.spec.ts` (argon2id: FK al borrar el usuario en la base local de dev), igual que
+  F2-120…F2-127 — NO es verde. /web build y lint limpios; vitest 1131/1131; check:bundle 297.3 kB
+  gzip. Seed real corrido en dev: "perfil creado, 2 receptores frecuentes".
+
+**Qué haría distinto.** Dar a cada e2e su propio número de certificado desde el principio: cualquier
+valor que el seed también escriba es una bomba para un "control positivo" que cuenta filas.

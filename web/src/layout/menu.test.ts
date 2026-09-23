@@ -125,7 +125,8 @@ describe('las seis secciones de la ficha', () => {
     expect(porId('inventario.traspasos').destino).toEqual({ ruta: '/traspasos' });
     expect(tarea('canales.ventas')).toBe('F2-144');
     expect(porId('canales.ventas').pendiente?.razon).toContain('F2-233');
-    expect(tarea('administracion.facturacion')).toBe('F2-100');
+    // F2-100 construyó los datos fiscales de Facturación: navega (sólo administradores).
+    expect(porId('administracion.facturacion').destino).toEqual({ ruta: '/facturacion' });
   });
 });
 

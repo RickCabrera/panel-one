@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CatalogosModule } from './catalogos/catalogos.module';
+import { FacturacionModule } from './facturacion/facturacion.module';
 import { FinanzasModule } from './finanzas/finanzas.module';
 import { InventarioModule } from './inventario/inventario.module';
 import { AuditoriaModule } from './comun/auditoria';
@@ -41,6 +42,7 @@ import { VentasModule } from './ventas/ventas.module';
     CatalogosModule,
     InventarioModule,
     FinanzasModule,
+    FacturacionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

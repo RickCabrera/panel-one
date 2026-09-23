@@ -4,12 +4,14 @@ import { fechaLocalCfdi, instanteDesdeLocal } from './cfdi-comun';
 import {
   ErrorTimbrado,
   type CfdiTimbrado,
+  type CsdRegistrado,
   type EstadoCfdi,
   type PuertoTimbrado,
   type ReferenciaCfdi,
   type ResultadoCancelacion,
   type SolicitudCancelacion,
   type SolicitudCfdi,
+  type SolicitudCsd,
 } from './puerto';
 
 /*
@@ -37,6 +39,61 @@ import {
  *   `emitir`: el PAC pudo haber timbrado. Quien reintente (F2-104/F2-109) consulta
  *   antes o usa una llave de idempotencia; reintentar a ciegas puede duplicar un CFDI.
  */
+
+/*
+ * Alta del CSD (F2-100). SUPUESTO NO VALIDADO (F2-190): `POST /api-lite/csds` da de alta el CSD
+ * de un RFC y `PUT /api-lite/csds/{rfc}` lo reemplaza, con el cuerpo `{ Rfc, Certificate,
+ * PrivateKey, PrivateKeyPassword }` (archivos en base64), y en multiemisor el emisor se identifica
+ * por su RFC (`idOrganizacion` = RFC). Sale de la documentación pública, no de una llamada real.
+ *
+ * La contraseña y la llave VIAJAN en este cuerpo (así lo pide la API): por eso esta petición no se
+ * loguea en ningún lado, y el error que vuelve se LIMPIA (`errorCsdDe`) antes de subir.
+ */
+export function peticionRegistrarCsd(base: string, s: SolicitudCsd): PeticionHttp {
+  return {
+    metodo: s.reemplazar ? 'PUT' : 'POST',
+    url: s.reemplazar
+      ? `${base}/api-lite/csds/${encodeURIComponent(s.rfc)}`
+      : `${base}/api-lite/csds`,
+    cuerpo: {
+      Rfc: s.rfc,
+      Certificate: s.certificado.toString('base64'),
+      PrivateKey: s.llavePrivada.toString('base64'),
+      PrivateKeyPassword: s.contrasena,
+    },
+  };
+}
+
+/** Lo que se tapa en un error del PAC: una tira larga que parezca base64 (un pedazo de archivo). */
+const TIRA_BASE64 = /[A-Za-z0-9+/=_-]{24,}/g;
+export const OMITIDO = '[omitido]';
+
+/**
+ * Un error del alta de CSD SIN secretos. Los errores de validación de ASP.NET suelen repetir el
+ * valor recibido ("The value 'xxx' is not valid for PrivateKeyPassword"): del texto del PAC se
+ * quitan la contraseña (cada vez que aparezca), el base64 del `.key` y del `.cer`, y cualquier tira
+ * larga con pinta de base64. Lo que queda puede ir al usuario.
+ */
+export function errorCsdDe(r: RespuestaHttp, s: SolicitudCsd): ErrorTimbrado {
+  const e = errorDe(r);
+  if (e.reintentable) return e;
+  if (r.status === 404) {
+    return new ErrorTimbrado(
+      'CSD_RECHAZADO',
+      'El PAC no tiene un CSD previo de ese RFC para reemplazar.',
+    );
+  }
+  let texto = e.message;
+  for (const secreto of [
+    s.contrasena,
+    s.llavePrivada.toString('base64'),
+    s.certificado.toString('base64'),
+  ]) {
+    if (secreto.length > 0) texto = texto.split(secreto).join(OMITIDO);
+  }
+  texto = texto.replace(TIRA_BASE64, OMITIDO);
+  return new ErrorTimbrado('CSD_RECHAZADO', `El PAC rechazó el CSD. ${texto}`.trim());
+}
 
 export function peticionEmitir(base: string, s: SolicitudCfdi): PeticionHttp {
   return {
@@ -169,6 +226,12 @@ export class TimbradoFacturama implements PuertoTimbrado {
         true,
       );
     }
+  }
+
+  async registrarCsd(solicitud: SolicitudCsd): Promise<CsdRegistrado> {
+    const r = await this.enviar(peticionRegistrarCsd(this.base, solicitud));
+    if (!ok(r)) throw errorCsdDe(r, solicitud);
+    return { idOrganizacion: solicitud.rfc };
   }
 
   async emitir(solicitud: SolicitudCfdi): Promise<CfdiTimbrado> {

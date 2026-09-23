@@ -204,3 +204,88 @@ describe('Contrato Facturama (F2-202)', () => {
     });
   });
 });
+
+describe('Contrato Facturama: alta del CSD (F2-100)', () => {
+  // Archivos y contraseña DUMMY: el snapshot fija la forma, no guarda ningún CSD.
+  const csd = (reemplazar: boolean) => ({
+    rfc: 'EKU9003173C9',
+    certificado: Buffer.from('cer-de-prueba'),
+    llavePrivada: Buffer.from('key-de-prueba'),
+    contrasena: 'contrasena-dummy',
+    reemplazar,
+  });
+
+  it('alta: POST /api-lite/csds con los archivos en base64', async () => {
+    const http = new ClienteQueCaptura(() => ({ status: 201, cuerpo: {} }));
+    await expect(
+      new TimbradoFacturama(BASE, http, RELOJ_FIJO).registrarCsd(csd(false)),
+    ).resolves.toEqual({ idOrganizacion: 'EKU9003173C9' });
+    expect(http.peticiones).toMatchSnapshot();
+  });
+
+  it('reemplazo: PUT /api-lite/csds/{rfc}', async () => {
+    const http = new ClienteQueCaptura(() => ({ status: 200, cuerpo: {} }));
+    await new TimbradoFacturama(BASE, http, RELOJ_FIJO).registrarCsd(csd(true));
+    expect(http.peticiones).toMatchSnapshot();
+  });
+
+  it('un error del PAC que repite la contraseña y la llave sale LIMPIO', async () => {
+    // Secretos largos y únicos: un LIKE/contains no coincide por casualidad.
+    const contrasena = 'Pw-3f9c1e7a-unica-F2-100-no-debe-salir';
+    const llave = Buffer.from(Array.from({ length: 300 }, (_, i) => (i * 37 + 11) % 256));
+    const cer = Buffer.from(Array.from({ length: 200 }, (_, i) => (i * 53 + 7) % 256));
+    const b64 = llave.toString('base64');
+    const http = new ClienteQueCaptura(() => ({
+      status: 400,
+      cuerpo: {
+        Message: `The value '${contrasena}' is not valid for PrivateKeyPassword.`,
+        ModelState: {
+          PrivateKey: [`Invalid key ${b64}`, `fragment ${b64.slice(100, 160)}`],
+          Certificate: [`bad ${cer.toString('base64')}`],
+          Rfc: [`Rfc ${contrasena} mismatch`],
+        },
+      },
+    }));
+    const error = await new TimbradoFacturama(BASE, http, RELOJ_FIJO)
+      .registrarCsd({
+        rfc: 'EKU9003173C9',
+        certificado: cer,
+        llavePrivada: llave,
+        contrasena,
+        reemplazar: false,
+      })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(error).toBeInstanceOf(ErrorTimbrado);
+    const e = error as ErrorTimbrado;
+    expect(e.codigo).toBe('CSD_RECHAZADO');
+    for (const secreto of [
+      contrasena,
+      b64,
+      b64.slice(100, 160),
+      b64.slice(0, 40),
+      cer.toString('base64').slice(0, 40),
+    ]) {
+      expect(e.message).not.toContain(secreto);
+    }
+    // El texto útil del PAC sí se conserva.
+    expect(e.message).toContain('is not valid for PrivateKeyPassword');
+    expect(e.message).toContain('[omitido]');
+  });
+
+  it('PAC caído en el alta: reintentable, sin copiar nada', async () => {
+    const http = new ClienteQueCaptura(() => ({ status: 503, cuerpo: 'x' }));
+    await expect(
+      new TimbradoFacturama(BASE, http, RELOJ_FIJO).registrarCsd(csd(false)),
+    ).rejects.toMatchObject({ codigo: 'PAC_NO_DISPONIBLE', reintentable: true });
+  });
+
+  it('reemplazar un CSD que el PAC no tiene: mensaje del CSD, no de "CFDI"', async () => {
+    const http = new ClienteQueCaptura(() => ({ status: 404, cuerpo: null }));
+    await expect(
+      new TimbradoFacturama(BASE, http, RELOJ_FIJO).registrarCsd(csd(true)),
+    ).rejects.toMatchObject({ codigo: 'CSD_RECHAZADO' });
+  });
+});

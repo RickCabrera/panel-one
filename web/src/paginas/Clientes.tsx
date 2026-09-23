@@ -404,6 +404,29 @@ function Ficha({
                 <dt className="text-tinta-suave">RFC</dt>
                 <dd>{c.rfc ?? 'El POS no lo tiene'}</dd>
               </dl>
+              {c.rfc !== null && (
+                <div className="mt-3" data-testid="ficha-cliente-receptor">
+                  <h4 className="text-xs font-medium text-tinta-suave">Datos de facturación</h4>
+                  {f.receptor ? (
+                    <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+                      <dt className="text-tinta-suave">Razón social</dt>
+                      <dd>{f.receptor.razonSocial}</dd>
+                      <dt className="text-tinta-suave">Régimen · CP</dt>
+                      <dd>
+                        {f.receptor.regimenFiscal} · {f.receptor.cp}
+                      </dd>
+                      <dt className="text-tinta-suave">Uso de CFDI</dt>
+                      <dd>{f.receptor.usoCfdi}</dd>
+                      <dt className="text-tinta-suave">Correo de facturas</dt>
+                      <dd>{f.receptor.email ?? 'Sin correo guardado'}</dd>
+                    </dl>
+                  ) : (
+                    <p className="mt-1 text-tinta-tenue">
+                      Sin datos de facturación guardados para este RFC.
+                    </p>
+                  )}
+                </div>
+              )}
               <dl
                 className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1"
                 data-testid="ficha-cliente-periodo"

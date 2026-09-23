@@ -23,7 +23,9 @@ export type AccionAuditada =
   | 'conteo.cancelar'
   | 'traspaso.enviar'
   | 'traspaso.recibir'
-  | 'traspaso.cancelar';
+  | 'traspaso.cancelar'
+  | 'perfil_fiscal.editar'
+  | 'perfil_fiscal.cargar_csd';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
@@ -37,7 +39,8 @@ export interface EventoAuditoria {
     | 'area'
     | 'existencia'
     | 'conteo'
-    | 'traspaso';
+    | 'traspaso'
+    | 'perfil_fiscal';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

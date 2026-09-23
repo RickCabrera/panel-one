@@ -775,6 +775,8 @@ export interface FichaCliente {
     activoPos: boolean | null;
     vistoAt: string;
   };
+  /** F2-100: `ReceptorClienteDto`, el receptor frecuente de la misma empresa con ese RFC. */
+  receptor: ReceptorCliente | null;
   periodo: CifrasCliente;
   productos: Array<{ producto: string; cantidad: string; importe: Importe; cuentas: number }>;
 }
@@ -1519,4 +1521,56 @@ export interface Proyecciones {
   sucursales: SucursalProyeccion[];
   filas: FilaProyeccion[];
   kpis: { filas: number; conSugerido: number; sinHistorial: number };
+}
+
+/** F2-100: `ReceptorClienteDto`. */
+export interface ReceptorCliente {
+  rfc: string;
+  razonSocial: string;
+  regimenFiscal: string;
+  cp: string;
+  usoCfdi: string;
+  email: string | null;
+}
+
+/** F2-100: `CsdDto`. Sólo METADATA: el .cer, el .key y la contraseña nunca vuelven. */
+export interface Csd {
+  noCertificado: string;
+  rfc: string;
+  vigenteDesde: string;
+  vigenteHasta: string;
+  cargadoAt: string;
+}
+
+/** F2-100: `PerfilFiscalDto`. */
+export interface PerfilFiscal {
+  rfc: string;
+  razonSocial: string;
+  regimenFiscal: string;
+  cp: string;
+  serie: string;
+  folioActual: number;
+  activo: boolean;
+  emisorRegistrado: boolean;
+  csd: Csd | null;
+  actualizadoAt: string;
+}
+
+/** F2-100: `RespuestaPerfilFiscalDto` (`GET /facturacion/perfil-fiscal` y la carga del CSD). */
+export interface RespuestaPerfilFiscal {
+  perfil: PerfilFiscal | null;
+  pacSimulado: boolean;
+}
+
+/** F2-100: `GuardarPerfilRespuestaDto` (`PUT /facturacion/perfil-fiscal`). */
+export interface GuardarPerfilRespuesta extends RespuestaPerfilFiscal {
+  csdQuitado: boolean;
+}
+
+/** F2-100: `RegimenFiscalDto` (`GET /facturacion/regimenes-fiscales`). */
+export interface RegimenFiscal {
+  clave: string;
+  descripcion: string;
+  fisica: boolean;
+  moral: boolean;
 }

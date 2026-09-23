@@ -3,6 +3,7 @@ import { Prisma, type CatalogoSr } from '@prisma/client';
 
 import { Reloj } from '../comun/reloj';
 import { Auditoria, type Actor } from '../comun/auditoria';
+import { normalizarRfc, RFC_GENERICOS } from '../facturacion/sat';
 import { CATALOGOS, solicitudPendiente } from '../ingesta/catalogos';
 import { verificarAlcance } from '../scope/alcance';
 import type { EmpresaScope } from '../scope/empresa-scope';
@@ -109,6 +110,15 @@ export interface FichaCliente {
     activoPos: boolean | null;
     vistoAt: string;
   };
+  /** F2-100: el receptor frecuente de la misma empresa con el mismo RFC normalizado, o null. */
+  receptor: {
+    rfc: string;
+    razonSocial: string;
+    regimenFiscal: string;
+    cp: string;
+    usoCfdi: string;
+    email: string | null;
+  } | null;
   periodo: CifrasCliente;
   productos: Array<{ producto: string; cantidad: string; importe: string; cuentas: number }>;
 }
@@ -832,6 +842,23 @@ export class CatalogosService {
     );
     const q = await this.agregados.consulta(scope, { ...filtro, sucursalId: c.sucursalId });
     const origen = c.origenSrId;
+    // F2-100: el RFC del POS se guarda "tal cual" (esquema-sr §8): se compara normalizado, y sólo
+    // contra receptores de ESTA empresa (el scope va en el WHERE; `empresaId` del filtro también).
+    const rfc = c.rfc === null ? '' : normalizarRfc(c.rfc);
+    const receptor =
+      rfc === '' || RFC_GENERICOS.includes(rfc)
+        ? null
+        : await datos.receptorFrecuente.findFirst({
+            where: { empresaId: filtro.empresaId, rfc },
+            select: {
+              rfc: true,
+              razonSocial: true,
+              regimenFiscal: true,
+              cp: true,
+              usoCfdi: true,
+              email: true,
+            },
+          });
     const [cifras, productos] = await Promise.all([
       this.cifrasClientes(q, origen),
       q.consultar<{ producto: string; cantidad: unknown; importe: unknown; cuentas: number }>(
@@ -861,6 +888,7 @@ export class CatalogosService {
         activoPos: c.activoPos,
         vistoAt: c.vistoAt.toISOString(),
       },
+      receptor: receptor ?? null,
       periodo: cifrasDe(cifras[0]),
       productos: productos.map((p) => ({
         producto: p.producto,

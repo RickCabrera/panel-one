@@ -1440,6 +1440,27 @@ estructural; una cancelación con motivo 02 se refleja; un RFC inexistente devue
 en español que ya estaba mapeado; y cada diferencia entre lo que el puerto falso suponía y lo
 que Facturama contesta de verdad queda corregida en el test de contrato correspondiente.
 
+> **Y además (de F2-100).** El alta del CSD se construyó contra el PAC falso y deja para aquí:
+> 1. **Rutas y cuerpo del alta del CSD** (`POST /api-lite/csds` alta, `PUT /api-lite/csds/{rfc}`
+>    reemplazo; `{ Rfc, Certificate, PrivateKey, PrivateKeyPassword }` en base64) y que el emisor
+>    multiemisor se identifica por RFC (`facturama_org_id` = RFC). Snapshots en
+>    `timbrado.contrato.spec.ts`. Confirmar también que los errores de Facturama que repiten valores
+>    quedan limpios con `errorCsdDe` (la contraseña y el base64 nunca llegan al usuario ni al log).
+>    Ojo con el **CSD huérfano**: si el PAC registra el CSD y luego `guardarCsd` da 409 (alguien
+>    cambió el RFC a media carga), el PAC queda con un CSD que la base no refleja y la siguiente carga
+>    sale como `POST` (alta): confirmar si Facturama la rechaza por duplicada y, si sí, usar `PUT`
+>    cuando el PAC ya conozca el RFC.
+> 2. **Supuestos del SAT marcados en `api/src/facturacion/csd.ts`**, con un CSD de prueba real del
+>    SAT: el `.key` es PKCS#8 cifrado DER (¿3DES?), el RFC viaja en `x500UniqueIdentifier` como
+>    "RFC / …", el número de certificado es el serial en ASCII, y una contraseña mala se detecta.
+>    Subir una **e.firma** en lugar del CSD: ¿Facturama la rechaza? (localmente no se distinguen).
+> 3. ❓ **DECISIÓN ABIERTA PARA RICARDO: el CFDI de prueba al guardar el CSD** (AC original de
+>    F2-100: "emitir un CFDI de prueba en sandbox y cancelarlo"). En sandbox sí; en producción
+>    gastaría un folio real y dejaría un CFDI emitido y cancelado ante el SAT. De noche NO se
+>    construyó: hoy la validación es la local (`csd.ts`) más la que haga el PAC al registrar el CSD.
+> 4. **Una empresa, un emisor.** `perfiles_fiscales.empresa_id` es único (DECISION PROVISIONAL). Si
+>    un cliente factura con varias razones sociales en una misma empresa, es tarea aparte.
+
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus
 registros DNS y el volumen persistente del servidor.** Cambiar `CORREO_IMPL` y `ARCHIVOS_IMPL`
