@@ -23,6 +23,9 @@ export const TEXTO_MOTIVO: Readonly<Record<MotivoCancelacion, string>> = {
 /**
  * Una solicitud en `solicitando` más vieja que esto se puede CONCILIAR (consultar al PAC y
  * resolverla). Más nueva, puede haber una llamada al PAC en vuelo: no se toca.
+ * DECISION PROVISIONAL (nocturno): si a los 10 min el PAC la ve VIGENTE, se concluye que nunca
+ * llegó y se borra. Supone que Facturama registra el DELETE en ese plazo; si lo hiciera después, el
+ * CFDI quedaría cancelado ante el SAT y vigente aquí hasta que otra consulta lo vea (F2-110/F2-190).
  */
 export const SOLICITUD_VENCIDA_MS = 10 * 60 * 1000;
 

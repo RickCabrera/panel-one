@@ -1513,7 +1513,10 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 > un valor desconocido se queda consultándose sin resolver); (2) una cancelación con motivo 02 de un
 > CFDI de más de $1,000 a un RFC real (necesita aceptación) y una de menos (no la necesita), y que
 > el sondeo (`CANCELACION_INTERVALO_S`) las cierre; (3) el acuse de cancelación (hoy no se guarda);
-> (4) la cancelación 04 de una global. Supuestos y decisiones en esquema-sr §2 "Cancelación de CFDI
+> (4) la cancelación 04 de una global; (5) si el GET trae la FECHA de cancelación (hoy, cuando la
+> resuelve una consulta, se anota la hora de la consulta); (6) cuánto tarda Facturama en reflejar
+> un DELETE (hoy, a los 10 min de una respuesta ambigua con el CFDI vigente, se da por no
+> registrada). Supuestos y decisiones en esquema-sr §2 "Cancelación de CFDI
 > (F2-109)"; decisiones abiertas para Ricardo: que 02 y 03 suelten el ticket por igual (la ficha
 > decía "nuevo código": se reusa el del ticket), y que la global automática no re-emita un periodo
 > con una global cancelada.
@@ -2069,7 +2072,10 @@ periodo.
 
 > **Y además (de F2-109).** (1) Las cancelaciones AMBIGUAS ya se concilian solas: el sondeo de
 > `CancelacionProgramador` consulta al PAC las solicitudes `solicitando` (más de 10 min) y
-> `en_proceso`; la conciliación de reservas colgadas de esta tarea NO tiene que cubrirlas. (2)
+> `en_proceso`; la conciliación de reservas colgadas de esta tarea NO tiene que cubrirlas, SALVO
+> el caso de una ambigua que a los 10 min se dio por no registrada (se borró): si Facturama la
+> registró después, el CFDI está cancelado ante el SAT y vigente aquí; conciliar CFDI vigentes
+> contra el PAC lo cubre. (2)
 > Cancelar no es un timbre: no descuenta folios (supuesto de Facturama, F2-190). (3) Un CFDI
 > cancelado SÍ cuenta en el reporte mensual como emitido (`vigente` + `cancelado`), y su sustituto o
 > la re-emisión del ticket soltado cuentan como timbres nuevos.

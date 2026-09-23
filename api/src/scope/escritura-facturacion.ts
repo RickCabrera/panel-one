@@ -1342,7 +1342,11 @@ export class EscrituraFacturacion {
     });
   }
 
-  /** Las solicitudes abiertas del scope (el sondeo corre con el de sistema), las más viejas primero. */
+  /**
+   * Las solicitudes abiertas del scope (el sondeo corre con el de sistema), las CONSULTADAS hace más
+   * tiempo primero (`updated_at`: cada consulta la marca). Así una que nunca se resuelve (el PAC no
+   * la conoce, un estado desconocido) pasa al final de la fila y no acapara el límite de la vuelta.
+   */
   async solicitudesAbiertas(limite: number): Promise<SolicitudAbierta[]> {
     return this.#enTransaccion(async (tx) => {
       const filas = await tx.cfdiCancelacion.findMany({
@@ -1353,7 +1357,7 @@ export class EscrituraFacturacion {
           ...SELECT_SOLICITUD,
           cfdi: { select: { id: true, empresaId: true, uuid: true, idPac: true } },
         },
-        orderBy: [{ solicitadaAt: 'asc' }, { id: 'asc' }],
+        orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
         take: limite,
       });
       return filas.map((f) => solicitudDe(f.cfdi, f));
@@ -1361,27 +1365,30 @@ export class EscrituraFacturacion {
   }
 
   /**
-   * Guarda el último error del PAC al consultar una solicitud abierta. Devuelve si CAMBIÓ (para
-   * loguear una vez por solicitud y no en cada vuelta del sondeo).
+   * Marca una solicitud abierta como CONSULTADA sin resolverla (`updated_at` = ahora) y guarda el
+   * último error del PAC (null = el PAC contestó bien). Devuelve si el error CAMBIÓ, para loguear una
+   * vez por solicitud y no en cada vuelta del sondeo.
    */
-  async anotarErrorConsulta(
+  async marcarConsultada(
     empresaId: string,
     solicitudId: string,
-    texto: string,
+    error: string | null,
     ahora: Date,
   ): Promise<boolean> {
     return this.#enTransaccion(async (tx) => {
       await this.#empresa(tx, empresaId);
-      const { count } = await tx.cfdiCancelacion.updateMany({
-        where: whereScoped(this.#scope, 'CfdiCancelacion', {
-          id: exigir('solicitudId', solicitudId),
-          empresaId,
-          estado: { in: ['solicitando', 'en_proceso'] },
-          OR: [{ ultimoError: null }, { ultimoError: { not: texto } }],
-        }),
-        data: { ultimoError: texto, updatedAt: ahora },
+      const where = whereScoped(this.#scope, 'CfdiCancelacion', {
+        id: exigir('solicitudId', solicitudId),
+        empresaId,
+        estado: { in: ['solicitando', 'en_proceso'] },
       });
-      return count === 1;
+      const previa = await tx.cfdiCancelacion.findFirst({ where, select: { ultimoError: true } });
+      if (!previa) return false;
+      await tx.cfdiCancelacion.updateMany({
+        where,
+        data: { ultimoError: error, updatedAt: ahora },
+      });
+      return previa.ultimoError !== error;
     });
   }
 

@@ -291,8 +291,9 @@ export class FacturaGlobalService {
             dias,
             emitidas: previas,
           } = await escritura.periodosGlobal(e.empresaId, sucursalId, ahora);
-          // F2-109: un periodo cuya global se CANCELÓ no se re-emite solo (si salió mal, la
-          // automática la volvería a emitir igual): queda para emisión manual.
+          // F2-109. DECISION PROVISIONAL (nocturno): un periodo cuya global se CANCELÓ no se
+          // re-emite solo (si salió mal, la automática la volvería a emitir igual): queda para
+          // emisión manual (docs/esquema-sr.md §2).
           const canceladas = previasPorClave(previas, sucursal.zonaHoraria, e.periodicidad, true);
           pendientes = enrollarPeriodos(
             dias,

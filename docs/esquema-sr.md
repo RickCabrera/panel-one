@@ -536,6 +536,17 @@ Supuestos y decisiones:
   solicitud se queda `solicitando` y se CONSULTA pasados 10 min (a mano, "Actualizar estado", o el
   sondeo `CANCELACION_INTERVALO_S`, 900 s por defecto). Antes de cancelar SIEMPRE se consulta: una
   cancelación que ya ocurrió sólo se anota. Webhook de Facturama: no (no hay dominio ni cuenta).
+- ⚠️ **SUPUESTO — NO VALIDADO (Facturama, F2-190):** `DECISION PROVISIONAL (nocturno)`
+  (`cancelacion.ts#SOLICITUD_VENCIDA_MS`): una solicitud AMBIGUA que a los **10 min** el PAC todavía
+  ve vigente se da por NO registrada y se borra. Si Facturama registrara el DELETE más tarde, el CFDI
+  quedaría cancelado ante el SAT y vigente aquí hasta que otra consulta lo vea (la conciliación de
+  F2-110 lo cubriría).
+- La fecha de cancelación que se anota cuando la resuelve una CONSULTA (el receptor aceptó, venció
+  el plazo) es la hora de la consulta, no la del SAT: el GET del PAC no la trae en lo que sabemos
+  (F2-190). Con el sondeo cada 15 min puede ir hasta ese tanto después. Cuando la cancelación es
+  inmediata sí es la fecha que devuelve el DELETE.
+- El sondeo toma primero las solicitudes consultadas hace más tiempo (cada consulta las marca en
+  `updated_at`), hasta 200 por vuelta: una que nunca se resuelve no acapara la fila.
 - Mientras una cancelación está EN PROCESO la factura sigue VIGENTE ante el SAT y sigue contando
   en lo facturado y en la tasa del tablero. Al quedar cancelada deja de contar (la tasa baja).
 - `DECISION PROVISIONAL (nocturno)` (`api/src/facturacion/cancelacion.ts#efectoEnTicket`): **una

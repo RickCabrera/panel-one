@@ -229,7 +229,7 @@ export class CancelacionCfdiService {
     if (ambiguo) {
       await this.datos
         .facturacion(scope)
-        .anotarErrorConsulta(s.empresaId, s.solicitudId, textoErrorPac(error), this.#ahora())
+        .marcarConsultada(s.empresaId, s.solicitudId, textoErrorPac(error), this.#ahora())
         .catch(() => false);
       return new BadGatewayException(MENSAJE_CANCELACION_INCIERTA);
     }
@@ -294,6 +294,10 @@ export class CancelacionCfdiService {
    * Consulta al PAC una solicitud abierta y anota lo que se concluye (`resolucionDeConsulta`).
    * `lanzar` = una persona está esperando la respuesta (errores como HTTP); el sondeo no lanza.
    * Un error del PAC se guarda en la solicitud y se loguea UNA vez por solicitud (sólo si cambió).
+   * Toda consulta que no la resuelve la marca (`marcarConsultada`): el sondeo rota por `updated_at`.
+   *
+   * La fecha de cancelación que se anota al resolverla aquí es la de la CONSULTA, no la del PAC (el
+   * GET no la trae en lo que sabemos; supuesto no validado, F2-190).
    */
   async #conciliar(
     scope: EmpresaScope,
@@ -320,7 +324,11 @@ export class CancelacionCfdiService {
     const ahora = this.#ahora();
     const vencida = ahora.getTime() - s.solicitadaAt.getTime() >= SOLICITUD_VENCIDA_MS;
     const res = resolucionDeConsulta(s.estado, pac, vencida);
-    if (res === 'sin_cambio') return s.estado;
+    if (res === 'sin_cambio') {
+      // Se consultó y el PAC contestó bien: pasa al final de la fila del sondeo y sin error.
+      await escritura.marcarConsultada(s.empresaId, s.solicitudId, null, ahora).catch(() => false);
+      return s.estado;
+    }
     const anotacion: AnotacionCancelacion =
       res === 'aceptada' ? { tipo: 'aceptada', fecha: ahora } : { tipo: res };
     const r = await escritura.anotarCancelacion(
@@ -343,7 +351,7 @@ export class CancelacionCfdiService {
   async #errorDeConsulta(scope: EmpresaScope, s: SolicitudAbierta, texto: string): Promise<void> {
     const cambio = await this.datos
       .facturacion(scope)
-      .anotarErrorConsulta(s.empresaId, s.solicitudId, texto, this.#ahora())
+      .marcarConsultada(s.empresaId, s.solicitudId, texto, this.#ahora())
       .catch(() => false);
     if (cambio) {
       this.#log.warn(`Solicitud de cancelación ${s.solicitudId}: no se pudo consultar: ${texto}`);

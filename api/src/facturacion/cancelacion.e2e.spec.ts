@@ -592,6 +592,12 @@ describe('Cancelación de CFDI (e2e, F2-109)', () => {
     // Menos de 10 min: puede haber una llamada en vuelo; la consulta no la toca.
     en('2026-09-18T10:09:00-06:00');
     expect((await consultar(c5.id)).body.estado).toBe('solicitando');
+    // La consulta la MARCA (el sondeo rota por `updated_at`) y, como el PAC contestó, sin error.
+    expect((await solicitudes(c5.id))[0]).toMatchObject({
+      estado: 'solicitando',
+      ultimoError: null,
+      updatedAt: new Date('2026-09-18T16:09:00.000Z'),
+    });
     // A los 10 min el PAC la ve vigente: nunca llegó; se libera (sin pedir otra cancelación).
     en('2026-09-18T10:11:00-06:00');
     expect((await consultar(c5.id)).body.estado).toBe('no_procedio');
@@ -727,21 +733,46 @@ describe('Cancelación de CFDI (e2e, F2-109)', () => {
   });
 
   it('SONDEO: dos vueltas a la vez resuelven cada solicitud UNA vez (un aviso, un cambio)', async () => {
+    // El sondeo recorre TODAS las empresas (scope de sistema): la base de desarrollo puede traer
+    // solicitudes del seed demo. Todo lo que se afirma aquí se mide SÓLO sobre las de los fixtures.
+    const abiertasFixtures = () =>
+      prisma.cfdiCancelacion.findMany({
+        where: {
+          empresaId: { in: [FX.empresaA, FX.empresaB] },
+          estado: { in: ['solicitando', 'en_proceso'] },
+        },
+        select: { cfdiId: true },
+      });
     const c7 = await cfdiDe('C7');
     const c4 = await cfdiDe('C4');
+    // Abiertas: la 01 de C7 (en proceso) y la segunda de C4 (en proceso).
+    expect((await abiertasFixtures()).map((x) => x.cfdiId).sort()).toEqual([c4.id, c7.id].sort());
     pac.falso.responderCancelacion(c7.uuid!, 'aceptar');
     en('2026-09-20T09:00:00-06:00');
-    const antesXia = correo.deCancelacion(RECEPTORES.acepta.email).length;
+    const antesAcepta = correo.deCancelacion(RECEPTORES.acepta.email).length;
+    const antesTodos = correo.enviados.length;
     const servicio = app.get(CancelacionCfdiService);
-    const [a, b] = await Promise.all([servicio.vueltaAutomatica(), servicio.vueltaAutomatica()]);
-    // C7 (aceptada) y C4 (el receptor que rechaza, en su primera consulta).
-    expect(a.resueltas + b.resueltas).toBe(2);
-    expect(a.fallidas + b.fallidas).toBe(0);
+    await Promise.all([servicio.vueltaAutomatica(), servicio.vueltaAutomatica()]);
+    // C7 aceptada UNA vez (un aviso) y C4 rechazada UNA vez (el receptor que rechaza).
     expect(await cfdiDe('C7')).toMatchObject({ estado: 'cancelado', motivoCancelacion: '01' });
-    expect((await solicitudes(c7.id)).map((s) => s.estado)).toEqual(['aceptada']);
-    expect(correo.deCancelacion(RECEPTORES.acepta.email)).toHaveLength(antesXia + 1);
-    expect((await solicitudes(c4.id)).map((s) => s.estado)).toEqual(['rechazada', 'rechazada']);
-    expect(await servicio.vueltaAutomatica()).toEqual({ revisadas: 0, resueltas: 0, fallidas: 0 });
+    expect((await solicitudes(c7.id)).map((x) => x.estado)).toEqual(['aceptada']);
+    expect(correo.deCancelacion(RECEPTORES.acepta.email)).toHaveLength(antesAcepta + 1);
+    expect(correo.enviados).toHaveLength(antesTodos + 1);
+    expect((await solicitudes(c4.id)).map((x) => x.estado)).toEqual(['rechazada', 'rechazada']);
+    expect(await abiertasFixtures()).toEqual([]);
+    // Otra vuelta no vuelve a tocar nada de los fixtures.
+    const antes = await prisma.cfdiCancelacion.findMany({
+      where: { empresaId: { in: [FX.empresaA, FX.empresaB] } },
+      orderBy: { id: 'asc' },
+    });
+    await servicio.vueltaAutomatica();
+    expect(
+      await prisma.cfdiCancelacion.findMany({
+        where: { empresaId: { in: [FX.empresaA, FX.empresaB] } },
+        orderBy: { id: 'asc' },
+      }),
+    ).toEqual(antes);
+    expect(correo.enviados).toHaveLength(antesTodos + 1);
   });
 
   describe('factura global (F2-108)', () => {
