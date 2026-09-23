@@ -1,8 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router';
 
 import { useFiltroAlcance } from '../alertas/consultas';
 import { ErrorApi } from '../api/cliente';
+import { useAlcance } from '../filtros/alcance';
+import { usePeriodo } from '../filtros/usePeriodo';
 import type { PerfilFiscal, RegimenFiscal, RespuestaPerfilFiscal } from '../api/tipos';
 import {
   cargarCsd,
@@ -23,6 +26,7 @@ import {
   type FormPerfil,
 } from './facturacion/reglas';
 import { PortalesAutofactura } from './facturacion/Portales';
+import { TableroFacturacion } from './facturacion/tablero/Tablero';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './inicio/Tarjeta';
 import { Vista } from './Vista';
 
@@ -36,24 +40,94 @@ const ERROR_CAMPO = 'text-xs text-peligro';
 
 const mensajeDe = (e: unknown) => (e instanceof ErrorApi ? e.message : 'Error inesperado.');
 
+/** Las pestañas de Facturación (`?tab=`). Sin `tab` (o uno desconocido), el tablero. */
+export type PestanaFacturacion = 'tablero' | 'datos';
+const PARAM_TAB = 'tab';
+
+function leerPestana(parametros: URLSearchParams): PestanaFacturacion {
+  return parametros.get(PARAM_TAB) === 'datos' ? 'datos' : 'tablero';
+}
+
+const PESTANAS: readonly { id: PestanaFacturacion; texto: string }[] = [
+  { id: 'tablero', texto: 'Tablero' },
+  { id: 'datos', texto: 'Datos fiscales' },
+];
+
 /**
- * Facturación → Datos fiscales (F2-100): con qué datos emite sus facturas la empresa y su
- * certificado de sello digital (CSD). Del CSD sólo se ve METADATA (número, RFC, vigencia): el
- * .key y su contraseña se mandan una vez al servidor, que los pasa al PAC sin guardarlos, y aquí
- * se borran del formulario en cuanto termina el envío. El dashboard de facturación es F2-106.
+ * Facturación (sólo administradores). Dos pestañas:
+ * - Tablero (F2-106): lo vendido contra lo facturado del periodo y la sucursal de la cabecera, las
+ *   facturas emitidas, lo que falta por facturar y los correos por reenviar.
+ * - Datos fiscales (F2-100): con qué datos emite sus facturas la empresa y su certificado de sello
+ *   digital (CSD). Del CSD sólo se ve METADATA (número, RFC, vigencia): el .key y su contraseña se
+ *   mandan una vez al servidor, que los pasa al PAC sin guardarlos, y aquí se borran del
+ *   formulario en cuanto termina el envío. Más los portales de autofactura (F2-103).
  */
 export function Facturacion() {
+  const [parametros, setParametros] = useSearchParams();
+  const pestana = leerPestana(parametros);
+  const cambiar = (id: PestanaFacturacion) =>
+    setParametros((previos) => {
+      const nuevos = new URLSearchParams(previos);
+      if (id === 'tablero') nuevos.delete(PARAM_TAB);
+      else nuevos.set(PARAM_TAB, id);
+      return nuevos;
+    });
+
+  return (
+    <Vista titulo="Facturación">
+      <div
+        role="tablist"
+        aria-label="Facturación"
+        className="mb-4 flex gap-1 border-b border-linea"
+      >
+        {PESTANAS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            role="tab"
+            aria-selected={pestana === p.id}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm ${
+              pestana === p.id
+                ? 'border-acento font-medium text-tinta'
+                : 'border-transparent text-tinta-suave hover:text-tinta'
+            }`}
+            onClick={() => cambiar(p.id)}
+          >
+            {p.texto}
+          </button>
+        ))}
+      </div>
+      {pestana === 'tablero' ? <PestanaTablero /> : <DatosFiscales />}
+    </Vista>
+  );
+}
+
+function PestanaTablero() {
+  const filtro = useFiltroAlcance();
+  const { rango } = usePeriodo();
+  const { sucursales } = useAlcance();
+  return (
+    <>
+      <p className="mb-4 text-sm text-tinta-tenue">
+        Lo vendido contra lo facturado en el periodo y la sucursal elegidos arriba. Las facturas
+        cuentan por su fecha de emisión en la zona de su sucursal.
+      </p>
+      <TableroFacturacion filtro={filtro} rango={rango} sucursales={sucursales.data ?? []} />
+    </>
+  );
+}
+
+function DatosFiscales() {
   const filtro = useFiltroAlcance();
   const empresaId = filtro?.empresaId ?? null;
   const consulta = usePerfilFiscal(empresaId);
   const regimenes = useRegimenesFiscales();
 
   return (
-    <Vista titulo="Datos fiscales">
+    <>
       <p className="mb-4 text-sm text-tinta-tenue">
         Los datos con los que la empresa emite sus facturas (CFDI 4.0) y su certificado de sello
-        digital. Sin los dos no se puede facturar. El resumen de lo facturado llegará a esta misma
-        sección.
+        digital. Sin los dos no se puede facturar.
       </p>
       {empresaId === null ? (
         <Tarjeta titulo="Datos fiscales">
@@ -77,7 +151,7 @@ export function Facturacion() {
           <PortalesAutofactura empresaId={empresaId} />
         </div>
       )}
-    </Vista>
+    </>
   );
 }
 

@@ -90,7 +90,10 @@ export class TableroFacturacionController {
   })
   @ApiOkResponse({ type: PaginaCfdisDto })
   @ApiForbiddenResponse({ type: ErrorDto, description: DESC_403 })
-  cfdis(@EmpresaScopeActual() scope: EmpresaScope, @Query() q: CfdisQueryDto): Promise<PaginaCfdis> {
+  cfdis(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: CfdisQueryDto,
+  ): Promise<PaginaCfdis> {
     return this.tablero.cfdis(scope, filtroDe(q), {
       q: q.q,
       estado: q.estado,

@@ -205,11 +205,7 @@ export class TableroFacturacionService {
   }
 
   /** La tabla de CFDI emitidos del periodo, con búsqueda y paginada. Sólo admins (receptores). */
-  async cfdis(
-    scope: EmpresaScope,
-    filtro: FiltroVentas,
-    op: OpcionesCfdis,
-  ): Promise<PaginaCfdis> {
+  async cfdis(scope: EmpresaScope, filtro: FiltroVentas, op: OpcionesCfdis): Promise<PaginaCfdis> {
     const q = await this.agregados.consulta(scope, filtro);
     const t = normalizarBusqueda(op.q);
     // Búsqueda LITERAL (`strpos`, sin comodines): RFC, UUID, serie-folio (`A-12`, `A12` o `12`) y

@@ -2,9 +2,11 @@ import type {
   EstadoResultados,
   EstadoResultadosBase,
   Resumen,
+  TableroFacturacion,
   VentaSucursal,
 } from '../../api/tipos';
 import { aCentavos } from '../../dinero/dinero';
+import { aDiezmilesimas } from '../facturacion/tablero/reglas';
 import { delta, type Delta } from '../resumen/delta';
 
 /**
@@ -21,9 +23,15 @@ import { delta, type Delta } from '../resumen/delta';
  * neta − costo teórico − gastos), por sucursal y el `total` para la fila de total (nunca se suma
  * aquí: el API la deja nula si falta una sucursal). Nula = "—" con su porqué (sin costo de lo
  * vendido, periodo B cortado a la misma altura, o no se pudo leer), nunca $0.00.
+ *
+ * Tasa de facturación (F2-106): la que manda `GET /facturacion/tablero` (facturado / venta del
+ * periodo, 4 decimales), por sucursal y la del total. Se lee en diezmilésimas (`bigint`, sin
+ * float); el Δ % es el de siempre y la diferencia se pinta en puntos porcentuales. Nula = "—" con
+ * su porqué (sin venta, o no se pudo leer).
  */
 
-export type Metrica = 'venta' | 'cuentas' | 'ticketPromedio' | 'comensales' | 'utilidad';
+export type Metrica =
+  'venta' | 'cuentas' | 'ticketPromedio' | 'comensales' | 'utilidad' | 'tasaFacturacion';
 
 export const METRICAS: readonly { metrica: Metrica; nombre: string; dinero: boolean }[] = [
   { metrica: 'venta', nombre: 'Venta', dinero: true },
@@ -31,7 +39,39 @@ export const METRICAS: readonly { metrica: Metrica; nombre: string; dinero: bool
   { metrica: 'ticketPromedio', nombre: 'Ticket promedio', dinero: true },
   { metrica: 'comensales', nombre: 'Comensales', dinero: false },
   { metrica: 'utilidad', nombre: 'Utilidad', dinero: true },
+  { metrica: 'tasaFacturacion', nombre: 'Tasa de facturación', dinero: false },
 ];
+
+/** La tasa de facturación de un periodo, o por qué no la hay (F2-106). */
+export interface TasaFacturacion {
+  /** Texto de 4 decimales del API (`"0.6898"`); `null` = no se afirma, `razon` dice por qué. */
+  valor: string | null;
+  razon: string | null;
+}
+
+export const TASA_SIN_VENTA = 'Sin venta en el periodo: no hay tasa de facturación.';
+export const TASA_SIN_LECTURA = 'La tasa de facturación no se pudo leer.';
+
+export const sinTasa = (razon: string): TasaFacturacion => ({ valor: null, razon });
+const tasaDeApi = (tasa: string | null): TasaFacturacion =>
+  tasa === null ? sinTasa(TASA_SIN_VENTA) : { valor: tasa, razon: null };
+
+export interface TasasPeriodo {
+  deSucursal: (sucursalId: string) => TasaFacturacion;
+  total: TasaFacturacion;
+}
+
+/** `tablero` ausente (no llegó o falló) = todas nulas con `razon`, nunca 0. */
+export function tasasDe(tablero: TableroFacturacion | undefined, razon: string): TasasPeriodo {
+  if (!tablero) return { deSucursal: () => sinTasa(razon), total: sinTasa(razon) };
+  const porId = new Map(tablero.porSucursal.map((s) => [s.sucursalId, tasaDeApi(s.tasa)]));
+  return {
+    deSucursal: (id) => porId.get(id) ?? sinTasa(TASA_SIN_LECTURA),
+    total: tasaDeApi(tablero.tasa),
+  };
+}
+
+const SIN_TASAS: TasasPeriodo = tasasDe(undefined, TASA_SIN_LECTURA);
 
 /** La utilidad de operación de un periodo, o por qué no la hay. */
 export interface Utilidad {
@@ -94,6 +134,7 @@ export interface Cifras {
   ticketPromedio: string | null;
   comensales: number;
   utilidad: Utilidad;
+  tasa: TasaFacturacion;
 }
 
 export interface FilaComparada {
@@ -107,6 +148,7 @@ export interface FilaComparada {
 export function cifrasDeResumen(
   r: Resumen,
   utilidad: Utilidad = sinUtilidad(UTILIDAD_SIN_LECTURA),
+  tasa: TasaFacturacion = sinTasa(TASA_SIN_LECTURA),
 ): Cifras {
   return {
     venta: r.venta,
@@ -114,16 +156,18 @@ export function cifrasDeResumen(
     ticketPromedio: r.ticketPromedio,
     comensales: r.comensales.total,
     utilidad,
+    tasa,
   };
 }
 
-function cifrasDeSucursal(f: VentaSucursal, u: UtilidadesPeriodo): Cifras {
+function cifrasDeSucursal(f: VentaSucursal, u: UtilidadesPeriodo, t: TasasPeriodo): Cifras {
   return {
     venta: f.venta,
     cuentas: f.cuentas,
     ticketPromedio: f.ticketPromedio,
     comensales: f.comensales,
     utilidad: u.deSucursal(f.sucursalId),
+    tasa: t.deSucursal(f.sucursalId),
   };
 }
 
@@ -136,6 +180,8 @@ export function armarFilas(
   b: readonly VentaSucursal[],
   ua: UtilidadesPeriodo = SIN_ESTADO,
   ub: UtilidadesPeriodo = SIN_ESTADO,
+  ta: TasasPeriodo = SIN_TASAS,
+  tb: TasasPeriodo = SIN_TASAS,
 ): FilaComparada[] {
   const deB = new Map(b.map((f) => [f.sucursalId, f]));
   const filas: FilaComparada[] = a.map((f) => {
@@ -143,14 +189,14 @@ export function armarFilas(
     return {
       id: f.sucursalId,
       nombre: f.nombre,
-      a: cifrasDeSucursal(f, ua),
-      b: enB ? cifrasDeSucursal(enB, ub) : null,
+      a: cifrasDeSucursal(f, ua, ta),
+      b: enB ? cifrasDeSucursal(enB, ub, tb) : null,
     };
   });
   const enA = new Set(a.map((f) => f.sucursalId));
   for (const f of b) {
     if (!enA.has(f.sucursalId)) {
-      filas.push({ id: f.sucursalId, nombre: f.nombre, a: null, b: cifrasDeSucursal(f, ub) });
+      filas.push({ id: f.sucursalId, nombre: f.nombre, a: null, b: cifrasDeSucursal(f, ub, tb) });
     }
   }
   return filas;
@@ -178,6 +224,9 @@ export function valor(c: Cifras | null, m: Metrica): bigint | null {
       return BigInt(c.comensales);
     case 'utilidad':
       return c.utilidad.importe === null ? null : aCentavos(c.utilidad.importe);
+    case 'tasaFacturacion':
+      // Diezmilésimas: `"0.6898"` → 6898n. Nunca pasa por float.
+      return c.tasa.valor === null ? null : aDiezmilesimas(c.tasa.valor);
   }
 }
 
@@ -187,6 +236,7 @@ const RAZON_BASE_CERO: Record<Metrica, string> = {
   ticketPromedio: 'Sin ticket promedio en el periodo B.',
   comensales: 'Sin comensales registrados en el periodo B.',
   utilidad: 'La utilidad de B es cero o negativa: no hay Δ %.',
+  tasaFacturacion: 'La tasa de facturación de B es cero: no hay Δ %.',
 };
 
 /** Δ de una métrica de A contra B. Sin datos en cualquiera de los dos: "—" con el porqué. */
@@ -208,6 +258,14 @@ export function deltaDe(fila: Pick<FilaComparada, 'a' | 'b'>, m: Metrica): Delta
       };
     }
   }
+  if (m === 'tasaFacturacion') {
+    if (fila.a.tasa.valor === null) {
+      return { tipo: 'sinBase', razon: `Periodo A: ${fila.a.tasa.razon ?? TASA_SIN_LECTURA}` };
+    }
+    if (fila.b.tasa.valor === null) {
+      return { tipo: 'sinBase', razon: `Periodo B: ${fila.b.tasa.razon ?? TASA_SIN_LECTURA}` };
+    }
+  }
   return delta(valor(fila.a, m), valor(fila.b, m), RAZON_BASE_CERO[m]);
 }
 
@@ -223,6 +281,7 @@ export const ORDENES: readonly { orden: Orden; nombre: string }[] = [
   { orden: 'ticketPromedio', nombre: 'Ticket promedio (A)' },
   { orden: 'comensales', nombre: 'Comensales (A)' },
   { orden: 'utilidad', nombre: 'Utilidad (A)' },
+  { orden: 'tasaFacturacion', nombre: 'Tasa de facturación (A)' },
   { orden: 'deltaVenta', nombre: 'Δ % de venta' },
 ];
 

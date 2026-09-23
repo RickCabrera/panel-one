@@ -39,11 +39,12 @@ describe('mesesDelRango()', () => {
 
 describe('completar()', () => {
   it('rellena con ceros de verdad las claves sin CFDI', () => {
-    expect(completar(['2026-09', '2026-10'], [{ clave: '2026-10', facturado: '5', num_cfdi: 1 }]))
-      .toEqual([
-        { clave: '2026-09', facturado: '0.00', cfdis: 0 },
-        { clave: '2026-10', facturado: '5.00', cfdis: 1 },
-      ]);
+    expect(
+      completar(['2026-09', '2026-10'], [{ clave: '2026-10', facturado: '5', num_cfdi: 1 }]),
+    ).toEqual([
+      { clave: '2026-09', facturado: '0.00', cfdis: 0 },
+      { clave: '2026-10', facturado: '5.00', cfdis: 1 },
+    ]);
     expect(completar(HORAS, [])).toHaveLength(24);
   });
 

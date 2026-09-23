@@ -151,7 +151,8 @@ export function generarCfdisSeed(
     .filter((c) => c.estado === 'facturado')
     .map((c) => {
       const cierre = c.cheque.cerradoAt;
-      if (cierre === null) throw new Error(`Seed de CFDI: el cheque ${c.cheque.id} no tiene cierre.`);
+      if (cierre === null)
+        throw new Error(`Seed de CFDI: el cheque ${c.cheque.id} no tiene cierre.`);
       const formaPago = formaPagoSat(c.cheque.pagos, op.catalogoFormas);
       if (formaPago === null) {
         // `seed-codigos.ts` no marca `facturado` un cheque que no se factura en línea.

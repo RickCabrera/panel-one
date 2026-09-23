@@ -31,7 +31,8 @@ import {
 const A = EMPRESA_A.id;
 // 22-sep-2026, 12:00 en CDMX.
 const AHORA = new Date('2026-09-22T18:00:00Z');
-const RUTA = `/facturacion?empresa=${A}`;
+// F2-106: la pestaña por defecto es el tablero; los datos fiscales van en `?tab=datos`.
+const RUTA = `/facturacion?empresa=${A}&tab=datos`;
 const DIA = 24 * 60 * 60 * 1000;
 
 const REGIMENES: RegimenFiscal[] = [

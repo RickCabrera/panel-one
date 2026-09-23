@@ -161,6 +161,47 @@ function estadoDe(l: Llamada) {
 const clave = (l: Llamada) =>
   [l.query.get('desde'), l.query.get('hasta'), l.query.get('alturaAl') ?? ''].join('|');
 
+/**
+ * Tasa de facturación (F2-106) por `desde|hasta|alturaAl`, como la manda `/facturacion/tablero`:
+ * el total y la de cada sucursal. Lo que no esté aquí: sin venta (tasa nula).
+ */
+const TASAS: Record<
+  string,
+  { total: string | null; centro: string | null; tijuana: string | null }
+> = {
+  [ESTE_MES]: { total: '0.4500', centro: '0.5000', tijuana: '0.2500' },
+  // Tijuana no tuvo cuentas el mes anterior: sin venta, sin tasa.
+  [MES_ANTERIOR]: { total: '0.4000', centro: '0.4000', tijuana: null },
+  [COMPARABLE]: { total: '0.4800', centro: '0.5000', tijuana: '0.4000' },
+};
+
+function tableroDe(l: Llamada) {
+  const t = TASAS[clave(l)] ?? { total: null, centro: null, tijuana: null };
+  const suc = (s: { id: string; nombre: string }, tasa: string | null) => ({
+    sucursalId: s.id,
+    nombre: s.nombre,
+    venta: '0.00',
+    cuentas: 0,
+    facturado: '0.00',
+    cfdis: 0,
+    cancelados: { monto: '0.00', cfdis: 0 },
+    tasa,
+  });
+  const porSucursal = [suc(SUCURSAL_A1, t.centro), suc(A2, t.tijuana)];
+  const s = l.query.get('sucursalId');
+  const filas = s ? porSucursal.filter((x) => x.sucursalId === s) : porSucursal;
+  return {
+    ventas: { venta: '0.00', cuentas: 0 },
+    facturado: { monto: '0.00', cfdis: 0 },
+    cancelados: { monto: '0.00', cfdis: 0 },
+    tasa: s ? (filas[0]?.tasa ?? null) : t.total,
+    porFacturar: { cuentas: 0, monto: '0.00' },
+    porSucursal: filas,
+    porMes: [],
+    porHora: [],
+  };
+}
+
 function filasDe(l: Llamada, datos: Record<string, VentaSucursal[]>): VentaSucursal[] {
   const filas = datos[clave(l)] ?? [sinCuentas(SUCURSAL_A1), sinCuentas(A2)];
   const s = l.query.get('sucursalId');
@@ -209,6 +250,7 @@ function api(extra: Record<string, Manejador> = {}, datos = SUCURSALES, totales 
     'GET /ventas/formas-pago': () => json(200, { formas: [], sinCatalogo: [] }),
     'GET /ventas/comparativo-sucursales': (l) => json(200, filasDe(l, datos)),
     'GET /finanzas/estado-resultados': (l) => json(200, estadoDe(l)),
+    'GET /facturacion/tablero': (l) => json(200, tableroDe(l)),
     'GET /mesas/abiertas': (l) => {
       const s = l.query.get('sucursalId');
       return json(200, s ? MESAS.filter((m) => m.sucursalId === s) : MESAS);
@@ -370,9 +412,19 @@ describe('periodo B', () => {
     const conAltura = a.llamadas
       .filter((l) => l.query.has('alturaAl'))
       .map((l) => `${l.ruta} ${clave(l)}`);
+    // F2-106: la tasa de B también se corta a la misma altura (el tablero lo soporta).
     expect(new Set(conAltura)).toEqual(
-      new Set([`/ventas/resumen ${COMPARABLE}`, `/ventas/comparativo-sucursales ${COMPARABLE}`]),
+      new Set([
+        `/ventas/resumen ${COMPARABLE}`,
+        `/ventas/comparativo-sucursales ${COMPARABLE}`,
+        `/facturacion/tablero ${COMPARABLE}`,
+      ]),
     );
+    // Tasa: total 45 % contra 48 % (−3 pp); Tijuana 25 % contra 40 %.
+    expect(celda('fila-total', 'tasaFacturacion-a')).toBe('45.00 %');
+    expect(celda('fila-total', 'tasaFacturacion-b')).toBe('48.00 %');
+    expect(celda('fila-total', 'tasaFacturacion-delta')).toBe('-6.3 %-3.00 pp');
+    expect(celda(TIJUANA, 'tasaFacturacion-delta')).toBe('-37.5 %-15.00 pp');
     // 40,000 vs 25,000; Tijuana 10,000 vs 5,000.
     expect(celda('fila-total', 'venta-delta')).toBe('+60.0 %+$15,000.00');
     expect(celda(TIJUANA, 'venta-delta')).toBe('+100.0 %+$5,000.00');
@@ -488,9 +540,9 @@ describe('estados vacíos', () => {
         expect(celda(f, `${m}-b`)).toBe('—');
       }
     }
-    expect(texto('nota-pendientes')).toContain('F2-106');
-    // F2-126 ya construyó la utilidad: sale de la nota de pendientes y tiene la suya.
-    expect(texto('nota-pendientes')).not.toContain('Utilidad');
+    // F2-106 construyó la tasa: ya no queda nota de pendientes, y la tasa tiene la suya.
+    expect(screen.queryByTestId('nota-pendientes')).toBeNull();
+    expect(texto('nota-tasa')).toContain('Tasa de facturación: lo facturado en el periodo');
     expect(texto('nota-utilidad')).toContain('Utilidad: la de operación');
   });
 
@@ -693,13 +745,28 @@ describe('export CSV', () => {
     expect(nombres).toEqual(['comparativos_2026-09-01_2026-09-21_vs_2026-08-01_2026-08-31.csv']);
     const contenido = new TextDecoder().decode(new Uint8Array(await blobs[0].arrayBuffer()));
     const lineas = contenido.slice(1).split('\r\n');
-    // Utilidad al final: Centro 9000 (sobrestimada; el CSV lleva la cifra) contra 12000; Tijuana
-    // sin costo en A y sin cuentas en B: vacías, nunca 0.
+    // Utilidad: Centro 9000 (sobrestimada; el CSV lleva la cifra) contra 12000; Tijuana sin
+    // costo en A y sin cuentas en B: vacías, nunca 0. Tasa al final (F2-106): Centro 50 % contra
+    // 40 % (+10 pp, +25 %); Tijuana 25 % en A y sin cuentas en B.
     expect(lineas[1]).toBe(
-      '1,Centro,30000.00,40000.00,-10000.00,-25.0,60,80,-20,-25.0,500.00,500.00,0.00,0.0,150,200,-50,-25.0,9000.00,12000.00,-3000.00,-25.0',
+      '1,Centro,30000.00,40000.00,-10000.00,-25.0,60,80,-20,-25.0,500.00,500.00,0.00,0.0,150,200,-50,-25.0,9000.00,12000.00,-3000.00,-25.0,50.00,40.00,10.00,25.0',
     );
-    expect(lineas[2]).toBe('2,Tijuana,10000.00,,,,25,,,,400.00,,,,0,,,,,,,');
+    expect(lineas[2]).toBe('2,Tijuana,10000.00,,,,25,,,,400.00,,,,0,,,,,,,,25.00,,,');
     expect(lineas).toHaveLength(4);
+  });
+});
+
+describe('tasa de facturación (F2-106)', () => {
+  it('sin venta es "—" con su porqué; si el tablero falla, la tabla sigue y la tasa dice por qué', async () => {
+    api({ 'GET /facturacion/tablero': () => json(500, { statusCode: 500, message: 'x' }) });
+    montar(`/comparativos?empresa=${A}&periodo=mes&b=mes-anterior`);
+    await screen.findByTestId('fila-total');
+    // La venta se pinta igual.
+    expect(celda(CENTRO, 'venta-a')).toBe('$30,000.00');
+    const tasa = within(screen.getByTestId(CENTRO)).getByTestId('tasaFacturacion-a');
+    expect(tasa).toHaveTextContent('—');
+    expect(tasa).toHaveAttribute('title', 'La tasa de facturación no se pudo leer.');
+    expect(tasa).not.toHaveTextContent('0');
   });
 });
 

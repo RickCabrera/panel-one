@@ -41,6 +41,8 @@ export const VISTAS_CON_PERIODO: readonly string[] = [
   '/clientes',
   // F2-233: la venta por área y canal es del periodo.
   '/areas',
+  // F2-106: el tablero de facturación es del periodo (la pestaña Datos fiscales no lo usa).
+  '/facturacion',
 ];
 
 export function usaPeriodo(pathname: string): boolean {

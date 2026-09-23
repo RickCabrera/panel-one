@@ -268,7 +268,10 @@ describe('Tablero de facturación (e2e, F2-106)', () => {
     await emitir('N-CFDI-CANC', SLUGS.a1, '2026-11-12T12:05:00-06:00', RECEPTORES.eku);
     const canc = await codigoDe('N-CFDI-CANC');
     await prisma.cfdi.update({ where: { codigoId: canc.id }, data: { estado: 'cancelado' } });
-    await prisma.codigoFacturacion.update({ where: { id: canc.id }, data: { estado: 'pendiente' } });
+    await prisma.codigoFacturacion.update({
+      where: { id: canc.id },
+      data: { estado: 'pendiente' },
+    });
     await reservar('N-TIMBR', '2026-11-12T12:10:00-06:00');
     await prisma.codigoFacturacion.update({
       where: { id: (await codigoDe('N-VENC-DERIV')).id },
@@ -350,8 +353,9 @@ describe('Tablero de facturación (e2e, F2-106)', () => {
 
   it('verificación extra: la venta es la de /ventas y lo facturado, la suma de los 201 del portal', async () => {
     const t = (await tablero(USUARIOS.visorA)).body;
-    const resumen = (await como(USUARIOS.visorA, `/ventas/resumen?empresaId=${FX.empresaA}&${RANGO}`))
-      .body;
+    const resumen = (
+      await como(USUARIOS.visorA, `/ventas/resumen?empresaId=${FX.empresaA}&${RANGO}`)
+    ).body;
     expect(t.ventas).toEqual({ venta: resumen.venta, cuentas: resumen.cuentas });
     const suma = ['A1-1', 'A1-2', 'A2-1', 'A2-3']
       .map((f) => Number(emitidos.get(f)!.total) * 100)
@@ -366,9 +370,7 @@ describe('Tablero de facturación (e2e, F2-106)', () => {
     expect(t.cancelados).toEqual({ monto: '0.00', cfdis: 0 });
     expect(t.tasa).toBe('0.8500');
     expect(t.porFacturar).toEqual({ cuentas: 1, monto: '150.00' });
-    expect(t.porSucursal.map((s: { sucursalId: string }) => s.sucursalId)).toEqual([
-      FX.sucursalA2,
-    ]);
+    expect(t.porSucursal.map((s: { sucursalId: string }) => s.sucursalId)).toEqual([FX.sucursalA2]);
   });
 
   it('con alturaAl: corta a la hora local de cada sucursal; lo emitido después queda fuera', async () => {

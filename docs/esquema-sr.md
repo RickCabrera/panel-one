@@ -412,6 +412,25 @@ cheque de SR, nada visto en una instalación real (F2-190):
   borra): un rechazo del SAT, o el PAC no disponible (429/503) tras agotar los reintentos. El CFDI
   4.0 no exige folios consecutivos; se deja así a propósito.
 
+**El tablero de facturación (F2-106).** Tampoco lee nada nuevo de SR: cruza la venta de Fase 1 con
+los CFDI propios. Lo que hereda de los supuestos de arriba:
+
+- ⚠️ **SUPUESTO — NO VALIDADO: la tasa de facturación hereda el supuesto "`cheques.total` no incluye
+  la propina".** La tasa es `facturado / venta` y las dos cifras salen de la MISMA columna
+  (`cheques.total`: la venta de Fase 1 y la base del CFDI de `importesDeTotal`). Si en una instalación
+  real `total` sí trae la propina, la venta y el CFDI se mueven juntos y la tasa no lo delata, pero
+  las dos cifras estarían infladas por igual (F2-190).
+- `DECISION PROVISIONAL (nocturno)` (`api/src/facturacion/tablero.ts`): **lo facturado cuenta por
+  la fecha de EMISIÓN del CFDI y la venta por la de CIERRE del cheque**, las dos en la zona de la
+  sucursal y el mismo rango. Un ticket del día 31 facturado el día 1 cuenta en el mes siguiente, así
+  que la tasa puede pasar de 100 %. Alternativa (decisión abierta para Ricardo): la tasa "por
+  ticket" (lo facturado DE las cuentas del periodo), acotada a 0..100 %.
+- Los CFDI `cancelado` se ubican también por su fecha de emisión: todavía no se guarda la de
+  cancelación (F2-109).
+- El seed (`api/prisma/seed-cfdis.ts`) siembra un CFDI por código `facturado` con el PAC falso, y
+  sólo marca `facturado` una cuenta cuya forma de pago dominante tiene clave SAT (una de vales no se
+  factura en línea, igual que en la emisión real).
+
 ---
 
 ## 3. Partidas de cuentas cerradas

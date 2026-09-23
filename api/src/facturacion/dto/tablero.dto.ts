@@ -125,7 +125,10 @@ export class SucursalTableroDto implements SucursalTablero {
 }
 
 export class MesTableroDto {
-  @ApiProperty({ example: '2026-09', description: 'Mes LOCAL de la emisión (zona de la sucursal).' })
+  @ApiProperty({
+    example: '2026-09',
+    description: 'Mes LOCAL de la emisión (zona de la sucursal).',
+  })
   mes!: string;
 
   @ApiProperty({ example: '2350.00' })

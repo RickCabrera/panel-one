@@ -217,7 +217,8 @@ describe('sembrarCfdis() (contra Postgres)', () => {
       expect(archivos.guardados.has(c.pdfClave!)).toBe(true);
     }
     const folioMax = Math.max(...primera.map((c) => c.folio));
-    const perfil = () => prisma.perfilFiscal.findFirstOrThrow({ where: { empresaId: FX.empresaA } });
+    const perfil = () =>
+      prisma.perfilFiscal.findFirstOrThrow({ where: { empresaId: FX.empresaA } });
     expect((await perfil()).folioActual).toBe(folioMax);
 
     await sembrarCfdis(prisma, op);

@@ -365,7 +365,9 @@ describe('alturaAl (F2-220)', () => {
       const { texto, valores } = await textoCon(A);
       const cuerpo = cuerpoDe(texto, 'codigos_ventas');
       expect(cuerpo).toContain('FROM codigos_facturacion k\n');
-      expect(cuerpo).toContain('JOIN ventas v ON v.id = k.cheque_id AND v.empresa_id = k.empresa_id');
+      expect(cuerpo).toContain(
+        'JOIN ventas v ON v.id = k.cheque_id AND v.empresa_id = k.empresa_id',
+      );
       expect(cuerpo).toMatch(/WHERE k\.empresa_id = \?::uuid AND k\.empresa_id = \?::uuid$/);
       expect(cuerpo).toContain(
         'AND x.empresa_id = ?::uuid AND x.empresa_id = ?::uuid\n' +
