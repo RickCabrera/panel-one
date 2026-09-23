@@ -25,7 +25,8 @@ internal sealed record DependenciasWorker(
     Action<int> TerminarProceso,
     Func<ConfiguracionAgente, ILogger, IRevisorActualizacion>? CrearRevisor = null,
     Func<ConfiguracionAgente, ILogger, ISincronizadorCatalogos>? CrearCatalogos = null,
-    Func<ConfiguracionAgente, ILogger, ISincronizadorExistencias>? CrearExistencias = null)
+    Func<ConfiguracionAgente, ILogger, ISincronizadorExistencias>? CrearExistencias = null,
+    Func<ConfiguracionAgente, ILogger, ISincronizadorInventario>? CrearInventario = null)
 {
     public static readonly TimeSpan ReintentoConfigPorDefecto = TimeSpan.FromSeconds(60);
 
@@ -35,7 +36,8 @@ internal sealed record DependenciasWorker(
             ArmadorHeartbeat.VersionAgente(), ReintentoConfigPorDefecto, TerminarDeVerdad,
             (config, logger) => CrearRevisorDeVerdad(rutas, config, logger),
             (config, logger) => SincronizadorCatalogos.DeVerdad(rutas, config, logger),
-            (config, logger) => SincronizadorExistencias.DeVerdad(rutas, config, logger));
+            (config, logger) => SincronizadorExistencias.DeVerdad(rutas, config, logger),
+            (config, logger) => SincronizadorInventario.DeVerdad(rutas, config, logger));
 
     /// <summary>La auto-actualización real (F2-143): el canal del api y el estado en <c>actualizacion\estado.db</c>.</summary>
     internal static RevisorActualizacion CrearRevisorDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger)
@@ -101,6 +103,7 @@ internal sealed class Worker : BackgroundService
     private string? _ultimaFallaActualizacion;
     private string? _ultimaFallaCatalogos;
     private string? _ultimaFallaExistencias;
+    private string? _ultimaFallaInventario;
 
     public Worker(ILogger<Worker> logger, DependenciasWorker dependencias)
     {
@@ -214,14 +217,15 @@ internal sealed class Worker : BackgroundService
         using var revisor = _dep.CrearRevisor?.Invoke(config, _logger);
         using var catalogos = _dep.CrearCatalogos?.Invoke(config, _logger);
         using var existencias = _dep.CrearExistencias?.Invoke(config, _logger);
+        using var inventario = _dep.CrearInventario?.Invoke(config, _logger);
         // El primer ciclo corre al arrancar: lo pendiente de antes de un reinicio sale
         // sin esperar al primer tick, y el panel ve al agente de inmediato.
-        await UnCicloAsync(config, envio, revisor, catalogos, existencias, stoppingToken);
+        await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, stoppingToken);
 
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
-            await UnCicloAsync(config, envio, revisor, catalogos, existencias, stoppingToken);
+            await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, stoppingToken);
         }
     }
 
@@ -230,12 +234,13 @@ internal sealed class Worker : BackgroundService
     /// encola SIEMPRE, antes de enviar: así sale un lote por ciclo aunque no haya cheques,
     /// que es lo que el panel lee como "conectado" (F1-061). F1-022 / F1-023 encolan
     /// cheques y snapshot aquí, también antes de enviar. Los catálogos (F2-240, F2-241) y las
-    /// existencias (F2-241) van DESPUÉS del heartbeat y del envío: leer once catálogos puede tardar,
+    /// existencias (F2-241) y movimientos, compras y recetas (F2-241b) van DESPUÉS del heartbeat y del envío: leer once catálogos puede tardar,
     /// y el panel no puede quedarse sin reporte mientras tanto.
     /// </summary>
     private async Task UnCicloAsync(
         ConfiguracionAgente config, ICicloEnvio envio, IRevisorActualizacion? revisor,
-        ISincronizadorCatalogos? catalogos, ISincronizadorExistencias? existencias, CancellationToken stoppingToken)
+        ISincronizadorCatalogos? catalogos, ISincronizadorExistencias? existencias, ISincronizadorInventario? inventario,
+        CancellationToken stoppingToken)
     {
         await ConsultarSrAsync(config, stoppingToken);
         EncolarHeartbeat(envio);
@@ -248,6 +253,11 @@ internal sealed class Worker : BackgroundService
         if (existencias is not null && _dep.EstadoSr.Reader is { } readerExistencias)
         {
             await SincronizarExistenciasAsync(existencias, readerExistencias, stoppingToken);
+        }
+
+        if (inventario is not null && _dep.EstadoSr.Reader is { } readerInventario)
+        {
+            await SincronizarInventarioAsync(inventario, readerInventario, stoppingToken);
         }
 
         if (revisor is not null)
@@ -305,6 +315,33 @@ internal sealed class Worker : BackgroundService
             {
                 _ultimaFallaExistencias = ex.GetType().FullName;
                 _logger.LogError(ex, "Existencias: falla interna; se reintenta en el siguiente ciclo.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Movimientos, compras y recetas (F2-241b), igual que las existencias: una excepción no prevista
+    /// (disco, SQLite) queda en el log una vez por tipo y el ciclo sigue. Una falla de LECTURA (timeout
+    /// de SQL) la maneja el sincronizador sin encolar nada.
+    /// </summary>
+    private async Task SincronizarInventarioAsync(
+        ISincronizadorInventario inventario, ISoftRestaurantReader reader, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await inventario.CicloAsync(reader, stoppingToken);
+            _ultimaFallaInventario = null;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (ex.GetType().FullName != _ultimaFallaInventario)
+            {
+                _ultimaFallaInventario = ex.GetType().FullName;
+                _logger.LogError(ex, "Inventario: falla interna; se reintenta en el siguiente ciclo.");
             }
         }
     }

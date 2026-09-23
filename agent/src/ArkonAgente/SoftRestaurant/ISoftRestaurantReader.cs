@@ -32,6 +32,15 @@ internal interface ISoftRestaurantReader
 
     /// <summary>La consulta embebida que lee las existencias por almacén en ESTA versión (F2-241).</summary>
     string ConsultaExistencias { get; }
+
+    /// <summary>La consulta embebida de movimientos de inventario (pólizas) en ESTA versión (F2-241b).</summary>
+    string ConsultaMovimientos { get; }
+
+    /// <summary>La consulta embebida de compras a proveedor en ESTA versión (F2-241b).</summary>
+    string ConsultaCompras { get; }
+
+    /// <summary>La consulta embebida de recetas (explosión de insumos) en ESTA versión (F2-241b).</summary>
+    string ConsultaRecetas { get; }
 }
 
 /// <summary>
@@ -59,4 +68,16 @@ internal sealed class SrV11Reader(VersionSr version) : ISoftRestaurantReader
     /// base); ⚠️ en la 11, SUPUESTO. docs/esquema-sr.md §10.
     /// </summary>
     public string ConsultaExistencias => "sr_existencias";
+
+    /// <summary>
+    /// ✅ Tablas vistas en SR 10 (2026-09-23, sólo metadatos y VACÍAS: la agrupación en pólizas es
+    /// SUPUESTO); ⚠️ en la 11, SUPUESTO. docs/esquema-sr.md §10.
+    /// </summary>
+    public string ConsultaMovimientos => "sr_movimientos";
+
+    /// <summary>Ídem: <c>compras</c> + <c>comprasmovtos</c> vistas sólo en metadatos (§10).</summary>
+    public string ConsultaCompras => "sr_compras";
+
+    /// <summary>Ídem: <c>costos</c> vista sólo en metadatos (§10).</summary>
+    public string ConsultaRecetas => "sr_recetas";
 }
