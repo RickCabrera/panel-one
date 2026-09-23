@@ -207,7 +207,7 @@ export function peticionDescarga(
  *
  * De esta respuesta depende LIBERAR una reserva (y con ella volver a facturar el ticket): si el PAC
  * ignorara un filtro o paginara, "no vino nuestro folio" no probaría nada. Por eso SÓLO una lista
- * VACÍA (o un 404) es "no lo tiene"; cualquier fila ajena (otra serie, otro folio, otro emisor si la
+ * VACÍA (200 con `[]`) es "no lo tiene" (un 404 tampoco: ver `buscarPorFolio`); cualquier fila ajena (otra serie, otro folio, otro emisor si la
  * fila lo trae) o más de una fila nuestra es `ESTADO_DESCONOCIDO` (reintentable) y nadie decide.
  */
 export function peticionBuscarPorFolio(base: string, c: ConsultaFolio): PeticionHttp {
@@ -443,7 +443,12 @@ export class TimbradoFacturama implements PuertoTimbrado {
 
   async buscarPorFolio(consulta: ConsultaFolio): Promise<CfdiEncontrado | null> {
     const r = await this.enviar(peticionBuscarPorFolio(this.base, consulta));
-    if (r.status === 404) return null;
+    // DECISION PROVISIONAL (nocturno): un 404 NO es "no la tiene". Una ruta de LISTA contesta `[]`
+    // cuando no hay resultados; un 404 apunta a una ruta mal armada (el supuesto de F2-190), y
+    // tomarlo como vacío liberaría TODA reserva ambigua a los 30 min (CFDI duplicado ante el SAT).
+    if (r.status === 404) {
+      throw new ErrorTimbrado('ESTADO_DESCONOCIDO', MENSAJE_LISTA_AMBIGUA_PAC, true);
+    }
     if (!ok(r)) throw errorDe(r);
     return cfdiDeLista(r.cuerpo, consulta);
   }

@@ -648,9 +648,15 @@ describe('Contrato Facturama: conciliación con el PAC (F2-110b)', () => {
     expect(pendiente).toMatchObject({ estado: 'en_cancelacion' });
   });
 
-  it('SÓLO una lista vacía (o un 404) es "no la tiene": null', async () => {
+  it('SÓLO una lista vacía (200 con `[]`) es "no la tiene": null', async () => {
     await expect((await buscar({ status: 200, cuerpo: [] })).resultado).resolves.toBeNull();
-    await expect((await buscar({ status: 404, cuerpo: null })).resultado).resolves.toBeNull();
+  });
+
+  it('un 404 NO es "no la tiene" (ruta mal armada): ESTADO_DESCONOCIDO reintentable', async () => {
+    await expect((await buscar({ status: 404, cuerpo: null })).resultado).rejects.toMatchObject({
+      codigo: 'ESTADO_DESCONOCIDO',
+      reintentable: true,
+    });
   });
 
   it.each([

@@ -1550,7 +1550,10 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 > `Uuid`, `Status`, `Date`, ¿trae el RFC emisor?) y la zona de `Date`; (2) cuánto tarda en listar un
 > CFDI recién timbrado (hoy: 15 min de edad mínima y dos búsquedas vacías separadas 15 min antes de
 > liberar); (3) cuánto puede tardar en registrar un DELETE que contestó ambiguo (hoy: se re-consulta
-> 7 días). Supuestos en esquema-sr §2 "Conciliación con el PAC (F2-110b)".
+> 7 días); (4) qué contesta la búsqueda cuando NO encuentra nada (hoy sólo un 200 con `[]` libera;
+> un 404 es "estado desconocido"); (5) si la fecha de respaldo del confirmado (la de la reserva)
+> mueve facturas de día en los reportes. Supuestos en esquema-sr §2 "Conciliación con el PAC
+> (F2-110b)".
 
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus

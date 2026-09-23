@@ -25,6 +25,7 @@ import { TimbradoFalso } from '../adaptadores/timbrado/timbrado-falso';
 import { hashApiKey } from '../agentes/api-key';
 import { AppModule } from '../app.module';
 import { TokensService } from '../auth/tokens.service';
+import { Auditoria } from '../comun/auditoria';
 import { Reloj } from '../comun/reloj';
 import { configurarApp } from '../configurar-app';
 import {
@@ -347,12 +348,26 @@ describe('Conciliación con el PAC (e2e, F2-110b)', () => {
     await prisma.$disconnect();
   });
 
-  it('sin token 401, visor 403; sin nada colgado, la vuelta no hace nada', async () => {
+  it('sin token 401, visor 403; sin nada colgado, la vuelta no hace nada; el disparo se audita con su actor', async () => {
     en('2033-03-02T10:00:00-06:00');
+    const auditoria = jest.spyOn(app.get(Auditoria), 'registrar');
     expect((await request(url).post('/facturacion/conciliacion')).status).toBe(401);
     expect((await post(VISOR_A, '/facturacion/conciliacion')).status).toBe(403);
     expect(await conciliar()).toEqual(NADA);
     expect(pac.busquedas).toHaveLength(0);
+    expect(auditoria.mock.calls).toEqual([
+      [
+        { id: ADMIN_A.id, rol: ADMIN_A.rol },
+        {
+          accion: 'facturacion.conciliacion',
+          recurso: 'conciliacion_pac',
+          recursoId: FX.empresaA,
+          empresaId: FX.empresaA,
+          campos: [],
+        },
+      ],
+    ]);
+    auditoria.mockRestore();
   });
 
   describe('AC1 · origen ticket (portal)', () => {
@@ -754,7 +769,12 @@ describe('Conciliación con el PAC (e2e, F2-110b)', () => {
       reloj.t = Date.parse('2033-03-27T10:15:00-06:00') - 1;
       expect(await conciliar()).toEqual(NADA);
       en('2033-03-27T10:15:00-06:00');
+      const auditoria = jest.spyOn(app.get(Auditoria), 'registrar');
       expect(await conciliar()).toEqual(con({ sustituciones: { revisadas: 1, cerradas: 1 } }));
+      // La 01 la pidió el SISTEMA: no queda auditada como si la hubiera pedido una persona; sólo el
+      // disparo de la vuelta, con su actor.
+      expect(auditoria.mock.calls.map(([, e]) => e.accion)).toEqual(['facturacion.conciliacion']);
+      auditoria.mockRestore();
       expect(pac.cancelaciones).toHaveLength(deletes + 1);
       expect(pac.cancelaciones.at(-1)).toMatchObject({ uuid: anterior.uuid, motivo: '01' });
       expect(await prisma.cfdi.findUniqueOrThrow({ where: { id: anterior.id } })).toMatchObject({

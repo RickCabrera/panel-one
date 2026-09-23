@@ -644,7 +644,9 @@ sólo concilia su empresa).
   Status, Date }]` (documentación pública, no una llamada real). Fijado por test de contrato
   (`timbrado.contrato.spec.ts`).
 - **Liberar exige evidencia fuerte** (de eso depende volver a facturar el ticket, y un error ahí
-  DUPLICA un CFDI ante el SAT): SÓLO una lista VACÍA (o un 404) cuenta como "no la tiene"; cualquier
+  DUPLICA un CFDI ante el SAT): SÓLO una lista VACÍA (200 con `[]`) cuenta como "no la tiene"; un 404
+  NO (`DECISION PROVISIONAL (nocturno)`: una ruta de lista contesta `[]`; un 404 apunta a una ruta mal
+  armada, y tomarlo como vacío liberaría toda reserva ambigua a los 30 min); cualquier
   fila ajena (otra serie, otro folio, otro emisor si la fila lo trae), dos filas nuestras o un
   cuerpo que no es arreglo es `ESTADO_DESCONOCIDO` y nadie decide. Y hacen falta DOS búsquedas vacías
   separadas al menos 15 min (`cfdis.conciliacion_vacia_at` guarda la primera). Si en medio aparece, se
@@ -678,6 +680,8 @@ sólo concilia su empresa).
 - **Archivos**: `descargarArchivos` (el mismo `GET /cfdi/{xml|pdf}/issuedLite/{id}` de la emisión) y se
   guardan con la entrega de F2-105; el correo al receptor sólo sale si nunca se reclamó uno.
 - Una reserva confirmada por la conciliación se ENTREGA (archivos + el correo que nunca salió).
+- Los pasos 3 (01 pendiente) y 4 (archivos) comparten el candado `conciliacion_at`: un CFDI que esté en
+  los dos casos se resuelve en vueltas distintas, con 15 min entre una y otra.
 
 ---
 
