@@ -15,6 +15,13 @@ $script:NombreVisible = 'ArkonAgente (monitor SoftRestaurant)'
 $script:DescripcionServicio = 'Lee SoftRestaurant en solo lectura y reporta al monitor.'
 $script:UsuarioLectorPorDefecto = 'monitor_lector'
 
+# F2-143: el watchdog de la auto-actualización. Es el MISMO agente.exe, copiado en una subcarpeta
+# (así el exe del agente nunca está bloqueado por él) y arrancado con el argumento "actualizador".
+$script:NombreActualizador = 'ArkonAgenteActualizador'
+$script:NombreVisibleActualizador = 'ArkonAgente - actualizador'
+$script:DescripcionActualizador = 'Instala las versiones nuevas del agente ArkonAgente que publica el monitor.'
+$script:CarpetaActualizador = 'actualizador'
+
 # --- Validaciones (devuelven $null si está bien, o el mensaje de qué corregir) -------
 
 function Test-ApiUrl {
@@ -220,6 +227,31 @@ function Get-ArgumentosScServicio {
         'start= delayed-auto',
         ('DisplayName= "' + $script:NombreVisible + '"'),
         ('obj= ' + $obj)
+    )
+    return ($partes -join ' ')
+}
+
+# Argumentos de sc.exe del watchdog (F2-143). binPath lleva el exe entre comillas internas Y el
+# argumento "actualizador" afuera de ellas. Corre como LocalSystem: tiene que detener y arrancar el
+# servicio del agente y escribir en Program Files, cosas que la cuenta virtual no puede.
+# DECISION PROVISIONAL (nocturno): LocalSystem, sin verificar con elevación (F1-020b).
+function Get-ArgumentosScActualizador {
+    param(
+        [Parameter(Mandatory)] [ValidateSet('create', 'config')] [string] $Accion,
+        [Parameter(Mandatory)] [string] $RutaExe
+    )
+
+    if ($RutaExe.Contains('"')) {
+        throw 'La ruta del exe no puede llevar comillas.'
+    }
+
+    $partes = @(
+        $Accion,
+        $script:NombreActualizador,
+        ('binPath= "\"' + $RutaExe + '\" actualizador"'),
+        'start= delayed-auto',
+        ('DisplayName= "' + $script:NombreVisibleActualizador + '"'),
+        'obj= LocalSystem'
     )
     return ($partes -join ' ')
 }

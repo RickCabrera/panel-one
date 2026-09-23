@@ -1,3 +1,4 @@
+using ArkonAgente.Actualizacion;
 using ArkonAgente.Cola;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
@@ -19,14 +20,26 @@ internal sealed record DependenciasWorker(
     TimeProvider Reloj,
     string VersionAgente,
     TimeSpan ReintentoConfig,
-    Action<int> TerminarProceso)
+    Action<int> TerminarProceso,
+    Func<ConfiguracionAgente, ILogger, IRevisorActualizacion>? CrearRevisor = null)
 {
     public static readonly TimeSpan ReintentoConfigPorDefecto = TimeSpan.FromSeconds(60);
 
     public static DependenciasWorker Reales(RutasAgente rutas, EstadoSoftRestaurant estadoSr) =>
         new(rutas, CargadorConfiguracion.Cargar, Diagnosticador.VerificacionesPara, DetectarDeVerdad, SondearDeVerdad,
             estadoSr, (config, logger) => CrearEnvioDeVerdad(rutas, config, logger), TimeProvider.System,
-            ArmadorHeartbeat.VersionAgente(), ReintentoConfigPorDefecto, TerminarDeVerdad);
+            ArmadorHeartbeat.VersionAgente(), ReintentoConfigPorDefecto, TerminarDeVerdad,
+            (config, logger) => CrearRevisorDeVerdad(rutas, config, logger));
+
+    /// <summary>La auto-actualización real (F2-143): el canal del api y el estado en <c>actualizacion\estado.db</c>.</summary>
+    internal static RevisorActualizacion CrearRevisorDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger)
+    {
+        var carpeta = CarpetaActualizacion.De(rutas);
+        var cliente = new ClienteCanal(config);
+        return new RevisorActualizacion(
+            carpeta, cliente, EstadoActualizacion.Abrir(carpeta.Estado), ArmadorHeartbeat.VersionAgente(),
+            TimeProvider.System, logger, cliente);
+    }
 
     /// <summary>La cola real: <c>cola.db</c> en la carpeta del agente, y el envío al API.</summary>
     internal static EnviadorCola CrearEnvioDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger) =>
@@ -79,6 +92,7 @@ internal sealed class Worker : BackgroundService
     private string? _ultimoMensajeDeteccion;
     private string? _ultimoErrorSondeo;
     private string? _ultimaFallaInterna;
+    private string? _ultimaFallaActualizacion;
 
     public Worker(ILogger<Worker> logger, DependenciasWorker dependencias)
     {
@@ -189,14 +203,15 @@ internal sealed class Worker : BackgroundService
         // Una falla de la cola (disco lleno, cola.db corrupto) no se atrapa: es falla
         // interna, el proceso muere con código 1 y `sc failure` lo levanta.
         using var envio = _dep.CrearEnvio(config, _logger);
+        using var revisor = _dep.CrearRevisor?.Invoke(config, _logger);
         // El primer ciclo corre al arrancar: lo pendiente de antes de un reinicio sale
         // sin esperar al primer tick, y el panel ve al agente de inmediato.
-        await UnCicloAsync(config, envio, stoppingToken);
+        await UnCicloAsync(config, envio, revisor, stoppingToken);
 
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
-            await UnCicloAsync(config, envio, stoppingToken);
+            await UnCicloAsync(config, envio, revisor, stoppingToken);
         }
     }
 
@@ -206,11 +221,42 @@ internal sealed class Worker : BackgroundService
     /// que es lo que el panel lee como "conectado" (F1-061). F1-022 / F1-023 encolan
     /// cheques y snapshot aquí, también antes de enviar.
     /// </summary>
-    private async Task UnCicloAsync(ConfiguracionAgente config, ICicloEnvio envio, CancellationToken stoppingToken)
+    private async Task UnCicloAsync(
+        ConfiguracionAgente config, ICicloEnvio envio, IRevisorActualizacion? revisor, CancellationToken stoppingToken)
     {
         await ConsultarSrAsync(config, stoppingToken);
         EncolarHeartbeat(envio);
         await envio.CicloAsync(stoppingToken);
+        if (revisor is not null)
+        {
+            await RevisarActualizacionAsync(revisor, stoppingToken);
+        }
+    }
+
+    /// <summary>
+    /// La auto-actualización (F2-143), DESPUÉS del heartbeat y del envío: una falla aquí nunca deja
+    /// al panel sin reporte. Una excepción no prevista (disco, SQLite del estado) queda en el log una
+    /// vez por tipo y el ciclo sigue: el agente viejo es mejor que ningún agente.
+    /// </summary>
+    private async Task RevisarActualizacionAsync(IRevisorActualizacion revisor, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await revisor.CicloAsync(stoppingToken);
+            _ultimaFallaActualizacion = null;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (ex.GetType().FullName != _ultimaFallaActualizacion)
+            {
+                _ultimaFallaActualizacion = ex.GetType().FullName;
+                _logger.LogError(ex, "Auto-actualización: falla interna; el agente sigue con su versión actual.");
+            }
+        }
     }
 
     /// <summary>

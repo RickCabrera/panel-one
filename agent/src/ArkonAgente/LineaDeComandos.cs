@@ -18,6 +18,8 @@ internal static class LineaDeComandos
           agente.exe                       Corre el agente (así lo arranca el servicio de Windows).
           agente.exe test [--config RUTA]  Valida la configuración y las conexiones a SQL Server y al API.
           agente.exe --help                Muestra esta ayuda.
+          agente.exe actualizador          El watchdog de la auto-actualización (lo arranca el servicio
+                                           ArkonAgenteActualizador; no se corre a mano).
 
         La configuración se lee de C:\ProgramData\ArkonAgente\config.json (o de RUTA).
         Códigos de salida de 'test': 0 todo OK · 1 falla alguna conexión · 2 configuración inválida.
