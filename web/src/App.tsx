@@ -17,6 +17,7 @@ import { AyudaConteos } from './paginas/AyudaConteos';
 import { ConteoCaptura } from './paginas/ConteoCaptura';
 import { Conteos } from './paginas/Conteos';
 import { Existencias } from './paginas/Existencias';
+import { Facturacion } from './paginas/Facturacion';
 import { Areas } from './paginas/Areas';
 import { Clientes } from './paginas/Clientes';
 import { Inicio } from './paginas/Inicio';
@@ -110,6 +111,14 @@ export function Rutas() {
         <Route path="compras" element={<Compras />} />
         <Route path="gastos" element={<Gastos />} />
         <Route path="cuenta" element={<Cuenta />} />
+        <Route
+          path="facturacion"
+          element={
+            <RequiereRol roles={ROLES_ADMIN}>
+              <Facturacion />
+            </RequiereRol>
+          }
+        />
         <Route
           path="admin"
           element={

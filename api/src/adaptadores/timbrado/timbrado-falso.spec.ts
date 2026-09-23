@@ -2,7 +2,9 @@ import { RELOJ_FIJO, solicitudCfdi } from '../../../test/fixtures-cfdi';
 import { ErrorTimbrado } from './puerto';
 import {
   LEYENDA_NO_FISCAL,
+  MENSAJE_CSD_RECHAZADO,
   RFC_CON_ERROR,
+  RFC_EMISOR_CSD_RECHAZADO,
   SELLO_FALSO,
   TimbradoFalso,
   uuidDeterminista,
@@ -283,6 +285,36 @@ describe('PAC falso (F2-202)', () => {
         codigo: 'MOTIVO_REQUIERE_SUSTITUTO',
       });
       await expect(pac.consultarEstado(cfdi)).resolves.toMatchObject({ estado: 'vigente' });
+    });
+  });
+});
+
+describe('PAC falso: alta del CSD (F2-100)', () => {
+  const csd = (rfc: string) => ({
+    rfc,
+    certificado: Buffer.from('cer'),
+    llavePrivada: Buffer.from('key'),
+    contrasena: 'x',
+    reemplazar: false,
+  });
+
+  it('determinista: el id del emisor es su RFC, alta o reemplazo', async () => {
+    const pac = new TimbradoFalso(RELOJ_FIJO);
+    await expect(pac.registrarCsd(csd('EKU9003173C9'))).resolves.toEqual({
+      idOrganizacion: 'EKU9003173C9',
+    });
+    await expect(pac.registrarCsd({ ...csd('EKU9003173C9'), reemplazar: true })).resolves.toEqual({
+      idOrganizacion: 'EKU9003173C9',
+    });
+  });
+
+  it('el RFC reservado se rechaza con su mensaje', async () => {
+    const promesa = new TimbradoFalso(RELOJ_FIJO).registrarCsd(csd(RFC_EMISOR_CSD_RECHAZADO));
+    await expect(promesa).rejects.toBeInstanceOf(ErrorTimbrado);
+    await expect(promesa).rejects.toMatchObject({
+      codigo: 'CSD_RECHAZADO',
+      message: MENSAJE_CSD_RECHAZADO,
+      reintentable: false,
     });
   });
 });

@@ -138,6 +138,9 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   await prisma.conteoFisico.deleteMany(deEstas);
   await prisma.sincronizacionCatalogo.deleteMany(deEstas);
   await prisma.solicitudSincronizacion.deleteMany(deEstas);
+  // Datos fiscales y receptores frecuentes (F2-100), de la empresa.
+  await prisma.perfilFiscal.deleteMany(deEstas);
+  await prisma.receptorFrecuente.deleteMany(deEstas);
   await prisma.sucursal.deleteMany({ where: { empresaId: { in: empresas } } });
   await prisma.empresa.deleteMany({ where: { id: { in: empresas } } });
 }

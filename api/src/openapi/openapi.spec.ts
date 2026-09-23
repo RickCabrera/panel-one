@@ -147,6 +147,8 @@ describe('Contrato OpenAPI', () => {
     );
     expect(Object.keys(esquemas.FichaClienteDto.properties ?? {})).toEqual([
       'cliente',
+      // F2-100: el receptor frecuente de la misma empresa con el mismo RFC.
+      'receptor',
       'periodo',
       'productos',
     ]);
@@ -494,6 +496,53 @@ describe('Contrato OpenAPI', () => {
     ]);
   });
 
+  it('F2-100: datos fiscales con 403 sólo por rol, 404 fuera de alcance, y ninguna respuesta con el CSD', async () => {
+    const { paths, components } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    expect(codigos(paths['/facturacion/perfil-fiscal']?.get)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+    ]);
+    expect(codigos(paths['/facturacion/perfil-fiscal']?.put)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+    ]);
+    expect(codigos(paths['/facturacion/perfil-fiscal/csd']?.post)).toEqual([
+      '200',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+      '503',
+    ]);
+    const esquemas = components?.schemas as Record<
+      string,
+      { properties?: Record<string, { format?: string }> }
+    >;
+    expect(esquemas.CargarCsdDto.properties?.llavePrivada?.format).toBe('byte');
+    expect(esquemas.CargarCsdDto.properties?.contrasena?.format).toBe('password');
+    // Ninguna RESPUESTA lleva archivos ni contraseña: sólo metadata.
+    for (const dto of [
+      'RespuestaPerfilFiscalDto',
+      'PerfilFiscalDto',
+      'CsdDto',
+      'GuardarPerfilRespuestaDto',
+    ]) {
+      const texto = JSON.stringify(esquemas[dto]);
+      for (const prohibido of ['llavePrivada', 'contrasena', 'certificado"']) {
+        expect(texto).not.toContain(prohibido);
+      }
+    }
+  });
+
   it('F2-126: compras (lote del agente), gastos con 403 sólo por rol, estado de resultados', async () => {
     const doc = await generarDocumento();
     const { paths } = doc;
@@ -677,6 +726,10 @@ describe('Contrato OpenAPI', () => {
         '/reportes/baja',
         '/empresas',
         '/empresas/{id}',
+        // F2-100: datos fiscales, carga del CSD y catálogo de regímenes.
+        '/facturacion/perfil-fiscal',
+        '/facturacion/perfil-fiscal/csd',
+        '/facturacion/regimenes-fiscales',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',

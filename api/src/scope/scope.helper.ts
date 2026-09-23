@@ -80,6 +80,10 @@ export const LLAVE_EMPRESA = {
   PartidaCompra: 'empresaId',
   CategoriaGasto: 'empresaId',
   Gasto: 'empresaId',
+  // F2-100. Datos fiscales y receptores frecuentes: dato NUESTRO, los escribe SÓLO
+  // `EscrituraFacturacion` (con el scope del usuario). Nada de esto se escribe a SR.
+  PerfilFiscal: 'empresaId',
+  ReceptorFrecuente: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

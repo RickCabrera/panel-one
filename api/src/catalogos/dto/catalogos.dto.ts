@@ -1074,9 +1074,40 @@ export class ProductoClienteDto {
   cuentas!: number;
 }
 
+/** F2-100: el receptor de facturación guardado para el RFC del cliente, en SU empresa. */
+export class ReceptorClienteDto {
+  @ApiProperty({ description: 'RFC normalizado (sin espacios, mayúsculas).' })
+  rfc!: string;
+
+  @ApiProperty()
+  razonSocial!: string;
+
+  @ApiProperty({ description: 'c_RegimenFiscal.' })
+  regimenFiscal!: string;
+
+  @ApiProperty({ description: 'CP del domicilio fiscal.' })
+  cp!: string;
+
+  @ApiProperty({ description: 'c_UsoCFDI con que factura normalmente.' })
+  usoCfdi!: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  email!: string | null;
+}
+
 export class FichaClienteDto {
   @ApiProperty({ type: ClienteFichaDto })
   cliente!: ClienteFichaDto;
+
+  @ApiProperty({
+    type: ReceptorClienteDto,
+    nullable: true,
+    description:
+      'F2-100: el receptor frecuente de facturación de la MISMA empresa cuyo RFC coincide con el ' +
+      'del cliente (comparado sin espacios y en mayúsculas). Null si el cliente no tiene RFC, si ' +
+      'es un RFC genérico (público en general / extranjero) o si no hay receptor con ese RFC.',
+  })
+  receptor!: ReceptorClienteDto | null;
 
   @ApiProperty({ type: CifrasClienteDto, description: 'Del periodo, en SU sucursal.' })
   periodo!: CifrasClienteDto;

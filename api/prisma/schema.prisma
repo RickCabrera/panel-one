@@ -50,6 +50,9 @@ model Empresa {
   suscripcionesReporte SuscripcionReporte[]
   // F2-126: categorías de gasto (dato del panel).
   categoriasGasto      CategoriaGasto[]
+  // F2-100: datos fiscales (uno por empresa) y receptores frecuentes de facturación.
+  perfilFiscal         PerfilFiscal?
+  receptoresFrecuentes ReceptorFrecuente[]
 
   @@map("empresas")
 }
@@ -1504,4 +1507,58 @@ model Gasto {
   @@index([empresaId])
   @@index([sucursalId, dia])
   @@map("gastos")
+}
+
+// F2-100. Los datos fiscales de una empresa: UN emisor por empresa (DECISION PROVISIONAL
+// (nocturno): varias razones sociales en una empresa sería una tarea aparte). Dato NUESTRO,
+// capturado en el panel; nunca se escribe a SR. Del CSD sólo se guarda METADATA (número de
+// certificado, RFC, vigencia): el .cer, el .key y su contraseña NUNCA tocan esta base (van
+// directo al PAC por `PuertoTimbrado.registrarCsd`). Todo `csd_*` es nulo hasta cargarlo, y se
+// vacía si cambia el RFC (ese CSD era de otro RFC). `folio_actual` lo avanza la emisión (F2-104).
+model PerfilFiscal {
+  id               String    @id @default(uuid()) @db.Uuid
+  empresaId        String    @unique @map("empresa_id") @db.Uuid
+  rfc              String
+  razonSocial      String    @map("razon_social")
+  regimenFiscal    String    @map("regimen_fiscal") @db.Char(3)
+  cp               String    @db.Char(5)
+  serie            String
+  folioActual      Int       @default(0) @map("folio_actual")
+  facturamaOrgId   String?   @map("facturama_org_id")
+  activo           Boolean   @default(true)
+  csdNoCertificado String?   @map("csd_no_certificado")
+  csdRfc           String?   @map("csd_rfc")
+  csdVigenteDesde  DateTime? @map("csd_vigente_desde") @db.Timestamptz(3)
+  csdVigenteHasta  DateTime? @map("csd_vigente_hasta") @db.Timestamptz(3)
+  csdCargadoAt     DateTime? @map("csd_cargado_at") @db.Timestamptz(3)
+  csdCargadoPor    String?   @map("csd_cargado_por") @db.Uuid
+  creadoPor        String?   @map("creado_por") @db.Uuid
+  actualizadoPor   String?   @map("actualizado_por") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "perfiles_fiscales_empresa_fkey")
+
+  @@map("perfiles_fiscales")
+}
+
+// F2-100. Cache de receptores de factura para autocompletar (lo alimentará el portal, F2-103).
+// Por empresa: el mismo RFC en dos empresas son dos filas y nunca se cruzan. `rfc` va
+// normalizado (trim + mayúsculas). La ficha de Clientes (F2-232) liga por ese RFC.
+model ReceptorFrecuente {
+  id            String   @id @default(uuid()) @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  rfc           String
+  razonSocial   String   @map("razon_social")
+  regimenFiscal String   @map("regimen_fiscal") @db.Char(3)
+  cp            String   @db.Char(5)
+  usoCfdi       String   @map("uso_cfdi")
+  email         String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict, map: "receptores_frecuentes_empresa_fkey")
+
+  @@unique([empresaId, rfc], map: "receptores_frecuentes_empresa_rfc_key")
+  @@map("receptores_frecuentes")
 }

@@ -29,6 +29,7 @@ import { sembrarCatalogos } from './seed-catalogos';
 import { sembrarCompras } from './seed-compras';
 import { sembrarConteos } from './seed-conteos';
 import { sembrarExistencias } from './seed-existencias';
+import { sembrarFacturacion } from './seed-facturacion';
 import { sembrarGastos } from './seed-gastos';
 import { sembrarMovimientos } from './seed-movimientos';
 import { sembrarRecetas } from './seed-recetas';
@@ -602,6 +603,13 @@ async function main(): Promise<void> {
     console.log(
       `Gastos sembrados (F2-126): ${gastos.gastos} en ${gastos.categorias} categorías nuevas; ` +
         `${gastos.omitidos} omitidos (categoría inactiva), ${gastos.borrados} de otra ventana borrados.`,
+    );
+    // Datos fiscales (F2-100): perfil con metadata SINTÉTICA de CSD (vence en 20 días, para ver
+    // la alerta) y dos receptores frecuentes que ligan con clientes del seed por RFC.
+    const facturacion = await sembrarFacturacion(prisma, { empresaId: op.empresaId, hoy, ahora });
+    console.log(
+      `Datos fiscales sembrados (F2-100): perfil ${facturacion.perfil}, ` +
+        `${facturacion.receptores} receptores frecuentes.`,
     );
     // El resto del universo todavía no tiene tabla: se genera (y se valida en los
     // specs) para que la tarea que la cree lo persista desde aquí.

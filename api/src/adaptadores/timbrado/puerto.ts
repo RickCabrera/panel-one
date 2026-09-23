@@ -113,7 +113,8 @@ export type CodigoErrorTimbrado =
   | 'ESTADO_DESCONOCIDO'
   | 'MOTIVO_REQUIERE_SUSTITUTO'
   | 'CFDI_NO_ENCONTRADO'
-  | 'RECHAZADO_POR_PAC';
+  | 'RECHAZADO_POR_PAC'
+  | 'CSD_RECHAZADO';
 
 /** Error del timbrado con mensaje en español, listo para mostrar. */
 export class ErrorTimbrado extends Error {
@@ -128,7 +129,30 @@ export class ErrorTimbrado extends Error {
   }
 }
 
+/**
+ * El CSD de un emisor (F2-100), tal como lo sube el administrador. Viaja SÓLO en memoria, de la
+ * petición al PAC: ni el `.key` ni la contraseña se guardan, se loguean o se copian a un error.
+ */
+export interface SolicitudCsd {
+  /** RFC del emisor (el del perfil fiscal, ya validado contra el certificado). */
+  rfc: string;
+  /** El `.cer` tal cual (DER). */
+  certificado: Buffer;
+  /** El `.key` tal cual (PKCS#8 cifrado, DER). */
+  llavePrivada: Buffer;
+  contrasena: string;
+  /** `true` = el emisor ya tenía un CSD en el PAC y éste lo reemplaza (renovación). */
+  reemplazar: boolean;
+}
+
+/** Lo que se guarda del alta: cómo encontrar al emisor en el PAC. */
+export interface CsdRegistrado {
+  idOrganizacion: string;
+}
+
 export interface PuertoTimbrado {
+  /** Da de alta (o reemplaza) el CSD de un emisor en el PAC multiemisor (F2-100). */
+  registrarCsd(solicitud: SolicitudCsd): Promise<CsdRegistrado>;
   emitir(solicitud: SolicitudCfdi): Promise<CfdiTimbrado>;
   cancelar(solicitud: SolicitudCancelacion): Promise<ResultadoCancelacion>;
   consultarEstado(cfdi: ReferenciaCfdi): Promise<{ uuid: string; estado: EstadoCfdi }>;

@@ -105,3 +105,33 @@ exports[`Contrato Facturama (F2-202) emitir: el cuerpo del POST y las descargas 
   },
 ]
 `;
+
+exports[`Contrato Facturama: alta del CSD (F2-100) alta: POST /api-lite/csds con los archivos en base64 1`] = `
+[
+  {
+    "cuerpo": {
+      "Certificate": "Y2VyLWRlLXBydWViYQ==",
+      "PrivateKey": "a2V5LWRlLXBydWViYQ==",
+      "PrivateKeyPassword": "contrasena-dummy",
+      "Rfc": "EKU9003173C9",
+    },
+    "metodo": "POST",
+    "url": "https://apisandbox.facturama.mx/api-lite/csds",
+  },
+]
+`;
+
+exports[`Contrato Facturama: alta del CSD (F2-100) reemplazo: PUT /api-lite/csds/{rfc} 1`] = `
+[
+  {
+    "cuerpo": {
+      "Certificate": "Y2VyLWRlLXBydWViYQ==",
+      "PrivateKey": "a2V5LWRlLXBydWViYQ==",
+      "PrivateKeyPassword": "contrasena-dummy",
+      "Rfc": "EKU9003173C9",
+    },
+    "metodo": "PUT",
+    "url": "https://apisandbox.facturama.mx/api-lite/csds/EKU9003173C9",
+  },
+]
+`;

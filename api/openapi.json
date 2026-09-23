@@ -9136,6 +9136,310 @@
           "finanzas"
         ]
       }
+    },
+    "/facturacion/regimenes-fiscales": {
+      "get": {
+        "description": "Cualquier usuario autenticado (sin rol): es el catálogo público del SAT y no trae datos de ninguna empresa.",
+        "operationId": "FacturacionController_regimenes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RegimenFiscalDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Catálogo c_RegimenFiscal del SAT con su aplicación a persona física o moral (F2-100).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/perfil-fiscal": {
+      "get": {
+        "description": "Nunca devuelve el .cer, el .key ni la contraseña: no se guardan. `perfil = null` = la empresa no tiene datos fiscales todavía.",
+        "operationId": "FacturacionController_perfil",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario o inexistente = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaPerfilFiscalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): los datos fiscales son sólo de administradores.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance. Misma respuesta en todos los casos (nunca 403), tenga o no datos fiscales.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Datos fiscales de una empresa y METADATA de su CSD (F2-100).",
+        "tags": [
+          "facturacion"
+        ]
+      },
+      "put": {
+        "description": "Valida RFC, régimen (existe y aplica a moral/física), CP y serie. Cambiar el RFC con un CSD cargado quita el CSD y el alta en el PAC (`csdQuitado = true`): eran de otro RFC.",
+        "operationId": "FacturacionController_guardarPerfil",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardarPerfilFiscalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardarPerfilRespuestaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos fiscales inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): los datos fiscales son sólo de administradores.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance. Misma respuesta en todos los casos (nunca 403), tenga o no datos fiscales.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Otro administrador los cambió a la vez.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Crea o edita los datos fiscales de una empresa (F2-100).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/perfil-fiscal/csd": {
+      "post": {
+        "description": "Orden: empresa en alcance (404) → hay datos fiscales (409) → validación local del CSD (400: .cer o .key inválidos, contraseña incorrecta, llave de otro certificado, RFC distinto, vencido) → alta en el PAC (400 si lo rechaza, 503 si no responde). Sólo si todo pasa se guarda la METADATA (número, RFC, vigencia). El .key y la contraseña van al PAC y no se guardan ni se loguean.",
+        "operationId": "FacturacionController_cargarCsd",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CargarCsdDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaPerfilFiscalDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "CSD inválido o rechazado por el PAC.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor): los datos fiscales son sólo de administradores.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance. Misma respuesta en todos los casos (nunca 403), tenga o no datos fiscales.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La empresa no tiene datos fiscales todavía, o su RFC cambió durante la carga.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "El PAC no respondió.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Carga (o reemplaza) el CSD de la empresa: .cer, .key y contraseña (F2-100).",
+        "tags": [
+          "facturacion"
+        ]
+      }
     }
   },
   "info": {
@@ -14163,6 +14467,42 @@
           "vistoAt"
         ]
       },
+      "ReceptorClienteDto": {
+        "type": "object",
+        "properties": {
+          "rfc": {
+            "type": "string",
+            "description": "RFC normalizado (sin espacios, mayúsculas)."
+          },
+          "razonSocial": {
+            "type": "string"
+          },
+          "regimenFiscal": {
+            "type": "string",
+            "description": "c_RegimenFiscal."
+          },
+          "cp": {
+            "type": "string",
+            "description": "CP del domicilio fiscal."
+          },
+          "usoCfdi": {
+            "type": "string",
+            "description": "c_UsoCFDI con que factura normalmente."
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "rfc",
+          "razonSocial",
+          "regimenFiscal",
+          "cp",
+          "usoCfdi",
+          "email"
+        ]
+      },
       "CifrasClienteDto": {
         "type": "object",
         "properties": {
@@ -14233,6 +14573,16 @@
           "cliente": {
             "$ref": "#/components/schemas/ClienteFichaDto"
           },
+          "receptor": {
+            "nullable": true,
+            "description": "F2-100: el receptor frecuente de facturación de la MISMA empresa cuyo RFC coincide con el del cliente (comparado sin espacios y en mayúsculas). Null si el cliente no tiene RFC, si es un RFC genérico (público en general / extranjero) o si no hay receptor con ese RFC.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReceptorClienteDto"
+              }
+            ]
+          },
           "periodo": {
             "description": "Del periodo, en SU sucursal.",
             "allOf": [
@@ -14251,6 +14601,7 @@
         },
         "required": [
           "cliente",
+          "receptor",
           "periodo",
           "productos"
         ]
@@ -17863,6 +18214,251 @@
         },
         "required": [
           "empresaId"
+        ]
+      },
+      "RegimenFiscalDto": {
+        "type": "object",
+        "properties": {
+          "clave": {
+            "type": "string",
+            "example": "601"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "fisica": {
+            "type": "boolean",
+            "description": "Aplica a persona física (RFC de 13)."
+          },
+          "moral": {
+            "type": "boolean",
+            "description": "Aplica a persona moral (RFC de 12)."
+          }
+        },
+        "required": [
+          "clave",
+          "descripcion",
+          "fisica",
+          "moral"
+        ]
+      },
+      "CsdDto": {
+        "type": "object",
+        "properties": {
+          "noCertificado": {
+            "type": "string",
+            "example": "30001000000500003416",
+            "description": "Número de certificado."
+          },
+          "rfc": {
+            "type": "string",
+            "description": "RFC del titular según el certificado."
+          },
+          "vigenteDesde": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "vigenteHasta": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Fin de la vigencia (UTC). La vista calcula los días restantes y la alerta."
+          },
+          "cargadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cuándo se cargó en el panel."
+          }
+        },
+        "required": [
+          "noCertificado",
+          "rfc",
+          "vigenteDesde",
+          "vigenteHasta",
+          "cargadoAt"
+        ]
+      },
+      "PerfilFiscalDto": {
+        "type": "object",
+        "properties": {
+          "rfc": {
+            "type": "string"
+          },
+          "razonSocial": {
+            "type": "string"
+          },
+          "regimenFiscal": {
+            "type": "string"
+          },
+          "cp": {
+            "type": "string"
+          },
+          "serie": {
+            "type": "string"
+          },
+          "folioActual": {
+            "type": "number",
+            "description": "Último folio emitido con la serie (lo avanza la emisión, F2-104)."
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "emisorRegistrado": {
+            "type": "boolean",
+            "description": "El emisor está dado de alta en el PAC (hay CSD registrado)."
+          },
+          "csd": {
+            "nullable": true,
+            "description": "Null = sin CSD cargado.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CsdDto"
+              }
+            ]
+          },
+          "actualizadoAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "rfc",
+          "razonSocial",
+          "regimenFiscal",
+          "cp",
+          "serie",
+          "folioActual",
+          "activo",
+          "emisorRegistrado",
+          "csd",
+          "actualizadoAt"
+        ]
+      },
+      "RespuestaPerfilFiscalDto": {
+        "type": "object",
+        "properties": {
+          "perfil": {
+            "nullable": true,
+            "description": "Null = la empresa todavía no tiene datos fiscales.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PerfilFiscalDto"
+              }
+            ]
+          },
+          "pacSimulado": {
+            "type": "boolean",
+            "description": "true = el servidor corre con el PAC SIMULADO (`PAC_IMPL=falso`): el CSD se valida aquí pero no se registra ante ningún PAC ni el SAT."
+          }
+        },
+        "required": [
+          "perfil",
+          "pacSimulado"
+        ]
+      },
+      "GuardarPerfilFiscalDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rfc": {
+            "type": "string",
+            "example": "EKU9003173C9",
+            "description": "RFC del emisor: 12 caracteres (persona moral) o 13 (física). Se guarda sin espacios y en mayúsculas. Cambiarlo con un CSD cargado QUITA el CSD (era de otro RFC)."
+          },
+          "razonSocial": {
+            "type": "string",
+            "maxLength": 254,
+            "description": "Como aparece en la Constancia de Situación Fiscal (CFDI 4.0: sin \"S.A. de C.V.\")."
+          },
+          "regimenFiscal": {
+            "type": "string",
+            "example": "601",
+            "description": "c_RegimenFiscal, compatible con el tipo de persona."
+          },
+          "cp": {
+            "type": "string",
+            "example": "06700",
+            "description": "Código postal del domicilio fiscal (5 dígitos)."
+          },
+          "serie": {
+            "type": "string",
+            "example": "A",
+            "maxLength": 25,
+            "description": "Serie de los CFDI (1–25 letras o números)."
+          }
+        },
+        "required": [
+          "empresaId",
+          "rfc",
+          "razonSocial",
+          "regimenFiscal",
+          "cp",
+          "serie"
+        ]
+      },
+      "GuardarPerfilRespuestaDto": {
+        "type": "object",
+        "properties": {
+          "perfil": {
+            "nullable": true,
+            "description": "Null = la empresa todavía no tiene datos fiscales.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PerfilFiscalDto"
+              }
+            ]
+          },
+          "pacSimulado": {
+            "type": "boolean",
+            "description": "true = el servidor corre con el PAC SIMULADO (`PAC_IMPL=falso`): el CSD se valida aquí pero no se registra ante ningún PAC ni el SAT."
+          },
+          "csdQuitado": {
+            "type": "boolean",
+            "description": "true = cambió el RFC y se quitó el CSD que estaba cargado."
+          }
+        },
+        "required": [
+          "perfil",
+          "pacSimulado",
+          "csdQuitado"
+        ]
+      },
+      "CargarCsdDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "certificado": {
+            "type": "string",
+            "format": "byte",
+            "maxLength": 21848,
+            "description": "El `.cer` en base64 (DER o PEM). Máximo 16 KB."
+          },
+          "llavePrivada": {
+            "type": "string",
+            "format": "byte",
+            "maxLength": 21848,
+            "description": "El `.key` en base64 (PKCS#8 cifrado, DER). Máximo 16 KB. Viaja al PAC y NUNCA se guarda ni se loguea."
+          },
+          "contrasena": {
+            "type": "string",
+            "format": "password",
+            "maxLength": 256,
+            "description": "Contraseña de la llave privada. Viaja al PAC y NUNCA se guarda ni se loguea."
+          }
+        },
+        "required": [
+          "empresaId",
+          "certificado",
+          "llavePrivada",
+          "contrasena"
         ]
       }
     }

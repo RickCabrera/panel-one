@@ -116,10 +116,14 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'partidaConteo',
       // F2-124: traspasos; se escriben por `traspasos(scope)`, no por aquí.
       'partidaTraspaso',
+      // F2-100: datos fiscales; se escriben por `facturacion(scope)`, no por aquí.
+      'perfilFiscal',
       'polizaInventario',
       'producto',
       'productoMetadata',
       'proveedorCatalogo',
+      // F2-100: receptores frecuentes; se escriben por `facturacion(scope)`.
+      'receptorFrecuente',
       // F2-125: recetas; se escriben por `recetasDeSucursal(agente)`.
       'receta',
       'reglaAlerta',
