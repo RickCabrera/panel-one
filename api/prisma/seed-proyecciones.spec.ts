@@ -67,6 +67,8 @@ const CORTE_INSTANTE = new Date('2026-09-02T18:00:00.000Z');
  * el seed ganó un insumo de consumo OPERATIVO estable (I063, aceite para freír: base por día de la
  * semana ±4 %, `seed-maestro/insumos.ts`). El AC ("para UN insumo con consumo estable") se mide
  * sobre él, y además se exige que pase el MISMO filtro de estabilidad: no se le supone estable.
+ * Su acierto es casi por construcción (se genera por día de la semana y el método promedia por día
+ * de la semana): la evidencia del método es la prueba de TODAS las filas, abajo.
  */
 const ESTABLE_TOLERANCIA = 0.1;
 const ESTABLE_MEDIA_MINIMA = 1;

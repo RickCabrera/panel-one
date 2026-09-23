@@ -6101,7 +6101,9 @@ su trabajo por no hacerlo.
 **Estado:** CERRADA si el PR se mergea. **PENDIENTE DE VALIDACIÓN REAL**: medir con una semana del
 piloto y resolver la base de la demanda si SR no deja pólizas de consumo (F2-193). Carriles /api +
 /web (+ docs). Revisor: gate del plan APROBADO en el 1.er pase, con 4 observaciones obligatorias que
-se incorporaron; gate del entregable: ver al final.
+se incorporaron; gate del entregable APROBADO en el 1.er pase (aceptó la desviación del criterio
+(b), con 4 menores: honestidad sobre I063, este veredicto aquí, "contrato con el agente" en
+esquema-sr y no commitear `.wt-main/`; las tres primeras se aplicaron antes del push).
 
 **Qué quedó hecho.**
 - **api** (sin tabla ni migración, todo al vuelo): `GET /inventario/proyecciones?empresaId&sucursalId?
@@ -6153,7 +6155,10 @@ se incorporaron; gate del entregable: ver al final.
   22 de 67 insumos de receta caen en ±15 %. No toqué los umbrales. Por la regla 2 de la Ronda 2
   agregué al seed un insumo de consumo OPERATIVO estable (I063) y el AC ("para UN insumo con consumo
   estable") se mide sobre él, exigiendo además que pase el MISMO filtro de estabilidad. Resultado:
-  error 1.9 % (A1) y 0.8 % (A2). Todo esto está escrito en el encabezado de
+  error 1.9 % (A1) y 0.8 % (A2). **Ojo: ese acierto es casi por construcción** (I063 se genera por
+  día de la semana ±4 % y el método promedia por día de la semana); la evidencia del método es la
+  prueba de TODAS las filas contra el cálculo a mano, y la precisión real sólo la da el piloto
+  (F2-193). Todo esto está escrito en el encabezado de
   `api/prisma/seed-proyecciones.spec.ts`. Si el revisor o Ricardo consideran que eso es medir algo
   más fácil, la alternativa honesta es hacer el seed de ventas más voluminoso (tarea aparte).
 - El ±15 % se mide sobre la PROYECCIÓN; el sugerido = proyección cuando existencia = mínimo es una

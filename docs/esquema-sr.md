@@ -1279,7 +1279,7 @@ sucursal se rechaza. Baja lógica (`anulado_at`), anulado no suma.
 
 ### Proyecciones y sugerido de compra (F2-127): al vuelo, desde pólizas y existencias
 
-**No hay tabla ni contrato nuevo.** `GET /inventario/proyecciones` (puro en
+**No hay tabla ni contrato nuevo con el agente.** `GET /inventario/proyecciones` (endpoint del panel) (puro en
 `api/src/inventario/proyecciones.ts`) lee las pólizas de F2-122, la última foto de existencias y
 los mínimos de F2-121. Nada se guarda ni se escribe a SR. Todo lo que sigue es **supuesto no
 validado**: depende de cómo registre SR sus salidas, que nadie ha visto (F2-193).
@@ -1320,7 +1320,10 @@ validado**: depende de cómo registre SR sus salidas, que nadie ha visto (F2-193
   HOY − 13, TODAS las filas cuadran contra un cálculo a mano desde las pólizas crudas del generador,
   y el insumo de consumo ESTABLE del seed (I063, aceite para freír, base por día de la semana ±4 %,
   agregado por F2-127 porque el seed no tenía ninguno) acierta la semana siguiente con error de
-  1.9 % (A1) y 0.8 % (A2); el AC pedía ±15 %. El ±15 % se mide sobre la PROYECCIÓN: el sugerido
+  1.9 % (A1) y 0.8 % (A2); el AC pedía ±15 %. **Ese acierto es casi por construcción**: I063 se
+  genera con una base por día de la semana ±4 % y el método promedia justamente por día de la
+  semana. Lo que da evidencia del método es que TODAS las filas cuadran con el cálculo a mano; la
+  precisión real sólo la da una semana del piloto (F2-193). El ±15 % se mide sobre la PROYECCIÓN: el sugerido
   hereda esa precisión cuando existencia = mínimo (identidad algebraica), no se validó aparte. En los
   insumos de RECETA del seed el mismo método acierta ±15 % sólo en 22 de 67 (demanda de pocas
   unidades por semana, 20–40 % de variación entre semanas, y baches de venta como el de A2·I032, que
