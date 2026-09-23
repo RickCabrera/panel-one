@@ -1968,7 +1968,7 @@ contador para el mismo mes (±1% por redondeos documentados).
 > vista (`NOTA_PENDIENTES` en `paginas/Comparativos.tsx`).
 
 ### F2-127 · Proyecciones y sugerido de compra
-`[ ]` Proyección de consumo por insumo: promedio móvil ponderado de 4 semanas por
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** la semana real del piloto y la base de la demanda si SR no deja pólizas de consumo son de F2-193 (ver §10 "Proyecciones" de esquema-sr). Proyección de consumo por insumo: promedio móvil ponderado de 4 semanas por
 día-de-semana (sin ML, transparente y explicable) → sugerido de compra = proyección próximo
 periodo − existencia + mínimo. Vista "Proyecciones" con ajuste manual del horizonte y export
 del sugerido como orden de compra CSV.
