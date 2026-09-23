@@ -973,13 +973,43 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
 
 ## 6. Productos y catálogo
 
-> Alimenta a `F1-032` (top productos) y a `F2-145`.
+> Alimenta a `F1-032` (top productos), a `F2-145` y al lector de F2-240.
 
-**Tablas:** _(pendiente)_
+**Tablas (F2-240).** ✅ **Columnas VALIDADAS 2026-09-23** contra la SR 10 local (`.\NATIONALSOFT`,
+`softrestaurant10`, `versiondb` 10.021800): se leyeron **metadatos** (`sys.tables`, `sys.columns`,
+`sys.indexes`, `sys.foreign_keys`) y **conteos agregados** (filas por tabla, cuántos NULL, cuántos
+distintos, cuántos por valor de una columna de estado). **Ningún valor de negocio** (nombres, precios)
+entró al repo. Lo que dice "qué es" una columna de estado sigue siendo ⚠️ SUPUESTO hasta F2-192.
 
-| Columna | Tipo | Qué es de verdad | Estado |
+| Tabla.columna | Tipo | Qué es (para el agente) | Estado |
 |---|---|---|---|
-| | | | |
+| `productos.idproducto` | varchar(15) NOT NULL, **PK** | `origenSrId` y `clave` del producto | ✅ columna y PK |
+| `productos.descripcion` | varchar(60) NULL | `nombre` | ✅ columna; en esta base ninguno vacío (217 filas) |
+| `productos.idgrupo` | varchar(5) NULL | `grupoOrigenSrId`; **FK real** `FK_productos_grupos` | ✅ |
+| `productos.plu` | varchar(30) NULL | NO se usa como clave: NULL en las 217 filas | ✅ conteo |
+| `productos.nombrecorto` | varchar(20) NULL | no se lee. ⚠️ Si el ticket imprime ESTE nombre y no `descripcion`, el cruce por nombre de F2-145 falla (ver abajo) | ⚠️ |
+| `productosdetalle` | **sin PK**; FK a `productos` y a `empresas` | una fila por (producto, empresa del POS) | ✅ FKs |
+| `productosdetalle.precio` | money NULL | `precio` (4 decimales, se manda como texto) | ✅ columna; ⚠️ IVA desconocido (`preciosinimpuestos` también existe) |
+| `productosdetalle.bloqueado` | bit NULL | `activoPos`: 1 → false, 0 → true, NULL → nulo | ⚠️ SUPUESTO de sentido (1 de 217 vale 1) |
+| `productosdetalle.idempresa` | varchar(15) | la empresa del POS a la que aplica el precio | ✅; esta base tiene 1 empresa |
+| `grupos.idgrupo` / `descripcion` | varchar(5) **PK** / varchar(30) NULL | grupo del producto; sin columna de estado (`activoPos` nulo) | ✅ (14 filas) |
+
+- **Consultas:** `agent/src/ArkonAgente/Sql/Consultas/sr_catalogo_productos.sql` (LEFT JOIN
+  `productosdetalle`, NOLOCK, una fila por fila de detalle) y `sr_catalogo_grupos.sql`.
+- `DECISION PROVISIONAL (nocturno)` — **varias filas de detalle por producto** (varias empresas en
+  una base de SR): si todas dicen el mismo precio y estado, se usan; si no, el producto viaja con
+  `precio` y `activoPos` **nulos** y el agente lo avisa en su log (`MapeoCatalogos.MapearProductos`).
+  El `total` del cierre cuenta **productos**, no filas SQL.
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — ¿una base de SR con varias empresas?** `dbo.empresas` y
+  `productosdetalle.idempresa` sugieren que una base puede tener varias "empresas" del POS, lo que
+  choca con "un agente = una sucursal". Sin verlo, no se elige una empresa.
+- ⚠️ **Listas de precios:** existen `ProductPriceLists`, `SalesAreaPriceList`,
+  `listadepreciosdetalle` y precios por día en `productosdetalle` (`preciolunes`…`preciodomingo`,
+  con horario). En esta base las listas están vacías. El agente manda sólo `precio`; si una
+  instalación usa listas o precio por día, el panel mostrará el precio base (supuesto "un precio por
+  producto y sucursal", abajo).
+- ⚠️ Existen `recetasalmacenes` y `explosionproductos`/`explosionproductosdetalle` (FK a productos):
+  candidatas para las recetas de F2-241 (§10). No se leen aquí.
 
 **Productos vendidos que no están en catálogo:** no se ha visto en SR si pasa ni cómo se ven
 (artículos abiertos, "precio libre", productos borrados). Lo que el panel supone hoy (F2-145,
@@ -1043,8 +1073,10 @@ y no debe compararse con ella.
   columna lo dice.
 
 
-**Lo que el espejo de catálogos (F2-230, `POST /ingesta/catalogos`) supone.** Nada de esto se ha
-visto en SR: la tabla de productos de §6 sigue `_(pendiente)_`. Lo lee F2-240 y lo valida F2-192.
+**Lo que el espejo de catálogos (F2-230, `POST /ingesta/catalogos`) supone.** Escrito antes de ver
+SR. F2-240 ya mapeó las columnas (tabla de arriba): la llave estable es el PK `idproducto`, la clave
+visible es la misma (el `plu` viene vacío) y la baja sale de `productosdetalle.bloqueado`. El SENTIDO
+de esas columnas lo valida F2-192.
 
 - ⚠️ **SUPUESTO — cada registro del POS tiene una llave ESTABLE (`origenSrId`, texto 1–64) dentro
   de la base de SU sucursal.** El espejo es por sucursal: el mismo `origenSrId` en dos sucursales
@@ -1072,13 +1104,25 @@ visto en SR: la tabla de productos de §6 sigue `_(pendiente)_`. Lo lee F2-240 y
 
 ## 7. Meseros y usuarios del POS
 
-> Alimenta a `F1-022`, `F1-023` y al monitor.
+> Alimenta a `F1-022`, `F1-023`, al monitor y al lector de F2-240.
 
-**Tablas:** _(pendiente)_
+**Tablas (F2-240).** ✅ Columnas VALIDADAS 2026-09-23 (SR 10 local, sólo metadatos y conteos; ver §6).
 
-| Columna | Tipo | Qué es de verdad | Estado |
+| Tabla.columna | Tipo | Qué es (para el agente) | Estado |
 |---|---|---|---|
-| | | | |
+| `meseros.idmeserointerno` | bigint NOT NULL, **PK** | `origenSrId` del mesero | ✅ |
+| `meseros.idmesero` | varchar(4) NOT NULL, **sin índice único** | `clave` (la que ve el usuario) | ✅ columna; 2 filas, 2 distintas |
+| `meseros.nombre` | varchar(60) NULL | `nombre` | ✅ |
+| `meseros.visible` | numeric(1) NULL | `activoPos`: 1 → true, 0 → false, otro/NULL → nulo | ⚠️ SUPUESTO de sentido (los 2 valen 1) |
+| `meseros.contraseña`, `fotografia` | varchar(30), image | **NUNCA se leen** (un test lo vigila) | ✅ existen |
+| `cheques.idmesero` / `tempcheques.idmesero` | varchar(4) | ⚠️ apunta a `meseros.idmesero` (la CLAVE, no el PK): **sin FK**, deducido por nombre y tipo | ⚠️ |
+
+- `DECISION PROVISIONAL (nocturno)` — **el `origenSrId` del mesero es `idmeserointerno`** (el PK),
+  no `idmesero`: `idmesero` no tiene índice único, y un id repetido en una página hace que el API
+  rechace TODAS sus apariciones. Consecuencia para F1-022: si un día el cheque manda un
+  `meseroOrigenSrId`, tendrá que traducir `cheques.idmesero` → `idmeserointerno` (o cruzar por
+  `clave`). Hoy el cheque manda el nombre y el cruce de F2-231 es por nombre.
+- Consulta: `agent/src/ArkonAgente/Sql/Consultas/sr_catalogo_meseros.sql`.
 
 **Lo que Análisis (F2-221, `GET /ventas/por-mesero`) supone.** El contrato de ingesta sólo trae el
 **nombre** del mesero en `cheques.mesero` (texto, nulo permitido), sin id de SR.
@@ -1137,6 +1181,37 @@ una instalación real (F2-192):
 > `docs/delivery.md` (lo que se sabe, la checklist de lo que falta ver y la decisión de alcance).
 > Sigue sin verse si esta instalación distingue comedor / mostrador / domicilio / plataformas, y
 > por qué campo: lo responde F2-192.
+
+**Tablas (F2-240).** ✅ Columnas VALIDADAS 2026-09-23 (SR 10 local, sólo metadatos y conteos; ver §6).
+
+| Tabla.columna | Tipo | Qué es (para el agente) | Estado |
+|---|---|---|---|
+| `areasrestaurant.idarearestaurant` | varchar(5) NOT NULL, **PK** | `origenSrId` y `clave` del **área** | ✅ (3 filas) |
+| `areasrestaurant.descripcion` | varchar(30) NULL | `nombre` | ✅ |
+| `areasrestaurant.Estatus` | bit NOT NULL (con mayúscula, §12) | `activoPos`: 1 → true, 0 → false | ⚠️ SUPUESTO de sentido (las 3 valen 1) |
+| `areasrestaurant.idtiposervicio` | numeric NULL | tipo de servicio del área: vale 1, 2 y 3 en esta base | ✅ conteo; ⚠️ sentido |
+| `cheques.idarearestaurant` | varchar(5) | ⚠️ apunta a `areasrestaurant`: **sin FK**, por nombre y tipo | ⚠️ |
+| `areas.idarea` / `nombre` | varchar(4) PK / varchar(30) | **SEÑUELO:** área de PRODUCCIÓN / impresión (la usan `productosdetalle.idarea` y `estacionesareas`), NO el área de la cuenta. No se lee | ✅ |
+| `tiposervicio.Idtiposervicio` / `Desc_tiposervicio` | nchar(20) NULL / varchar(50) NULL, **sin PK** | el agente la manda como catálogo `canales` | ✅ columnas; **vacía** en esta base |
+| `cheques.tipodeservicio` | numeric (`tempcheques`: int) | tipo de servicio de la cuenta | ✅ columna; ⚠️ sentido |
+| `estaciones.idestacion` / `descripcion` | varchar(40) **PK** / varchar(50) NULL | la terminal o punto de venta (1 fila) | ✅ |
+| `cheques.estacion`, `cheqdet.idestacion` | varchar(40) | ⚠️ apuntan a `estaciones`: sin FK, por nombre y tipo | ⚠️ |
+| `clientes.idcliente` | varchar(15) NOT NULL, **PK** | `origenSrId` y `clave` del cliente | ✅ (0 filas en esta base) |
+| `clientes.nombre` / `telefono1` / `email` / `rfc` | varchar(max) / varchar(50) / varchar(250) / varchar(15) | `nombre` / `telefono` / `correo` / `rfc` | ✅ columnas |
+| `clientes.status` | bit NOT NULL | ⚠️ sin ningún cliente no hay evidencia de su sentido: **no se lee**, `activoPos` nulo | ⚠️ |
+| `cheques.idcliente` | varchar(15) | ⚠️ apunta a `clientes`: sin FK (sí hay FK de `facturas`, `reservaciones` y otras a `clientes`) | ⚠️ |
+
+- ❓ **DECISIÓN ABIERTA PARA RICARDO — canales / tipo de servicio.** `areasrestaurant.idtiposervicio`
+  es **numérico** (1, 2, 3) y `tiposervicio.Idtiposervicio` es **nchar(20)** y está **vacía**: no
+  parece el catálogo al que apuntan las áreas. La hipótesis es que el tipo de servicio es un enum
+  fijo del POS (comedor / domicilio / rápido, por las columnas `usarcomedor`, `usardomicilio`,
+  `usarrapido` de `productos` y `comedor`, `domicilio`, `rapido` de `estacionesareas`), pero **no se
+  inventa**: el agente lee `dbo.tiposervicio` tal cual y aquí cierra `canales` con `total = 0`.
+  Si se confirma el enum (F2-192), mapearlo es tarea nueva.
+- **Estaciones: SR sí las tiene** (`dbo.estaciones`, y la cuenta dice en cuál se cobró). El panel no
+  tiene espejo, contrato ni desglose de estaciones, así que el agente **no las manda**. Su espejo,
+  contrato y la vista serían una tarea nueva (queda en la nota de F2-250 del log).
+- Consultas: `sr_catalogo_areas.sql`, `sr_catalogo_canales.sql`, `sr_catalogo_clientes.sql`.
 
 **Lo que el spike de F2-144 deja como supuesto no validado** (checklist completa en
 `docs/delivery.md` §3):
@@ -1799,11 +1874,18 @@ instalación de SR 10 (ver el recuadro de abajo). Lo que no aparece ahí sigue s
 - **`agente test` no toca tablas de SR.** Su única query, `Sql/Consultas/diagnostico.sql`,
   lee funciones de sistema: versión y edición del servidor, base, login, `IS_SRVROLEMEMBER`,
   `IS_ROLEMEMBER` y `HAS_PERMS_BY_NAME`. Si el usuario puede escribir, `test` marca FALLA.
-  **Límite conocido:** revisa roles de servidor y de base, permisos sobre la base y
-  permisos sobre el esquema `dbo`. Un `GRANT INSERT ON dbo.<tabla>` sobre una tabla suelta
-  (permiso por objeto) **no se detecta**. La defensa real sigue siendo crear el usuario
-  sólo con `db_datareader` (script de F1-026). Si en F1-090 las tablas de SR resultan vivir
-  en otro esquema, hay que agregarlo a la query.
+  Revisa roles de servidor y de base, permisos sobre la base, sobre el esquema `dbo` y
+  (desde F2-240) **permisos por objeto** (`INSERT`/`UPDATE`/`DELETE`/`ALTER`) sobre **cada tabla
+  que el agente lee** (lista `VALUES` de `diagnostico.sql`; un test exige que toda tabla de una
+  consulta `sr_*.sql` esté en ella). ✅ Con el login sysadmin de la SR local da
+  `obj_escritura_total` = 52 (13 tablas × 4 permisos). **Límite conocido:** un `GRANT` sobre una
+  tabla que el agente NO lee no se detecta. La defensa real sigue siendo crear el usuario sólo
+  con `db_datareader` (script de F1-026). Si en F1-090 las tablas de SR resultan vivir en otro
+  esquema, hay que agregarlo a la query.
+- **El lector de catálogos (F2-240) corre esa misma query antes de cada lectura** y no lee nada
+  si el usuario puede escribir o si no se pudo confirmar (`DECISION PROVISIONAL (nocturno)`,
+  `SincronizadorCatalogos`). En la PC de desarrollo (login sysadmin) los catálogos no se
+  sincronizan hasta crear el usuario lector (F1-020b).
 - ⚠️ **SUPUESTO — SR corre sobre un SQL Server Express local con certificado autofirmado.**
   `Microsoft.Data.SqlClient` 5 cifra por defecto (`Encrypt=True`) y valida el certificado:
   sin `TrustServerCertificate=True` la conexión falla con un error de "certificate chain".
@@ -1909,6 +1991,12 @@ Supuestos del instalador (⚠️ ninguno visto funcionando):
   EXACTO los nombres que le devuelve el catálogo** (`HuellaSr.Desde`).
   ⚠️ No se ha visto ninguna instalación con collation CS ni con otras mayúsculas. Si
   aparece una, la detección la reporta como "faltan tablas" y no la lee a ciegas.
+- **Corrección (F2-240): NO todas las columnas van en minúsculas.** ✅ `areasrestaurant.Estatus`,
+  `areasrestaurant.idAreaSR`, `tiposervicio.Idtiposervicio` y `Desc_tiposervicio`, `WorkspaceId`
+  en varias tablas, y tablas como `Product`, `ProductPriceLists`. Las consultas de catálogo les
+  ponen alias en minúsculas y el mapeo busca columnas **sin distinguir mayúsculas**.
+- **Columnas con eñe que el agente NUNCA lee:** `meseros.contraseña` y `clientes.cumpleaños`
+  (además de la de `configuracion`).
 - **Hay identificadores que no son ASCII**, por ejemplo la columna
   `configuracion.contraseñainventarios`, con eñe. El agente no la lee. Queda anotado para
   cuando alguna query tenga que nombrar una columna así: el `.sql` embebido es UTF-8.
@@ -2003,6 +2091,30 @@ que cumplir al leer SR:
   atiende cada `solicitadaAt` una vez (lo recuerda en su SQLite). Un cierre
   tomado antes pero recibido después la da por atendida (desfase de relojes aceptado).
 
+**Cómo lo cumple el lector de F2-240** (`agent/src/ArkonAgente/Catalogos/`, `Cola/ColaCatalogos.cs`,
+`Cola/EnviadorCatalogos.cs`; tablas de SR en §6–§8):
+
+- Lee `grupos`, `productos`, `meseros`, `areas`, `canales` y `clientes`. **No** lee ni cierra los
+  cinco de inventario (F2-241). Sólo sincronizaciones COMPLETAS (páginas de 500 + cierre), nunca
+  incrementales, y no abre una si el catálogo tiene otra sin confirmar en su cola.
+- `total` del cierre = registros **consolidados** (un producto con varias filas de detalle es uno).
+- **Regla de recorte de ids (la tiene que copiar el lector de cheques, F1-022):** todo texto leído
+  de SR, **ids incluidos**, pierde SÓLO los espacios de la **derecha** (`TrimEnd(' ')`); un opcional
+  que queda vacío viaja nulo. SQL Server compara `varchar` ignorando los espacios finales (para el
+  POS `'A1 '` = `'A1'`) y `nchar` viene relleno (`tiposervicio.Idtiposervicio` es nchar(20)). Si
+  F1-022 manda `areaOrigenSrId` o `clienteOrigenSrId` sin recortar igual, el cruce exacto de F2-233 /
+  F2-232 falla en silencio.
+- El hash del agente (SHA-256 de los registros ordenados) es SUYO, distinto del hash del API: sirve
+  para no reencolar un catálogo sin cambios. Un forzado del panel manda todo aunque no cambie.
+- ⚠️ **Desajuste de largos con `dbo.clientes`:** `nombre` varchar(max) > 200, `telefono1` 50 > 40,
+  `email` 250 > 200, `rfc` 15 > 13. El agente **no recorta** (sería cambiar el dato): el API rechaza
+  ESE registro, el agente lo registra en su log (índice, id y motivo, nunca el valor) y lo suma a
+  `rechazados`. ❓ **Para Ricardo:** si en una instalación real se pierden clientes por esto,
+  ensanchar el contrato es tarea nueva.
+- Respuestas: 401/429/503/otros 5xx → reintento con backoff propio (no frena cheques ni heartbeat);
+  400/409/413/500 o un 2xx ilegible → se abandona esa sincronización, se borra el hash del catálogo
+  y se relee a los 15 min, no antes.
+
 ### Contrato de existencias (F2-121): `POST /ingesta/existencias`
 
 Foto completa de un almacén por petición; todos sus supuestos y decisiones están en §10. Lo que
@@ -2069,4 +2181,5 @@ lote (partir por partidas); (7) documentar en §10 si SR guarda la compra sólo 
 
 | Fecha | Versión SR | Restaurante / entorno | Qué se validó |
 |---|---|---|---|
+| 2026-09-23 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, login sysadmin). Metadatos (`sys.*`) y conteos agregados; ningún valor de negocio al repo | Tablas y columnas de catálogos: productos, productosdetalle, grupos, meseros, areasrestaurant, tiposervicio, clientes, estaciones y el señuelo `areas`; FKs reales; permisos por objeto de `diagnostico.sql`; que las 6 consultas `sr_catalogo_*.sql` compilan y devuelven 14/217/2/3/0/0 filas (F2-240, §6–§8, §11, §12). **No** valida el SENTIDO de las columnas de estado ni el cruce con cheques (sin FK): eso es F2-192. |
 | 2026-09-21 | 10 (exe 10.0.323, `versiondb` 10.021800) | Instalación local de desarrollo (SQL Server 2014 SP1 Express, instancia `.\NATIONALSOFT`). Sin datos de negocio: sólo catálogo y la columna de versión. Login sysadmin (no es config de producción) | Detección de versión y elección del reader (F1-021); conexión, certificado y TLS; `diagnostico.sql` (§1, §11, §12). Modo mixto, permisos de `public` y comportamiento de `sqlcmd` 2014 (F1-026, §11). **No** valida el mapeo de cuentas, pagos ni productos: eso es F1-090. |

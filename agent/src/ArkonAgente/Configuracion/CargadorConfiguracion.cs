@@ -18,7 +18,7 @@ internal sealed record ResultadoConfiguracion(
 
 /// <summary>
 /// Lee y valida <c>config.json</c>:
-/// <c>{ apiUrl, apiKey, connectionString, intervaloSegundos }</c>.
+/// <c>{ apiUrl, apiKey, connectionString, intervaloSegundos, horaSincronizacionCatalogos }</c>.
 /// </summary>
 /// <remarks>
 /// El archivo lo edita a mano un técnico en la PC del restaurante, así que se
@@ -39,7 +39,7 @@ internal static class CargadorConfiguracion
     internal const int IntervaloQueSuponeElPanel = 30;
 
     private static readonly string[] CamposConocidos =
-        ["apiUrl", "apiKey", "connectionString", "intervaloSegundos"];
+        ["apiUrl", "apiKey", "connectionString", "intervaloSegundos", "horaSincronizacionCatalogos"];
 
     public static ResultadoConfiguracion Cargar(string rutaArchivo)
     {
@@ -108,6 +108,7 @@ internal static class CargadorConfiguracion
             var apiKey = TextoObligatorio(raiz, "apiKey", errores);
             var cadena = ValidarCadena(TextoObligatorio(raiz, "connectionString", errores), errores);
             var intervalo = ValidarIntervalo(raiz, errores);
+            var horaCatalogos = ValidarHoraCatalogos(raiz, errores);
 
             // DECISION PROVISIONAL (nocturno): el panel (F1-061) marca "desconectado" a los
             // 90 s fijos (3 × 30 s), no a 3 × el intervalo de cada agente. El heartbeat no
@@ -127,7 +128,7 @@ internal static class CargadorConfiguracion
             }
 
             return new ResultadoConfiguracion(
-                new ConfiguracionAgente(apiUrl, apiKey, cadena, intervalo), [], avisos);
+                new ConfiguracionAgente(apiUrl, apiKey, cadena, intervalo, horaCatalogos), [], avisos);
         }
     }
 
@@ -245,6 +246,28 @@ internal static class CargadorConfiguracion
         }
 
         return segundos;
+    }
+
+    /// <summary>"HH:mm" de 24 horas (F2-240). Ausente o null = la de por defecto (04:00).</summary>
+    private static TimeOnly? ValidarHoraCatalogos(JsonElement raiz, List<string> errores)
+    {
+        if (!raiz.TryGetProperty("horaSincronizacionCatalogos", out var valor) || valor.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        if (valor.ValueKind == JsonValueKind.String
+            && TimeOnly.TryParseExact(
+                valor.GetString()!.Trim(), "HH:mm", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var hora))
+        {
+            return hora;
+        }
+
+        errores.Add(
+            "'horaSincronizacionCatalogos' debe ser una hora de 24 horas entre comillas, \"HH:mm\" " +
+            "(por ejemplo \"04:00\"); es la hora de esta PC.");
+        return null;
     }
 
     private static ResultadoConfiguracion Fallo(string error) => new(null, [error], []);

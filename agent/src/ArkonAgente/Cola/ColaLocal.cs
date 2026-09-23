@@ -320,7 +320,7 @@ internal sealed class ColaLocal
     /// El único formato de fecha de la cola: lo escribe <see cref="Formatear"/> y lo lee
     /// <see cref="ResumenRechazados"/>. Si divergieran, leer un rechazo tronaría en cada ciclo.
     /// </summary>
-    private const string FormatoFecha = "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'";
+    internal const string FormatoFecha = "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'";
 
     internal static string Formatear(DateTimeOffset instante) =>
         instante.UtcDateTime.ToString(FormatoFecha, CultureInfo.InvariantCulture);

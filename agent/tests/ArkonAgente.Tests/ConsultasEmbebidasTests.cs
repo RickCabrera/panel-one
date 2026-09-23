@@ -29,7 +29,11 @@ public partial class ConsultasEmbebidasTests
     public void Existen_las_consultas_esperadas()
     {
         var nombres = ConsultasEmbebidas.Nombres();
-        foreach (var esperada in new[] { "diagnostico", "sr_estructura", "sr_version", "sr_sondeo" })
+        foreach (var esperada in new[]
+                 {
+                     "diagnostico", "sr_estructura", "sr_version", "sr_sondeo", "sr_catalogo_grupos", "sr_catalogo_productos",
+                     "sr_catalogo_meseros", "sr_catalogo_areas", "sr_catalogo_canales", "sr_catalogo_clientes",
+                 })
         {
             Assert.Contains(esperada, nombres);
             Assert.StartsWith("--", ConsultasEmbebidas.Leer(esperada));
@@ -105,6 +109,56 @@ public partial class ConsultasEmbebidasTests
     public void La_guardia_no_se_confunde_con_textos_ni_comentarios(string sql)
     {
         Assert.DoesNotMatch(PalabrasQueEscriben(), SinComentariosNiTextos(sql));
+    }
+
+    /// <summary>Cada <c>dbo.tabla</c> que aparece después de FROM / JOIN.</summary>
+    [GeneratedRegex(@"\b(?:FROM|JOIN)\s+dbo\.(?<tabla>\w+)", RegexOptions.IgnoreCase)]
+    private static partial Regex TablaDbo();
+
+    [Fact]
+    public void Toda_tabla_que_lee_una_consulta_sr_esta_en_la_sonda_de_permisos_por_tabla_del_diagnostico()
+    {
+        // F2-240: si una consulta nueva lee una tabla que la sonda no revisa, un GRANT de escritura
+        // sobre ella pasaría sin que 'agente test' falle.
+        var diagnostico = ConsultasEmbebidas.Leer("diagnostico");
+        var nombres = Regex.Matches(diagnostico, @"N'dbo\.(\w+)'").Select(m => m.Groups[1].Value.ToLowerInvariant()).ToList();
+        // La lista va dos veces (el conteo y el ejemplo): las dos tienen que ser la misma.
+        Assert.All(nombres.GroupBy(n => n), g => Assert.True(g.Count() == 2, $"dbo.{g.Key} no está en las dos listas"));
+        var revisadas = nombres.ToHashSet();
+        var leidas = ConsultasEmbebidas.Nombres()
+            .Where(n => n.StartsWith("sr_", StringComparison.Ordinal))
+            .SelectMany(n => TablaDbo().Matches(SinComentariosNiTextos(ConsultasEmbebidas.Leer(n)))
+                .Select(m => (Consulta: n, Tabla: m.Groups["tabla"].Value.ToLowerInvariant())))
+            .ToList();
+
+        Assert.Contains(leidas, l => l.Tabla == "productosdetalle");
+        Assert.Empty(leidas.Where(l => !revisadas.Contains(l.Tabla)).Select(l => $"{l.Consulta}.sql lee dbo.{l.Tabla}"));
+    }
+
+    [Fact]
+    public void Las_consultas_de_catalogo_no_leen_contrasenas_ni_fotos_ni_columnas_de_mas()
+    {
+        var meseros = SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_catalogo_meseros"));
+        Assert.DoesNotContain("contrase", meseros, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fotografia", meseros, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("*", meseros);
+        var clientes = SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_catalogo_clientes"));
+        foreach (var prohibida in new[] { "fotografia", "curp", "direccion", "limitedecredito", "notas", "*" })
+        {
+            Assert.DoesNotContain(prohibida, clientes, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void Las_consultas_embebidas_son_TSQL_valido_de_SQL_Server_2008_en_adelante()
+    {
+        // SR 10 trae SQL Server 2014; el parser de 2008 (TSql100) es el piso: nada de STRING_AGG ni similares.
+        foreach (var nombre in ConsultasEmbebidas.Nombres())
+        {
+            var parser = new Microsoft.SqlServer.TransactSql.ScriptDom.TSql100Parser(initialQuotedIdentifiers: true);
+            parser.Parse(new StringReader(ConsultasEmbebidas.Leer(nombre)), out var errores);
+            Assert.Empty(errores.Select(e => $"{nombre}.sql línea {e.Line}: {e.Message}"));
+        }
     }
 
     private static List<string> ProblemasDeNolock(string sql)

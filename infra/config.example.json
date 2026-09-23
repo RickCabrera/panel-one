@@ -2,5 +2,6 @@
   "apiUrl": "https://monitor.ejemplo.com",
   "apiKey": "msr_PEGA_AQUI_LA_KEY_QUE_DA_EL_PANEL",
   "connectionString": "Server=.\\SQLEXPRESS;Database=NOMBRE_DE_LA_BASE_DE_SOFTRESTAURANT;User ID=monitor_lector;Password=CAMBIAR;TrustServerCertificate=True",
-  "intervaloSegundos": 30
+  "intervaloSegundos": 30,
+  "horaSincronizacionCatalogos": "04:00"
 }

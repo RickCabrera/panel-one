@@ -88,10 +88,13 @@ internal sealed class VerificacionSql : IVerificacion
                 avisos);
         }
 
-        // No se revisan permisos por objeto (un GRANT sobre una tabla concreta): el texto
-        // dice exactamente lo que se comprobó, no más.
+        // Por objeto se revisan SÓLO las tablas que el agente lee (lista de diagnostico.sql):
+        // el texto dice exactamente lo que se comprobó, no más.
         return ResultadoVerificacion.Bien(
-            nombre, $"{detalle} Sin permisos de escritura a nivel servidor, base ni esquema dbo.", avisos);
+            nombre,
+            $"{detalle} Sin permisos de escritura a nivel servidor, base ni esquema dbo, ni sobre las tablas " +
+            "de SoftRestaurant que lee el agente.",
+            avisos);
     }
 
     /// <summary>
@@ -174,7 +177,9 @@ internal sealed record FilaDiagnostico(
     bool DboPuedeInsert,
     bool DboPuedeUpdate,
     bool DboPuedeDelete,
-    bool DboPuedeAlter)
+    bool DboPuedeAlter,
+    int ObjEscrituraTotal = 0,
+    string? ObjEscrituraEjemplo = null)
 {
     public IReadOnlyList<string> PermisosDeEscritura()
     {
@@ -192,6 +197,13 @@ internal sealed record FilaDiagnostico(
         if (DboPuedeUpdate) lista.Add("UPDATE en el esquema dbo");
         if (DboPuedeDelete) lista.Add("DELETE en el esquema dbo");
         if (DboPuedeAlter) lista.Add("ALTER en el esquema dbo");
+        if (ObjEscrituraTotal > 0)
+        {
+            // F2-240: un GRANT sobre una tabla concreta que el agente lee.
+            var mas = ObjEscrituraTotal > 1 ? $" y {ObjEscrituraTotal - 1} permiso(s) más" : "";
+            lista.Add($"permiso por tabla ({ObjEscrituraEjemplo ?? "sin detalle"}{mas})");
+        }
+
         return lista;
     }
 
@@ -212,7 +224,21 @@ internal sealed record FilaDiagnostico(
         Bandera(r, "dbo_puede_insert"),
         Bandera(r, "dbo_puede_update"),
         Bandera(r, "dbo_puede_delete"),
-        Bandera(r, "dbo_puede_alter"));
+        Bandera(r, "dbo_puede_alter"),
+        Entero(r, "obj_escritura_total"),
+        TextoONulo(r, "obj_escritura_ejemplo"));
+
+    private static int Entero(IDataRecord r, string columna)
+    {
+        var i = r.GetOrdinal(columna);
+        return r.IsDBNull(i) ? 0 : Convert.ToInt32(r.GetValue(i));
+    }
+
+    private static string? TextoONulo(IDataRecord r, string columna)
+    {
+        var i = r.GetOrdinal(columna);
+        return r.IsDBNull(i) ? null : r.GetString(i);
+    }
 
     private static string Texto(IDataRecord r, string columna)
     {
