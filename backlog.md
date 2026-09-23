@@ -1748,7 +1748,7 @@ Carriles paralelos del sprint: A = facturación (Epic 8), B = inventario (Epic 9
 ## EPIC 8 — Facturación CFDI + portal de autofactura
 
 ### F2-100 · Datos fiscales y CSD por empresa
-`[ ]` Modelos Prisma: `PerfilFiscal(id, empresa_id, rfc, razon_social, regimen_fiscal, cp,
+`[x]` **ALCANCE:** sin el CFDI de prueba al guardar (decisión abierta en F2-190) y un emisor por empresa (DECISION PROVISIONAL, esquema-sr §8). **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190. Modelos Prisma: `PerfilFiscal(id, empresa_id, rfc, razon_social, regimen_fiscal, cp,
 serie, folio_actual, facturama_org_id, activo)` y `ReceptorFrecuente(rfc, razon_social,
 regimen, cp, uso_cfdi, email)` (cache de receptores para autocompletar). Vista admin para
 capturar datos fiscales y subir CSD (.cer, .key, contraseña): los archivos van DIRECTO a
