@@ -2297,7 +2297,7 @@ automático a polling si el socket cae. Autenticación del socket con el mismo J
 polling sin que el usuario note más que el indicador de frescura.
 
 ### F2-143 · Auto-update remoto del agente
-`[ ]` Canal de versiones en el api (`GET /agente/version` con url firmada del binario + hash
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** el swap con el administrador de servicios de verdad, el rollback y el instalador elevado se probaron sólo simulados: ver F1-020b; ❓ firma Authenticode abierta en F2-191 (ver `docs/actualizacion-agente.md`). Canal de versiones en el api (`GET /agente/version` con url firmada del binario + hash
 SHA-256); el agente compara en cada heartbeat, descarga, verifica hash, se auto-reemplaza vía
 servicio watchdog (segundo servicio mínimo que hace swap del binario) y reporta versión nueva.
 Rollout gradual por sucursal (flag por sucursal en admin).
