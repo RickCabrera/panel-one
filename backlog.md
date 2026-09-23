@@ -1946,7 +1946,7 @@ código pendiente del periodo.
 > tarea (regla 2 de la Ronda 2), para que el tablero no mienta.
 
 ### F2-107 · Factura sin ticket y refacturación
-`[ ]` Vista admin "Facturar sin ticket": captura manual de importe total + datos de receptor
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (`Relations` 04, cancelación 01 con sustituto y concepto sin `IdentificationNumber` en el sandbox; esquema-sr §2 "Factura sin ticket y refacturación"). Vista admin "Facturar sin ticket": captura manual de importe total + datos de receptor
 → emite CFDI ligado a la sucursal sin cheque (marcado `origen=manual`). Refacturación: sobre
 un CFDI vigente, botón "refacturar" = cancelar con motivo 01 (comprobante emitido con
 errores con relación) + emitir sustituto relacionado (`TipoRelacion 04`), en una sola acción
