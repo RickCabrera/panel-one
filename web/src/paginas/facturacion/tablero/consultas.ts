@@ -5,6 +5,7 @@ import type {
   CfdiFila,
   EnvioCfdi,
   EstadoCfdiEmitido,
+  OrigenCfdi,
   PaginaCfdis,
   PaginaPorFacturar,
   TableroFacturacion,
@@ -53,6 +54,8 @@ export function useTablero(filtro: Filtro | null, rango: Rango | null, alturaAl?
 export interface FiltroTabla {
   q: string;
   estado: EstadoCfdiEmitido | null;
+  /** F2-107: `manual` = facturas sin ticket; null = todas. */
+  origen: OrigenCfdi | null;
   pagina: number;
 }
 
@@ -67,6 +70,7 @@ export function useCfdis(filtro: Filtro | null, rango: Rango | null, tabla: Filt
       rango?.hasta,
       tabla.q,
       tabla.estado,
+      tabla.origen,
       tabla.pagina,
     ],
     queryFn: ({ signal }) =>
@@ -75,6 +79,7 @@ export function useCfdis(filtro: Filtro | null, rango: Rango | null, tabla: Filt
           ...consulta(filtro, rango),
           q: tabla.q || undefined,
           estado: tabla.estado,
+          origen: tabla.origen,
           pagina: tabla.pagina,
           porPagina: POR_PAGINA_TABLA,
         },
@@ -132,7 +137,7 @@ export function bajarArchivoCfdi(id: string, extension: 'xml' | 'pdf'): Promise<
 export async function todosLosCfdis(
   filtro: Filtro,
   rango: Rango,
-  tabla: Pick<FiltroTabla, 'q' | 'estado'>,
+  tabla: Pick<FiltroTabla, 'q' | 'estado' | 'origen'>,
   onProgreso?: (hechos: number, total: number) => void,
   signal?: AbortSignal,
 ): Promise<CfdiFila[]> {
@@ -143,6 +148,7 @@ export async function todosLosCfdis(
         ...consulta(filtro, rango),
         q: tabla.q || undefined,
         estado: tabla.estado,
+        origen: tabla.origen,
         pagina,
         porPagina: POR_PAGINA_EXPORT,
       },

@@ -26,6 +26,7 @@ import {
   type FormPerfil,
 } from './facturacion/reglas';
 import { PortalesAutofactura } from './facturacion/Portales';
+import { FacturaSinTicket } from './facturacion/emision/FacturaSinTicket';
 import { TableroFacturacion } from './facturacion/tablero/Tablero';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './inicio/Tarjeta';
 import { Vista } from './Vista';
@@ -41,22 +42,26 @@ const ERROR_CAMPO = 'text-xs text-peligro';
 const mensajeDe = (e: unknown) => (e instanceof ErrorApi ? e.message : 'Error inesperado.');
 
 /** Las pestañas de Facturación (`?tab=`). Sin `tab` (o uno desconocido), el tablero. */
-export type PestanaFacturacion = 'tablero' | 'datos';
+export type PestanaFacturacion = 'tablero' | 'manual' | 'datos';
 const PARAM_TAB = 'tab';
 
 function leerPestana(parametros: URLSearchParams): PestanaFacturacion {
-  return parametros.get(PARAM_TAB) === 'datos' ? 'datos' : 'tablero';
+  const tab = parametros.get(PARAM_TAB);
+  return tab === 'datos' || tab === 'manual' ? tab : 'tablero';
 }
 
 const PESTANAS: readonly { id: PestanaFacturacion; texto: string }[] = [
   { id: 'tablero', texto: 'Tablero' },
+  { id: 'manual', texto: 'Sin ticket' },
   { id: 'datos', texto: 'Datos fiscales' },
 ];
 
 /**
- * Facturación (sólo administradores). Dos pestañas:
+ * Facturación (sólo administradores). Tres pestañas:
  * - Tablero (F2-106): lo vendido contra lo facturado del periodo y la sucursal de la cabecera, las
  *   facturas emitidas, lo que falta por facturar y los correos por reenviar.
+ * - Sin ticket (F2-107): factura por un importe capturado a mano, sin cheque (`origen = manual`).
+ *   La refacturación de una factura vigente se hace desde la tabla del Tablero.
  * - Datos fiscales (F2-100): con qué datos emite sus facturas la empresa y su certificado de sello
  *   digital (CSD). Del CSD sólo se ve METADATA (número, RFC, vigencia): el .key y su contraseña se
  *   mandan una vez al servidor, que los pasa al PAC sin guardarlos, y aquí se borran del
@@ -97,7 +102,9 @@ export function Facturacion() {
           </button>
         ))}
       </div>
-      {pestana === 'tablero' ? <PestanaTablero /> : <DatosFiscales />}
+      {pestana === 'tablero' && <PestanaTablero />}
+      {pestana === 'manual' && <PestanaSinTicket />}
+      {pestana === 'datos' && <DatosFiscales />}
     </Vista>
   );
 }
@@ -115,6 +122,11 @@ function PestanaTablero() {
       <TableroFacturacion filtro={filtro} rango={rango} sucursales={sucursales.data ?? []} />
     </>
   );
+}
+
+function PestanaSinTicket() {
+  const { empresaId, sucursales } = useAlcance();
+  return <FacturaSinTicket empresaId={empresaId} sucursales={sucursales.data ?? []} />;
 }
 
 function DatosFiscales() {

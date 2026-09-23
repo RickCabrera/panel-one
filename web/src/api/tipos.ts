@@ -1720,6 +1720,61 @@ export interface CfdiFila {
   folioTicket: string | null;
   xml: boolean;
   pdf: boolean;
+  /** F2-107: `manual` = factura sin ticket. */
+  origen: OrigenCfdi;
+  /** Los datos con que se timbró (precargan la refacturación). */
+  receptor: ReceptorCfdi;
+  /** UUID del CFDI al que éste sustituye (relación 04). */
+  sustituyeA: string | null;
+  /** UUID de su sustituto ya timbrado. */
+  sustituidoPor: string | null;
+  /** Vigente con un sustituto vigente: la cancelación 01 sigue pendiente (no suma a lo facturado). */
+  sustitucionPendiente: boolean;
+  motivoCancelacion: string | null;
+}
+
+/** F2-107. */
+export type OrigenCfdi = 'ticket' | 'manual';
+
+/** `ReceptorFilaDto` (F2-107): el receptor como se timbró; el correo puede faltar. */
+export interface ReceptorCfdi {
+  rfc: string;
+  razonSocial: string;
+  regimenFiscal: string;
+  cp: string;
+  usoCfdi: string;
+  email: string | null;
+}
+
+/** `FacturaManualDto` (F2-107). El total va como texto, nunca número. */
+export interface SolicitudFacturaManual {
+  empresaId: string;
+  sucursalId: string;
+  solicitudId: string;
+  total: string;
+  formaPago: FormaPagoManual;
+  receptor: ReceptorCfdi;
+}
+
+export type FormaPagoManual = 'efectivo' | 'tarjeta' | 'transferencia';
+
+/** `FacturaEmitidaAdminDto` (F2-107). */
+export interface FacturaEmitidaAdmin {
+  id: string;
+  uuid: string;
+  serieFolio: string;
+  total: Importe;
+  origen: OrigenCfdi;
+  email: string | null;
+  descargas: { xml: string | null; pdf: string | null };
+}
+
+/** `ResultadoRefacturacionDto` (F2-107). */
+export interface ResultadoRefacturacion {
+  anterior: { id: string; uuid: string; estado: EstadoCfdiEmitido };
+  nuevo: { id: string; uuid: string; serieFolio: string; total: Importe };
+  cancelacion: 'cancelado' | 'pendiente';
+  mensaje: string | null;
 }
 
 export interface PaginaCfdis {
