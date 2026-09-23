@@ -53,6 +53,7 @@ const CATALOGOS: CatalogosSat = {
 const TABLERO: TableroFacturacion = {
   ventas: { venta: '1000.00', cuentas: 3 },
   facturado: { monto: '500.00', cfdis: 2 },
+  global: { monto: '0.00', cfdis: 0 },
   cancelados: { monto: '0.00', cfdis: 0 },
   tasa: '0.5000',
   porFacturar: { cuentas: 0, monto: '0.00' },
@@ -291,6 +292,41 @@ describe('tabla del tablero y refacturación (F2-107)', () => {
       expect(
         a.llamadas.some(
           (l) => l.ruta === '/facturacion/cfdis' && l.query.get('origen') === 'manual',
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it('F2-108: la factura global se distingue, no se refactura y se filtra', async () => {
+    const a = api({
+      'GET /facturacion/cfdis': () =>
+        json(200, {
+          ...PAGINA,
+          total: 2,
+          cfdis: [
+            cfdi(1),
+            cfdi(5, {
+              origen: 'global',
+              folioTicket: null,
+              receptorRfc: 'XAXX010101000',
+              receptorNombre: 'PUBLICO EN GENERAL',
+            }),
+          ],
+        }),
+    });
+    const u = userEvent.setup();
+    montar(RUTA);
+    const tabla = await screen.findByTestId('tabla-cfdis');
+    const filas = within(tabla).getAllByRole('row').slice(1);
+    expect(within(filas[1]).getByText('Global')).toBeInTheDocument();
+    expect(within(filas[0]).queryByText('Global')).toBeNull();
+    expect(within(filas[0]).getByRole('button', { name: 'Refacturar' })).toBeInTheDocument();
+    expect(within(filas[1]).queryByRole('button', { name: /Refacturar|Reintentar/ })).toBeNull();
+    await u.selectOptions(screen.getByLabelText('Origen'), 'global');
+    await waitFor(() =>
+      expect(
+        a.llamadas.some(
+          (l) => l.ruta === '/facturacion/cfdis' && l.query.get('origen') === 'global',
         ),
       ).toBe(true),
     );

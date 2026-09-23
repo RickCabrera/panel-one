@@ -10,6 +10,9 @@ import { EmisionAdminService } from './emision-admin.service';
 import { EMISION_PORTAL } from './emision-portal';
 import { ArchivosPublicosController, EntregaController } from './entrega.controller';
 import { EntregaCfdiService } from './entrega.service';
+import { FacturaGlobalController } from './global.controller';
+import { FacturaGlobalProgramador } from './global.programador';
+import { FacturaGlobalService } from './global.service';
 import { PortalesAdminController, PortalPublicoController } from './portal.controller';
 import { PortalFacturacionService } from './portal.service';
 import { TableroFacturacionController } from './tablero.controller';
@@ -25,7 +28,8 @@ import { VentasModule } from '../ventas/ventas.module';
  * `EMISION_PORTAL`. F2-104: la emisión del CFDI (`CfdiService`) es ese puerto. F2-105: la entrega
  * (`EntregaCfdiService`): archivos, correo con bitácora y reintento, y las descargas. F2-106: el
  * tablero (`TableroFacturacionService`), que lee la venta de `VentasModule`. F2-107: factura sin
- * ticket y refacturación (`EmisionAdminService`), sobre el mismo tramo de emisión.
+ * ticket y refacturación (`EmisionAdminService`), sobre el mismo tramo de emisión. F2-108: la
+ * factura global (`FacturaGlobalService`) y su programador de emisión automática.
  */
 @Module({
   imports: [VentasModule],
@@ -38,6 +42,7 @@ import { VentasModule } from '../ventas/ventas.module';
     EntregaController,
     ArchivosPublicosController,
     EmisionAdminController,
+    FacturaGlobalController,
   ],
   providers: [
     FacturacionService,
@@ -47,6 +52,8 @@ import { VentasModule } from '../ventas/ventas.module';
     EntregaCfdiService,
     TableroFacturacionService,
     EmisionAdminService,
+    FacturaGlobalService,
+    FacturaGlobalProgramador,
     Espera,
     { provide: EMISION_PORTAL, useExisting: CfdiService },
   ],

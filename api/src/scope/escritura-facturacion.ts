@@ -6,16 +6,36 @@ import {
 } from '@nestjs/common';
 import { Prisma, type EstadoEmisionCfdi, type OrigenCfdi } from '@prisma/client';
 
-import type { CfdiRelacionados, MotivoCancelacion } from '../adaptadores/timbrado/puerto';
+import type {
+  CfdiRelacionados,
+  InformacionGlobal,
+  MotivoCancelacion,
+} from '../adaptadores/timbrado/puerto';
 
 import {
   esFacturable,
   estadoPublico,
-  MENSAJE_ESTADO,
+  mensajeEstado,
+  periodoGlobalDe,
   type EstadoPublico,
   type VigenciaCodigos,
 } from '../facturacion/codigo';
 import { formaPagoSat, importesDeTotal, type FormaPagoEnum } from '../facturacion/cfdi';
+import {
+  anioPermitido,
+  diaLocal,
+  estadoPeriodo,
+  formaPagoGlobal,
+  importesGlobal,
+  periodoDeClave,
+  receptorPublicoGeneral,
+  type DiaGlobal,
+  type EstadoPeriodoGlobal,
+  type PeriodicidadGlobalEnum,
+  type PeriodoGlobal,
+  type TicketGlobal,
+} from '../facturacion/global';
+import { instanteDesdeLocal } from '../comun/fechas';
 import { MENSAJE_EMISION_NO_DISPONIBLE } from '../facturacion/emision-portal';
 import { normalizarRfc, RFC_GENERICOS } from '../facturacion/sat';
 import type { EmpresaScope } from './empresa-scope';
@@ -108,6 +128,8 @@ export interface ReservaCfdi {
   importes: { subtotal: Prisma.Decimal; iva: Prisma.Decimal; total: Prisma.Decimal };
   /** F2-107: el CFDI que sustituye (relación 04), si es un sustituto. */
   relacionados?: CfdiRelacionados;
+  /** F2-108: la factura global (su InformacionGlobal y un concepto por ticket), si es una global. */
+  global?: { informacion: InformacionGlobal; etiqueta: string; tickets: TicketGlobal[] };
 }
 
 /** Lo que pide una factura sin ticket (F2-107), ya validado: todo del administrador. */
@@ -269,14 +291,90 @@ export function perfilEmite(
   );
 }
 
-/** El 409 que el portal ya sabe pintar: el estado público actual del código. */
-export function conflictoDeEstado(estado: EstadoPublico): ConflictException {
+/**
+ * El 409 que el portal ya sabe pintar: el estado público actual del código (con el periodo de la
+ * factura global si entró a una, F2-108).
+ */
+export function conflictoDeEstado(
+  estado: EstadoPublico,
+  periodoGlobal: string | null = null,
+): ConflictException {
   return new ConflictException({
     statusCode: 409,
     error: 'Conflict',
-    message: MENSAJE_ESTADO[estado],
+    message: mensajeEstado(estado, periodoGlobal),
     estado,
   });
+}
+
+/** F2-108: lo que pide una factura global (el administrador o el programador). */
+export interface PedidoGlobal {
+  sucursalId: string;
+  periodicidad: PeriodicidadGlobalEnum;
+  /** El primer día local del periodo (`AAAA-MM-DD`). */
+  clave: string;
+}
+
+export interface ConfiguracionGlobal {
+  periodicidad: PeriodicidadGlobalEnum;
+  automatica: boolean;
+  automaticaDesde: Date | null;
+  /** La vigencia de los códigos: la global espera a que venzan (la UI avisa si la retrasa). */
+  vigencia: VigenciaCodigos;
+}
+
+export interface SucursalGlobal {
+  id: string;
+  nombre: string;
+  zonaHoraria: string;
+}
+
+export interface GlobalEmitida {
+  id: string;
+  uuid: string | null;
+  serieFolio: string;
+  estado: EstadoEmisionCfdi;
+  total: Prisma.Decimal;
+  emitidoAt: Date | null;
+  globalPeriodicidad: string | null;
+  globalDesde: Date | null;
+  tickets: number;
+  conArchivos: boolean;
+}
+
+export interface VistaPreviaGlobal {
+  sucursal: SucursalGlobal;
+  periodo: PeriodoGlobal;
+  estado: EstadoPeriodoGlobal;
+  tickets: { folio: string; cerradoAt: Date; total: Prisma.Decimal }[];
+  vigentes: { tickets: number; hasta: Date | null };
+  formaPago: string | null;
+  importes: { subtotal: Prisma.Decimal; iva: Prisma.Decimal; total: Prisma.Decimal } | null;
+  globalesPrevias: number;
+}
+
+export const MENSAJE_CLAVE_PERIODO =
+  'El periodo no es válido: la clave tiene que ser el primer día (AAAA-MM-DD) de un periodo de esa ' +
+  'periodicidad.';
+export const MENSAJE_GLOBAL_EN_CURSO =
+  'Este periodo todavía no termina: su factura global se emite cuando termine.';
+export const MENSAJE_GLOBAL_FUERA_DE_PLAZO =
+  'El SAT ya no acepta una factura global de ese año (sólo del año en curso o del anterior).';
+export const MENSAJE_GLOBAL_SIN_TICKETS =
+  'No hay tickets que incluir en la factura global de este periodo (ya se incluyeron en otra, o ' +
+  'todos se facturaron).';
+export const MENSAJE_GLOBAL_SIN_FORMA =
+  'Ningún pago de estos tickets tiene una forma de pago que se pueda declarar ante el SAT ' +
+  '(efectivo, tarjeta o transferencia): la factura global no se puede emitir desde aquí.';
+export const MENSAJE_GLOBAL_NO_SE_REFACTURA =
+  'Una factura global no se refactura: el receptor es siempre público en general. Si hay que ' +
+  'corregirla, se cancela (F2-109) y se emite de nuevo.';
+
+export function mensajeGlobalEsperando(n: number): string {
+  return (
+    `Este periodo todavía no está listo: ${n === 1 ? 'un ticket todavía se puede' : `${n} tickets todavía se pueden`} ` +
+    'facturar en el portal. La factura global espera a que venza su plazo.'
+  );
 }
 
 /** El enlace y la marca del portal de autofactura de una sucursal (F2-103), ya validados. */
@@ -532,6 +630,12 @@ export class EscrituraFacturacion {
               estado: true,
               expiraAt: true,
               cfdi: { select: { estado: true } },
+              // F2-108: un ticket que entró a una global (o a su reserva) ya no se autofactura.
+              global: {
+                select: {
+                  cfdi: { select: { estado: true, globalPeriodicidad: true, globalDesde: true } },
+                },
+              },
               cheque: {
                 select: {
                   folio: true,
@@ -555,7 +659,12 @@ export class EscrituraFacturacion {
         );
         if (!codigo.sucursal.activo || !codigo.sucursal.empresa.activo) encontradoOr404(null);
         const estado = estadoPublico(codigo, codigo.cheque, ahora.getTime());
-        if (estado !== 'pendiente') throw conflictoDeEstado(estado);
+        if (estado !== 'pendiente') {
+          throw conflictoDeEstado(
+            estado,
+            periodoGlobalDe(estado, codigo.global, codigo.sucursal.zonaHoraria),
+          );
+        }
         if (!esFacturable(codigo.cheque)) {
           throw new UnprocessableEntityException(MENSAJE_NO_FACTURABLE);
         }
@@ -641,7 +750,7 @@ export class EscrituraFacturacion {
             empresaId,
             estado: 'timbrando',
           }),
-          select: { id: true, codigoId: true, sustituyeAId: true },
+          select: { id: true, codigoId: true, sustituyeAId: true, origen: true },
         }),
       );
       await tx.cfdi.updateMany({
@@ -671,6 +780,17 @@ export class EscrituraFacturacion {
             data: { codigoId: viejo.codigoId, updatedAt: ahora },
           });
         }
+      }
+      // F2-108: los tickets de una global pasan a `en_global` en la MISMA transacción.
+      if (reserva.origen === 'global') {
+        await tx.codigoFacturacion.updateMany({
+          where: whereScoped(this.#scope, 'CodigoFacturacion', {
+            empresaId,
+            estado: { in: ['pendiente', 'expirado'] },
+            global: { cfdiId: reserva.id, empresaId },
+          }),
+          data: { estado: 'en_global', updatedAt: ahora },
+        });
       }
       let codigoFacturado = false;
       if (reserva.codigoId) {
@@ -836,6 +956,7 @@ export class EscrituraFacturacion {
             estado: true,
             uuid: true,
             idPac: true,
+            origen: true,
             sustituidoPor: {
               select: {
                 id: true,
@@ -850,6 +971,7 @@ export class EscrituraFacturacion {
         }),
       );
       await this.#empresa(tx, cfdi.empresaId);
+      if (cfdi.origen === 'global') throw new ConflictException(MENSAJE_GLOBAL_NO_SE_REFACTURA);
       return {
         id: cfdi.id,
         empresaId: cfdi.empresaId,
@@ -927,6 +1049,7 @@ export class EscrituraFacturacion {
           }),
         );
         if (!viejo.sucursal.activo || !viejo.sucursal.empresa.activo) encontradoOr404(null);
+        if (viejo.origen === 'global') throw new ConflictException(MENSAJE_GLOBAL_NO_SE_REFACTURA);
         if (viejo.estado !== 'vigente') throw new ConflictException(MENSAJE_YA_CANCELADO);
         if (viejo.sustituidoPor) throw new ConflictException(MENSAJE_SUSTITUCION_EN_CURSO);
         const perfil = await this.#perfilQueEmite(tx, empresaId, ahora);
@@ -1201,6 +1324,514 @@ export class EscrituraFacturacion {
             },
       });
       encontradoOr404(count === 1 ? true : null);
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // F2-108 · Factura global de los tickets que nadie facturó.
+  // -------------------------------------------------------------------------
+
+  /** La sucursal de ESA empresa, con el scope (404 si no, o si ella o su empresa están de baja). */
+  async #sucursalDeEmpresa(tx: Tx, empresaId: string, sucursalId: string) {
+    const sucursal = encontradoOr404(
+      await tx.sucursal.findFirst({
+        where: whereScoped(this.#scope, 'Sucursal', {
+          id: exigir('sucursalId', sucursalId),
+          empresaId,
+        }),
+        select: {
+          id: true,
+          activo: true,
+          zonaHoraria: true,
+          nombre: true,
+          portalFacturacion: { select: { color: true } },
+          empresa: { select: { activo: true } },
+        },
+      }),
+    );
+    if (!sucursal.activo || !sucursal.empresa.activo) encontradoOr404(null);
+    return sucursal;
+  }
+
+  /** La configuración de la global de la empresa (sin fila = mensual y manual). 404 fuera de scope. */
+  async configuracionGlobal(empresaId: string): Promise<ConfiguracionGlobal> {
+    return this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      return this.#configuracionGlobalTx(tx, empresaId);
+    });
+  }
+
+  async #configuracionGlobalTx(tx: Tx, empresaId: string): Promise<ConfiguracionGlobal> {
+    const fila = await tx.configuracionFacturacion.findFirst({
+      where: whereScoped(this.#scope, 'ConfiguracionFacturacion', { empresaId }),
+      select: {
+        globalPeriodicidad: true,
+        globalAutomatica: true,
+        globalAutomaticaDesde: true,
+        vigenciaCodigos: true,
+        vigenciaDias: true,
+      },
+    });
+    return {
+      periodicidad: fila?.globalPeriodicidad ?? 'mensual',
+      automatica: fila?.globalAutomatica ?? false,
+      automaticaDesde: fila?.globalAutomaticaDesde ?? null,
+      vigencia:
+        fila?.vigenciaCodigos === 'dias' && fila.vigenciaDias !== null
+          ? { regla: 'dias', dias: fila.vigenciaDias }
+          : { regla: 'fin_de_mes' },
+    };
+  }
+
+  /**
+   * Guarda la periodicidad de la global y si se emite sola. Al ENCENDER la automática se anota
+   * desde cuándo (sólo emitirá periodos que terminen después); si ya estaba encendida, se conserva
+   * la fecha; al apagarla se borra.
+   */
+  async guardarConfiguracionGlobal(
+    empresaId: string,
+    datos: { periodicidad: PeriodicidadGlobalEnum; automatica: boolean },
+    actorId: string | null,
+    ahora: Date,
+  ): Promise<ConfiguracionGlobal> {
+    return this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      const actual = await this.#configuracionGlobalTx(tx, empresaId);
+      const desde = datos.automatica ? (actual.automaticaDesde ?? ahora) : null;
+      const cambios = {
+        globalPeriodicidad: datos.periodicidad,
+        globalAutomatica: datos.automatica,
+        globalAutomaticaDesde: desde,
+        actualizadoPor: actorId,
+        updatedAt: ahora,
+      };
+      const { count } = await tx.configuracionFacturacion.updateMany({
+        where: whereScoped(this.#scope, 'ConfiguracionFacturacion', { empresaId }),
+        data: cambios,
+      });
+      if (count !== 1) {
+        try {
+          await tx.configuracionFacturacion.create({
+            data: { empresaId, ...cambios },
+            select: { id: true },
+          });
+        } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+            throw new ConflictException(
+              'Otro administrador acaba de guardar la configuración de esta empresa. Recarga.',
+            );
+          }
+          throw error;
+        }
+      }
+      return {
+        ...actual,
+        periodicidad: datos.periodicidad,
+        automatica: datos.automatica,
+        automaticaDesde: desde,
+      };
+    });
+  }
+
+  /**
+   * Los tickets de la sucursal que quedan para una global, por DÍA LOCAL de cierre (en la zona de
+   * la sucursal), desde el 1 de enero del año anterior (lo más viejo que el SAT acepta en una
+   * global), más las globales ya emitidas (o en emisión) de la sucursal. Los días se enrollan en
+   * periodos en `global.ts#enrollarPeriodos`.
+   *
+   * El SQL replica "incluible" = `estadoPublico(...) === 'expirado'` y sin global, y "todavía
+   * autofacturable" = `estadoPublico(...) === 'pendiente'` (un e2e lo compara rama por rama):
+   * código `pendiente`/`expirado` guardado, cuenta FACTURABLE (cerrada, no cancelada y con total > 0,
+   * `codigo.ts#esFacturable`), SIN CFDI propio `vigente` o `timbrando` y SIN fila en
+   * `cfdi_global_codigos`. Empresa Y sucursal en CADA tabla. Una cuenta que SR reprocesó a total 0
+   * después de tener código no cuenta ni como lista ni como vigente (el portal tampoco la emite):
+   * la misma regla que `#ticketsDelPeriodo`.
+   */
+  async periodosGlobal(
+    empresaId: string,
+    sucursalId: string,
+    ahora: Date,
+  ): Promise<{ sucursal: SucursalGlobal; dias: DiaGlobal[]; emitidas: GlobalEmitida[] }> {
+    return this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      const suc = await this.#sucursalDeEmpresa(tx, empresaId, sucursalId);
+      const anio = Number(diaLocal(ahora, suc.zonaHoraria).slice(0, 4));
+      const ventana = instanteDesdeLocal(`${anio - 1}-01-01T00:00:00`, suc.zonaHoraria);
+      if (ventana === null) throw new Error(`Zona inválida en la sucursal ${suc.id}`);
+      const expirado = Prisma.sql`(cf.estado = 'expirado' OR cf.expira_at <= ${ahora})`;
+      const filas = await tx.$queryRaw<
+        {
+          dia: string;
+          n_listos: number;
+          total_listos: string;
+          n_vigentes: number;
+          vigentes_hasta: Date | null;
+        }[]
+      >`
+        SELECT to_char(ch.cerrado_at AT TIME ZONE ${suc.zonaHoraria}, 'YYYY-MM-DD') AS dia,
+               (count(*) FILTER (WHERE ${expirado}))::int AS n_listos,
+               COALESCE(sum(ch.total) FILTER (WHERE ${expirado}), 0)::text AS total_listos,
+               (count(*) FILTER (WHERE NOT ${expirado}))::int AS n_vigentes,
+               max(cf.expira_at) FILTER (WHERE NOT ${expirado}) AS vigentes_hasta
+        FROM codigos_facturacion cf
+        JOIN cheques ch
+          ON ch.id = cf.cheque_id
+         AND ch.empresa_id = ${empresaId}::uuid
+         AND ch.sucursal_id = ${suc.id}::uuid
+        WHERE cf.empresa_id = ${empresaId}::uuid
+          AND cf.sucursal_id = ${suc.id}::uuid
+          AND cf.estado IN ('pendiente', 'expirado')
+          AND ch.cancelado = false
+          AND ch.cerrado_at IS NOT NULL
+          AND ch.total > 0
+          AND ch.cerrado_at >= ${ventana}
+          AND NOT EXISTS (
+            SELECT 1 FROM cfdis c
+            WHERE c.codigo_id = cf.id
+              AND c.empresa_id = ${empresaId}::uuid
+              AND c.sucursal_id = ${suc.id}::uuid
+              AND c.estado IN ('vigente', 'timbrando'))
+          AND NOT EXISTS (
+            SELECT 1 FROM cfdi_global_codigos g
+            WHERE g.codigo_id = cf.id
+              AND g.empresa_id = ${empresaId}::uuid
+              AND g.sucursal_id = ${suc.id}::uuid)
+        GROUP BY 1
+        ORDER BY 1`;
+      const emitidas = await tx.cfdi.findMany({
+        where: whereScoped(this.#scope, 'Cfdi', {
+          empresaId,
+          sucursalId: suc.id,
+          origen: 'global',
+        }),
+        select: {
+          id: true,
+          uuid: true,
+          serie: true,
+          folio: true,
+          estado: true,
+          total: true,
+          emitidoAt: true,
+          globalPeriodicidad: true,
+          globalDesde: true,
+          xmlClave: true,
+          _count: { select: { globalCodigos: true } },
+        },
+        orderBy: [{ globalDesde: 'desc' }, { folio: 'desc' }],
+      });
+      return {
+        sucursal: { id: suc.id, nombre: suc.nombre, zonaHoraria: suc.zonaHoraria },
+        dias: filas.map((f) => ({
+          dia: f.dia,
+          nListos: f.n_listos,
+          totalListos: new Prisma.Decimal(f.total_listos),
+          nVigentes: f.n_vigentes,
+          vigentesHasta: f.vigentes_hasta,
+        })),
+        emitidas: emitidas.map((e) => ({
+          id: e.id,
+          uuid: e.uuid,
+          serieFolio: `${e.serie}-${e.folio}`,
+          estado: e.estado,
+          total: e.total,
+          emitidoAt: e.emitidoAt,
+          globalPeriodicidad: e.globalPeriodicidad,
+          globalDesde: e.globalDesde,
+          tickets: e._count.globalCodigos,
+          conArchivos: e.xmlClave !== null,
+        })),
+      };
+    });
+  }
+
+  /**
+   * Los tickets de UN periodo, ya clasificados con `estadoPublico` (el mismo juez que el portal):
+   * `incluidos` = expirados y sin global; `vigentes` = los que el cliente todavía puede facturar.
+   * UNA sola consulta (con pagos) para todo el periodo.
+   */
+  async #ticketsDelPeriodo(
+    tx: Tx,
+    empresaId: string,
+    sucursalId: string,
+    periodo: PeriodoGlobal,
+    ahora: Date,
+  ) {
+    const codigos = await tx.codigoFacturacion.findMany({
+      where: whereScoped(this.#scope, 'CodigoFacturacion', {
+        empresaId,
+        sucursalId,
+        cheque: {
+          empresaId,
+          sucursalId,
+          cerradoAt: { gte: periodo.desde, lt: periodo.hasta },
+        },
+      }),
+      select: {
+        id: true,
+        estado: true,
+        expiraAt: true,
+        cfdi: { select: { estado: true } },
+        global: { select: { cfdi: { select: { estado: true } } } },
+        cheque: {
+          select: {
+            folio: true,
+            cerradoAt: true,
+            cancelado: true,
+            total: true,
+            pagos: { select: { formaRaw: true, monto: true }, orderBy: { id: 'asc' } },
+          },
+        },
+      },
+      orderBy: [{ cheque: { cerradoAt: 'asc' } }, { id: 'asc' }],
+    });
+    const incluidos: typeof codigos = [];
+    const vigentes: typeof codigos = [];
+    for (const c of codigos) {
+      const estado = estadoPublico(c, c.cheque, ahora.getTime());
+      // Sólo cuentas facturables (total > 0): una que SR reprocesó a 0 no entra ni detiene la
+      // global (el portal tampoco la emitiría). Misma regla que el SQL de `periodosGlobal`.
+      if (!esFacturable(c.cheque)) continue;
+      if (estado === 'expirado' && c.global === null) incluidos.push(c);
+      else if (estado === 'pendiente') vigentes.push(c);
+    }
+    return { incluidos, vigentes };
+  }
+
+  /** Cuántas globales VIGENTES (o en emisión) tiene ya ese periodo de la sucursal. */
+  async #globalesDelPeriodo(tx: Tx, empresaId: string, sucursalId: string, p: PeriodoGlobal) {
+    return tx.cfdi.count({
+      where: whereScoped(this.#scope, 'Cfdi', {
+        empresaId,
+        sucursalId,
+        origen: 'global',
+        estado: { in: ['vigente', 'timbrando'] },
+        globalPeriodicidad: p.informacion.periodicidad,
+        globalDesde: p.desde,
+      }),
+    });
+  }
+
+  /** El periodo que empieza en `clave`, o 400 si la clave no es el inicio de uno. */
+  #periodo(clave: string, zona: string, periodicidad: PeriodicidadGlobalEnum): PeriodoGlobal {
+    const periodo = periodoDeClave(clave, zona, periodicidad);
+    if (periodo === null) throw new BadRequestException([MENSAJE_CLAVE_PERIODO]);
+    return periodo;
+  }
+
+  /** La vista previa de la global de un periodo: qué tickets entrarían y cuánto suma. */
+  async vistaPreviaGlobal(
+    empresaId: string,
+    pedido: PedidoGlobal,
+    ahora: Date,
+  ): Promise<VistaPreviaGlobal> {
+    return this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      const suc = await this.#sucursalDeEmpresa(tx, empresaId, pedido.sucursalId);
+      const periodo = this.#periodo(pedido.clave, suc.zonaHoraria, pedido.periodicidad);
+      const { incluidos, vigentes } = await this.#ticketsDelPeriodo(
+        tx,
+        empresaId,
+        suc.id,
+        periodo,
+        ahora,
+      );
+      const catalogo = await this.#catalogoFormas(tx, empresaId);
+      const formaPago = formaPagoGlobal(
+        incluidos.flatMap((c) => c.cheque.pagos),
+        catalogo,
+      );
+      const hasta = vigentes.reduce<Date | null>(
+        (m, c) => (m === null || c.expiraAt > m ? c.expiraAt : m),
+        null,
+      );
+      return {
+        sucursal: { id: suc.id, nombre: suc.nombre, zonaHoraria: suc.zonaHoraria },
+        periodo,
+        estado: estadoPeriodo(
+          periodo,
+          { nListos: incluidos.length, nVigentes: vigentes.length },
+          ahora,
+          suc.zonaHoraria,
+        ),
+        tickets: incluidos.map((c) => ({
+          folio: c.cheque.folio,
+          cerradoAt: c.cheque.cerradoAt!,
+          total: c.cheque.total,
+        })),
+        vigentes: { tickets: vigentes.length, hasta },
+        formaPago,
+        importes:
+          incluidos.length > 0
+            ? importesGlobal(
+                incluidos.map((c) => ({ folio: c.cheque.folio, total: c.cheque.total })),
+              )
+            : null,
+        globalesPrevias: await this.#globalesDelPeriodo(tx, empresaId, suc.id, periodo),
+      };
+    });
+  }
+
+  async #catalogoFormas(tx: Tx, empresaId: string): Promise<Map<string, FormaPagoEnum>> {
+    const catalogo = await tx.formaPagoCatalogo.findMany({
+      where: whereScoped(this.#scope, 'FormaPagoCatalogo', { empresaId }),
+      select: { formaRaw: true, forma: true },
+    });
+    return new Map(catalogo.map((c) => [c.formaRaw, c.forma as FormaPagoEnum]));
+  }
+
+  /**
+   * RESERVA la factura global de un periodo de una sucursal. En UNA transacción, en este orden:
+   * 1. Empresa (404) → sucursal activa de ESA empresa (404) → la clave es inicio de periodo (400).
+   * 2. El SAT acepta su año (422) y el periodo ya terminó (409).
+   * 3. Se BLOQUEAN (`FOR UPDATE OF cf`, en orden de id: dos reservas del mismo periodo no se
+   *    interbloquean) todos los códigos de la sucursal cuyo cheque cerró en el periodo, y con el
+   *    candado se re-mide todo con `estadoPublico` en UNA consulta.
+   * 4. Si algún ticket todavía se puede autofacturar → 409 (el periodo no está listo). Si no queda
+   *    ninguno que incluir → 409 (otra global ya los tomó, o no hay).
+   * 5. Perfil que emite (503) → forma de pago (422). ANTES de tomar folio: un rechazo no deja hueco.
+   * 6. Folio → INSERT de la reserva `timbrando` (origen global, público en general, importes
+   *    sumados, InformacionGlobal) + una fila por ticket en `cfdi_global_codigos`. El único de
+   *    `codigo_id` es la segunda red (409).
+   */
+  async reservarGlobal(empresaId: string, pedido: PedidoGlobal, ahora: Date): Promise<ReservaCfdi> {
+    try {
+      return await this.#enTransaccion(async (tx) => {
+        await this.#empresa(tx, empresaId);
+        const suc = await this.#sucursalDeEmpresa(tx, empresaId, pedido.sucursalId);
+        const periodo = this.#periodo(pedido.clave, suc.zonaHoraria, pedido.periodicidad);
+        if (!anioPermitido(periodo, ahora, suc.zonaHoraria)) {
+          throw new UnprocessableEntityException(MENSAJE_GLOBAL_FUERA_DE_PLAZO);
+        }
+        if (ahora.getTime() < periodo.hasta.getTime()) {
+          throw new ConflictException(MENSAJE_GLOBAL_EN_CURSO);
+        }
+        await tx.$queryRaw`
+          SELECT cf.id FROM codigos_facturacion cf
+          JOIN cheques ch
+            ON ch.id = cf.cheque_id
+           AND ch.empresa_id = ${empresaId}::uuid
+           AND ch.sucursal_id = ${suc.id}::uuid
+          WHERE cf.empresa_id = ${empresaId}::uuid
+            AND cf.sucursal_id = ${suc.id}::uuid
+            AND ch.cerrado_at >= ${periodo.desde}
+            AND ch.cerrado_at < ${periodo.hasta}
+          ORDER BY cf.id
+          FOR UPDATE OF cf`;
+        const { incluidos, vigentes } = await this.#ticketsDelPeriodo(
+          tx,
+          empresaId,
+          suc.id,
+          periodo,
+          ahora,
+        );
+        if (vigentes.length > 0) {
+          throw new ConflictException(mensajeGlobalEsperando(vigentes.length));
+        }
+        if (incluidos.length === 0) throw new ConflictException(MENSAJE_GLOBAL_SIN_TICKETS);
+
+        const perfil = await this.#perfilQueEmite(tx, empresaId, ahora);
+        const formaPago = formaPagoGlobal(
+          incluidos.flatMap((c) => c.cheque.pagos),
+          await this.#catalogoFormas(tx, empresaId),
+        );
+        if (formaPago === null) throw new UnprocessableEntityException(MENSAJE_GLOBAL_SIN_FORMA);
+
+        const tickets = incluidos.map((c) => ({ folio: c.cheque.folio, total: c.cheque.total }));
+        const importes = importesGlobal(tickets);
+        const folio = await this.#siguienteFolio(tx, perfil.id, empresaId);
+        const { id } = await tx.cfdi.create({
+          data: {
+            empresaId,
+            sucursalId: suc.id,
+            chequeId: null,
+            codigoId: null,
+            origen: 'global',
+            perfilFiscalId: perfil.id,
+            serie: perfil.serie,
+            folio,
+            receptor: receptorPublicoGeneral(perfil.cp),
+            formaPago,
+            subtotal: importes.subtotal,
+            iva: importes.iva,
+            total: importes.total,
+            estado: 'timbrando',
+            globalPeriodicidad: periodo.informacion.periodicidad,
+            globalMeses: periodo.informacion.meses,
+            globalAnio: periodo.informacion.anio,
+            globalDesde: periodo.desde,
+            globalHasta: periodo.hasta,
+            updatedAt: ahora,
+          },
+          select: { id: true },
+        });
+        await tx.cfdiGlobalCodigo.createMany({
+          data: incluidos.map((c) => ({
+            empresaId,
+            sucursalId: suc.id,
+            cfdiId: id,
+            codigoId: c.id,
+            total: c.cheque.total,
+          })),
+        });
+        return {
+          reservaId: id,
+          origen: 'global',
+          serie: perfil.serie,
+          folio,
+          emisor: emisorDe(perfil),
+          sucursal: {
+            zonaHoraria: suc.zonaHoraria,
+            nombre: suc.nombre,
+            colorPortal: suc.portalFacturacion?.color ?? null,
+          },
+          cheque: null,
+          formaPago,
+          importes,
+          global: { informacion: periodo.informacion, etiqueta: periodo.etiqueta, tickets },
+        };
+      });
+    } catch (error) {
+      if (esUnicoDe(error, 'codigo_id')) {
+        // Otra global tomó alguno de estos tickets entre la lectura y el INSERT.
+        throw new ConflictException(MENSAJE_GLOBAL_SIN_TICKETS);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Las empresas con la global AUTOMÁTICA encendida, con sus sucursales activas. Para el
+   * programador, que corre con el scope del sistema y después va empresa por empresa.
+   */
+  async empresasConGlobalAutomatica(): Promise<
+    { empresaId: string; periodicidad: PeriodicidadGlobalEnum; desde: Date; sucursales: string[] }[]
+  > {
+    return this.#enTransaccion(async (tx) => {
+      const filas = await tx.configuracionFacturacion.findMany({
+        where: whereScoped(this.#scope, 'ConfiguracionFacturacion', {
+          globalAutomatica: true,
+          empresa: { activo: true },
+        }),
+        select: {
+          empresaId: true,
+          globalPeriodicidad: true,
+          globalAutomaticaDesde: true,
+          empresa: {
+            select: {
+              sucursales: { where: { activo: true }, select: { id: true }, orderBy: { id: 'asc' } },
+            },
+          },
+        },
+        orderBy: { empresaId: 'asc' },
+      });
+      return filas
+        .filter((f) => f.globalAutomaticaDesde !== null)
+        .map((f) => ({
+          empresaId: f.empresaId,
+          periodicidad: f.globalPeriodicidad,
+          desde: f.globalAutomaticaDesde!,
+          sucursales: f.empresa.sucursales.map((s) => s.id),
+        }));
     });
   }
 

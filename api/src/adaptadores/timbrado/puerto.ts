@@ -77,6 +77,21 @@ export interface SolicitudCfdi {
    * que éste sustituye (el que después se cancela con motivo 01).
    */
   relacionados?: CfdiRelacionados;
+  /**
+   * Sólo en una FACTURA GLOBAL a público en general (F2-108): el periodo que ampara, como lo pide el
+   * nodo `InformacionGlobal` del Anexo 20.
+   */
+  informacionGlobal?: InformacionGlobal;
+}
+
+/** Nodo `InformacionGlobal` del CFDI 4.0 (F2-108). */
+export interface InformacionGlobal {
+  /** c_Periodicidad: 01 diario, 02 semanal, 04 mensual. */
+  periodicidad: '01' | '02' | '04';
+  /** c_Meses: '01'..'12', el mes del periodo. */
+  meses: string;
+  /** El año del periodo (el SAT acepta el año en curso o el anterior). */
+  anio: number;
 }
 
 /** c_TipoRelacion 04: sustitución de los CFDI previos. */

@@ -1497,6 +1497,16 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 > /api-lite/cfdis/{id}`) es barato y no gasta folio. Supuestos en esquema-sr §2 "Factura sin
 > ticket y refacturación".
 
+> **Y además (de F2-108).** Contra el sandbox y con el contador: (1) **factura global**: que timbre
+> con `GlobalInformation: { Periodicity, Months, Year }` (año como texto), receptor `XAXX010101000`
+> / 616 / S01 con `TaxZipCode` = lugar de expedición, e `Items` `01010101`/`ACT` por ticket con su
+> folio (snapshot "factura global (F2-108)" en `timbrado.contrato.spec.ts`); con muchos conceptos
+> (un mes real: miles de tickets). (2) **Decisiones abiertas para Ricardo**: esperar a que venzan
+> los códigos contra el plazo del SAT para emitir la global (vigencia `dias` o periodicidad menor que
+> la vigencia la retrasan; la UI lo avisa), la semana cortada en el cambio de mes, la forma de pago
+> dominante de la global, la global POR SUCURSAL, y si la tasa de facturación debe excluir la global.
+> Supuestos en esquema-sr §2 "Factura global (F2-108)".
+
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus
 registros DNS y el volumen persistente del servidor.** Cambiar `CORREO_IMPL` y `ARCHIVOS_IMPL`
@@ -1997,6 +2007,15 @@ deja continuar.
 > sustituto que después se cancela deja al anterior con `sustituidoPor` cancelado y la refacturación
 > contesta 409 (`sustituye_a_id` es único); decidir si se permite una segunda sustitución.
 
+> **Y además (de F2-108).** (1) **Cancelar una global** (motivo 02/03, o 04 cuando un ticket de la
+> global se factura nominativo después): hoy sus tickets siguen amarrados a ella en
+> `cfdi_global_codigos` (único por `codigo_id`) y su código dice `en_global`; decidir si al cancelar
+> se sueltan (borrar las filas y regresar el código a `pendiente`) para que entren a otra global, y
+> probar que el candado sigue valiendo. `estadoPublico` ya trata una global `cancelado` como si no
+> estuviera. (2) Una global NO se refactura (409 en `cfdiParaRefacturar`/`reservarSustituto`): se
+> cancela y se emite otra. (3) Si SR reabre o cancela una cuenta que ya entró a una global, el
+> `total` guardado en su fila no cambia: decidir qué se hace.
+
 ### F2-110 · Control de folios del PAC
 `[ ]` Contador de folios consumidos por empresa y global (cada timbre exitoso, incluida
 global y sustituciones, decrementa saldo local configurado al comprar paquete a Facturama).
@@ -2030,6 +2049,12 @@ periodo.
 > `vigente`, `sustitucionPendiente` en la tabla) se reintenta a mano desde el tablero; conciliarla
 > en automático (consultar al PAC y anotar la cancelación) cabe en el mismo proceso. (4) Los
 > sustitutos y las facturas sin ticket son timbres: cuentan para el saldo de folios.
+
+> **Y además (de F2-108).** Una factura global con respuesta AMBIGUA del PAC se queda en `timbrando`
+> con sus tickets AMARRADOS en `cfdi_global_codigos` (no entran a otra global y el portal los dice
+> `en_proceso`); la conciliación de reservas colgadas tiene que cubrirla también (confirmar: los
+> códigos pasan a `en_global`; liberar: el CASCADE suelta los tickets). La global es un timbre:
+> cuenta para el saldo de folios, y un rechazo del PAC deja hueco de folio como las demás.
 
 ## EPIC 9 — Inventario y compras
 

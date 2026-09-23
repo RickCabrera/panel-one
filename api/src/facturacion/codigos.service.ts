@@ -8,8 +8,9 @@ import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import {
   esCodigoValido,
   estadoPublico,
-  MENSAJE_ESTADO,
+  mensajeEstado,
   normalizarCodigo,
+  periodoGlobalDe,
   type VigenciaCodigos,
 } from './codigo';
 import type {
@@ -47,10 +48,12 @@ export class CodigosFacturacionService {
       throw new NotFoundException(MENSAJE_CODIGO_NO_ENCONTRADO);
     }
     const estado = estadoPublico(fila, fila.cheque, this.reloj.ahora());
+    const periodoGlobal = periodoGlobalDe(estado, fila.global, fila.sucursal.zonaHoraria);
     return {
       codigo: fila.codigo,
       estado,
-      mensaje: MENSAJE_ESTADO[estado],
+      mensaje: mensajeEstado(estado, periodoGlobal),
+      periodoGlobal,
       ticket:
         estado === 'pendiente'
           ? {

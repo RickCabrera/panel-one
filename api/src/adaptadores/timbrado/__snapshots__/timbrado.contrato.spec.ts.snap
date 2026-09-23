@@ -189,6 +189,106 @@ exports[`Contrato Facturama: alta del CSD (F2-100) reemplazo: PUT /api-lite/csds
 ]
 `;
 
+exports[`Contrato Facturama: factura global (F2-108) el cuerpo del POST, exacto 1`] = `
+{
+  "cuerpo": {
+    "CfdiType": "I",
+    "Currency": "MXN",
+    "Date": "2026-09-01T02:00:00",
+    "ExpeditionPlace": "06700",
+    "Exportation": "01",
+    "Folio": "2040",
+    "GlobalInformation": {
+      "Months": "08",
+      "Periodicity": "04",
+      "Year": "2026",
+    },
+    "Issuer": {
+      "FiscalRegime": "601",
+      "Name": "ESCUELA KEMPER URGATE",
+      "Rfc": "EKU9003173C9",
+    },
+    "Items": [
+      {
+        "Description": "Venta",
+        "IdentificationNumber": "T-0101",
+        "ProductCode": "01010101",
+        "Quantity": 1,
+        "Subtotal": 100,
+        "TaxObject": "02",
+        "Taxes": [
+          {
+            "Base": 100,
+            "IsRetention": false,
+            "Name": "IVA",
+            "Rate": 0.16,
+            "Total": 16,
+          },
+        ],
+        "Total": 116,
+        "Unit": "Actividad",
+        "UnitCode": "ACT",
+        "UnitPrice": 100,
+      },
+      {
+        "Description": "Venta",
+        "IdentificationNumber": "T-0102",
+        "ProductCode": "01010101",
+        "Quantity": 1,
+        "Subtotal": 50,
+        "TaxObject": "02",
+        "Taxes": [
+          {
+            "Base": 50,
+            "IsRetention": false,
+            "Name": "IVA",
+            "Rate": 0.16,
+            "Total": 8,
+          },
+        ],
+        "Total": 58,
+        "Unit": "Actividad",
+        "UnitCode": "ACT",
+        "UnitPrice": 50,
+      },
+      {
+        "Description": "Venta",
+        "IdentificationNumber": "T-0103",
+        "ProductCode": "01010101",
+        "Quantity": 1,
+        "Subtotal": 86.22,
+        "TaxObject": "02",
+        "Taxes": [
+          {
+            "Base": 86.22,
+            "IsRetention": false,
+            "Name": "IVA",
+            "Rate": 0.16,
+            "Total": 13.79,
+          },
+        ],
+        "Total": 100.01,
+        "Unit": "Actividad",
+        "UnitCode": "ACT",
+        "UnitPrice": 86.22,
+      },
+    ],
+    "PaymentForm": "01",
+    "PaymentMethod": "PUE",
+    "Receiver": {
+      "CfdiUse": "S01",
+      "FiscalRegime": "616",
+      "Name": "PUBLICO EN GENERAL",
+      "Rfc": "XAXX010101000",
+      "TaxZipCode": "06700",
+    },
+    "Serie": "A",
+  },
+  "metodo": "POST",
+  "url": "https://apisandbox.facturama.mx/api-lite/3/cfdis",
+}
+`;
+
 exports[`Contrato Facturama: sustitución y factura sin ticket (F2-107) el sustituto lleva \`Relations\` 04 con el UUID anterior (snapshot revisado a mano) 1`] = `
 {
   "cuerpo": {

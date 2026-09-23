@@ -38,6 +38,8 @@ export interface SucursalTablero {
   cuentas: number;
   facturado: string;
   cfdis: number;
+  /** F2-108: la factura global vigente de la sucursal (NO suma en `facturado` ni en la tasa). */
+  global: CifrasCfdi;
   cancelados: CifrasCfdi;
   tasa: string | null;
 }
@@ -45,6 +47,8 @@ export interface SucursalTablero {
 export interface TableroFacturacion {
   ventas: { venta: string; cuentas: number };
   facturado: CifrasCfdi;
+  /** F2-108: la factura global vigente, aparte de lo facturado a clientes. */
+  global: CifrasCfdi;
   cancelados: CifrasCfdi;
   tasa: string | null;
   porFacturar: { cuentas: number; monto: string };
@@ -54,8 +58,17 @@ export interface TableroFacturacion {
 }
 
 export type EstadoCfdiEmitido = 'vigente' | 'cancelado';
-export type OrigenCfdi = 'ticket' | 'manual';
-export const ORIGENES_CFDI: readonly OrigenCfdi[] = ['ticket', 'manual'];
+export type OrigenCfdi = 'ticket' | 'manual' | 'global';
+export const ORIGENES_CFDI: readonly OrigenCfdi[] = ['ticket', 'manual', 'global'];
+
+/**
+ * Lo que se le facturó a un CLIENTE (F2-108): `cuenta_facturado` sin la factura global.
+ * DECISION PROVISIONAL (nocturno): la global ampara la venta que NINGÚN cliente facturó; meterla en
+ * `facturado` y en la tasa la dejaría en ~100 % siempre. Va aparte (`global`), y `facturado` +
+ * `global` = todos los CFDI vigentes que cuentan (docs/esquema-sr.md §2).
+ */
+const A_CLIENTES = Prisma.sql`f.cuenta_facturado AND NOT f.es_global`;
+const DE_GLOBAL = Prisma.sql`f.cuenta_facturado AND f.es_global`;
 
 /** Los datos del receptor con que se timbró (para precargar la refacturación, F2-107). */
 export interface ReceptorFila {
@@ -158,11 +171,15 @@ export class TableroFacturacionService {
           sucursal_id: string;
           facturado: unknown;
           num_vigentes: number;
+          monto_global: unknown;
+          num_global: number;
           cancelado: unknown;
           num_cancelados: number;
         }>(Prisma.sql`SELECT s.id AS sucursal_id,
-            COALESCE(sum(f.total) FILTER (WHERE f.cuenta_facturado), 0) AS facturado,
-            (count(f.id) FILTER (WHERE f.cuenta_facturado))::int AS num_vigentes,
+            COALESCE(sum(f.total) FILTER (WHERE ${A_CLIENTES}), 0) AS facturado,
+            (count(f.id) FILTER (WHERE ${A_CLIENTES}))::int AS num_vigentes,
+            COALESCE(sum(f.total) FILTER (WHERE ${DE_GLOBAL}), 0) AS monto_global,
+            (count(f.id) FILTER (WHERE ${DE_GLOBAL}))::int AS num_global,
             COALESCE(sum(f.total) FILTER (WHERE f.estado = 'cancelado'), 0) AS cancelado,
             (count(f.id) FILTER (WHERE f.estado = 'cancelado'))::int AS num_cancelados
           FROM sucursales_alcance s
@@ -170,11 +187,11 @@ export class TableroFacturacionService {
           GROUP BY s.id`),
         q.consultar<{ clave: string; facturado: unknown; num_cfdi: number }>(
           Prisma.sql`SELECT mes_local AS clave, sum(total) AS facturado, count(*)::int AS num_cfdi
-            FROM cfdis_periodo WHERE cuenta_facturado GROUP BY mes_local`,
+            FROM cfdis_periodo f WHERE ${A_CLIENTES} GROUP BY mes_local`,
         ),
         q.consultar<{ clave: number; facturado: unknown; num_cfdi: number }>(
           Prisma.sql`SELECT hora_local AS clave, sum(total) AS facturado, count(*)::int AS num_cfdi
-            FROM cfdis_periodo WHERE cuenta_facturado GROUP BY hora_local`,
+            FROM cfdis_periodo f WHERE ${A_CLIENTES} GROUP BY hora_local`,
         ),
         q.consultar<{ cuentas: number; monto: unknown }>(
           Prisma.sql`SELECT count(*)::int AS cuentas, COALESCE(sum(k.total), 0) AS monto
@@ -191,13 +208,17 @@ export class TableroFacturacionService {
       throw new Error('Tablero de facturación: las sucursales de ventas y de CFDI no coinciden.');
     }
     let facturado = new Prisma.Decimal(0);
+    let global = new Prisma.Decimal(0);
     let cancelado = new Prisma.Decimal(0);
     let vigentes = 0;
+    let globales = 0;
     let cancelados = 0;
     for (const f of cfdiSucursal) {
       facturado = facturado.plus(dec(f.facturado));
+      global = global.plus(dec(f.monto_global));
       cancelado = cancelado.plus(dec(f.cancelado));
       vigentes += f.num_vigentes;
+      globales += f.num_global;
       cancelados += f.num_cancelados;
     }
     const porSucursal = ventasSucursal.map((v): SucursalTablero => {
@@ -211,6 +232,7 @@ export class TableroFacturacionService {
         cuentas: v.cuentas,
         facturado: pesos(suFacturado),
         cfdis: f?.num_vigentes ?? 0,
+        global: { monto: pesos(dec(f?.monto_global)), cfdis: f?.num_global ?? 0 },
         cancelados: { monto: pesos(suCancelado), cfdis: f?.num_cancelados ?? 0 },
         tasa: tasaDe(suFacturado, dec(v.venta)),
       };
@@ -219,6 +241,7 @@ export class TableroFacturacionService {
     return {
       ventas: { venta: resumen.venta, cuentas: resumen.cuentas },
       facturado: { monto: pesos(facturado), cfdis: vigentes },
+      global: { monto: pesos(global), cfdis: globales },
       cancelados: { monto: pesos(cancelado), cfdis: cancelados },
       tasa: tasaDe(facturado, dec(resumen.venta)),
       porFacturar: { cuentas: pendientes.cuentas, monto: pesos(dec(pendientes.monto)) },

@@ -227,6 +227,7 @@ describe('Vista Tickets: la tabla', () => {
           codigo: '7JQRECP3U',
           estado: 'pendiente',
           mensaje: 'El ticket se puede facturar.',
+          periodoGlobal: null,
         },
       }),
       ticket({
@@ -236,6 +237,7 @@ describe('Vista Tickets: la tabla', () => {
           codigo: 'ABCDEFGH2',
           estado: 'facturado',
           mensaje: 'Este ticket ya fue facturado.',
+          periodoGlobal: null,
         },
       }),
       ticket({ id: '0000000a-0000-4000-8000-000000000003', folio: '1003' }),

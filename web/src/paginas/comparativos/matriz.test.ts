@@ -383,6 +383,7 @@ describe('tasa de facturación (F2-106)', () => {
       cuentas: 1,
       facturado: '0.00',
       cfdis: 0,
+      global: { monto: '0.00', cfdis: 0 },
       cancelados: { monto: '0.00', cfdis: 0 },
       tasa,
     });
@@ -390,6 +391,7 @@ describe('tasa de facturación (F2-106)', () => {
       {
         ventas: { venta: '2.00', cuentas: 2 },
         facturado: { monto: '1.00', cfdis: 1 },
+        global: { monto: '0.00', cfdis: 0 },
         cancelados: { monto: '0.00', cfdis: 0 },
         tasa: '0.5000',
         porFacturar: { cuentas: 0, monto: '0.00' },

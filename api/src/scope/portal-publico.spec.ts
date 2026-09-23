@@ -45,6 +45,25 @@ describe('ScopedPrismaService: lecturas públicas del portal (F2-103)', () => {
     }
   });
 
+  it('F2-108: de la factura global del ticket sólo sale su estado y su periodo (lista blanca)', async () => {
+    const { helper, llamadas } = clienteFalso();
+    await helper.codigoFacturacionDelPortal('7JQRECP3U', 'empresa-1');
+    await helper.codigoFacturacionPublico('7JQRECP3U');
+    expect(llamadas).toHaveLength(2);
+    for (const l of llamadas) {
+      const global = (l.args.select as { global?: unknown }).global;
+      // Exactamente esto: ni uuid, ni serie, ni folio, ni total, ni receptor de la global, ni el
+      // total del ticket guardado en `cfdi_global_codigos` (la venta mensual al público).
+      expect(global).toEqual({
+        select: { cfdi: { select: { estado: true, globalPeriodicidad: true, globalDesde: true } } },
+      });
+      const texto = JSON.stringify(global);
+      for (const prohibido of ['uuid', 'serie', 'folio', 'total', 'receptor', 'subtotal', 'iva']) {
+        expect(texto).not.toContain(`"${prohibido}"`);
+      }
+    }
+  });
+
   it.each([
     ['empresa vacía', '7JQRECP3U', ''],
     ['empresa ausente', '7JQRECP3U', undefined],

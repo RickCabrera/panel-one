@@ -33,6 +33,7 @@ import { CODIGO_EJEMPLO, VIGENCIA_DEFAULT } from '../src/facturacion/codigo';
 import { generarCodigosSeed } from './seed-codigos';
 import { sembrarFacturacion, sembrarPortales } from './seed-facturacion';
 import { sembrarCfdis } from './seed-cfdis';
+import { sembrarGlobales, whereGlobalesSeed } from './seed-globales';
 import { crearArchivos } from '../src/adaptadores/adaptadores.module';
 import type { PuertoArchivos } from '../src/adaptadores/archivos/puerto';
 import { leerAdaptadoresConfig } from '../src/adaptadores/config';
@@ -450,6 +451,12 @@ export async function sembrarVentas(
     async (tx) => {
       // Los CFDI (F2-104) y los códigos cuelgan del cheque (FK Restrict): se borran antes que él.
       // Son de cheques SINTÉTICOS del seed, así que sus CFDI sólo pudo emitirlos el PAC falso.
+      // F2-108: las globales del seed amparan códigos de estos cheques (sus filas en
+      // `cfdi_global_codigos` caen por CASCADE). Sólo las que amparan tickets del seed de estas
+      // sucursales; `sembrarGlobales` las vuelve a crear después.
+      const globalesSeed = whereGlobalesSeed(sucursalIds, PREFIJO_SEED);
+      await tx.cfdiEnvio.deleteMany({ where: { cfdi: globalesSeed } });
+      await tx.cfdi.deleteMany({ where: globalesSeed });
       await tx.cfdiEnvio.deleteMany({ where: { cfdi: { cheque: sembrados.cheque } } });
       await tx.cfdi.deleteMany({ where: { cheque: sembrados.cheque } });
       await tx.codigoFacturacion.deleteMany({ where: { cheque: sembrados.cheque } });
@@ -694,6 +701,25 @@ async function main(): Promise<void> {
       if (cfdis.sinArchivos > 0) {
         console.warn(
           `AVISO: ${cfdis.sinArchivos} CFDI del seed quedaron SIN XML/PDF (falló el almacenamiento).`,
+        );
+      }
+    }
+    // Facturas globales (F2-108): una por mes cerrado y listo, salvo el último (queda para la
+    // vista previa), con sus tickets en `en_global`. Después de los CFDI: toma los folios siguientes.
+    const globales = await sembrarGlobales(prisma, {
+      empresaId: op.empresaId,
+      prefijo: PREFIJO_SEED,
+      ahora,
+      catalogoFormas: CATALOGO_FORMAS_SEED,
+      archivos,
+    });
+    if (!globales.sinPerfil) {
+      console.log(
+        `Facturas globales sembradas (F2-108): ${globales.globales} con ${globales.tickets} tickets.`,
+      );
+      if (globales.sinArchivos > 0) {
+        console.warn(
+          `AVISO: ${globales.sinArchivos} globales del seed quedaron SIN XML/PDF (falló el almacenamiento).`,
         );
       }
     }

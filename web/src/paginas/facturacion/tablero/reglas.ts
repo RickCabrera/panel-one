@@ -51,6 +51,8 @@ export interface PuntoSucursal {
   facturado: number;
   ventaTexto: string;
   facturadoTexto: string;
+  /** F2-108: la factura global de la sucursal, aparte (no suma a la tasa). */
+  globalTexto: string;
   tasa: string | null;
 }
 
@@ -62,6 +64,7 @@ export function puntosSucursal(t: TableroFacturacion): PuntoSucursal[] {
     facturado: aGrafica(s.facturado),
     ventaTexto: s.venta,
     facturadoTexto: s.facturado,
+    globalTexto: s.global.monto,
     tasa: s.tasa,
   }));
 }
@@ -105,7 +108,7 @@ export function puntosHora(t: TableroFacturacion): PuntoSerie[] {
  * `null` = sí hay CFDI (o cancelados) en el periodo.
  */
 export function motivoSinFacturas(t: TableroFacturacion): string | null {
-  if (t.facturado.cfdis > 0 || t.cancelados.cfdis > 0) return null;
+  if (t.facturado.cfdis > 0 || t.cancelados.cfdis > 0 || t.global.cfdis > 0) return null;
   if (t.ventas.cuentas === 0) {
     return 'No hay ventas en este periodo: no hay nada que facturar. Elige otro periodo o revisa que la sucursal esté sincronizando.';
   }

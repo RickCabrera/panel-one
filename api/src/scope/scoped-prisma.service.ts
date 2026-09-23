@@ -154,6 +154,11 @@ const SELECCION_CODIGO_PUBLICO = {
   cheque: { select: { abiertoAt: true, cerradoAt: true, total: true, cancelado: true } },
   // F2-104: si hay una reserva o un CFDI, el estado público lo dice (`en_proceso`).
   cfdi: { select: { estado: true } },
+  // F2-108: si el ticket entró a una factura global, su estado y su periodo. NADA más de la global
+  // (ni uuid, ni serie-folio, ni importes, ni el total del ticket guardado en la fila).
+  global: {
+    select: { cfdi: { select: { estado: true, globalPeriodicidad: true, globalDesde: true } } },
+  },
   sucursal: {
     select: {
       nombre: true,
@@ -191,6 +196,11 @@ const SELECCION_CODIGO_PORTAL = {
     },
   },
   cfdi: { select: { estado: true } },
+  // F2-108: si el ticket entró a una factura global, su estado y su periodo. NADA más de la global
+  // (ni uuid, ni serie-folio, ni importes, ni el total del ticket guardado en la fila).
+  global: {
+    select: { cfdi: { select: { estado: true, globalPeriodicidad: true, globalDesde: true } } },
+  },
   sucursal: {
     select: {
       nombre: true,

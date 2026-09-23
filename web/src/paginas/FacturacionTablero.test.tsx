@@ -35,6 +35,7 @@ const RUTA = `/facturacion?empresa=${A}&periodo=mes`;
 const TABLERO: TableroFacturacion = {
   ventas: { venta: '3406.78', cuentas: 9 },
   facturado: { monto: '2350.00', cfdis: 4 },
+  global: { monto: '500.00', cfdis: 1 },
   cancelados: { monto: '250.00', cfdis: 1 },
   tasa: '0.6898',
   porFacturar: { cuentas: 2, monto: '273.45' },
@@ -46,6 +47,7 @@ const TABLERO: TableroFacturacion = {
       cuentas: 9,
       facturado: '2350.00',
       cfdis: 4,
+      global: { monto: '500.00', cfdis: 1 },
       cancelados: { monto: '250.00', cfdis: 1 },
       tasa: '0.6898',
     },
@@ -181,6 +183,11 @@ describe('tablero de facturación', () => {
     expect(texto('kpi-ventas')).toBe('$3,406.78');
     expect(texto('kpi-facturado')).toBe('$2,350.00');
     expect(texto('kpi-cancelados')).toBe('$250.00');
+    // F2-108: la factura global va aparte y no entra a la tasa.
+    expect(texto('kpi-global')).toBe('$500.00');
+    expect(
+      screen.getByText('1 factura a público en general; no suma a la tasa'),
+    ).toBeInTheDocument();
     expect(texto('kpi-tasa')).toBe('68.98 %');
     expect(texto('kpi-por-facturar')).toBe('$273.45');
     // El periodo global de la cabecera ("Este mes") llega al api.
@@ -199,6 +206,7 @@ describe('tablero de facturación', () => {
           ...TABLERO,
           ventas: { venta: '0.00', cuentas: 0 },
           facturado: { monto: '0.00', cfdis: 0 },
+          global: { monto: '0.00', cfdis: 0 },
           cancelados: { monto: '0.00', cfdis: 0 },
           tasa: null,
         }),

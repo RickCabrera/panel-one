@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import type { EstadoCodigoFacturacion, EstadoEmisionCfdi, Prisma } from '@prisma/client';
 
 import { fechaLocal, instanteDesdeLocal } from '../comun/fechas';
+import { mensajeEnGlobal, periodoGuardado } from './global';
 
 /**
  * El código corto de facturación de un cheque (F2-101): lo que el cliente teclea (o escanea) en
@@ -111,6 +112,8 @@ export type EstadoPublico = EstadoCodigoFacturacion | 'cancelado' | 'en_proceso'
  * 2. El código tiene un CFDI (F2-104): en `timbrando` (la reserva mientras el PAC contesta, o una
  *    que se quedó colgada por un timeout) → `en_proceso`; `vigente` → `facturado` (no debería
  *    verse: la emisión cambia los dos en la misma transacción).
+ *    F2-108: lo mismo si el ticket entró a una FACTURA GLOBAL: su reserva en `timbrando` →
+ *    `en_proceso`; ya `vigente` → `en_global`.
  * 3. Cheque cancelado → `cancelado`. DECISION PROVISIONAL (nocturno): se DERIVA del cheque y no
  *    se guarda (no está en el enum de la ficha); si SR cancela la cuenta después de emitir el
  *    código, la fila del código no cambia (docs/esquema-sr.md §2).
@@ -123,6 +126,8 @@ export function estadoPublico(
     estado: EstadoCodigoFacturacion;
     expiraAt: Date;
     cfdi: { estado: EstadoEmisionCfdi } | null;
+    /** F2-108: la factura global en la que entró el ticket (o su reserva), si entró a una. */
+    global: { cfdi: { estado: EstadoEmisionCfdi } } | null;
   },
   cheque: { cancelado: boolean },
   ahoraMs: number,
@@ -130,6 +135,8 @@ export function estadoPublico(
   if (codigo.estado === 'facturado' || codigo.estado === 'en_global') return codigo.estado;
   if (codigo.cfdi?.estado === 'timbrando') return 'en_proceso';
   if (codigo.cfdi?.estado === 'vigente') return 'facturado';
+  if (codigo.global?.cfdi.estado === 'timbrando') return 'en_proceso';
+  if (codigo.global?.cfdi.estado === 'vigente') return 'en_global';
   if (cheque.cancelado) return 'cancelado';
   if (codigo.estado === 'expirado' || ahoraMs >= codigo.expiraAt.getTime()) return 'expirado';
   return 'pendiente';
@@ -155,6 +162,34 @@ export const MENSAJE_ESTADO: Readonly<Record<EstadoPublico, string>> = {
     'La factura de este ticket se está emitiendo. Si en unos minutos no te llega, pídela en el ' +
     'restaurante con tu ticket; no la vuelvas a solicitar aquí.',
 };
+
+/** Lo que hace falta saber de la global de un ticket para decir su periodo (F2-108). */
+export interface GlobalDelCodigo {
+  cfdi: { globalPeriodicidad: string | null; globalDesde: Date | null };
+}
+
+/**
+ * El periodo (en español) de la factura global en la que entró el ticket, o null si no entró a
+ * ninguna. Se corta en la zona de la SUCURSAL.
+ */
+export function periodoGlobalDe(
+  estado: EstadoPublico,
+  global: GlobalDelCodigo | null,
+  zona: string,
+): string | null {
+  if (estado !== 'en_global' || global === null) return null;
+  return periodoGuardado(global.cfdi, zona)?.etiqueta ?? null;
+}
+
+/**
+ * El mensaje público de un estado. Un ticket en una global dice DE QUÉ PERIODO (F2-108); si el
+ * periodo no se conoce (un `en_global` guardado sin su global), el texto general.
+ */
+export function mensajeEstado(estado: EstadoPublico, periodoGlobal: string | null): string {
+  return estado === 'en_global' && periodoGlobal !== null
+    ? mensajeEnGlobal(periodoGlobal)
+    : MENSAJE_ESTADO[estado];
+}
 
 /** El punto de azar de la ingesta. Un provider para que los e2e fuercen colisiones y fallas. */
 @Injectable()
