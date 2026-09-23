@@ -243,7 +243,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         id: 'inventario.proyecciones',
         texto: 'Proyecciones',
         icono: TrendingUp,
-        pendiente: construye('F2-127'),
+        destino: { ruta: '/proyecciones' },
       },
       {
         id: 'inventario.compras',

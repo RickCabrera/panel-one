@@ -465,6 +465,35 @@ describe('Contrato OpenAPI', () => {
     }
   });
 
+  it('F2-127: proyecciones con horizonte acotado, estados y avisos como enum', async () => {
+    const doc = await generarDocumento();
+    const op = doc.paths['/inventario/proyecciones']?.get;
+    expect(Object.keys(op?.responses ?? {}).sort()).toEqual(['200', '400', '401', '404']);
+    const horizonte = (op?.parameters as Array<{ name: string; schema?: object }>).find(
+      (p) => p.name === 'horizonte',
+    );
+    expect(horizonte?.schema).toMatchObject({ minimum: 1, maximum: 28, default: 7 });
+    const esquemas = doc.components?.schemas as Record<
+      string,
+      { properties?: Record<string, { enum?: string[]; items?: { enum?: string[] } }> }
+    >;
+    const fila = esquemas.FilaProyeccionDto.properties ?? {};
+    expect(fila.estado.enum).toEqual(['calculada', 'sin_historial']);
+    expect(fila.avisos.items?.enum).toEqual([
+      'sin_foto',
+      'fuera_de_foto',
+      'foto_atrasada',
+      'sin_minimo',
+    ]);
+    expect(Object.keys(esquemas.ProyeccionesDto.properties ?? {}).sort()).toEqual([
+      'filas',
+      'horizonte',
+      'kpis',
+      'pesos',
+      'sucursales',
+    ]);
+  });
+
   it('F2-126: compras (lote del agente), gastos con 403 sólo por rol, estado de resultados', async () => {
     const doc = await generarDocumento();
     const { paths } = doc;
@@ -687,6 +716,8 @@ describe('Contrato OpenAPI', () => {
         '/finanzas/gastos/{id}',
         '/finanzas/gastos/{id}/anular',
         '/finanzas/estado-resultados',
+        // F2-127: proyección de demanda y sugerido de compra.
+        '/inventario/proyecciones',
         '/mesas/abiertas',
         '/sucursales',
         '/sucursales/{id}',

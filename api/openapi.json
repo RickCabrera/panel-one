@@ -8138,6 +8138,107 @@
         ]
       }
     },
+    "/inventario/proyecciones": {
+      "get": {
+        "description": "Demanda = salidas de pólizas NO canceladas de consumo, merma y traspaso de salida, por día LOCAL de la sucursal. Proyección = Σ sobre los días del horizonte (desde hoy) del promedio ponderado 4-3-2-1 de las 4 semanas anteriores a hoy para ese día de la semana. Sugerido = max(0, proyección − existencia + mínimo). Un artículo con menos de 28 días desde su primer movimiento sale `sin_historial` (proyección y sugerido NULOS, nunca 0); un almacén sin foto de existencias, sugerido nulo. Una sucursal sin pólizas no se calcula (`calculada=false`).",
+        "operationId": "ProyeccionesController_listar",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "almacenOrigenSrId",
+            "required": false,
+            "in": "query",
+            "description": "El `origenSrId` de un almacén de esa sucursal. Exige `sucursalId` (si no, 400).",
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "name": "horizonte",
+            "required": false,
+            "in": "query",
+            "description": "Días a cubrir, empezando HOY (en la zona de cada sucursal). Entero de 1 a 28; fuera de rango = 400.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 28,
+              "default": 7,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProyeccionesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Proyección de demanda y sugerido de compra por artículo y almacén (F2-127).",
+        "tags": [
+          "inventario"
+        ]
+      }
+    },
     "/finanzas/estado-resultados": {
       "get": {
         "description": "Venta neta (Σ `cheques.subtotal`, sin IVA — supuesto de esquema-sr §2) − costo de lo vendido (consumo teórico de F2-125 a costo) = utilidad bruta; − gastos del panel = utilidad de operación. Costo incompleto (insumo sin costo o producto vendido sin receta) = utilidad marcada `utilidadSobrestimada`. Sucursal con ventas sin catálogo de productos o sin recetas = costo y utilidades nulos con su motivo; el total es nulo si falta alguna. Las compras viajan como dato informativo y NO entran a la utilidad.",
@@ -16732,6 +16833,248 @@
           "sucursales",
           "filas",
           "aparte"
+        ]
+      },
+      "SucursalProyeccionDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "description": "Zona IANA con que se cortan sus días."
+          },
+          "calculada": {
+            "type": "boolean",
+            "description": "false = no se proyecta (ver `motivo`); sus artículos no salen en `filas`."
+          },
+          "motivo": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "sin_polizas"
+            ],
+            "description": "`sin_polizas` = el agente nunca ha mandado pólizas de inventario."
+          },
+          "polizasRecibidas": {
+            "type": "number",
+            "description": "Pólizas recibidas (cualquier tipo, también canceladas)."
+          },
+          "almacenesConFoto": {
+            "type": "number",
+            "description": "Almacenes con al menos una foto de existencias."
+          },
+          "hoy": {
+            "type": "string",
+            "example": "2026-09-16",
+            "description": "Hoy en la zona de la sucursal."
+          },
+          "ventanaDesde": {
+            "type": "string",
+            "description": "Primer día de la ventana de historial (hoy − 28)."
+          },
+          "ventanaHasta": {
+            "type": "string",
+            "description": "Último día de la ventana (ayer)."
+          },
+          "horizonteDesde": {
+            "type": "string",
+            "description": "Primer día del horizonte (hoy)."
+          },
+          "horizonteHasta": {
+            "type": "string",
+            "description": "Último día del horizonte (hoy + horizonte − 1)."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "zonaHoraria",
+          "calculada",
+          "motivo",
+          "polizasRecibidas",
+          "almacenesConFoto",
+          "hoy",
+          "ventanaDesde",
+          "ventanaHasta",
+          "horizonteDesde",
+          "horizonteHasta"
+        ]
+      },
+      "FilaProyeccionDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "almacenOrigenSrId": {
+            "type": "string"
+          },
+          "almacen": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo si no está en el catálogo."
+          },
+          "insumoOrigenSrId": {
+            "type": "string"
+          },
+          "insumo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nulo si no está en el catálogo."
+          },
+          "clave": {
+            "type": "string",
+            "nullable": true
+          },
+          "unidad": {
+            "type": "string",
+            "nullable": true
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "calculada",
+              "sin_historial"
+            ],
+            "description": "`sin_historial` = menos de 28 días desde su primer movimiento: NO se proyecta ni se sugiere (nulos), en vez de sugerir 0 a ciegas."
+          },
+          "diasHistorial": {
+            "type": "number",
+            "description": "Días desde su primer movimiento no cancelado (cualquier tipo) hasta hoy."
+          },
+          "semanas": {
+            "nullable": true,
+            "description": "Demanda (salidas por consumo, merma y traspaso) de cada una de las 4 semanas de la ventana, la MÁS RECIENTE primero. Nulo si `sin_historial`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "proyeccion": {
+            "type": "string",
+            "nullable": true,
+            "description": "Demanda proyectada para el horizonte, 3 decimales. Nulo si `sin_historial`."
+          },
+          "existencia": {
+            "type": "string",
+            "nullable": true,
+            "description": "Existencia de la última foto. Nulo si el almacén no tiene foto; 0 si hay foto y el artículo no viene en ella (aviso `fuera_de_foto`)."
+          },
+          "minimo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Mínimo del panel (F2-121). Nulo = sin mínimo."
+          },
+          "sugerido": {
+            "type": "string",
+            "nullable": true,
+            "description": "max(0, proyección − existencia + mínimo). Nulo si `sin_historial` o sin foto del almacén."
+          },
+          "avisos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sin_foto",
+                "fuera_de_foto",
+                "foto_atrasada",
+                "sin_minimo"
+              ]
+            }
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "almacenOrigenSrId",
+          "almacen",
+          "insumoOrigenSrId",
+          "insumo",
+          "clave",
+          "unidad",
+          "estado",
+          "diasHistorial",
+          "semanas",
+          "proyeccion",
+          "existencia",
+          "minimo",
+          "sugerido",
+          "avisos"
+        ]
+      },
+      "KpisProyeccionDto": {
+        "type": "object",
+        "properties": {
+          "filas": {
+            "type": "number"
+          },
+          "conSugerido": {
+            "type": "number",
+            "description": "Filas con sugerido mayor que 0."
+          },
+          "sinHistorial": {
+            "type": "number",
+            "description": "Filas `sin_historial`."
+          }
+        },
+        "required": [
+          "filas",
+          "conSugerido",
+          "sinHistorial"
+        ]
+      },
+      "ProyeccionesDto": {
+        "type": "object",
+        "properties": {
+          "horizonte": {
+            "type": "number",
+            "description": "Días del horizonte usados."
+          },
+          "pesos": {
+            "example": [
+              4,
+              3,
+              2,
+              1
+            ],
+            "description": "Peso de cada semana de la ventana, la más reciente primero.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalProyeccionDto"
+            }
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaProyeccionDto"
+            }
+          },
+          "kpis": {
+            "$ref": "#/components/schemas/KpisProyeccionDto"
+          }
+        },
+        "required": [
+          "horizonte",
+          "pesos",
+          "sucursales",
+          "filas",
+          "kpis"
         ]
       },
       "CostoVendidoDto": {
