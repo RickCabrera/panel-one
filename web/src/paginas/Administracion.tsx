@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router';
 
 import { useUsuario } from '../auth/contexto';
 import { useAlcance } from '../filtros/alcance';
+import { Actualizaciones } from './admin/Actualizaciones';
 import { Agentes } from './admin/Agentes';
 import { Empresas } from './admin/Empresas';
 import { ReglasAlertas } from './admin/ReglasAlertas';
@@ -9,7 +10,7 @@ import { Sucursales } from './admin/Sucursales';
 import { Usuarios } from './admin/Usuarios';
 import { Vista } from './Vista';
 
-type Pestana = 'sucursales' | 'usuarios' | 'agentes' | 'alertas' | 'empresas';
+type Pestana = 'sucursales' | 'usuarios' | 'agentes' | 'alertas' | 'actualizaciones' | 'empresas';
 
 const PARAM_PESTANA = 'tab';
 
@@ -18,6 +19,7 @@ const TEXTO: Record<Pestana, string> = {
   usuarios: 'Usuarios',
   agentes: 'Agentes',
   alertas: 'Alertas',
+  actualizaciones: 'Actualizaciones',
   empresas: 'Empresas',
 };
 
@@ -33,7 +35,7 @@ export function Administracion() {
   const [parametros, setParametros] = useSearchParams();
   const pestanas: Pestana[] =
     usuario.rol === 'admin_global'
-      ? ['sucursales', 'usuarios', 'agentes', 'alertas', 'empresas']
+      ? ['sucursales', 'usuarios', 'agentes', 'alertas', 'actualizaciones', 'empresas']
       : ['sucursales', 'usuarios', 'agentes', 'alertas'];
   const pedida = parametros.get(PARAM_PESTANA) as Pestana | null;
   const actual: Pestana = pedida && pestanas.includes(pedida) ? pedida : 'sucursales';
@@ -51,6 +53,9 @@ export function Administracion() {
     contenido = <Empresas />;
   } else if (!empresa) {
     contenido = <p className="text-sm text-tinta-tenue">Cargando empresa…</p>;
+  } else if (actual === 'actualizaciones') {
+    // F2-143: el canal de versiones del agente y el rollout por sucursal (sólo admin_global).
+    contenido = <Actualizaciones key={empresa.id} empresa={empresa} />;
   } else if (actual === 'alertas') {
     contenido = <ReglasAlertas key={empresa.id} empresa={empresa} />;
   } else if (actual === 'agentes') {

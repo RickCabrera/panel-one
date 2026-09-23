@@ -49,6 +49,9 @@ function fila(
     tamanoCola: nunca ? null : 0,
     latenciaQueryMs: nunca ? null : 12,
     ultimoError: null,
+    actualizacionAutomatica: false,
+    versionObjetivo: null,
+    actualizacion: null,
     ...extra,
   };
 }
@@ -156,6 +159,7 @@ describe('Administración › Agentes: la tabla', () => {
       'Usuarios',
       'Agentes',
       'Alertas',
+      'Actualizaciones',
       'Empresas',
     ]);
   });

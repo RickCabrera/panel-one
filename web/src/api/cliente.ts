@@ -19,6 +19,11 @@ export interface OpcionesPedir {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** Se manda como JSON. */
   body?: unknown;
+  /**
+   * Se manda TAL CUAL como `application/octet-stream` (F2-143: el binario del agente que publica el
+   * admin_global). Excluye a `body`.
+   */
+  binario?: Blob;
   /** Query string; los `undefined` y `null` se omiten. */
   query?: Record<string, string | number | undefined | null>;
   signal?: AbortSignal;
@@ -41,12 +46,15 @@ async function enviar(
 ): Promise<Response> {
   const encabezados: Record<string, string> = { Accept: acepta };
   if (token) encabezados.Authorization = `Bearer ${token}`;
-  if (opciones.body !== undefined) encabezados['Content-Type'] = 'application/json';
+  if (opciones.binario !== undefined) encabezados['Content-Type'] = 'application/octet-stream';
+  else if (opciones.body !== undefined) encabezados['Content-Type'] = 'application/json';
   try {
     return await fetch(url(ruta, opciones.query), {
       method: opciones.method ?? 'GET',
       headers: encabezados,
-      body: opciones.body === undefined ? undefined : JSON.stringify(opciones.body),
+      body:
+        opciones.binario ??
+        (opciones.body === undefined ? undefined : JSON.stringify(opciones.body)),
       credentials: 'same-origin',
       signal: opciones.signal,
     });

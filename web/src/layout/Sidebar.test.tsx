@@ -294,6 +294,9 @@ describe('Administración', () => {
       tamanoCola: 0,
       latenciaQueryMs: 12,
       ultimoError: null,
+      actualizacionAutomatica: false,
+      versionObjetivo: null,
+      actualizacion: null,
     };
     api(usuario('admin_empresa'), [caida]);
     montar(`/cuenta?empresa=${A}`);

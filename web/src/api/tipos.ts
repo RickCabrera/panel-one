@@ -227,6 +227,42 @@ export interface EstadoAgenteSucursal {
   /** Latencia de la consulta a SR del último heartbeat, en ms (F1-025). */
   latenciaQueryMs: number | null;
   ultimoError: string | null;
+  /** F2-143: la bandera de rollout de la auto-actualización. */
+  actualizacionAutomatica: boolean;
+  /** F2-143: la versión vigente del canal si la bandera está encendida; si no, null. */
+  versionObjetivo: string | null;
+  /** F2-143: el último reporte de auto-actualización del agente; null = nunca reportó. */
+  actualizacion: ReporteActualizacion | null;
+}
+
+/** F2-143: los motivos de falla de una auto-actualización (enum del api). */
+export type MotivoFallaActualizacion =
+  | 'hash_invalido'
+  | 'descarga'
+  | 'detener'
+  | 'reemplazo'
+  | 'arranque'
+  | 'version_distinta';
+
+/** `ReporteActualizacionVistoDto`: el último intento de auto-actualización de un agente. */
+export interface ReporteActualizacion {
+  resultado: 'aplicada' | 'fallida';
+  version: string;
+  motivo: MotivoFallaActualizacion | null;
+  detalle: string | null;
+  primeraFallaAt: string | null;
+  reportadaAt: string;
+}
+
+/** `VersionAgenteDto`: una versión del canal del agente (F2-143, sólo admin_global). */
+export interface VersionAgente {
+  version: string;
+  sha256: string;
+  tamanoBytes: number;
+  notas: string | null;
+  publicadaAt: string;
+  retiradaAt: string | null;
+  vigente: boolean;
 }
 
 /** `ModificadorDto`: como los guardó la ingesta (esquema-sr.md §13). */
@@ -408,7 +444,9 @@ export type TipoAlerta =
   // F2-121: un artículo por debajo de su mínimo en su almacén.
   | 'bajo_minimo'
   // F2-124: un traspaso del panel sin conciliar con SR pasado su umbral (horas).
-  | 'traspaso_sin_conciliar';
+  | 'traspaso_sin_conciliar'
+  // F2-143: la auto-actualización del agente a la versión vigente falla (minutos de racha).
+  | 'actualizacion_fallida';
 export type SeveridadAlerta = 'critica' | 'advertencia';
 export type MotivoCierreAlerta =
   'condicion' | 'regla_apagada' | 'sucursal_inactiva' | 'empresa_inactiva';
