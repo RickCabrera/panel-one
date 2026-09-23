@@ -226,8 +226,9 @@ export class PortalPublicoController {
   @ApiServiceUnavailableResponse({
     type: ErrorDto,
     description:
-      'La empresa no puede emitir (sin perfil fiscal activo o sin CSD vigente), o el PAC no ' +
-      'está disponible tras los reintentos. No se guardó nada.',
+      'La empresa no puede emitir (sin perfil fiscal activo o sin CSD vigente), la plataforma se ' +
+      'quedó sin folios de timbrado (F2-110; antes de llamar al PAC), o el PAC no está disponible ' +
+      'tras los reintentos. No se guardó nada.',
   })
   @ApiTooManyRequestsResponse({ description: 'Más de 5 por minuto desde la misma IP.' })
   solicitarFactura(

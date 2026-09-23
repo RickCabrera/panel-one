@@ -510,7 +510,7 @@ function TablaCfdis({
                             ) : (
                               <span
                                 className="text-xs text-tinta-tenue"
-                                title="Los archivos no se guardaron al timbrar; se pueden recuperar del PAC."
+                                title="Los archivos no se guardaron al timbrar; pídelos en el PAC (recuperarlos desde aquí está pendiente)."
                               >
                                 Sin archivos
                               </span>

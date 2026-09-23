@@ -88,7 +88,8 @@ export class FacturaGlobalController {
   @Get('periodos')
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({
-    summary: 'Periodos de la sucursal con tickets para la global, y las globales emitidas (F2-108).',
+    summary:
+      'Periodos de la sucursal con tickets para la global, y las globales emitidas (F2-108).',
     description:
       'Un ticket entra a la global sólo cuando su código ya no se puede autofacturar. Periodos ' +
       'cortados en la zona de la sucursal, desde el 1 de enero del año anterior.',
@@ -146,11 +147,14 @@ export class FacturaGlobalController {
   })
   @ApiServiceUnavailableResponse({
     type: ErrorDto,
-    description: 'Sin perfil fiscal activo o CSD vigente, o el PAC no está disponible.',
+    description:
+      'Sin perfil fiscal activo o CSD vigente, sin folios de timbrado en la plataforma (F2-110; ' +
+      'antes de llamar al PAC), o el PAC no está disponible.',
   })
   @ApiBadGatewayResponse({
     type: ErrorDto,
-    description: 'El PAC no confirmó (pudo emitirse): los tickets siguen reservados hasta conciliarla (F2-110b).',
+    description:
+      'El PAC no confirmó (pudo emitirse): los tickets siguen reservados hasta conciliarla (F2-110b).',
   })
   emitir(
     @Req() req: RequestAutenticado,

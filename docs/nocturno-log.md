@@ -7286,3 +7286,129 @@ impedía refacturar y cancelar el mismo CFDI a la vez) y aprobado a la segunda (
 **Qué haría distinto.** Escribir los e2e que tocan procesos de "todas las empresas" (sondeos, programadores)
 midiendo sólo los fixtures desde el principio, y correr la suite DESPUÉS de sembrar la base, no antes: el 19/19 que
 reporté la primera vez era de antes del seed y la base sembrada lo tumbaba.
+
+## 2026-09-23 06:00 — F2-110 · Control de folios del PAC
+**Estado:** CERRADA PARCIAL (PR de `feat/F2-110`, squash a main) con el AC nocturno de la tabla "Cierre nocturno de las
+tareas heredadas de Fase 2" · **PARCIAL:** la conciliación de reservas colgadas se CORTÓ a **F2-110b** (declarado
+desde el plan) · sin `folios_bajo` en el centro de alertas (❓ decisión abierta) · **PENDIENTE DE VALIDACIÓN REAL:**
+ver F2-190. Revisor: plan bloqueado 1 vez (B1: la lectura del saldo cruzaba empresas sin una pieza de scope con
+nombre) y aprobado a la segunda; entregable APROBADO a la primera con observaciones (OpenAPI de los 503, texto del tablero: arregladas;
+costo del FIFO y base sembrada: anotadas abajo).
+
+**Por qué y dónde se cortó.** Las notas "Y además (de F2-104/F2-107/F2-108/F2-109)" piden conciliar con el PAC las
+reservas colgadas en `timbrando` (ticket, sin ticket, sustituto, global), los CFDI vigentes que Facturama canceló
+tarde, la refacturación con la 01 pendiente y recuperar XML/PDF no guardados. Eso exige un método NUEVO en
+`PuertoTimbrado` (buscar un CFDI por serie/folio: la reserva ambigua no tiene `idPac`), su Facturama con test de
+contrato, el PAC falso, un programador y la resolución de cuatro orígenes: una tarea del tamaño de F2-109. El AC
+nocturno de F2-110 no la incluye. DENTRO: todo el control de folios. FUERA: todo lo de conciliar. **Por dónde
+retomar (F2-110b):** empezar por el puerto (`buscarPorSerieFolio` o equivalente; en Facturama, `GET /api-lite/cfdis`
+con filtros), luego un `ConciliacionProgramador` con el patrón de `cancelacion.programador.ts`, y por último cada
+origen reusando `confirmarCfdi` / `liberarReserva` (la global ya se suelta por CASCADE). Mientras no exista, una
+reserva colgada RESTA saldo de folios (cuenta "en emisión"): el "disponible" puede salir por debajo del real.
+
+**Qué quedó hecho.**
+- Migración `20260929010000_folios_pac` (`migrate diff --from-schema-datasource` + a mano): `paquetes_folios`
+  (CHECK cantidad 1..1e6, vence > compra, índice por `vence_at`), `configuracion_folios` (UNA fila `id = 1` creada por
+  la migración, CHECK id = 1, umbral 1..100 default 20, `control_activo` default false, `aviso_umbral_at`), índice
+  parcial `cfdis(emitido_at) WHERE estado IN ('vigente','cancelado')` y `cfdis(id) WHERE estado = 'timbrando'`.
+- **Scope:** `LLAVE_EMPRESA` acepta `null` = modelo de PLATAFORMA (`PaqueteFolios`, `ConfiguracionFolios`, y un test
+  exige que sean EXACTAMENTE ésos). Con scope de empresa `whereEmpresa` da `{ id: { in: [] } }` (lecturas vacías,
+  `updateMany` en 0, sin lanzar). Pieza con nombre `api/src/scope/folios-plataforma.ts`: `LecturaFoliosPlataforma`
+  (`ScopedPrismaService.folios(scope)`) y `EscrituraFolios` (`escrituraFolios(scope)`, lanza sin scope global). A un
+  tenant sólo le sale un booleano (`hayFoliosEnTx`, `hayFolios`); `estado`/`consumoPorEmpresa`/`reporteMensual`/
+  `destinatariosAvisos` LANZAN sin scope global.
+- Reglas puras `api/src/facturacion/folios.ts`: vigencia de compra, límites y cubos (`width_bucket`), FIFO por
+  vencimiento con sobregiro, estado del saldo, aviso de vigencia y las dos plantillas de correo.
+- **Bloqueo antes del PAC:** `EscrituraFacturacion.#tomarFolio` reemplaza las CUATRO llamadas a `#siguienteFolio`
+  (portal, sin ticket, sustituto, global): sin saldo → 503 con texto FIJO (`MENSAJE_SIN_FOLIOS_PORTAL` /
+  `_ADMIN`), sin cifras, sin insertar ni tomar folio ni llamar al PAC. Candado global `configuracion_folios FOR UPDATE`
+  después de los candados de dominio y antes del perfil. `CfdiService.disponible()` (portal) también dice false.
+- `FoliosService` + `FoliosController` (`/facturacion/folios`, `/paquetes`, `/paquetes/{id}`, `/configuracion`,
+  `/reporte`; sólo admin_global, 403 POR RUTA escrito en el controller) + `FoliosProgramador` (`FOLIOS_INTERVALO_S`,
+  3600, apagado en test; en `.env.example`). Auditoría `folios.paquete_alta|paquete_baja|configurar`.
+- Seed `prisma/seed-folios.ts` (al final de `seed-ventas`, tras las globales): 3 paquetes con ids fijos relativos a
+  `ahora` (vencido 300, por vencer 400 a ~20 días, vigente 5000) y PRENDE el control. Seed real: disponible 5298 de
+  5400, el "por vencer" con 298 de restante (dispara el aviso en demo).
+- Web: pestaña "Folios" en Facturación (`?tab=folios`, sólo admin_global; para otros roles ni se monta y la URL cae
+  al tablero): saldo con barra y estado en palabras, avisos bajo/agotado, reservas en emisión, sobregiro, umbral,
+  paquetes (último día útil en CDMX, borrar sólo sin consumo), alta con validación, consumo por empresa, reporte
+  mensual con CSV.
+- Textos visibles que citaban "F2-110" (409 de sustitución y captura en curso, global incierta, PAC no vigente,
+  títulos del web) ya no llevan ID de tarea; los comentarios apuntan a F2-110b.
+- Docs: esquema-sr §2 "Control de folios (F2-110)"; backlog: "Y además (de F2-110)" en F2-190 y F2-250, y los
+  ALCANCE de F2-104/F2-105 apuntan a F2-110b. El `[x] PARCIAL`, la tarea F2-110b y su fila en la cola van en el
+  commit de cierre.
+
+**Decisiones que tomé y por qué.** (todas en esquema-sr §2 "Control de folios")
+- `DECISION PROVISIONAL (nocturno)` `folios.ts` (cabecera): saldo de PLATAFORMA, no por empresa (Facturama
+  multiemisor tiene un saldo por cuenta). Si cobra por emisor, cambia el modelo.
+- `DECISION PROVISIONAL (nocturno)` `folios.ts#vigenciaDeCompra`: compra en CDMX, vence al EMPEZAR el mismo día un año
+  después (conservadora).
+- `DECISION PROVISIONAL (nocturno)` `folios.service.ts#vueltaAvisos` y `folios.programador.ts`: `folios_bajo` NO va
+  al centro de alertas (sus alertas exigen sucursal y las ven los clientes). **Para Ricardo** (nota en F2-250).
+- Control apagado hasta el primer paquete (`control_activo`), y ninguna ruta lo apaga; borrar un paquete con timbres
+  = 409 (reescribiría el historial). Así el control no se apaga "sin querer" borrando el último paquete.
+- Lo anterior al primer paquete NO es sobregiro (el control no existía); sobregiro = timbres en huecos o después del
+  último vencimiento.
+- Una reserva `timbrando` consume en el cubo de "ahora" (conservador: aparta el folio).
+- Los avisos se RECLAMAN en la base antes de mandarse (dos vueltas → un correo); si el correo falla se suelta y se
+  reintenta A TODOS los admin_global (puede duplicar a quien sí le llegó: preferible a no avisar).
+- Reporte y tarjeta "consumo por empresa" salen de la MISMA consulta (`porMes`), con el mes en la zona de la
+  sucursal: cuadran por construcción.
+
+**Trampas que encontré.**
+- **`await` sobre un `request(url).post(...).set(...)` de supertest lo EJECUTA** (es thenable): un helper
+  `async (r) => r.set(...)` mandó la petición sin cuerpo. Arma la petición completa (`.set(...).send(...)`) en una
+  sola expresión después de `await token`.
+- **Line endings:** los archivos del repo están en CRLF en el árbol (autocrlf). Un reemplazo con Node sobre texto con
+  `\n` NO casa y no truena; Python en modo texto sí normaliza. Revisa que el reemplazo ocurrió (`grep`) antes de
+  seguir. Y `'\\n'` dentro de un heredoc con Python terminó como salto real dentro de un `join('...')`: para archivos
+  nuevos usa la herramienta de escribir archivos.
+- Tres paquetes comprados el MISMO día vencen en el mismo instante: el FIFO los desempata por id (aleatorio en el
+  e2e), así que cuál conserva restante no es predecible; el e2e de vigencia mide contra los que están `por_vencer`.
+  Y registrar un paquete que vence ANTES reparte otra vez los timbres: un paquete agotado puede volver a tener
+  restante (y avisar).
+- `String.prototype.trim()` quita el BOM (U+FEFF): un test de CSV que "quita el BOM" con un regex mal escrito
+  pasaba igual. El test ahora afirma el BOM y luego lo corta.
+- `prisma/esquema.spec.ts` ("al crear el admin…") sigue rojo en la base local de dev, igual que F2-104…F2-109.
+- **Base local sembrada + relojes fijos:** con el seed, el control queda PRENDIDO y los paquetes se calculan desde
+  la fecha en que se sembró (vigentes de ~hoy−345 días a ~hoy+290). Los e2e de emisión de F2-104…F2-109 usan relojes
+  de 2026-08 a 2027-03: hoy pasan, pero si se vuelve a sembrar meses después pueden dar 503 "sin folios" EN LOCAL (en
+  CI no: ahí no se siembra y el control queda apagado). Si pasa, no es un bug de esas suites: es el seed.
+- Correr suites sueltas SIN `--runInBand` las pone en rojo (comparten fixtures): usa siempre `--runInBand`.
+- `.wt-main/` sigue sin seguimiento en la raíz: nunca `git add -A`.
+
+**Qué quedó abierto.**
+- **F2-110b** (nueva, en la cola justo después de F2-110): la conciliación con el PAC (ver arriba).
+- F2-190 (nota): saldo único por cuenta, cancelar no gasta, vigencia real, ¿la API expone saldo/vigencia?
+- F2-250 (nota): `folios_bajo` en un centro de alertas de plataforma, si Ricardo lo quiere.
+- Sin prueba visual en navegador: la pestaña se probó con testing-library contra el router real.
+- Si la suite `folios.e2e` se interrumpe SIN llegar a su `afterAll`, la base de dev queda sin los paquetes del seed
+  (y con los del test, en 2031–2032): `npm run seed` los repone. El test mide y restaura las filas exactas.
+- **Costo que crece (observación del revisor):** `conteosPorCubo` cuenta TODOS los timbres de la plataforma desde el
+  primer paquete, en CADA reserva y bajo el candado global. Hoy, con el seed, el saldo completo tarda ~110 ms
+  (conexión incluida). Crece sin tope: si algún día pasa del `statement_timeout` (5 s), toda reserva de toda empresa
+  truena. Arreglo futuro: congelar lo consumido de los paquetes ya vencidos (o un contador por paquete conciliado
+  contra `cfdis`). Anotado para F2-250.
+
+**Tests.**
+- api nuevos: `facturacion/folios.spec.ts` (15, puros: vigencia en CDMX y 29-feb, cubos, FIFO con sobregiro y paquete
+  vencido, bordes del umbral y de los 30 días, plantillas), `folios.e2e.spec.ts` (12, app real + Postgres + PAC falso
+  contado + correo que captura, reloj en 2031–2032 y filas de la plataforma guardadas y restauradas: sin control; 403/
+  401/400; SALDO 0 → las cuatro emisiones 503 sin PAC, sin CFDI y sin folio; aviso de umbral con correo que falla y
+  dos vueltas = un correo; dos empresas simultáneas con saldo 1 = un 201 y un 503; re-armado; umbral 99 %; reporte a
+  mano con borde de mes en Tijuana/CDMX y contra un conteo independiente en JS; 409 al borrar con consumo; vigencia a
+  30 días y 30 días + 1 ms; paquete registrado ya dentro de los 30 días; bordes del SQL: compra cuenta, vencimiento y
+  hueco son sobregiro), `prisma/seed-folios.spec.ts` (3), `scope.helper.spec` +2, `scoped-prisma.service.spec` +5,
+  `openapi.spec` +1.
+- Adaptados al comportamiento nuevo, no aflojados: listas de modelos y de rutas.
+- Mutación a mano: quitar el chequeo de saldo en `#tomarFolio` → 5 tests del e2e en rojo.
+- Números: /api lint, typecheck, `prisma validate` limpios; `migrate diff` vacío; openapi regenerado. Jest completo
+  sobre la base SEMBRADA: **2252/2253** (129 suites), cero skips; el único rojo es el preexistente de
+  `prisma/esquema.spec.ts` ("al crear el admin…", igual que F2-104…F2-109), así que NO es verde en esta base local.
+  Folios + scope + seed-folios en serie: 243/243. /web build y lint limpios; vitest **1230/1230** (100 archivos);
+  check:bundle 320.0 kB gzip.
+
+**Qué haría distinto.** Decidir el corte (y escribirlo en el plan) antes de leer todo el código de facturación: las
+notas "Y además" acumuladas de cinco tareas eran una tarea entera por sí solas. Y diseñar el e2e de un dato GLOBAL
+desde el principio en un rango de fechas donde no vive nada más (2031+): así las cifras a mano no dependen de la base.

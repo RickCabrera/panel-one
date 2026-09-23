@@ -10372,7 +10372,7 @@
             }
           },
           "503": {
-            "description": "La empresa no puede emitir (sin perfil fiscal activo o sin CSD vigente), o el PAC no está disponible tras los reintentos. No se guardó nada.",
+            "description": "La empresa no puede emitir (sin perfil fiscal activo o sin CSD vigente), la plataforma se quedó sin folios de timbrado (F2-110; antes de llamar al PAC), o el PAC no está disponible tras los reintentos. No se guardó nada.",
             "content": {
               "application/json": {
                 "schema": {
@@ -11196,7 +11196,7 @@
             }
           },
           "503": {
-            "description": "La empresa no puede emitir (sin perfil fiscal activo o CSD vigente), o el PAC no está disponible.",
+            "description": "La empresa no puede emitir (sin perfil fiscal activo o CSD vigente), la plataforma se quedó sin folios de timbrado (F2-110; se responde ANTES de llamar al PAC), o el PAC no está disponible.",
             "content": {
               "application/json": {
                 "schema": {
@@ -11324,7 +11324,7 @@
             }
           },
           "503": {
-            "description": "La empresa no puede emitir (sin perfil fiscal activo o CSD vigente), o el PAC no está disponible.",
+            "description": "La empresa no puede emitir (sin perfil fiscal activo o CSD vigente), la plataforma se quedó sin folios de timbrado (F2-110; se responde ANTES de llamar al PAC), o el PAC no está disponible.",
             "content": {
               "application/json": {
                 "schema": {
@@ -11795,7 +11795,7 @@
             }
           },
           "503": {
-            "description": "Sin perfil fiscal activo o CSD vigente, o el PAC no está disponible.",
+            "description": "Sin perfil fiscal activo o CSD vigente, sin folios de timbrado en la plataforma (F2-110; antes de llamar al PAC), o el PAC no está disponible.",
             "content": {
               "application/json": {
                 "schema": {
