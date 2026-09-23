@@ -5996,7 +5996,14 @@ aprobado en el 2.º pase.
 recetas: el revisor lo marcó en el plan y era la pregunta de fondo de la tarea.
 
 ## 2026-09-23 03:30 — F2-126 · Compras, gastos y utilidad
-**Estado:** CERRADA (PR #PENDIENTE, mergeada)
+**Estado:** CERRADA (PR #54, mergeada). **PENDIENTE DE VALIDACIÓN REAL** (F2-193, F2-241).
+
+> **Una TERCERA sesión la cerró (2026-09-22 19:10).** La segunda dejó todo hecho, revisado,
+> pusheado y con el PR #54 abierto y el CI en verde, pero murió antes del merge. La tercera, que
+> llegó en frío, no vio la rama al principio y empezó un plan desde cero. Sólo al hacer
+> `git checkout -b` se enteró de que la rama existía. **Si retomas una tarea, antes de planear corre
+> `git branch -a | grep <id>` y `gh pr list --head feat/<id> --state all`.** Esa sesión no tocó
+> código: corrigió este encabezado, esperó el CI y mergeó.
 
 **Cómo llegó esta sesión (léelo).** Una sesión ANTERIOR tomó F2-126, construyó casi todo el api y
 las páginas web, y murió (límite de uso) SIN commitear y SIN dejar nota: su trabajo apareció como
