@@ -39,6 +39,29 @@ internal static class FixturesSr
              ("rfc", typeof(string))],
             filas.Select(f => new object?[] { f.Id, f.Nombre, f.Telefono, f.Correo, f.Rfc }));
 
+    /// <summary><c>insumos.unidad</c> crudo (varchar(10), collation CI de SR): el recorte y la unión son del mapeo.</summary>
+    public static DataTable Unidades(params string?[] unidades) =>
+        Tabla([("id", typeof(string))], unidades.Select(u => new object?[] { u }));
+
+    public static DataTable GruposInsumo(params (string? Id, string? Nombre)[] filas) =>
+        Tabla([("id", typeof(string)), ("nombre", typeof(string))], filas.Select(f => new object?[] { f.Id, f.Nombre }));
+
+    /// <summary><c>insumosdetalle.estatus</c> es <c>int</c> en SR 10.</summary>
+    public static DataTable Insumos(params (string? Id, string? Nombre, string? Grupo, string? Unidad, int? Estatus)[] filas) =>
+        Tabla(
+            [("id", typeof(string)), ("nombre", typeof(string)), ("grupo", typeof(string)), ("unidad", typeof(string)),
+             ("estatus", typeof(int))],
+            filas.Select(f => new object?[] { f.Id, f.Nombre, f.Grupo, f.Unidad, f.Estatus }));
+
+    public static DataTable Almacenes(params (string? Id, string? Nombre)[] filas) =>
+        Tabla([("id", typeof(string)), ("nombre", typeof(string))], filas.Select(f => new object?[] { f.Id, f.Nombre }));
+
+    /// <summary><c>proveedores.estatus</c> es <c>numeric(1)</c>: llega como <c>decimal</c>.</summary>
+    public static DataTable Proveedores(params (string? Id, string? Nombre, decimal? Estatus)[] filas) =>
+        Tabla(
+            [("id", typeof(string)), ("nombre", typeof(string)), ("estatus", typeof(decimal))],
+            filas.Select(f => new object?[] { f.Id, f.Nombre, f.Estatus }));
+
     public static DataTable Vacia(CatalogoPanel catalogo) => catalogo switch
     {
         CatalogoPanel.Grupos => Grupos(),
@@ -47,6 +70,11 @@ internal static class FixturesSr
         CatalogoPanel.Areas => Areas(),
         CatalogoPanel.Canales => Canales(),
         CatalogoPanel.Clientes => Clientes(),
+        CatalogoPanel.Unidades => Unidades(),
+        CatalogoPanel.GruposInsumo => GruposInsumo(),
+        CatalogoPanel.Insumos => Insumos(),
+        CatalogoPanel.Almacenes => Almacenes(),
+        CatalogoPanel.Proveedores => Proveedores(),
         _ => throw new ArgumentOutOfRangeException(nameof(catalogo)),
     };
 
@@ -83,6 +111,11 @@ public class MapeoCatalogosTests
     [InlineData("areas")]
     [InlineData("canales")]
     [InlineData("clientes")]
+    [InlineData("unidades")]
+    [InlineData("grupos_insumo")]
+    [InlineData("insumos")]
+    [InlineData("almacenes")]
+    [InlineData("proveedores")]
     public void Catalogo_vacio_da_cero_registros_sin_avisos(string texto)
     {
         var catalogo = CatalogosPanel.Parsear(texto);
@@ -267,8 +300,13 @@ public class MapeoCatalogosTests
     [Fact]
     public void Texto_de_los_catalogos_es_el_enum_del_contrato()
     {
-        Assert.Equal(["grupos", "productos", "meseros", "areas", "canales", "clientes"], CatalogosPanel.Todos.Select(c => c.Texto()));
+        // Los once del enum CatalogoSr del contrato (F2-230 + F2-120), en orden de lectura.
+        Assert.Equal(
+            ["grupos", "productos", "meseros", "areas", "canales", "clientes",
+             "unidades", "grupos_insumo", "insumos", "almacenes", "proveedores"],
+            CatalogosPanel.Todos.Select(c => c.Texto()));
+        Assert.Equal(Enum.GetValues<CatalogoPanel>().Length, CatalogosPanel.Todos.Count);
         Assert.All(CatalogosPanel.Todos, c => Assert.Equal(c, CatalogosPanel.Parsear(c.Texto())));
-        Assert.Throws<InvalidDataException>(() => CatalogosPanel.Parsear("insumos"));
+        Assert.Throws<InvalidDataException>(() => CatalogosPanel.Parsear("recetas"));
     }
 }
