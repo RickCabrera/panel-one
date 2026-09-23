@@ -9,6 +9,7 @@
     "types": ["node"],
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "strict": true,
     "noUnusedLocals": true,
@@ -16,5 +17,10 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["vite.config.ts", "src/**/*.node.test.ts"]
+  "include": [
+    "vite.config.ts",
+    "pwa-plugin.ts",
+    "src/**/*.node.test.ts",
+    "scripts/**/*.node.test.ts"
+  ]
 }

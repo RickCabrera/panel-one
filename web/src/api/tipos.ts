@@ -470,6 +470,38 @@ export interface SuscripcionReporte {
   ultimosEnvios: EnvioReporte[];
 }
 
+// ---- Notificaciones push (F2-146), `/cuenta/notificaciones` ----
+
+export type TipoNotificacion =
+  'mesa_abierta' | 'sucursal_sin_reporte' | 'folios_bajo' | 'cierre_dia';
+
+export interface PreferenciasPush {
+  mesaAbierta: boolean;
+  sucursalSinReporte: boolean;
+  foliosBajo: boolean;
+  cierreDia: boolean;
+}
+
+export interface NotificacionesCuenta {
+  /** Llave pública VAPID; null = el servidor no tiene notificaciones configuradas. */
+  clavePublica: string | null;
+  preferencias: PreferenciasPush;
+  /** Lo que el rol del usuario puede prender (`folios_bajo` sólo admin_global). */
+  disponibles: TipoNotificacion[];
+  dispositivos: number;
+}
+
+export interface RegistrarDispositivo {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
+export interface ResultadoPruebaPush {
+  entregados: number;
+  descartados: number;
+  fallidos: number;
+}
+
 export interface GuardarSuscripcionReporte {
   empresaId: string;
   diario: boolean;

@@ -1304,6 +1304,12 @@ válido en ambos subdominios; `GET /health` responde `{status:'ok', db:'ok'}`.
 > bloquearla. Si el upgrade falla, socket.io se queda en long-polling y funciona igual, pero
 > hay que saberlo. Mientras haya **una sola** instancia del api no hace falta el adapter de
 > Redis (`docs/tiempo-real.md`, "Límites conocidos").
+>
+> **Y además (de F2-146):** servir `sw.js` con `Cache-Control: no-cache` (si no, un service
+> worker viejo tarda en cambiar) y `manifest.webmanifest` como `application/manifest+json`;
+> comprobar que Caddy deja pasar el cuerpo de `DELETE /api/cuenta/notificaciones/dispositivos`,
+> y que `trust proxy` hace que el throttler de `POST /cuenta/notificaciones/prueba` vea la IP
+> real y no la de Caddy (`docs/notificaciones.md`, "Producción").
 
 ## F1-003 · CI/CD con GitHub Actions
 `[ ]` **Epic 0** · 🔒 **Razón: necesita los secretos SSH del VPS en GitHub Actions.**
@@ -1571,6 +1577,13 @@ a las implementaciones reales y recorrer el AC original de F2-105 y F2-141.
 **Listo cuando:** el correo llega a una bandeja real con XML y PDF adjuntos válidos y sin caer
 en spam (SPF, DKIM y DMARC verificados); el resumen diario llega antes de las 9:00 hora local;
 y los archivos sobreviven un redespliegue y quedan incluidos en el respaldo de F1-004.
+
+> **Y además (de F2-146):** conectar el push real. Generar las llaves VAPID de producción
+> (`npx web-push generate-vapid-keys`, una sola vez, nunca al repo), poner `PUSH_IMPL=webpush` y
+> recorrer el "Listo cuando" de F2-146 en dispositivos reales: el botón "Instalar" en Chrome de
+> escritorio y en Android; el armazón abre con DevTools → Offline; y una alerta de sucursal
+> desconectada llega con la app CERRADA. De noche sólo se midió con `PushFalso`, el test de
+> contrato de web-push y `check:pwa` (`docs/notificaciones.md`, "Cómo se probó").
 
 ## F2-192 · Validar los lectores de catálogos e inventario contra SoftRestaurant
 `[ ]` **Bloque H** · 🔒 **Razón: necesita el usuario SQL de solo lectura creado (F1-020b) y una

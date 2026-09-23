@@ -80,6 +80,13 @@ export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
   };
   await prisma.envioReporte.deleteMany({ where: { suscripcion: suscripciones.where } });
   await prisma.suscripcionReporte.deleteMany(suscripciones);
+  // Notificaciones push (F2-146): navegadores y preferencias caen en cascada con el usuario;
+  // el candado del resumen también cuelga de la empresa (Restrict), así que va antes.
+  await prisma.envioPushResumen.deleteMany({
+    where: {
+      OR: [{ empresaId: { in: empresas } }, { usuario: { email: { endsWith: DOMINIO } } }],
+    },
+  });
   await prisma.usuario.deleteMany({ where: { email: { endsWith: DOMINIO } } });
   // Ventas de prueba (F1-030) colgadas de estas sucursales: las FK son Restrict,
   // así que se borran de las hojas hacia arriba antes que las sucursales.

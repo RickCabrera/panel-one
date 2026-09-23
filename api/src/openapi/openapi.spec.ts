@@ -48,6 +48,29 @@ describe('Contrato OpenAPI', () => {
     expect(paths['/cuenta/reportes']?.get?.security).toEqual([{ bearer: [] }]);
   });
 
+  it('notificaciones push (F2-146): todo con token; prueba con límite; baja ajena = 404', async () => {
+    const { paths, components } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    const base = '/cuenta/notificaciones';
+    expect(codigos(paths[base]?.get)).toEqual(['200', '400', '401']);
+    expect(codigos(paths[`${base}/preferencias`]?.put)).toEqual(['200', '400', '401']);
+    expect(codigos(paths[`${base}/dispositivos`]?.post)).toEqual(['200', '400', '401']);
+    expect(codigos(paths[`${base}/dispositivos`]?.delete)).toEqual(['200', '400', '401', '404']);
+    expect(codigos(paths[`${base}/prueba`]?.post)).toEqual(['200', '400', '401', '429']);
+    for (const op of [
+      paths[base]?.get,
+      paths[`${base}/preferencias`]?.put,
+      paths[`${base}/dispositivos`]?.post,
+      paths[`${base}/dispositivos`]?.delete,
+      paths[`${base}/prueba`]?.post,
+    ]) {
+      expect(op?.security).toEqual([{ bearer: [] }]);
+    }
+    const esquemas = JSON.stringify(components?.schemas ?? {});
+    expect(esquemas).toContain('"TipoNotificacion"');
+    expect(JSON.stringify(components?.schemas?.NotificacionesDto)).toContain('clavePublica');
+  });
+
   it('F2-101: consulta pública del código con 400/404/429 y sin token; vigencia con roles y 404', async () => {
     const { paths, components } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -1051,6 +1074,10 @@ describe('Contrato OpenAPI', () => {
         '/auth/logout',
         '/auth/me',
         '/auth/refresh',
+        '/cuenta/notificaciones',
+        '/cuenta/notificaciones/dispositivos',
+        '/cuenta/notificaciones/preferencias',
+        '/cuenta/notificaciones/prueba',
         '/cuenta/password',
         '/cuenta/reportes',
         '/cuenta/reportes/vista-previa',

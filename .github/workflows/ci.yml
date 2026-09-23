@@ -176,6 +176,8 @@ jobs:
       - run: npm run build
       # F1-092: el bundle entero (lazy incluido) no pasa de 400 kB en gzip.
       - run: npm run check:bundle
+      # F2-146: la PWA es instalable (manifest, íconos, sw.js clásico) y el precache cubre el armazón.
+      - run: npm run check:pwa
       # F1-040: vitest + jsdom, sin red (la API se simula sobre fetch).
       - run: npm test
 

@@ -19,6 +19,9 @@ import {
 } from './correo/correo-falso';
 import type { PuertoCorreo } from './correo/puerto';
 import { ClienteFetch } from './http';
+import { DIRECTORIO_PUSH_FALSO, PushFalso } from './push/push-falso';
+import { PushWebPush } from './push/push-webpush';
+import type { PuertoPush } from './push/puerto';
 import type { PuertoTimbrado } from './timbrado/puerto';
 import { TimbradoFacturama } from './timbrado/timbrado-facturama';
 import { TimbradoFalso } from './timbrado/timbrado-falso';
@@ -33,6 +36,7 @@ export const ADAPTADORES_CONFIG = Symbol('ADAPTADORES_CONFIG');
 export const PUERTO_TIMBRADO = Symbol('PUERTO_TIMBRADO');
 export const PUERTO_CORREO = Symbol('PUERTO_CORREO');
 export const PUERTO_ARCHIVOS = Symbol('PUERTO_ARCHIVOS');
+export const PUERTO_PUSH = Symbol('PUERTO_PUSH');
 
 export function crearTimbrado(config: AdaptadoresConfig, reloj: Reloj): PuertoTimbrado {
   const pac = config.pac;
@@ -70,6 +74,16 @@ export function crearArchivos(config: AdaptadoresConfig, reloj: Reloj): PuertoAr
   );
 }
 
+export function crearPush(config: AdaptadoresConfig, reloj: Reloj): PuertoPush {
+  const push = config.push;
+  if (push.impl === 'webpush') return new PushWebPush(push.vapid, push.hostsExtra);
+  return new PushFalso(
+    push.vapid?.publica ?? null,
+    reloj,
+    push.directorio ?? (config.modoDemo ? DIRECTORIO_PUSH_FALSO : undefined),
+  );
+}
+
 const PROVEEDORES: Provider[] = [
   // Se lee al crear la app: una combinación prohibida (producción + falso) o una
   // credencial faltante TRUENA aquí y el arranque aborta.
@@ -82,11 +96,12 @@ const PROVEEDORES: Provider[] = [
     inject: [ADAPTADORES_CONFIG, BANDEJA_CORREO_FALSO, Reloj],
   },
   { provide: PUERTO_ARCHIVOS, useFactory: crearArchivos, inject: [ADAPTADORES_CONFIG, Reloj] },
+  { provide: PUERTO_PUSH, useFactory: crearPush, inject: [ADAPTADORES_CONFIG, Reloj] },
 ];
 
 @Global()
 @Module({
   providers: PROVEEDORES,
-  exports: [ADAPTADORES_CONFIG, PUERTO_TIMBRADO, PUERTO_CORREO, PUERTO_ARCHIVOS],
+  exports: [ADAPTADORES_CONFIG, PUERTO_TIMBRADO, PUERTO_CORREO, PUERTO_ARCHIVOS, PUERTO_PUSH],
 })
 export class AdaptadoresModule {}

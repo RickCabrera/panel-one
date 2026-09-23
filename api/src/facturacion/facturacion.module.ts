@@ -19,6 +19,7 @@ import { EntregaCfdiService } from './entrega.service';
 import { FoliosController } from './folios.controller';
 import { FoliosProgramador } from './folios.programador';
 import { FoliosService } from './folios.service';
+import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { FacturaGlobalController } from './global.controller';
 import { FacturaGlobalProgramador } from './global.programador';
 import { FacturaGlobalService } from './global.service';
@@ -45,7 +46,7 @@ import { VentasModule } from '../ventas/ventas.module';
  * cancelación dejaron sin saber, con su programador y su disparo manual.
  */
 @Module({
-  imports: [VentasModule],
+  imports: [VentasModule, NotificacionesModule],
   controllers: [
     TableroFacturacionController,
     FacturacionController,

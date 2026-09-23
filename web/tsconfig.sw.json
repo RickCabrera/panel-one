@@ -1,0 +1,22 @@
+{
+  // F2-146: el service worker corre en un ServiceWorkerGlobalScope (lib WebWorker, que choca
+  // con DOM). Se tipa aquí con el mismo rigor que la app.
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.sw.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2022", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "types": [],
+    "skipLibCheck": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["src/pwa/sw.ts", "src/pwa/sw-logica.ts"]
+}

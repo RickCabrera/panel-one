@@ -10,7 +10,12 @@ import { Auditoria, type Actor } from '../comun/auditoria';
 import { Reloj } from '../comun/reloj';
 import { verificarAlcance } from '../scope/alcance';
 import type { EmpresaScope } from '../scope/empresa-scope';
-import { CandadoAlertasOcupado, type TransaccionAlertas } from '../scope/escritura-alertas';
+import { NotificacionesService } from '../notificaciones/notificaciones.service';
+import {
+  CandadoAlertasOcupado,
+  type AlertaRecienAbierta,
+  type TransaccionAlertas,
+} from '../scope/escritura-alertas';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import { AgregadosVentasService } from '../ventas/agregados-ventas.service';
 import {
@@ -114,6 +119,7 @@ export class AlertasService {
     private readonly ventas: AgregadosVentasService,
     private readonly reloj: Reloj,
     private readonly auditoria: Auditoria,
+    private readonly notificaciones: NotificacionesService,
   ) {}
 
   // ---------------------------------------------------------------- evaluación
@@ -354,19 +360,22 @@ export class AlertasService {
    * APLICACIONES, no las observaciones. Una observación tomada FUERA del candado con un
    * instante anterior a la última aplicada llegó tarde: aplicarla cerraría con una hora
    * anterior a la apertura (viola `alertas_abierta_chk`) o abriría una fila fantasma. Se
-   * descarta (devuelve `false`). Una observación tomada DENTRO del candado (`fresca`) es la
+   * descarta (devuelve `null`). Una observación tomada DENTRO del candado (`fresca`) es la
    * más nueva por construcción y siempre se aplica. La hora que se escribe nunca es anterior
    * a la marca, así que `cerrada_at >= abierta_at` se sostiene aunque el reloj retroceda.
+   *
+   * Aplicada, devuelve las alertas que abrió DE VERDAD (F2-146: su push sale después del
+   * commit, en quien llamó).
    */
   private async aplicarEn(
     tx: TransaccionAlertas,
     obs: Observacion,
     observadoAt: number,
     fresca: boolean,
-  ): Promise<boolean> {
+  ): Promise<AlertaRecienAbierta[] | null> {
     const marca = await tx.marcaDeAgua();
     if (!fresca && marca !== null && observadoAt < marca) {
-      return false;
+      return null;
     }
     const ahora = marca === null ? observadoAt : Math.max(observadoAt, marca);
     const [empresaActiva, sucursalesActivas, guardadas, abiertas] = await Promise.all([
@@ -389,9 +398,9 @@ export class AlertasService {
     for (const [motivo, ids] of porMotivo) {
       await tx.cerrar(ids, instante, motivo);
     }
-    await tx.abrir(cambios.abrir, instante);
+    const abiertasNuevas = await tx.abrir(cambios.abrir, instante);
     await tx.avanzarMarca(instante);
-    return true;
+    return abiertasNuevas;
   }
 
   /**
@@ -399,9 +408,13 @@ export class AlertasService {
    * Devuelve `false` si llegó tarde y se descartó (ver `aplicarEn`).
    */
   async aplicar(obs: Observacion, observadoAt: number): Promise<boolean> {
-    return this.datos
+    const abiertas = await this.datos
       .alertas(SCOPE_SISTEMA)
       .bajoCandado(obs.empresaId, (tx) => this.aplicarEn(tx, obs, observadoAt, false));
+    if (abiertas === null) return false;
+    // F2-146: el push sale DESPUÉS del commit y sin esperar (nunca bajo el candado).
+    this.notificaciones.alertasAbiertas(abiertas);
+    return true;
   }
 
   /**
@@ -526,14 +539,16 @@ export class AlertasService {
     // Como en la vuelta del programador: primero se concilian los traspasos (F2-124).
     await this.conciliarTraspasos(empresaId);
     try {
-      await this.datos.alertas(scope).bajoCandado(empresaId, async (tx) => {
+      const abiertas = await this.datos.alertas(scope).bajoCandado(empresaId, async (tx) => {
         await tx.guardarRegla(tipo, cambio.activa, cambio.umbral);
         // Se observa CON el candado tomado: ninguna otra aplicación puede colarse entre esta
         // observación y su aplicación, así que es la más nueva y nunca se descarta.
         const ahora = this.reloj.ahora();
         const obs = await this.observar(empresaId, ahora);
-        await this.aplicarEn(tx, obs, ahora, true);
+        return this.aplicarEn(tx, obs, ahora, true);
       });
+      // F2-146: bajar un umbral puede abrir alertas; su push sale después del commit.
+      if (abiertas !== null) this.notificaciones.alertasAbiertas(abiertas);
     } catch (error) {
       if (error instanceof CandadoAlertasOcupado) {
         throw new ServiceUnavailableException(error.message);

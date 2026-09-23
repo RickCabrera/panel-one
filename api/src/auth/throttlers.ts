@@ -17,6 +17,7 @@ export const THROTTLER_BAJA = 'baja-reportes';
 export const THROTTLER_CODIGO = 'codigo-facturacion';
 export const THROTTLER_PORTAL = 'portal-facturacion';
 export const THROTTLER_FACTURAS_PORTAL = 'facturas-portal';
+export const THROTTLER_PRUEBA_PUSH = 'prueba-push';
 
 /** `POST /auth/login` y `POST /cuenta/password`: 5 intentos por minuto por IP. */
 export const OPCIONES_THROTTLER_LOGIN: ThrottlerOptions = {
@@ -103,6 +104,17 @@ export const OPCIONES_THROTTLER_FACTURAS_PORTAL: ThrottlerOptions = {
   limit: 5,
 };
 
+/**
+ * `POST /cuenta/notificaciones/prueba` (F2-146): 5 por minuto por IP. Cada llamada es un POST
+ * nuestro a un servicio de push de terceros; nadie necesita más de una prueba cada pocos
+ * segundos.
+ */
+export const OPCIONES_THROTTLER_PRUEBA_PUSH: ThrottlerOptions = {
+  name: THROTTLER_PRUEBA_PUSH,
+  ttl: 60_000,
+  limit: 5,
+};
+
 /** Todos los throttlers registrados en `AuthModule`. Uno nuevo va aquí. */
 export const THROTTLERS = [
   THROTTLER_LOGIN,
@@ -113,6 +125,7 @@ export const THROTTLERS = [
   THROTTLER_CODIGO,
   THROTTLER_PORTAL,
   THROTTLER_FACTURAS_PORTAL,
+  THROTTLER_PRUEBA_PUSH,
   THROTTLER_AGENTE,
 ] as const;
 export type NombreThrottler = (typeof THROTTLERS)[number];

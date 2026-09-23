@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import App from './App';
 import './index.css';
+import { registrarServiceWorker } from './pwa/registrar';
 import { ACENTO_DESPLIEGUE } from './tema/acento';
 import { iniciarTema } from './tema/tema';
 
@@ -20,3 +21,6 @@ createRoot(contenedor).render(
     <App />
   </StrictMode>,
 );
+
+// F2-146: la PWA (instalable, armazón sin red y avisos push). Sólo en el build.
+registrarServiceWorker();

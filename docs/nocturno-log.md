@@ -7691,3 +7691,112 @@ nocturno de las heredadas".
 
 **Qué haría distinto.** Probar primero, con un e2e de 5 líneas, si un guard global llega a un gateway,
 antes de planear sobre esa suposición.
+
+## 2026-09-23 10:30 — F2-146 · PWA instalable con notificaciones
+**Estado:** CERRADA al mergear el PR de `feat/F2-146` (squash a main). El `[x]` lleva **PENDIENTE DE
+VALIDACIÓN REAL: ver F2-191**: el "Listo cuando" pide dispositivos reales y de noche se midió con
+`PushFalso`, el test de contrato de web-push y `check:pwa`.
+
+**Cómo llegó esta sesión (léelo si te pasa lo mismo).** Una sesión anterior construyó casi toda la tarea
+y murió por límite de uso SIN commitear nada y SIN log. El árbol quedó con los cambios en `main` (sin
+commit) y una rama `feat/F2-146` vacía, apuntando a main. Esta sesión hizo `git checkout feat/F2-146`
+(los cambios viajan con el árbol), corrió todos los checks, re-pasó el plan por el revisor sobre lo ya
+construido (APROBADO con 4 obligatorias), completó lo que faltaba y pasó el entregable (APROBADO).
+**Lección:** si el límite de uso se acerca, commitea en la rama aunque esté a medias. Un árbol sucio en
+main es recuperable, pero no se sabe qué revisó el revisor ni qué se probó.
+`.wt-main/` en la raíz es un resto viejo (22/09), no está en `.gitignore` y NO es de ninguna tarea.
+Agrega los archivos por nombre, nunca `git add -A`.
+
+**Qué quedó hecho.** Todo el diseño está en `docs/notificaciones.md`.
+- **api:**
+  - `adaptadores/push/`: `PuertoPush`, con `PushWebPush` (lib `web-push`) y `PushFalso` (memoria + jsonl).
+    `PUSH_IMPL=falso|webpush`. VAPID: van las tres o ninguna, validadas por tamaño.
+  - **Ojo, deploy:** con `NODE_ENV=production` el api NO arranca con `PUSH_IMPL=falso`. Necesita
+    `webpush` + las tres VAPID (nota en F2-191).
+  - Anti-SSRF: `endpoint.ts` con una lista blanca de hosts (FCM, Mozilla, WNS, Apple) +
+    `PUSH_HOSTS_PERMITIDOS`. Se valida al guardar y otra vez antes de mandar.
+  - **Migración `20261001010000_notificaciones_push`**, tres tablas en `LLAVE_EMPRESA`:
+    - `dispositivos_push`: el navegador; muere con la sesión por `version_sesion` + `renovado_at` de 7 días.
+    - `preferencias_push`: 4 booleanos, opt-in.
+    - `envios_push_resumen`: candado del resumen diario.
+    Sólo `ScopedPrismaService.push(scope)` → `EscrituraPush` escribe en ellas.
+  - `/cuenta/notificaciones`: GET, PUT preferencias, POST/DELETE dispositivos y POST prueba (throttler
+    5/min por IP). Todo en `openapi.json`.
+  - Alertas: `TransaccionAlertas.abrir` ahora usa `createManyAndReturn` y devuelve SÓLO lo que abrió.
+    El push sale DESPUÉS del commit, fuera del candado y sin esperar.
+  - Folios: el push sale sólo si el correo del umbral salió.
+  - Resumen de cierre a las 07:00 en la zona de la empresa, leído con el scope del destinatario
+    (`NOTIFICACIONES_INTERVALO_S`).
+- **web:**
+  - Manifest + íconos (`npm run iconos:pwa`).
+  - `pwa-plugin.ts` compila `src/pwa/sw.ts` a `dist/sw.js` (clásico). El precache es TODO el build y
+    `public/`, y la versión es una huella del contenido.
+  - `sw-logica.ts`:
+    - Navegación sin red → `index.html` del precache.
+    - Assets cache-first con `ignoreVary`.
+    - NUNCA toca `/api/` ni `/socket.io/`.
+    - Al tocar un push, abre sólo rutas del mismo origen.
+  - Cuenta → Notificaciones: un interruptor por aviso, estado del navegador y botón de prueba.
+  - `Layout` renueva el navegador y muestra la banda `SinConexion`.
+- **CI:** `npm run check:pwa` en el carril web, después de `check:bundle`.
+- **backlog:** notas "Y además (de F2-146)" en F1-002 (Caddy: `sw.js` no-cache, MIME del manifest,
+  DELETE con cuerpo, trust proxy) y en F2-191 (VAPID de producción y prueba en dispositivos reales).
+
+**Decisiones que tomé y por qué.**
+- **DECISIÓN ABIERTA PARA RICARDO:** el resumen de cierre muestra la venta, las cuentas y el ticket
+  promedio, y eso se ve en la pantalla bloqueada (`DECISION PROVISIONAL (nocturno)` en
+  `api/src/notificaciones/mensajes.ts:7`). Las alertas no llevan cifras. El revisor nota que lo más
+  conservador sería no mostrar montos. Se dejó así porque la tarea pide un "resumen de cierre". Si
+  Ricardo lo quiere sin cifras, sólo cambia `mensajeCierreDia`.
+- **Todo opt-in**, y `folios_bajo` sólo para admin_global: se revisa al guardar Y al enviar.
+- **Resumen best-effort:** se reclama antes de mandar. Si el envío falla después, ese día se pierde,
+  porque el canal confiable es el correo de F2-141.
+- **Endpoint ajeno:** se reasigna sólo con las MISMAS llaves, y la respuesta es idéntica (no delata).
+  Quitar uno ajeno o inexistente da el mismo 404.
+- `esquema-sr.md` no cambia: la tarea no toca SoftRestaurant.
+
+**Trampas que encontré.**
+- **Honestidad:** el comentario de `sw-logica.ts` sobre `Vary: Origin` decía "lo encontró la prueba en
+  Chrome real". No hay registro de esa prueba, así que se corrigió a "lo fija un test; falta verlo en
+  Chrome real". No afirmes pruebas que no puedes ver.
+- El código citaba `docs/notificaciones.md`, pero la sesión muerta nunca lo escribió. Busca referencias
+  colgadas a docs cuando heredes trabajo.
+
+**Qué quedó abierto.**
+- **Sin probar en un navegador real:** falta el botón "Instalar" en Chrome escritorio/Android, el armazón
+  con DevTools → Offline y un push real con la app cerrada. Es Diurna (F2-191). Los pasos manuales están
+  en el doc.
+- **Límites conocidos para F2-250** (en el doc):
+  - el resumen no avisa si faltó una sucursal;
+  - avalancha de avisos para admin_global con muchas empresas;
+  - la cola `#pendiente` de push de alertas no tiene tope (y se pierde si el proceso muere);
+  - `envios_push_resumen` sin purga;
+  - el conteo de navegadores de la cuenta incluye los de sesiones muertas;
+  - el throttler de prueba es por IP.
+- **Revisor, menor:** el filtro de destinatarios de alertas (`notificaciones.service.ts:274-283`,
+  `OR admin_global / empresaId` bajo scope de sistema) está escrito a mano. Es correcto y tiene test, pero
+  conviene sacarlo al helper de scope en una tarea futura.
+
+**Tests.**
+- **api:**
+  - e2e `notificaciones/notificaciones.e2e.spec.ts`:
+    - cuenta y roles;
+    - el navegador que muere con la sesión;
+    - a quién llega qué, incluido el AC "sucursal desconectada llega sin la app abierta";
+    - cada aviso se apaga por separado;
+    - resumen idempotente con vueltas simultáneas, cuadrado a mano a 450.00 y contra `/ventas/resumen`;
+    - empresa sin ventas nunca dice "$0.00".
+  - Contrato `adaptadores/push/push.contrato.spec.ts` (VAPID local): cabeceras, JWT ES256, aes128gcm
+    descifrado y timeout.
+  - Unitarios de mensajes, endpoint, config y adaptadores.
+  - Adaptados, no aflojados: `folios.e2e.spec.ts` y `openapi.spec.ts`.
+- **web:** `pwa/sw-logica.test.ts`, `pwa/push.test.ts` y `paginas/Notificaciones.test.tsx`.
+- **Checks:**
+  - api: `lint` y `typecheck` limpios; `prisma validate` ok; `migrate dev` sin diferencias; `npm test`
+    **2425 verdes / 1 rojo PREEXISTENTE** (`prisma/esquema.spec.ts` "argon2id verificable", el de
+    siempre). Cero skips.
+  - web: `build` y `lint` limpios; vitest **108 archivos / 1340 verdes**; `check:bundle` 339.8 kB gzip
+    (antes 337.4; tope 400); `check:pwa` ok.
+
+**Qué haría distinto.** Commitear en la rama en cuanto algo compila, y escribir el log a la mitad del
+trabajo, no al final.

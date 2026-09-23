@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 
 import { pedir } from '../api/cliente';
 import type { Sesion } from '../api/tipos';
+import { desvincularAlSalir } from '../pwa/push';
 import { CLAVE_SISTEMA } from '../sistema/sistema';
 import { AuthContexto, type ContextoAuth, type EstadoAuth } from './contexto';
 import {
@@ -79,6 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // cliente, responda o no la API.
   const cerrarSesion = useCallback(async () => {
     marcarSesionCerrada();
+    // F2-146: este navegador deja de recibir los avisos push de este usuario. Antes del
+    // logout (necesita la sesión) y con tope de tiempo: nunca detiene la salida.
+    await desvincularAlSalir();
     await cerrarSesionEnServidor();
     terminarSesion('cerrada');
   }, []);

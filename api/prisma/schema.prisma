@@ -48,6 +48,7 @@ model Empresa {
   reglasAlerta             ReglaAlerta[]
   alertaEvaluacion         AlertaEvaluacion?
   suscripcionesReporte     SuscripcionReporte[]
+  enviosPushResumen        EnvioPushResumen[]
   // F2-126: categorías de gasto (dato del panel).
   categoriasGasto          CategoriaGasto[]
   // F2-100: datos fiscales (uno por empresa) y receptores frecuentes de facturación.
@@ -161,9 +162,16 @@ model Usuario {
 
   // Sesiones de login (F1-093). La segunda relación es la FK compuesta que
   // impide que `sesiones_usuario.empresa_id` diverja de la del usuario.
-  sesiones             SesionUsuario[]
-  sesionesEmpresa      SesionUsuario[]      @relation("SesionUsuarioEmpresa")
-  suscripcionesReporte SuscripcionReporte[]
+  sesiones                SesionUsuario[]
+  sesionesEmpresa         SesionUsuario[]      @relation("SesionUsuarioEmpresa")
+  suscripcionesReporte    SuscripcionReporte[]
+  // Notificaciones push (F2-146). Las relaciones "…Empresa" son las FK compuestas que
+  // impiden que el `empresa_id` copiado diverja del del usuario.
+  dispositivosPush        DispositivoPush[]
+  dispositivosPushEmpresa DispositivoPush[]    @relation("DispositivoPushEmpresa")
+  preferenciaPush         PreferenciaPush?
+  preferenciasPushEmpresa PreferenciaPush[]    @relation("PreferenciaPushEmpresa")
+  enviosPushResumen       EnvioPushResumen[]
 
   // Redundante con el PK, pero Prisma lo exige para la FK compuesta de
   // `sesiones_usuario` (usuario_id, empresa_id).
@@ -634,6 +642,78 @@ model EnvioReporte {
   @@unique([suscripcionId, tipo, periodo], map: "envios_reporte_suscripcion_id_tipo_periodo_key")
   @@index([empresaId])
   @@map("envios_reporte")
+}
+
+// ---------------------------------------------------------------------------
+// Notificaciones push (F2-146). Ver `docs/notificaciones.md`.
+
+// Un navegador suscrito (PWA). `endpoint` es la URL del servicio de push de ESE
+// navegador: una capacidad secreta, única en toda la tabla. `empresa_id` es el del
+// usuario (NULL sólo para admin_global), como en `sesiones_usuario`: la FK compuesta
+// impide que diverja cuando no es nulo; con NULL (MATCH SIMPLE) queda la simple.
+//
+// Muere con la sesión (observación del revisor): `version_sesion` es la del usuario al
+// registrarlo; si el usuario sube su versión (cambio/reset de contraseña, baja), el
+// dispositivo deja de recibir y se borra al siguiente envío. `renovado_at` se corre cada
+// vez que el panel abre en ese navegador; sin renovarse en 7 días (lo que dura una
+// sesión inactiva) tampoco recibe.
+model DispositivoPush {
+  id            String   @id @default(uuid()) @db.Uuid
+  usuarioId     String   @map("usuario_id") @db.Uuid
+  empresaId     String?  @map("empresa_id") @db.Uuid
+  endpoint      String
+  p256dh        String
+  auth          String
+  versionSesion Int      @map("version_sesion")
+  creadoAt      DateTime @map("creado_at") @db.Timestamptz(3)
+  renovadoAt    DateTime @map("renovado_at") @db.Timestamptz(3)
+
+  usuario        Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade, map: "dispositivos_push_usuario_id_fkey")
+  usuarioEmpresa Usuario? @relation("DispositivoPushEmpresa", fields: [usuarioId, empresaId], references: [id, empresaId], onDelete: Cascade, onUpdate: Cascade, map: "dispositivos_push_usuario_empresa_fkey")
+
+  @@unique([endpoint], map: "dispositivos_push_endpoint_key")
+  @@index([usuarioId])
+  @@index([empresaId])
+  @@map("dispositivos_push")
+}
+
+// Qué avisos quiere un usuario, uno por tipo. Sin fila = todo apagado (opt-in).
+// `folios_bajo` sólo cuenta para admin_global: se valida al guardar Y al enviar.
+// `empresa_id` como en `dispositivos_push`.
+model PreferenciaPush {
+  usuarioId          String   @id @map("usuario_id") @db.Uuid
+  empresaId          String?  @map("empresa_id") @db.Uuid
+  mesaAbierta        Boolean  @default(false) @map("mesa_abierta")
+  sucursalSinReporte Boolean  @default(false) @map("sucursal_sin_reporte")
+  foliosBajo         Boolean  @default(false) @map("folios_bajo")
+  cierreDia          Boolean  @default(false) @map("cierre_dia")
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  usuario        Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade, map: "preferencias_push_usuario_id_fkey")
+  usuarioEmpresa Usuario? @relation("PreferenciaPushEmpresa", fields: [usuarioId, empresaId], references: [id, empresaId], onDelete: Cascade, onUpdate: Cascade, map: "preferencias_push_usuario_empresa_fkey")
+
+  @@index([empresaId])
+  @@map("preferencias_push")
+}
+
+// Candado de idempotencia del resumen de cierre del día: el único (usuario, empresa,
+// periodo) hace que otra vuelta u otra réplica no lo manden dos veces. Se reclama ANTES
+// de mandar y no guarda estado: si el envío falla, ese día se pierde (best-effort,
+// documentado). CHECK a mano en la migración: `periodo` con forma AAAA-MM-DD.
+model EnvioPushResumen {
+  id        String   @id @default(uuid()) @db.Uuid
+  usuarioId String   @map("usuario_id") @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  // El día resumido (ayer en la zona de la empresa).
+  periodo   String
+  creadoAt  DateTime @map("creado_at") @db.Timestamptz(3)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+
+  @@unique([usuarioId, empresaId, periodo], map: "envios_push_resumen_usuario_empresa_periodo_key")
+  @@index([empresaId])
+  @@map("envios_push_resumen")
 }
 
 // ---------------------------------------------------------------------------

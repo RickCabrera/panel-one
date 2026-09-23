@@ -32,6 +32,11 @@ export const LLAVE_EMPRESA = {
   // `updateMany` con el id de un token firmado ya verificado.
   SuscripcionReporte: 'empresaId',
   EnvioReporte: 'empresaId',
+  // F2-146. Las escribe SÓLO `EscrituraPush`. `empresaId` es el del usuario (NULL para
+  // admin_global, como `SesionUsuario`): un scope de empresa nunca ve la de otra.
+  DispositivoPush: 'empresaId',
+  PreferenciaPush: 'empresaId',
+  EnvioPushResumen: 'empresaId',
   // F2-230. Catálogos espejo: los escribe SÓLO `IngestaCatalogos` (clavada a la sucursal
   // del agente); la metadata y la solicitud, `EscrituraCatalogos` (con scope).
   GrupoProducto: 'empresaId',
