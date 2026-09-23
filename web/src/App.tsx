@@ -8,11 +8,13 @@ import { RequiereRol, RutaProtegida } from './auth/RutaProtegida';
 import { crearQueryClient } from './consultas/queryClient';
 import { Layout } from './layout/Layout';
 import { Administracion } from './paginas/Administracion';
+import { AltaGuiada } from './paginas/AltaGuiada';
 import { Alertas } from './paginas/Alertas';
 import { Analisis } from './paginas/Analisis';
 import { BajaReportes } from './paginas/BajaReportes';
 import { Comparativos } from './paginas/Comparativos';
 import { Cuenta } from './paginas/Cuenta';
+import { AyudaAgente } from './paginas/AyudaAgente';
 import { AyudaConteos } from './paginas/AyudaConteos';
 import { ConteoCaptura } from './paginas/ConteoCaptura';
 import { Conteos } from './paginas/Conteos';
@@ -129,6 +131,23 @@ export function Rutas() {
           element={
             <RequiereRol roles={ROLES_ADMIN}>
               <Administracion />
+            </RequiereRol>
+          }
+        />
+        {/* F2-147: el alta guiada es sólo de admin_global; la guía del agente, de cualquier admin. */}
+        <Route
+          path="admin/alta"
+          element={
+            <RequiereRol roles={['admin_global']}>
+              <AltaGuiada />
+            </RequiereRol>
+          }
+        />
+        <Route
+          path="ayuda/agente"
+          element={
+            <RequiereRol roles={ROLES_ADMIN}>
+              <AyudaAgente />
             </RequiereRol>
           }
         />

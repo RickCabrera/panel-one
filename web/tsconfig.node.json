@@ -19,6 +19,7 @@
   },
   "include": [
     "vite.config.ts",
+    "vite.landing.config.ts",
     "pwa-plugin.ts",
     "src/**/*.node.test.ts",
     "scripts/**/*.node.test.ts"

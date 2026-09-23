@@ -1,0 +1,529 @@
+/*
+ * Landing pública (F2-147). CSS a mano, sin Tailwind ni React: la página tiene que pesar poco y
+ * pintarse sin JS (Lighthouse > 90). El acento es el del panel (#0f766e, `public/favicon.svg`);
+ * los tonos de texto se eligieron con contraste AA sobre su fondo en los dos temas.
+ */
+:root {
+  --fondo: #ffffff;
+  --alterno: #f1f5f4;
+  --superficie: #ffffff;
+  --tinta: #102a27;
+  --tinta-suave: #3d5652;
+  --linea: #cfdcd9;
+  --acento: #0f766e;
+  --acento-texto: #0b5e58;
+  --sobre-acento: #ffffff;
+  --peligro: #b42318;
+  --exito: #0b6b3a;
+  /* Las ilustraciones */
+  --c-fondo: #f6faf9;
+  --c-barra: #0f766e;
+  --c-tarjeta: #ffffff;
+  --c-texto: #3d5652;
+  --c-cifra: #102a27;
+  --c-mesa: #ffffff;
+  --c-alerta-fondo: #fdecea;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #0d1716;
+    --alterno: #13211f;
+    --superficie: #182927;
+    --tinta: #e6f0ee;
+    --tinta-suave: #b3c6c2;
+    --linea: #2c4440;
+    --acento: #2bb3a6;
+    --acento-texto: #5fd4c8;
+    --sobre-acento: #06201d;
+    --peligro: #ff8a7a;
+    --exito: #6fd69b;
+    --c-fondo: #13211f;
+    --c-barra: #1f8f85;
+    --c-tarjeta: #1d302d;
+    --c-texto: #b3c6c2;
+    --c-cifra: #e6f0ee;
+    --c-mesa: #1d302d;
+    --c-alerta-fondo: #3a1d1a;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--tinta);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Arial,
+    sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  margin: 0 0 0.6rem;
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 3rem);
+}
+
+h2 {
+  font-size: clamp(1.5rem, 3.2vw, 2rem);
+}
+
+h3 {
+  font-size: 1.1rem;
+}
+
+p {
+  margin: 0 0 0.8rem;
+}
+
+a {
+  color: var(--acento-texto);
+}
+
+:focus-visible {
+  outline: 3px solid var(--acento);
+  outline-offset: 2px;
+}
+
+.envoltura {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.estrecha {
+  max-width: 46rem;
+}
+
+.saltar {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--acento);
+  color: var(--sobre-acento);
+  border-radius: 0.4rem;
+  z-index: 10;
+}
+
+.saltar:focus {
+  top: 0.5rem;
+}
+
+/* Cabecera */
+.cabecera {
+  border-bottom: 1px solid var(--linea);
+  background: var(--fondo);
+}
+
+.cabecera-fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.marca {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--acento-texto);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.logo-fondo {
+  fill: var(--acento);
+}
+
+.logo-barras {
+  stroke: var(--sobre-acento);
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav a:not(.boton) {
+  display: inline-block;
+  padding: 0.6rem 0.2rem;
+  color: var(--tinta);
+  text-decoration: none;
+}
+
+.nav a:not(.boton):hover {
+  text-decoration: underline;
+}
+
+/* Botones */
+.boton {
+  display: inline-block;
+  min-height: 2.75rem;
+  padding: 0.65rem 1.1rem;
+  border: 2px solid var(--acento);
+  border-radius: 0.5rem;
+  background: var(--acento);
+  color: var(--sobre-acento);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.boton:hover {
+  filter: brightness(1.08);
+}
+
+.boton:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.boton-secundario {
+  background: transparent;
+  color: var(--acento-texto);
+}
+
+/* Hero */
+.hero {
+  padding: 3rem 0 2.5rem;
+}
+
+.hero-rejilla {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+}
+
+@media (min-width: 56rem) {
+  .hero-rejilla {
+    grid-template-columns: 1.05fr 1fr;
+  }
+}
+
+.antetitulo {
+  color: var(--acento-texto);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.85rem;
+}
+
+.entrada {
+  color: var(--tinta-suave);
+  font-size: 1.1rem;
+}
+
+.promesas {
+  padding-left: 1.2rem;
+  margin: 0 0 1.4rem;
+}
+
+.promesas li {
+  margin-bottom: 0.3rem;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Ilustraciones */
+.captura {
+  margin: 0;
+}
+
+.captura svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--linea);
+  border-radius: 14px;
+}
+
+.captura-ancha {
+  margin-top: 2rem;
+}
+
+.captura figcaption {
+  margin-top: 0.4rem;
+  color: var(--tinta-suave);
+  font-size: 0.85rem;
+}
+
+.c-fondo {
+  fill: var(--c-fondo);
+}
+
+.c-barra,
+.c-barras rect {
+  fill: var(--c-barra);
+}
+
+.c-punto {
+  fill: var(--sobre-acento);
+  opacity: 0.8;
+}
+
+.c-tarjeta,
+.c-mesa {
+  fill: var(--c-tarjeta);
+  stroke: var(--linea);
+}
+
+.c-mesa-alerta {
+  fill: var(--c-alerta-fondo);
+  stroke: var(--peligro);
+  stroke-width: 2;
+}
+
+.captura text {
+  font-family: inherit;
+  font-size: 13px;
+  fill: var(--c-texto);
+}
+
+.captura .c-texto-claro {
+  fill: var(--sobre-acento);
+  font-weight: 600;
+}
+
+.captura .c-cifra {
+  fill: var(--c-cifra);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.captura .c-etiqueta-fuerte {
+  fill: var(--c-cifra);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.captura .c-alerta {
+  fill: var(--peligro);
+  font-weight: 700;
+}
+
+/* Secciones */
+.seccion {
+  padding: 3rem 0;
+}
+
+.seccion-alterna {
+  background: var(--alterno);
+}
+
+.rejilla-3 {
+  display: grid;
+  gap: 1rem;
+  list-style: none;
+  margin: 1.2rem 0 0;
+  padding: 0;
+}
+
+@media (min-width: 40rem) {
+  .rejilla-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 64rem) {
+  .rejilla-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.tarjeta {
+  padding: 1.1rem;
+  border: 1px solid var(--linea);
+  border-radius: 0.75rem;
+  background: var(--superficie);
+}
+
+.tarjeta p {
+  color: var(--tinta-suave);
+  margin: 0;
+}
+
+.pasos {
+  display: grid;
+  gap: 1rem;
+  padding-left: 1.3rem;
+  margin: 1.2rem 0 0;
+}
+
+@media (min-width: 56rem) {
+  .pasos {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2.5rem;
+  }
+}
+
+.pasos p {
+  color: var(--tinta-suave);
+}
+
+/* Precios */
+.plan-destacado {
+  border: 2px solid var(--acento);
+}
+
+.precio {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--acento-texto);
+}
+
+.plan .incluye {
+  margin: 0.6rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--tinta-suave);
+}
+
+.nota {
+  margin-top: 1rem;
+  color: var(--tinta-suave);
+}
+
+/* Preguntas */
+details {
+  border-bottom: 1px solid var(--linea);
+  padding: 0.3rem 0;
+}
+
+summary {
+  cursor: pointer;
+  padding: 0.7rem 0;
+  font-weight: 600;
+}
+
+details p {
+  color: var(--tinta-suave);
+}
+
+/* Formulario */
+.formulario {
+  display: grid;
+  gap: 0.25rem 1rem;
+  margin-top: 1rem;
+}
+
+@media (min-width: 40rem) {
+  .formulario {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .campo-ancho {
+    grid-column: 1 / -1;
+  }
+}
+
+.campo label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.campo input,
+.campo textarea {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--tinta-suave);
+  border-radius: 0.45rem;
+  background: var(--superficie);
+  color: var(--tinta);
+  font: inherit;
+}
+
+.campo [aria-invalid='true'] {
+  border-color: var(--peligro);
+  border-width: 2px;
+}
+
+.error {
+  min-height: 1.3rem;
+  margin: 0.2rem 0 0.4rem;
+  color: var(--peligro);
+  font-size: 0.9rem;
+}
+
+.estado {
+  margin-top: 0.7rem;
+  min-height: 1.5rem;
+}
+
+.estado[data-tipo='error'] {
+  color: var(--peligro);
+}
+
+.estado[data-tipo='ok'] {
+  color: var(--exito);
+  font-weight: 600;
+}
+
+/* La trampa para bots: fuera de la vista y del foco, pero en el DOM. */
+.trampa {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Pie */
+.pie {
+  border-top: 1px solid var(--linea);
+  padding: 1.5rem 0;
+  color: var(--tinta-suave);
+  font-size: 0.9rem;
+}
+
+.pie-fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  justify-content: space-between;
+}
+
+.pie p {
+  margin: 0;
+}

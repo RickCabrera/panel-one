@@ -69,8 +69,15 @@ export const USUARIOS = {
   },
 } as const;
 
-export async function limpiarFixtures(prisma: PrismaClient): Promise<void> {
-  const empresas = [FX.empresaA, FX.empresaB, FX.empresaC];
+/**
+ * Borra las fixtures y todo lo que cuelga de sus empresas. `extras`: empresas que un test creó
+ * por la API (el alta guiada de F2-147), que se limpian con el mismo barrido.
+ */
+export async function limpiarFixtures(
+  prisma: PrismaClient,
+  extras: readonly string[] = [],
+): Promise<void> {
+  const empresas = [FX.empresaA, FX.empresaB, FX.empresaC, ...extras];
   // Reportes programados (F2-141): cuelgan del usuario y de la empresa, así que van antes
   // que los dos. Envíos primero (FK a la suscripción).
   const suscripciones = {

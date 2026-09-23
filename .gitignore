@@ -1,6 +1,8 @@
 # ---------- Node (/api NestJS, /web React+Vite) ----------
 node_modules/
 dist/
+# F2-147: el build de la landing pública (web/vite.landing.config.ts).
+dist-landing/
 build/
 .vite/
 coverage/

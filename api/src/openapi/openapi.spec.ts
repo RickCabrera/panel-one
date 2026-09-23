@@ -1084,6 +1084,10 @@ describe('Contrato OpenAPI', () => {
         '/reportes/baja',
         '/empresas',
         '/empresas/{id}',
+        // F2-147: alta guiada, lista de arranque y el contacto público de la landing.
+        '/empresas/alta-guiada',
+        '/empresas/{id}/arranque',
+        '/publico/contacto',
         // F2-100: datos fiscales, carga del CSD y catálogo de regímenes.
         '/facturacion/perfil-fiscal',
         '/facturacion/perfil-fiscal/csd',

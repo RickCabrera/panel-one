@@ -18,6 +18,8 @@ export const THROTTLER_CODIGO = 'codigo-facturacion';
 export const THROTTLER_PORTAL = 'portal-facturacion';
 export const THROTTLER_FACTURAS_PORTAL = 'facturas-portal';
 export const THROTTLER_PRUEBA_PUSH = 'prueba-push';
+export const THROTTLER_CONTACTO = 'contacto';
+export const THROTTLER_CONTACTO_HORA = 'contacto-hora';
 
 /** `POST /auth/login` y `POST /cuenta/password`: 5 intentos por minuto por IP. */
 export const OPCIONES_THROTTLER_LOGIN: ThrottlerOptions = {
@@ -115,6 +117,22 @@ export const OPCIONES_THROTTLER_PRUEBA_PUSH: ThrottlerOptions = {
   limit: 5,
 };
 
+/**
+ * `POST /publico/contacto` (F2-147): 3 por minuto y 20 por hora por IP. Es el formulario
+ * público de la landing y cada envío es un correo nuestro por Brevo: una persona manda uno.
+ */
+export const OPCIONES_THROTTLER_CONTACTO: ThrottlerOptions = {
+  name: THROTTLER_CONTACTO,
+  ttl: 60_000,
+  limit: 3,
+};
+
+export const OPCIONES_THROTTLER_CONTACTO_HORA: ThrottlerOptions = {
+  name: THROTTLER_CONTACTO_HORA,
+  ttl: 3_600_000,
+  limit: 20,
+};
+
 /** Todos los throttlers registrados en `AuthModule`. Uno nuevo va aquí. */
 export const THROTTLERS = [
   THROTTLER_LOGIN,
@@ -126,6 +144,8 @@ export const THROTTLERS = [
   THROTTLER_PORTAL,
   THROTTLER_FACTURAS_PORTAL,
   THROTTLER_PRUEBA_PUSH,
+  THROTTLER_CONTACTO,
+  THROTTLER_CONTACTO_HORA,
   THROTTLER_AGENTE,
 ] as const;
 export type NombreThrottler = (typeof THROTTLERS)[number];

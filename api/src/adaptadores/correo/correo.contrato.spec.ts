@@ -1,3 +1,4 @@
+import { plantillaContacto } from '../../onboarding/contacto';
 import type { ClienteHttp, PeticionHttp, RespuestaHttp } from '../http';
 import { CorreoBrevo, URL_BREVO } from './correo-brevo';
 import type { PlantillaCorreo } from './puerto';
@@ -45,6 +46,21 @@ describe('Contrato Brevo (F2-202)', () => {
     await new CorreoBrevo(REMITENTE, http).enviar({ email: 'a@ejemplo.test' }, PLANTILLA, []);
     expect(http.peticiones).toMatchSnapshot();
     expect(http.peticiones[0].cuerpo).not.toHaveProperty('attachment');
+  });
+
+  it('el contacto de la landing (F2-147): lo del visitante va escapado y sin adjuntos', async () => {
+    const http = new ClienteQueCaptura({ status: 201, cuerpo: { messageId: 'm' } });
+    await new CorreoBrevo(REMITENTE, http).enviar(
+      { email: 'ventas@ejemplo.test' },
+      plantillaContacto({
+        nombre: 'Ana <b>',
+        email: 'ana@ejemplo.test',
+        sucursales: 3,
+        mensaje: 'Hola\nquiero una demo',
+      }),
+      [],
+    );
+    expect(http.peticiones).toMatchSnapshot();
   });
 
   it('la api-key NO va en la petición (la pone el cliente HTTP)', async () => {

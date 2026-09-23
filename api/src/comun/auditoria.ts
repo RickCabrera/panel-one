@@ -4,6 +4,8 @@ import type { RolUsuario } from '@prisma/client';
 /** Lo que se audita (F1-060): quién creó, editó o rotó qué. */
 export type AccionAuditada =
   | 'empresa.crear'
+  // F2-147: el alta guiada (empresa + sucursales con key + admin, en una transacción).
+  | 'empresa.alta_guiada'
   | 'empresa.editar'
   | 'sucursal.crear'
   | 'sucursal.editar'

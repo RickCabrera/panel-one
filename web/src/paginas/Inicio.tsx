@@ -1,3 +1,5 @@
+import { useUsuario } from '../auth/contexto';
+import { ROLES_ADMIN } from '../auth/roles';
 import { useAlcance } from '../filtros/alcance';
 import { horaEn, incluyeHoy } from '../filtros/periodo';
 import { useHoraEn } from '../filtros/useHoy';
@@ -10,9 +12,11 @@ import {
   TarjetaVentaEnVivo,
   TarjetaVentaTotal,
 } from './inicio/Tarjetas';
+import { ChecklistArranque } from './onboarding/ChecklistArranque';
 import { Vista } from './Vista';
 
 export function Inicio() {
+  const usuario = useUsuario();
   const { empresa, sucursal, sucursalId, sucursales } = useAlcance();
   // El selector de periodo está en la cabecera (F2-212); aquí sólo se lee.
   const { rango, hoy, zona } = usePeriodo();
@@ -66,6 +70,14 @@ export function Inicio() {
           </button>
         </div>
       </div>
+
+      {/* F2-147: mientras a la empresa le falte algo para recibir datos, se dice qué. Sólo
+          admins: el visor no puede resolver ninguno de los pasos. */}
+      {empresa && ROLES_ADMIN.includes(usuario.rol) && (
+        <div className="mt-4">
+          <ChecklistArranque key={empresa.id} empresaId={empresa.id} soloIncompleta />
+        </div>
+      )}
 
       {rango === null ? (
         <p className="mt-6 text-sm text-tinta-tenue">

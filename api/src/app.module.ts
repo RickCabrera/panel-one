@@ -15,6 +15,7 @@ import { AuditoriaModule } from './comun/auditoria';
 import { RelojModule } from './comun/reloj';
 import { IngestaModule } from './ingesta/ingesta.module';
 import { MesasModule } from './mesas/mesas.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { OrganizacionModule } from './organizacion/organizacion.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
@@ -37,6 +38,7 @@ import { VentasModule } from './ventas/ventas.module';
     MesasModule,
     OrganizacionModule,
     AdministracionModule,
+    OnboardingModule,
     SistemaModule,
     AlertasModule,
     ReportesModule,

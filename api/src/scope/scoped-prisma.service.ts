@@ -297,6 +297,15 @@ export class ScopedPrismaService {
   }
 
   /**
+   * El alta guiada (F2-147): las mismas altas de `admin(scope)`, pero TODAS en una sola
+   * transacción. Si una truena (un email duplicado, por ejemplo) no queda ni la empresa ni
+   * sus sucursales a medias. Cada alta conserva su propio chequeo de alcance.
+   */
+  altaEnTransaccion<T>(scope: EmpresaScope, fn: (admin: EscrituraAdmin) => Promise<T>): Promise<T> {
+    return this.#prisma.$transaction((tx) => fn(new EscrituraAdmin(tx, scope)));
+  }
+
+  /**
    * Las escrituras del centro de alertas (F2-224): abrir, cerrar y guardar reglas, todo
    * bajo el candado de la empresa y clavado a ella (ver `escritura-alertas.ts`). La
    * empresa se verifica con este `scope`: fuera de alcance, 404.
