@@ -50,6 +50,19 @@ import type { EmpresaScope } from './empresa-scope';
  *   cantidad, total)`: partidas de `ventas`.
  * - `pagos_ventas(cheque_id, empresa_id, sucursal_id, forma_raw, monto)`.
  * - `catalogo_formas(empresa_id, forma_raw, forma)`: catálogo de la empresa.
+ * - `cfdis_periodo(id, empresa_id, sucursal_id, cheque_id, uuid, serie, folio, total, estado,
+ *   emitido_at, mes_local, hora_local, receptor_rfc, receptor_nombre, con_xml, con_pdf,
+ *   folio_ticket, sucursal_nombre)` (F2-106): los CFDI EMITIDOS (`vigente` o `cancelado`; una
+ *   reserva `timbrando` NUNCA entra) cuyo `emitido_at` cae en el rango, cortado en la zona de SU
+ *   sucursal como `ventas` (también con `alturaAl`). `mes_local` (`YYYY-MM`) y `hora_local` son los
+ *   de la emisión en esa zona. `folio_ticket` es el del cheque (nulo si el CFDI no tiene cheque:
+ *   LEFT JOIN, para F2-107). PII (`receptor_rfc`, `receptor_nombre`): sólo en cuerpos de endpoints
+ *   de ADMINISTRADORES; un endpoint abierto a visor sólo puede agregarla.
+ * - `codigos_ventas(cheque_id, empresa_id, sucursal_id, folio, cerrado_at, total, codigo, estado,
+ *   expira_at, con_cfdi)` (F2-106): el código de facturación de cada cuenta de `ventas`, con su
+ *   estado GUARDADO y `con_cfdi` = tiene un CFDI `vigente` o una reserva `timbrando` (uno
+ *   `cancelado` NO cuenta, igual que en `facturacion/codigo.ts#estadoPublico`). El estado público
+ *   se deriva en el cuerpo.
  *
  * `guardiaCuerpo()` rechaza un cuerpo que intente leer otra cosa.
  */
@@ -99,6 +112,8 @@ export const CTES_VENTAS = [
   'tickets',
   'partidas_empresa',
   'pagos_empresa',
+  'cfdis_periodo',
+  'codigos_ventas',
 ] as const;
 
 const HORA_ISO = /T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/;
@@ -316,6 +331,10 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
     filtro.sucursalId === undefined
       ? Prisma.empty
       : Prisma.sql`AND c.sucursal_id = ${filtro.sucursalId}::uuid`;
+  const sucursalCfdi =
+    filtro.sucursalId === undefined
+      ? Prisma.empty
+      : Prisma.sql`AND f.sucursal_id = ${filtro.sucursalId}::uuid`;
 
   return Prisma.sql`WITH sucursales_alcance AS (
     SELECT s.id, s.empresa_id, s.nombre, s.zona_horaria
@@ -393,5 +412,35 @@ function armarCtes(scope: EmpresaScope, filtro: FiltroVentas): Prisma.Sql {
     SELECT g.cheque_id, g.empresa_id, g.forma_raw
     FROM cheque_pagos g
     WHERE g.empresa_id = ${empresa} ${filtroTenant(scope, 'g')}
+  ),
+  cfdis_periodo AS (
+    SELECT f.id, f.empresa_id, f.sucursal_id, f.cheque_id, f.uuid, f.serie, f.folio, f.total,
+           f.estado::text AS estado, f.emitido_at,
+           to_char(f.emitido_at AT TIME ZONE s.zona_horaria, 'YYYY-MM') AS mes_local,
+           extract(hour FROM f.emitido_at AT TIME ZONE s.zona_horaria)::int AS hora_local,
+           f.receptor->>'rfc' AS receptor_rfc, f.receptor->>'razonSocial' AS receptor_nombre,
+           (f.xml_clave IS NOT NULL) AS con_xml, (f.pdf_clave IS NOT NULL) AS con_pdf,
+           c.folio AS folio_ticket, s.nombre AS sucursal_nombre
+    FROM cfdis f
+    JOIN sucursales_alcance s ON s.id = f.sucursal_id AND s.empresa_id = f.empresa_id
+    LEFT JOIN cheques c ON c.id = f.cheque_id AND c.empresa_id = f.empresa_id
+      AND c.empresa_id = ${empresa} ${filtroTenant(scope, 'c')}
+    WHERE f.empresa_id = ${empresa} ${filtroTenant(scope, 'f')} ${sucursalCfdi}
+      AND f.estado IN ('vigente', 'cancelado')
+      AND f.emitido_at >= ${inicioGrueso} AND f.emitido_at < ${finGrueso}
+      AND f.emitido_at >= ${inicioLocal} AND f.emitido_at < ${finLocal}
+  ),
+  codigos_ventas AS (
+    SELECT k.cheque_id, k.empresa_id, v.sucursal_id, v.folio, v.cerrado_at, v.total, k.codigo,
+           k.estado::text AS estado, k.expira_at,
+           EXISTS (
+             SELECT 1 FROM cfdis x
+             WHERE x.codigo_id = k.id AND x.empresa_id = k.empresa_id
+               AND x.empresa_id = ${empresa} ${filtroTenant(scope, 'x')}
+               AND x.estado IN ('timbrando', 'vigente')
+           ) AS con_cfdi
+    FROM codigos_facturacion k
+    JOIN ventas v ON v.id = k.cheque_id AND v.empresa_id = k.empresa_id
+    WHERE k.empresa_id = ${empresa} ${filtroTenant(scope, 'k')}
   )`;
 }

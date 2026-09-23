@@ -9,7 +9,13 @@ import {
   VIGENCIA_DEFAULT,
 } from '../src/facturacion/codigo';
 import { generarCodigosSeed, type OpcionesCodigos } from './seed-codigos';
-import { generarVentas, sembrarVentas, type OpcionesVentas } from './seed-ventas';
+import { formaPagoSat } from '../src/facturacion/cfdi';
+import {
+  CATALOGO_FORMAS_SEED,
+  generarVentas,
+  sembrarVentas,
+  type OpcionesVentas,
+} from './seed-ventas';
 
 // Los códigos de facturación del seed (F2-101): puros y deterministas, y persistidos por
 // `sembrarVentas` en las sucursales de FIXTURES (nunca en las de la base de desarrollo).
@@ -30,6 +36,7 @@ const OPCIONES: OpcionesCodigos = {
   vigencia: VIGENCIA_DEFAULT,
   ahora: AHORA,
   ejemplo: { sucursalId: FX.sucursalA1, codigo: CODIGO_EJEMPLO },
+  catalogoFormas: CATALOGO_FORMAS_SEED,
 };
 
 describe('generarCodigosSeed()', () => {
@@ -85,6 +92,19 @@ describe('generarCodigosSeed()', () => {
     const facturados = (porEstado.get('facturado') ?? 0) / codigos.length;
     expect(facturados).toBeGreaterThan(0.1);
     expect(facturados).toBeLessThan(0.22);
+  });
+
+  it('F2-106: sólo es `facturado` un cheque que se factura en línea (forma dominante con clave SAT)', () => {
+    const deCheque = new Map(cheques.map((c) => [c.id, c]));
+    const noFacturables = codigos.filter(
+      (c) => formaPagoSat(deCheque.get(c.chequeId)!.pagos, CATALOGO_FORMAS_SEED) === null,
+    );
+    // El seed sí trae cuentas pagadas sobre todo con vales (sin catálogo = `otro`).
+    expect(noFacturables.length).toBeGreaterThan(0);
+    expect(noFacturables.filter((c) => c.estado === 'facturado')).toEqual([]);
+    for (const c of codigos.filter((x) => x.estado === 'facturado')) {
+      expect(formaPagoSat(deCheque.get(c.chequeId)!.pagos, CATALOGO_FORMAS_SEED)).not.toBeNull();
+    }
   });
 
   it('vencen al fin del mes de su cierre en la zona de SU sucursal', () => {

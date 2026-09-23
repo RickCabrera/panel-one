@@ -113,6 +113,25 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(post?.responses?.['201'])).toContain('enlaces firmados');
   });
 
+  it('F2-106: el tablero es de cualquier rol (sin 403); la tabla y por-facturar, de admins (403); 404 nunca 403 por alcance', async () => {
+    const { paths } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    const tablero = paths['/facturacion/tablero']?.get;
+    expect(tablero?.security).toEqual([{ bearer: [] }]);
+    expect(codigos(tablero)).toEqual(['200', '400', '401', '404']);
+    for (const ruta of ['/facturacion/cfdis', '/facturacion/por-facturar']) {
+      const op = paths[ruta]?.get;
+      expect(op?.security).toEqual([{ bearer: [] }]);
+      expect(codigos(op)).toEqual(['200', '400', '401', '403', '404']);
+    }
+    // La búsqueda dice que es literal y SÓLO dentro del rango.
+    const q = paths['/facturacion/cfdis']?.get?.parameters?.find(
+      (x) => 'name' in x && x.name === 'q',
+    );
+    expect(JSON.stringify(q)).toContain('SÓLO en los CFDI emitidos en el rango');
+    expect(JSON.stringify(q)).toContain('sin comodines');
+  });
+
   it('F2-103/F2-104: el portal es público y con 429; el POST emite (201) y documenta sus fallas; admin con roles y 404', async () => {
     const { paths, components } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -873,6 +892,10 @@ describe('Contrato OpenAPI', () => {
         '/facturacion/cfdis/{id}/pdf',
         '/facturacion/cfdis/{id}/xml',
         '/facturacion/envios',
+        // F2-106: tablero de facturación (resumen, tabla de CFDI y cuentas por facturar).
+        '/facturacion/cfdis',
+        '/facturacion/por-facturar',
+        '/facturacion/tablero',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',
