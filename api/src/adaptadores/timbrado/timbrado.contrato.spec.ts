@@ -151,8 +151,9 @@ describe('Contrato Facturama (F2-202)', () => {
       });
     });
 
+    // F2-109: `pending` ya se conoce (cancelación en proceso); lo desconocido sigue siendo ambiguo.
     it('un estado que no conocemos NO se da por vigente: ESTADO_DESCONOCIDO, reintentable', async () => {
-      const http = new ClienteQueCaptura(() => ({ status: 200, cuerpo: { Status: 'pending' } }));
+      const http = new ClienteQueCaptura(() => ({ status: 200, cuerpo: { Status: 'weird' } }));
       const pac = new TimbradoFacturama(BASE, http, RELOJ_FIJO);
       await expect(pac.consultarEstado({ uuid: UUID, idPac: 'fcm-123' })).rejects.toMatchObject({
         codigo: 'ESTADO_DESCONOCIDO',
@@ -161,6 +162,31 @@ describe('Contrato Facturama (F2-202)', () => {
       await expect(
         pac.cancelar({ uuid: UUID, idPac: 'fcm-123', motivo: '02' }),
       ).rejects.toMatchObject({ codigo: 'ESTADO_DESCONOCIDO' });
+    });
+
+    it('F2-109: `pending` = cancelación en proceso, en el DELETE y en el GET', async () => {
+      const http = new ClienteQueCaptura(() => ({ status: 200, cuerpo: { Status: 'pending' } }));
+      const pac = new TimbradoFacturama(BASE, http, RELOJ_FIJO);
+      await expect(pac.consultarEstado({ uuid: UUID, idPac: 'fcm-123' })).resolves.toEqual({
+        uuid: UUID,
+        estado: 'en_cancelacion',
+      });
+      await expect(pac.cancelar({ uuid: UUID, idPac: 'fcm-123', motivo: '02' })).resolves.toEqual({
+        uuid: UUID,
+        estado: 'en_cancelacion',
+        fecha: new Date(RELOJ_FIJO.ahora()),
+      });
+    });
+
+    it('F2-109: un DELETE que contesta `active` no se da por cancelado ni por en proceso', async () => {
+      const http = new ClienteQueCaptura(() => ({ status: 200, cuerpo: { Status: 'active' } }));
+      await expect(
+        new TimbradoFacturama(BASE, http, RELOJ_FIJO).cancelar({
+          uuid: UUID,
+          idPac: 'fcm-123',
+          motivo: '03',
+        }),
+      ).rejects.toMatchObject({ codigo: 'ESTADO_DESCONOCIDO', reintentable: true });
     });
 
     it('cancelar sin Status en la respuesta tampoco se da por cancelado', async () => {

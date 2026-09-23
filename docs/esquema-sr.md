@@ -425,8 +425,8 @@ los CFDI propios. Lo que hereda de los supuestos de arriba:
   sucursal y el mismo rango. Un ticket del día 31 facturado el día 1 cuenta en el mes siguiente, así
   que la tasa puede pasar de 100 %. Alternativa (decisión abierta para Ricardo): la tasa "por
   ticket" (lo facturado DE las cuentas del periodo), acotada a 0..100 %.
-- Los CFDI `cancelado` se ubican también por su fecha de emisión: todavía no se guarda la de
-  cancelación (F2-109).
+- Los CFDI `cancelado` se ubican también por su fecha de emisión. F2-109 ya guarda `cancelado_at`,
+  pero el KPI sigue por emisión (una sola base de fechas); moverlo es decisión abierta.
 - El seed (`api/prisma/seed-cfdis.ts`) siembra un CFDI por código `facturado` con el PAC falso, y
   sólo marca `facturado` una cuenta cuya forma de pago dominante tiene clave SAT (una de vales no se
   factura en línea, igual que en la emisión real).
@@ -506,9 +506,67 @@ cierre del cheque), y en supuestos del SAT y de Facturama. Supuestos y decisione
 - La emisión automática está APAGADA por omisión (timbrar gasta folios) y al encenderla sólo emite
   periodos que terminen DESPUÉS (encenderla no timbra meses viejos de golpe). El backlog pedía
   `node-cron`; se usó el patrón de programador del repo (setInterval, F2-141/F2-224).
-- Abierto para F2-109: qué pasa con los tickets de una global CANCELADA (hoy siguen amarrados a
-  ella: el único de `cfdi_global_codigos.codigo_id` no los deja entrar a otra) y qué pasa si SR
-  REABRE o CANCELA una cuenta que ya entró a una global (el total guardado en la fila no cambia).
+- F2-109 resolvió los tickets de una global CANCELADA (se sueltan; ver abajo). Sigue abierto: qué
+  pasa si SR REABRE o CANCELA una cuenta que ya entró a una global (el total guardado en la fila no
+  cambia; necesita ver una instalación real, F2-190).
+
+**Cancelación de CFDI (F2-109).** No lee nada nuevo de SR (no hubo hallazgo del POS): es una
+operación propia sobre los CFDI que ya están en Postgres, contra `PuertoTimbrado`. Pero lo que le
+pasa al TICKET al cancelar descansa en los supuestos de SR de arriba ("facturable", el cierre).
+Supuestos y decisiones:
+
+- ⚠️ **SUPUESTO — NO VALIDADO (Facturama, F2-190):** una cancelación que espera la respuesta del
+  receptor llega como `Status: "pending"` en la respuesta del `DELETE /api-lite/cfdis/{id}` y en el
+  `GET` (→ `en_cancelacion`). Un `active` DESPUÉS de un DELETE, o cualquier otro valor, es
+  `ESTADO_DESCONOCIDO` (ambiguo): la solicitud se queda como está y se vuelve a consultar. Si
+  Facturama tiene un estado explícito de "rechazada" que no conocemos, cae ahí y el sondeo lo
+  reintenta sin resolverlo (se loguea UNA vez por solicitud, `ultimo_error`): confirmarlo en F2-190.
+  "Rechazada por el receptor" NO se lee del PAC: se DERIVA (la solicitud estaba en proceso y el PAC
+  vuelve a decir vigente).
+- La regla del SAT de CUÁNDO una cancelación necesita aceptación del receptor (monto, tipo de
+  receptor, tiempo desde la emisión) y el plazo de 72 h la aplica el PAC, no nosotros. El PAC falso
+  NO la modela: cancela al instante salvo dos RFC de receptor reservados (`XFAL010101AC0` espera y
+  acepta cuando se le dice o a las 72 h de su reloj; `XFAL010101RC0` rechaza en la primera consulta).
+- Estados propios (`cfdi_cancelaciones`, una fila por solicitud, historial): `solicitando` (la
+  llamada salió o fue ambigua), `en_proceso`, `aceptada`, `rechazada`. Una solicitud que el PAC NO
+  registró (rechazo claro, PAC no disponible, o `solicitando` que a los 10 min el PAC ve vigente) se
+  BORRA; queda en el log y en la auditoría (`cfdi.cancelacion_no_procedio`). Candado: ÚNICO PARCIAL
+  de una abierta por CFDI + `FOR UPDATE` del CFDI, el mismo que toma la refacturación.
+- Una respuesta AMBIGUA (timeout, 5xx, estado desconocido) NUNCA se reintenta a ciegas: la
+  solicitud se queda `solicitando` y se CONSULTA pasados 10 min (a mano, "Actualizar estado", o el
+  sondeo `CANCELACION_INTERVALO_S`, 900 s por defecto). Antes de cancelar SIEMPRE se consulta: una
+  cancelación que ya ocurrió sólo se anota. Webhook de Facturama: no (no hay dominio ni cuenta).
+- Mientras una cancelación está EN PROCESO la factura sigue VIGENTE ante el SAT y sigue contando
+  en lo facturado y en la tasa del tablero. Al quedar cancelada deja de contar (la tasa baja).
+- `DECISION PROVISIONAL (nocturno)` (`api/src/facturacion/cancelacion.ts#efectoEnTicket`): **una
+  cancelación 02 o 03 de un CFDI con código SUELTA el ticket**: `cfdis.codigo_id` pasa a nulo (el
+  candado de emisión queda libre) y el código vuelve a `pendiente`. El portal lo vuelve a ofrecer
+  si no ha vencido (la vigencia NO se extiende); si ya venció, entra a una global (complementaria)
+  como cualquier ticket vencido. La ficha decía "nuevo código": se reusa el mismo, que es el que
+  trae impreso el ticket. 02 y 03 sueltan por igual (con 03 "no se llevó a cabo la operación", si
+  SR cancela la cuenta el portal ya dice `cancelado` por el cheque). El 01 no suelta nada: el código
+  ya pasó al sustituto (F2-107).
+- **Una global cancelada (02/03/04) suelta sus tickets**: se borran sus filas de
+  `cfdi_global_codigos` (antes se guardan en `tickets_global` de la solicitud, con el total como
+  texto) y los códigos `en_global` vuelven a `pendiente` (vencidos por fecha → entran a otra
+  global). `DECISION PROVISIONAL (nocturno)` (`global.service.ts#vueltaAutomatica`): la emisión
+  AUTOMÁTICA no re-emite un periodo que ya tuvo una global cancelada (si salió mal, la repetiría);
+  queda para emitir a mano, y la vista del periodo lo dice.
+- Motivos: 04 sólo en una global ("operación nominativa relacionada en una factura global"); una
+  global no se cancela con 01. El 01 exige el UUID del SUSTITUTO PROPIO (el que dejó la
+  refacturación, relación 04), no uno escrito a mano. Un CFDI con un sustituto en emisión o vigente
+  sólo se cancela con 01; un sustituto cuyo anterior sigue vigente no se cancela. La refacturación
+  no emite sustituto si hay una cancelación abierta. Un sustituto que después se cancela con 02/03
+  suelta el ticket; una SEGUNDA refacturación del anterior sigue sin hacerse (409, F2-107).
+- Aviso al receptor por correo (`factura-cancelada`, sin adjuntos) cuando la cancelación queda
+  hecha, sólo si el CFDI tiene correo. Si el correo falla, la cancelación igual queda; el error se
+  anota en la solicitud (`aviso_error`) y no hay reintento (ALCANCE). Un CFDI cancelado ya no se
+  reenvía por correo (409); sus descargas de administrador siguen.
+- Las cancelaciones del KPI del tablero se siguen ubicando por la fecha de EMISIÓN (una sola base de
+  fechas, F2-106), aunque ya exista `cancelado_at`. Moverlas es decisión abierta.
+- En modo demo el PAC falso no conoce los CFDI del SEED: cancelarlos da 409 `no_encontrado`. El seed
+  sí trae cancelados (02 y 01) con su solicitud aceptada y el ticket suelto, y unos vigentes con una
+  solicitud 02 en proceso o rechazada, para que la tabla muestre todos los estados.
 
 ---
 

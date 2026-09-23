@@ -56,6 +56,7 @@ function periodo(p: Partial<ResumenPeriodoGlobal> & { clave: string }): ResumenP
     vigentes: 0,
     vigentesHasta: null,
     globalesPrevias: 0,
+    globalesCanceladas: 0,
     ...p,
   };
 }

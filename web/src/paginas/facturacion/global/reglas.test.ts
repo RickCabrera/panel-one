@@ -21,6 +21,7 @@ const BASE: ResumenPeriodoGlobal = {
   vigentes: 0,
   vigentesHasta: null,
   globalesPrevias: 0,
+  globalesCanceladas: 0,
 };
 const CDMX = 'America/Mexico_City';
 
@@ -32,6 +33,11 @@ describe('explicacionPeriodo', () => {
     expect(explicacionPeriodo({ ...BASE, tickets: 3, globalesPrevias: 2 }, CDMX)).toBe(
       'Complementaria: este periodo ya tiene 2 facturas globales; 3 tickets llegaron después o ' +
         'quedaron fuera. Revísalo antes de emitir otra.',
+    );
+    // F2-109: su global se canceló (y la automática ya no la repite).
+    expect(explicacionPeriodo({ ...BASE, tickets: 2, globalesCanceladas: 1 }, CDMX)).toBe(
+      'Su factura global se canceló: 2 tickets volvieron a quedar sin factura. La emisión ' +
+        'automática no la repite: emítela aquí.',
     );
   });
 

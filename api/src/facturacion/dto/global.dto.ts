@@ -171,6 +171,13 @@ export class ResumenPeriodoGlobalDto extends PeriodoGlobalDto {
       'complementaria (tickets que llegaron tarde); el programador no la emite solo.',
   })
   globalesPrevias!: number;
+
+  @ApiProperty({
+    description:
+      'F2-109: cuántas globales CANCELADAS tiene el periodo. Con alguna, la emisión automática ya no ' +
+      'lo emite sola (sus tickets se soltaron): queda para emitir a mano.',
+  })
+  globalesCanceladas!: number;
 }
 
 export class GlobalEmitidaDto {

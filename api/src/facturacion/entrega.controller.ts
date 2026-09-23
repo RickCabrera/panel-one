@@ -154,7 +154,7 @@ export class EntregaController {
     type: ErrorDto,
     description:
       'No hay nada que reintentar (el envío ya salió, se está enviando ahora, o no existe), o el ' +
-      'CFDI no tiene sus archivos guardados (se recupera del PAC).',
+      'CFDI no tiene sus archivos guardados (se recupera del PAC), o está CANCELADO (F2-109).',
   })
   reintentar(
     @Req() req: RequestAutenticado,

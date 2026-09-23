@@ -90,6 +90,7 @@ function cfdi(n: number, c: Partial<CfdiFila> = {}): CfdiFila {
     sustituidoPor: null,
     sustitucionPendiente: false,
     motivoCancelacion: null,
+    cancelacion: null,
     ...c,
   };
 }

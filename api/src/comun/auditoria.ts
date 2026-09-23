@@ -39,7 +39,11 @@ export type AccionAuditada =
   | 'cfdi.refacturacion'
   // F2-108: la factura global (emisión manual) y su configuración.
   | 'cfdi.global'
-  | 'factura_global.configurar';
+  | 'factura_global.configurar'
+  // F2-109: cancelación de CFDI (solicitud, consulta a mano, y la que el PAC no registró).
+  | 'cfdi.cancelacion'
+  | 'cfdi.cancelacion_consulta'
+  | 'cfdi.cancelacion_no_procedio';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;

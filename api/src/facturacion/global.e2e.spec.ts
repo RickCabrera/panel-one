@@ -407,6 +407,8 @@ describe('Factura global (e2e, F2-108)', () => {
           vigentes: 1,
           vigentesHasta: '2026-10-01T06:00:00.000Z',
           globalesPrevias: 0,
+          // F2-109: el periodo también dice cuántas globales canceladas tiene.
+          globalesCanceladas: 0,
         },
         {
           clave: '2026-08-01',
@@ -424,6 +426,8 @@ describe('Factura global (e2e, F2-108)', () => {
           vigentes: 0,
           vigentesHasta: null,
           globalesPrevias: 0,
+          // F2-109: el periodo también dice cuántas globales canceladas tiene.
+          globalesCanceladas: 0,
         },
       ]);
       expect(res.body.emitidas).toEqual([]);

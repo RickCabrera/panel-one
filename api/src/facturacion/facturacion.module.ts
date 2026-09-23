@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 
+import { CancelacionController } from './cancelacion.controller';
+import { CancelacionProgramador } from './cancelacion.programador';
+import { CancelacionCfdiService } from './cancelacion.service';
 import { CodigoFacturacionPublicoController } from './codigos.controller';
 import { CodigosFacturacionService } from './codigos.service';
 import { FacturacionController } from './facturacion.controller';
@@ -29,7 +32,8 @@ import { VentasModule } from '../ventas/ventas.module';
  * (`EntregaCfdiService`): archivos, correo con bitácora y reintento, y las descargas. F2-106: el
  * tablero (`TableroFacturacionService`), que lee la venta de `VentasModule`. F2-107: factura sin
  * ticket y refacturación (`EmisionAdminService`), sobre el mismo tramo de emisión. F2-108: la
- * factura global (`FacturaGlobalService`) y su programador de emisión automática.
+ * factura global (`FacturaGlobalService`) y su programador de emisión automática. F2-109: la
+ * cancelación de CFDI (`CancelacionCfdiService`), que también usa la refacturación, y su sondeo.
  */
 @Module({
   imports: [VentasModule],
@@ -43,6 +47,7 @@ import { VentasModule } from '../ventas/ventas.module';
     ArchivosPublicosController,
     EmisionAdminController,
     FacturaGlobalController,
+    CancelacionController,
   ],
   providers: [
     FacturacionService,
@@ -54,6 +59,8 @@ import { VentasModule } from '../ventas/ventas.module';
     EmisionAdminService,
     FacturaGlobalService,
     FacturaGlobalProgramador,
+    CancelacionCfdiService,
+    CancelacionProgramador,
     Espera,
     { provide: EMISION_PORTAL, useExisting: CfdiService },
   ],

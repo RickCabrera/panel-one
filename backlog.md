@@ -1507,6 +1507,17 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 > dominante de la global, la global POR SUCURSAL, y si la tasa de facturación debe excluir la global.
 > Supuestos en esquema-sr §2 "Factura global (F2-108)".
 
+> **Y además (de F2-109).** Contra el sandbox: (1) **cómo reporta Facturama una cancelación en
+> proceso** (hoy se supone `Status: "pending"` en el DELETE y en el GET → `en_cancelacion`) y si hay
+> un estado explícito de "rechazada por el receptor" (hoy se DERIVA: en proceso → vigente otra vez;
+> un valor desconocido se queda consultándose sin resolver); (2) una cancelación con motivo 02 de un
+> CFDI de más de $1,000 a un RFC real (necesita aceptación) y una de menos (no la necesita), y que
+> el sondeo (`CANCELACION_INTERVALO_S`) las cierre; (3) el acuse de cancelación (hoy no se guarda);
+> (4) la cancelación 04 de una global. Supuestos y decisiones en esquema-sr §2 "Cancelación de CFDI
+> (F2-109)"; decisiones abiertas para Ricardo: que 02 y 03 suelten el ticket por igual (la ficha
+> decía "nuevo código": se reusa el del ticket), y que la global automática no re-emita un periodo
+> con una global cancelada.
+
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus
 registros DNS y el volumen persistente del servidor.** Cambiar `CORREO_IMPL` y `ARCHIVOS_IMPL`
@@ -2055,6 +2066,13 @@ periodo.
 > `en_proceso`); la conciliación de reservas colgadas tiene que cubrirla también (confirmar: los
 > códigos pasan a `en_global`; liberar: el CASCADE suelta los tickets). La global es un timbre:
 > cuenta para el saldo de folios, y un rechazo del PAC deja hueco de folio como las demás.
+
+> **Y además (de F2-109).** (1) Las cancelaciones AMBIGUAS ya se concilian solas: el sondeo de
+> `CancelacionProgramador` consulta al PAC las solicitudes `solicitando` (más de 10 min) y
+> `en_proceso`; la conciliación de reservas colgadas de esta tarea NO tiene que cubrirlas. (2)
+> Cancelar no es un timbre: no descuenta folios (supuesto de Facturama, F2-190). (3) Un CFDI
+> cancelado SÍ cuenta en el reporte mensual como emitido (`vigente` + `cancelado`), y su sustituto o
+> la re-emisión del ticket soltado cuentan como timbres nuevos.
 
 ## EPIC 9 — Inventario y compras
 

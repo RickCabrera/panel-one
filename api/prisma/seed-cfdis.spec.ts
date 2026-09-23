@@ -77,10 +77,51 @@ describe('generarCfdisSeed()', () => {
   const cfdis = todos.filter((c) => c.chequeId !== null);
   const facturados = codigosSeed.filter((k) => k.estado === 'facturado');
 
-  it('cada código `facturado` lo tiene EXACTAMENTE un CFDI; ningún facturado queda huérfano', () => {
+  // F2-109: un cancelado con 02 SUELTA su código (como la cancelación real): ese código ya no lo
+  // tiene ningún CFDI; su ticket se reconoce por el cheque del CFDI cancelado. Todo facturado de la
+  // entrada queda en exactamente UNO de los dos grupos.
+  it('cada código `facturado` lo tiene EXACTAMENTE un CFDI, o lo soltó su cancelación 02', () => {
     expect(facturados.length).toBeGreaterThan(100);
-    const conCodigo = todos.filter((c) => c.codigoId !== null).map((c) => c.codigoId);
-    expect(conCodigo.sort()).toEqual(facturados.map((k) => k.id).sort());
+    const conCodigo = todos.filter((c) => c.codigoId !== null).map((c) => c.codigoId!);
+    const chequeDe = new Map(facturados.map((k) => [k.chequeId, k.id]));
+    const soltados = todos
+      .filter((c) => c.estado === 'cancelado' && c.motivoCancelacion === '02')
+      .map((c) => chequeDe.get(c.chequeId!)!);
+    expect(soltados.length).toBeGreaterThan(0);
+    expect(new Set([...conCodigo, ...soltados]).size).toBe(conCodigo.length + soltados.length);
+    expect([...conCodigo, ...soltados].sort()).toEqual(facturados.map((k) => k.id).sort());
+  });
+
+  it('F2-109: cancelados con motivo, fecha y su solicitud aceptada; unos vigentes con solicitud abierta', () => {
+    for (const c of todos.filter((k) => k.estado === 'cancelado')) {
+      expect(c.codigoId).toBeNull();
+      expect(c.canceladoAt).not.toBeNull();
+      expect(c.canceladoAt!.getTime()).toBeGreaterThanOrEqual(c.emitidoAt.getTime());
+      expect(c.canceladoAt!.getTime()).toBeLessThanOrEqual(AHORA.getTime());
+      expect(c.cancelacion).toMatchObject({
+        estado: 'aceptada',
+        motivo: c.motivoCancelacion,
+        solicitadaAt: c.canceladoAt,
+        resueltaAt: c.canceladoAt,
+      });
+      // Sustituto ⇔ motivo 01 (el CHECK de la tabla).
+      expect(c.cancelacion!.uuidSustitucion !== null).toBe(c.motivoCancelacion === '01');
+    }
+    const abiertas = todos.filter((c) => c.cancelacion !== null && c.estado === 'vigente');
+    expect(abiertas.some((c) => c.cancelacion!.estado === 'en_proceso')).toBe(true);
+    expect(abiertas.some((c) => c.cancelacion!.estado === 'rechazada')).toBe(true);
+    for (const c of abiertas) {
+      // Una solicitud sin resolver no toca el CFDI: sigue vigente y con su código.
+      expect(c.origen).toBe('ticket');
+      expect(c.codigoId).not.toBeNull();
+      expect(c.motivoCancelacion).toBeNull();
+      expect(c.cancelacion!.motivo).toBe('02');
+      expect(c.cancelacion!.resueltaAt === null).toBe(c.cancelacion!.estado === 'en_proceso');
+      expect(c.cancelacion!.solicitadaAt.getTime()).toBeLessThanOrEqual(AHORA.getTime());
+    }
+    // Determinista: misma entrada, mismas solicitudes.
+    const otra = generarCfdisSeed(CODIGOS, OPCIONES, SUCURSALES);
+    expect(otra.map((c) => c.cancelacion)).toEqual(todos.map((c) => c.cancelacion));
   });
 
   it('F2-107: refacturaciones = anterior cancelado 01 sin código + sustituto vigente 04 con él', () => {
@@ -103,9 +144,13 @@ describe('generarCfdisSeed()', () => {
       expect(n.emitidoAt.getTime() - a.emitidoAt.getTime()).toBe(RETRASO_SUSTITUTO_MIN * 60_000);
       expect(n.emitidoAt.getTime()).toBeLessThanOrEqual(AHORA.getTime());
     }
-    // Sólo los cancelados de una refacturación llevan motivo.
-    const conMotivo = todos.filter((c) => c.motivoCancelacion !== null);
-    expect(conMotivo).toHaveLength(sustitutos.length);
+    // F2-109: los cancelados de una refacturación llevan 01; todos los demás cancelados, 02.
+    const con01 = todos.filter((c) => c.motivoCancelacion === '01');
+    expect(con01).toHaveLength(sustitutos.length);
+    const cancelados = todos.filter((c) => c.estado === 'cancelado');
+    expect(
+      cancelados.every((c) => c.motivoCancelacion === '01' || c.motivoCancelacion === '02'),
+    ).toBe(true);
   });
 
   it('F2-107: facturas sin ticket por sucursal, sin cheque ni código, con su llave determinista', () => {
@@ -262,6 +307,8 @@ describe('sembrarCfdis() (contra Postgres)', () => {
     expect(r).toEqual({
       cfdis: 0,
       cancelados: 0,
+      enProceso: 0,
+      rechazadas: 0,
       refacturados: 0,
       manuales: 0,
       sinArchivos: 0,
@@ -282,15 +329,50 @@ describe('sembrarCfdis() (contra Postgres)', () => {
       catalogoFormas: CATALOGO_FORMAS_SEED,
       archivos,
     };
+    const facturadosAntes = await prisma.codigoFacturacion.count({
+      where: { empresaId: FX.empresaA, estado: 'facturado' },
+    });
     const r = await sembrarCfdis(prisma, op);
     const facturados = await prisma.codigoFacturacion.count({
       where: { empresaId: FX.empresaA, estado: 'facturado' },
     });
     const sucursalesA = await prisma.sucursal.count({ where: { empresaId: FX.empresaA } });
     // F2-107: uno por facturado + el anterior de cada refacturación + las manuales.
+    // F2-109: los cancelados con 02 soltaron su código (ya no es `facturado`): son los
+    // cancelados que NO son el anterior de una refacturación.
+    const soltados = r.cancelados - r.refacturados;
+    expect(soltados).toBeGreaterThan(0);
+    expect(facturados).toBe(facturadosAntes - soltados);
     expect(r.refacturados).toBeGreaterThan(0);
     expect(r.manuales).toBe(sucursalesA * MANUALES_POR_SUCURSAL);
-    expect(r.cfdis).toBe(facturados + r.refacturados + r.manuales);
+    expect(r.cfdis).toBe(facturados + soltados + r.refacturados + r.manuales);
+    // Una solicitud por cancelado (aceptada) y por cada vigente en proceso o rechazada.
+    const cancelaciones = () =>
+      prisma.cfdiCancelacion.findMany({
+        where: { empresaId: FX.empresaA },
+        orderBy: { id: 'asc' },
+      });
+    const solicitudes = await cancelaciones();
+    expect(r.enProceso).toBeGreaterThan(0);
+    expect(r.rechazadas).toBeGreaterThan(0);
+    expect(solicitudes).toHaveLength(r.cancelados + r.enProceso + r.rechazadas);
+    expect(solicitudes.filter((x) => x.estado === 'aceptada')).toHaveLength(r.cancelados);
+    // Los soltados quedaron `pendiente` (el ticket se vuelve a poder facturar).
+    const cfdiSoltados = await prisma.cfdi.findMany({
+      where: { empresaId: FX.empresaA, estado: 'cancelado', motivoCancelacion: '02' },
+      select: { chequeId: true, codigoId: true },
+    });
+    expect(cfdiSoltados).toHaveLength(soltados);
+    expect(cfdiSoltados.every((c) => c.codigoId === null)).toBe(true);
+    expect(
+      await prisma.codigoFacturacion.count({
+        where: {
+          empresaId: FX.empresaA,
+          estado: 'pendiente',
+          chequeId: { in: cfdiSoltados.map((c) => c.chequeId!) },
+        },
+      }),
+    ).toBe(soltados);
     expect(r.sinArchivos).toBe(0);
     const primera = await leer();
     expect(primera).toHaveLength(r.cfdis);
@@ -317,6 +399,13 @@ describe('sembrarCfdis() (contra Postgres)', () => {
     await sembrarCfdis(prisma, op);
     expect(await leer()).toEqual(primera);
     expect((await perfil()).folioActual).toBe(folioMax);
+    // F2-109: también las solicitudes y los códigos soltados quedan idénticos.
+    expect(await cancelaciones()).toEqual(solicitudes);
+    expect(
+      await prisma.codigoFacturacion.count({
+        where: { empresaId: FX.empresaA, estado: 'facturado' },
+      }),
+    ).toBe(facturados);
   }, 120_000);
 
   it('si el almacenamiento falla, los CFDI quedan sin clave y se cuentan', async () => {

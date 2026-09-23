@@ -7,6 +7,7 @@ import {
   type CfdiTimbrado,
   type CsdRegistrado,
   type EstadoCfdi,
+  type EstadoTrasCancelar,
   type PuertoTimbrado,
   type ReferenciaCfdi,
   type ResultadoCancelacion,
@@ -33,9 +34,11 @@ import {
  *   sucursal (así viene la del CFDI, Anexo 20), nunca como hora del servidor; si la
  *   trae, se respeta. Si falta o no se puede leer, se usa el reloj (como el falso), y
  *   F2-190 confirma el formato real.
- * - `Status`: sólo se conocen `active` y `canceled`. DECISION PROVISIONAL (nocturno):
- *   cualquier otro valor (p. ej. una cancelación en proceso) NO se da por vigente ni
- *   por cancelado: es `ESTADO_DESCONOCIDO`, reintentable (consultar más tarde).
+ * - `Status`: se conocen `active` y `canceled`. F2-109, DECISION PROVISIONAL (nocturno):
+ *   `pending` = una cancelación que espera la respuesta del receptor (`en_cancelacion`). Cualquier
+ *   otro valor NO se da por vigente ni por cancelado: es `ESTADO_DESCONOCIDO`, reintentable
+ *   (consultar más tarde). Tras un DELETE, un `active` tampoco se da por bueno (el PAC no dijo
+ *   qué pasó con la solicitud): `ESTADO_DESCONOCIDO`.
  * - Un timeout, un corte a medio camino o un 5xx que no sea 503 es `PAC_SIN_RESPUESTA`.
  *   OJO en `emitir`: el PAC pudo haber timbrado; reintentar a ciegas puede duplicar un
  *   CFDI. La emisión (F2-104) NO lo reintenta: deja la reserva colgada (F2-110 la resuelve
@@ -265,15 +268,23 @@ interface CuerpoCfdi {
   Complement?: { TaxStamp?: { Uuid?: string; Date?: string } };
 }
 
+const MENSAJE_ESTADO_DESCONOCIDO =
+  'El PAC reportó un estado que no reconocemos. Consulta de nuevo en unos minutos.';
+
 export function estadoDeFacturama(status: string | undefined): EstadoCfdi {
   const normal = status?.toLowerCase();
   if (normal === 'active') return 'vigente';
   if (normal === 'canceled') return 'cancelado';
-  throw new ErrorTimbrado(
-    'ESTADO_DESCONOCIDO',
-    'El PAC reportó un estado que no reconocemos. Consulta de nuevo en unos minutos.',
-    true,
-  );
+  // F2-109. SUPUESTO NO VALIDADO (F2-190): así reporta Facturama una cancelación "en proceso".
+  if (normal === 'pending') return 'en_cancelacion';
+  throw new ErrorTimbrado('ESTADO_DESCONOCIDO', MENSAJE_ESTADO_DESCONOCIDO, true);
+}
+
+/** Lo que contesta el DELETE: sólo `cancelado` o `en_cancelacion` cuentan como respuesta. */
+export function estadoTrasCancelarDeFacturama(status: string | undefined): EstadoTrasCancelar {
+  const estado = estadoDeFacturama(status);
+  if (estado === 'cancelado' || estado === 'en_cancelacion') return estado;
+  throw new ErrorTimbrado('ESTADO_DESCONOCIDO', MENSAJE_ESTADO_DESCONOCIDO, true);
 }
 
 export class TimbradoFacturama implements PuertoTimbrado {
@@ -340,7 +351,7 @@ export class TimbradoFacturama implements PuertoTimbrado {
     const cuerpo = (r.cuerpo ?? {}) as CuerpoCfdi;
     return {
       uuid: solicitud.uuid,
-      estado: estadoDeFacturama(cuerpo.Status),
+      estado: estadoTrasCancelarDeFacturama(cuerpo.Status),
       fecha: new Date(this.reloj.ahora()),
     };
   }

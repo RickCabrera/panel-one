@@ -46,6 +46,8 @@ export interface CfdiParaEntregar {
   pdf: Buffer;
 }
 
+export const MENSAJE_REENVIO_CANCELADA =
+  'Esta factura está cancelada ante el SAT: no se vuelve a enviar al receptor.';
 export const MENSAJE_SIN_ARCHIVOS =
   'Esta factura no tiene sus archivos guardados, así que no se puede reenviar desde aquí. ' +
   'Recupérala del PAC con su folio fiscal.';
@@ -199,6 +201,7 @@ export class EntregaCfdiService {
           total: true,
           xmlClave: true,
           pdfClave: true,
+          estado: true,
           perfil: { select: { razonSocial: true } },
           sucursal: {
             select: { nombre: true, portalFacturacion: { select: { color: true } } },
@@ -305,6 +308,9 @@ export class EntregaCfdiService {
    */
   async reintentar(scope: EmpresaScope, actor: Actor, cfdiId: string): Promise<EnvioCfdiDto> {
     const cfdi = await this.#cfdi(scope, cfdiId);
+    // F2-109: una factura cancelada no se vuelve a mandar como si valiera (las descargas del
+    // administrador sí siguen: es historial).
+    if (cfdi.estado === 'cancelado') throw new ConflictException(MENSAJE_REENVIO_CANCELADA);
     if (!cfdi.xmlClave || !cfdi.pdfClave) throw new ConflictException(MENSAJE_SIN_ARCHIVOS);
     let xml: Buffer;
     let pdf: Buffer;

@@ -25,8 +25,14 @@ import { uuidDe } from './seed-alertas';
  * - PURO y determinista (`generarCfdisSeed`): todo sale de hashes del id del código, nunca de azar.
  * - `emitido_at` = cierre + un retraso de 10 min a 3 días, acotado a ANTES de que venza el código y
  *   a no pasar de `ahora` (el seed no inventa futuro).
- * - ~8 % quedan `cancelado` (el código se queda `facturado`: qué le pasa al código al cancelar es de
- *   F2-109). Ninguno en `timbrando`: una reserva colgada no es un dato de demo.
+ * - ~8 % quedan `cancelado` con motivo 02 y, como lo deja la cancelación real (F2-109), el código
+ *   SUELTO: el CFDI sin `codigo_id` y el código de vuelta en `pendiente` (el ticket se puede volver
+ *   a facturar, o entra a una global si ya venció). Ninguno en `timbrando`: una reserva colgada no
+ *   es un dato de demo.
+ * - F2-109: cada cancelado lleva su solicitud `aceptada` en `cfdi_cancelaciones`, y ~1 de cada
+ *   `CADA_SOLICITUD_ABIERTA` vigentes de ticket lleva una solicitud 02 `en_proceso` o `rechazada`,
+ *   para que la tabla del tablero tenga qué mostrar. Como la cancelación real, una `en_proceso` NO
+ *   cambia el CFDI (sigue vigente).
  * - Receptores: RFC de PRUEBA publicados por el SAT, con correos `@ejemplo.test`. No son de nadie.
  * - Serie del perfil fiscal y folios consecutivos por orden de emisión, desde el mayor folio de un
  *   CFDI que NO es del seed + 1; al final `folio_actual` del perfil sube a lo usado, para que una
@@ -49,6 +55,8 @@ import { uuidDe } from './seed-alertas';
  */
 
 export const PORCENTAJE_CANCELADO = 8;
+/** F2-109: 1 de cada tantos vigentes de ticket lleva una solicitud de cancelación sin resolver. */
+export const CADA_SOLICITUD_ABIERTA = 40;
 /** F2-107: 1 de cada tantos facturados vigentes se siembra refacturado. */
 export const CADA_REFACTURACION = 30;
 export const RETRASO_SUSTITUTO_MIN = 90;
@@ -159,13 +167,27 @@ export interface CfdiSeed {
   solicitudId: string | null;
   sustituyeAId: string | null;
   tipoRelacion: '04' | null;
-  motivoCancelacion: '01' | null;
+  motivoCancelacion: '01' | '02' | null;
   canceladoAt: Date | null;
 }
 
-/** Un CFDI del seed con lo que hace falta para su XML (el UUID relacionado no es columna). */
+/** F2-109: la solicitud de cancelación que acompaña a un CFDI del seed. */
+export interface CancelacionSeed {
+  id: string;
+  estado: 'aceptada' | 'en_proceso' | 'rechazada';
+  motivo: '01' | '02';
+  uuidSustitucion: string | null;
+  solicitadaAt: Date;
+  resueltaAt: Date | null;
+}
+
+/**
+ * Un CFDI del seed con lo que hace falta para su XML (el UUID relacionado no es columna) y, desde
+ * F2-109, su solicitud de cancelación (tampoco es columna: va a `cfdi_cancelaciones`).
+ */
 export interface CfdiSeedConRelacion extends CfdiSeed {
   relacionadoUuid: string | null;
+  cancelacion: CancelacionSeed | null;
 }
 
 /** Lo que `generarCfdisSeed` necesita de cada sucursal para las facturas manuales (F2-107). */
@@ -215,12 +237,17 @@ export function generarCfdisSeed(
     const uuid = uuidDeterminista(id);
     const cancelado = h[5] % 100 < PORCENTAJE_CANCELADO;
     const receptor = RECEPTORES_CFDI_SEED[h[4] % RECEPTORES_CFDI_SEED.length];
+    // F2-109: cuándo se canceló (1 a 48 h después de emitir, sin pasar de `ahora`).
+    const canceladoAt = new Date(
+      Math.min(emitido + (1 + (h[10] % 48)) * 3_600_000, op.ahora.getTime()),
+    );
     const base: SinFolio = {
       id,
       empresaId: c.cheque.empresaId,
       sucursalId: c.cheque.sucursalId,
       chequeId: c.cheque.id,
-      codigoId: c.id,
+      // F2-109: el cancelado (02) suelta el código, como la cancelación real.
+      codigoId: cancelado ? null : c.id,
       perfilFiscalId: op.perfil.id,
       serie: op.perfil.serie,
       uuid,
@@ -234,9 +261,19 @@ export function generarCfdisSeed(
       solicitudId: null,
       sustituyeAId: null,
       tipoRelacion: null,
-      motivoCancelacion: null,
-      canceladoAt: null,
+      motivoCancelacion: cancelado ? '02' : null,
+      canceladoAt: cancelado ? canceladoAt : null,
       relacionadoUuid: null,
+      cancelacion: cancelado
+        ? {
+            id: uuidDe(`cfdi-cancelacion-seed:${c.id}`),
+            estado: 'aceptada',
+            motivo: '02',
+            uuidSustitucion: null,
+            solicitadaAt: canceladoAt,
+            resueltaAt: canceladoAt,
+          }
+        : null,
     };
     const sustitucion = new Date(emitido + RETRASO_SUSTITUTO_MIN * 60_000);
     const refacturado =
@@ -244,6 +281,21 @@ export function generarCfdisSeed(
       h.readUInt16BE(6) % CADA_REFACTURACION === 0 &&
       sustitucion.getTime() <= op.ahora.getTime();
     if (!refacturado) {
+      // F2-109: algunos vigentes con una solicitud 02 sin resolver (en proceso o rechazada).
+      const abierta = !cancelado && h.readUInt16BE(11) % CADA_SOLICITUD_ABIERTA;
+      if (abierta === 0 || abierta === 1) {
+        const solicitadaAt = new Date(
+          Math.max(emitido, op.ahora.getTime() - (2 + (h[13] % 20)) * 3_600_000),
+        );
+        base.cancelacion = {
+          id: uuidDe(`cfdi-cancelacion-seed:${c.id}`),
+          estado: abierta === 0 ? 'en_proceso' : 'rechazada',
+          motivo: '02',
+          uuidSustitucion: null,
+          solicitadaAt,
+          resueltaAt: abierta === 0 ? null : solicitadaAt,
+        };
+      }
       sinFolio.push(base);
       continue;
     }
@@ -256,6 +308,15 @@ export function generarCfdisSeed(
       estado: 'cancelado',
       motivoCancelacion: '01',
       canceladoAt: sustitucion,
+      // F2-109: la solicitud 01 aceptada, con el UUID del sustituto.
+      cancelacion: {
+        id: uuidDe(`cfdi-cancelacion-seed:${c.id}`),
+        estado: 'aceptada',
+        motivo: '01',
+        uuidSustitucion: uuidSustituto,
+        solicitadaAt: sustitucion,
+        resueltaAt: sustitucion,
+      },
     });
     sinFolio.push({
       ...base,
@@ -267,6 +328,7 @@ export function generarCfdisSeed(
       sustituyeAId: id,
       tipoRelacion: '04',
       relacionadoUuid: uuid,
+      cancelacion: null,
     });
   }
 
@@ -302,6 +364,7 @@ export function generarCfdisSeed(
         motivoCancelacion: null,
         canceladoAt: null,
         relacionadoUuid: null,
+        cancelacion: null,
       });
     }
   }
@@ -315,10 +378,14 @@ export function generarCfdisSeed(
   }));
 }
 
-/** La fila tal cual va a la tabla: el UUID relacionado sólo sirve para el XML. */
+/**
+ * La fila tal cual va a la tabla: el UUID relacionado sólo sirve para el XML y la cancelación va a
+ * su propia tabla (F2-109).
+ */
 function sinRelacion(c: CfdiSeedConRelacion): CfdiSeed {
   const fila: Partial<CfdiSeedConRelacion> = { ...c };
   delete fila.relacionadoUuid;
+  delete fila.cancelacion;
   return fila as CfdiSeed;
 }
 
@@ -364,6 +431,9 @@ export function archivosDe(
 export interface ResultadoSembrarCfdis {
   cfdis: number;
   cancelados: number;
+  /** F2-109: vigentes con una solicitud de cancelación en proceso / rechazada. */
+  enProceso: number;
+  rechazadas: number;
   /** F2-107: pares de refacturación y facturas sin ticket sembrados. */
   refacturados: number;
   manuales: number;
@@ -395,6 +465,8 @@ export async function sembrarCfdis(
     return {
       cfdis: 0,
       cancelados: 0,
+      enProceso: 0,
+      rechazadas: 0,
       refacturados: 0,
       manuales: 0,
       sinArchivos: 0,
@@ -417,6 +489,31 @@ export async function sembrarCfdis(
     ],
   };
   const deChequesSeed = { cheque: { folioSr: { startsWith: op.prefijo } } };
+  // F2-109: re-sembrar sin volver a sembrar las ventas (como el spec) encuentra SUELTOS los códigos
+  // que la corrida anterior soltó al cancelar con 02. Se regresan a `facturado` ANTES de leer, para
+  // que la entrada sea la misma y el resultado idéntico. En el seed completo `sembrarVentas` ya
+  // recrea los códigos y esto no encuentra nada.
+  const soltados = await prisma.cfdi.findMany({
+    where: {
+      empresaId: op.empresaId,
+      ...deChequesSeed,
+      origen: 'ticket',
+      estado: 'cancelado',
+      motivoCancelacion: '02',
+      codigoId: null,
+    },
+    select: { chequeId: true },
+  });
+  if (soltados.length > 0) {
+    await prisma.codigoFacturacion.updateMany({
+      where: {
+        empresaId: op.empresaId,
+        estado: 'pendiente',
+        chequeId: { in: soltados.map((c) => c.chequeId!) },
+      },
+      data: { estado: 'facturado' },
+    });
+  }
   const codigos = await prisma.codigoFacturacion.findMany({
     where: { empresaId: op.empresaId, estado: 'facturado', ...deChequesSeed },
     select: {
@@ -490,6 +587,32 @@ export async function sembrarCfdis(
           pdfClave: claves.get(c.id)!.pdf,
         })),
       });
+      // F2-109: sus solicitudes de cancelación (las anteriores cayeron por CASCADE con sus CFDI).
+      const conCancelacion = cfdis.filter((c) => c.cancelacion !== null);
+      await tx.cfdiCancelacion.createMany({
+        data: conCancelacion.map((c) => ({
+          id: c.cancelacion!.id,
+          empresaId: c.empresaId,
+          cfdiId: c.id,
+          motivo: c.cancelacion!.motivo,
+          uuidSustitucion: c.cancelacion!.uuidSustitucion,
+          estado: c.cancelacion!.estado,
+          solicitadaAt: c.cancelacion!.solicitadaAt,
+          resueltaAt: c.cancelacion!.resueltaAt,
+          createdAt: c.cancelacion!.solicitadaAt,
+          updatedAt: c.cancelacion!.resueltaAt ?? c.cancelacion!.solicitadaAt,
+        })),
+      });
+      // Y los códigos que sus cancelaciones 02 soltaron vuelven a `pendiente`.
+      const sueltos = cfdis
+        .filter((c) => c.estado === 'cancelado' && c.motivoCancelacion === '02' && c.chequeId)
+        .map((c) => c.chequeId!);
+      if (sueltos.length > 0) {
+        await tx.codigoFacturacion.updateMany({
+          where: { empresaId: op.empresaId, estado: 'facturado', chequeId: { in: sueltos } },
+          data: { estado: 'pendiente' },
+        });
+      }
       if (cfdis.length > 0) {
         const ultimo = cfdis[cfdis.length - 1].folio;
         await tx.perfilFiscal.updateMany({
@@ -503,6 +626,8 @@ export async function sembrarCfdis(
   return {
     cfdis: cfdis.length,
     cancelados: cfdis.filter((c) => c.estado === 'cancelado').length,
+    enProceso: cfdis.filter((c) => c.cancelacion?.estado === 'en_proceso').length,
+    rechazadas: cfdis.filter((c) => c.cancelacion?.estado === 'rechazada').length,
     refacturados: cfdis.filter((c) => c.sustituyeAId !== null).length,
     manuales: cfdis.filter((c) => c.origen === 'manual').length,
     sinArchivos,

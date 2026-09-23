@@ -88,6 +88,7 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // F2-104: CFDI emitidos y sus reservas; se escriben por `facturacion(scope)`, no por aquí.
       'cfdi',
       // F2-105: envíos por correo de los CFDI; se escriben por `facturacion(scope)`.
+      'cfdiCancelacion',
       'cfdiEnvio',
       'cfdiGlobalCodigo',
       'cheque',
@@ -422,6 +423,15 @@ describe('ScopedPrismaService (contra Postgres)', () => {
           servicio.para(A).cfdiGlobalCodigo.updateMany({ where: { id: otro }, data } as never),
         ).rejects.toThrow(`no puede escribir ${Object.keys(data)[0]}`);
       }
+    });
+
+    it('F2-109: updateMany no puede mover una solicitud de cancelación a otro CFDI', async () => {
+      const otro = '00000000-0000-4000-8000-000000000109';
+      await expect(
+        servicio
+          .para(A)
+          .cfdiCancelacion.updateMany({ where: { id: otro }, data: { cfdiId: otro } } as never),
+      ).rejects.toThrow('no puede escribir cfdiId');
     });
   });
 });
