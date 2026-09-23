@@ -17,6 +17,9 @@ function fila(sucursalId: string, edadContactoSegundos: number | null): EstadoAg
     tamanoCola: null,
     latenciaQueryMs: null,
     ultimoError: null,
+    actualizacionAutomatica: false,
+    versionObjetivo: null,
+    actualizacion: null,
   };
 }
 

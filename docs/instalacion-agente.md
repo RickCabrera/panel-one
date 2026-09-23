@@ -135,6 +135,9 @@ sin mostrarlas, para que no queden guardadas en el historial de PowerShell.
 El script copia el agente a `C:\Program Files\ArkonAgente`, guarda la configuración en
 `C:\ProgramData\ArkonAgente` (una carpeta que sólo pueden abrir los administradores),
 registra el servicio **ArkonAgente**, lo arranca y al final prueba las dos conexiones.
+También registra un segundo servicio pequeño, **ArkonAgenteActualizador**: es el que instala
+solo las versiones nuevas del agente, pero sólo si en el panel se encendió la actualización
+automática de esa sucursal (ver `docs/actualizacion-agente.md`).
 
 ## Paso 5 · Leer el resultado (1 min)
 
@@ -214,11 +217,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar.ps1
 Detiene el servicio, cambia el `agente.exe` y lo vuelve a arrancar. **Conserva** la
 configuración y la cola: lo que no se había mandado se manda después.
 
+Si la sucursal tiene la **actualización automática** encendida (Administración ›
+Actualizaciones, en el panel), no hace falta: el agente toma solo la versión que se publique.
+El script sigue sirviendo para actualizar el propio actualizador.
+
 ## Desinstalar
 
 En PowerShell como administrador:
 
 ```powershell
+sc.exe stop ArkonAgenteActualizador
+sc.exe delete ArkonAgenteActualizador
 sc.exe stop ArkonAgente
 sc.exe delete ArkonAgente
 ```

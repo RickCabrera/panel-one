@@ -7887,3 +7887,83 @@ re-corrió el CI con el push de esta nota (intento 1 de 2 del protocolo). El tok
 una suscripción que crea el test (uuid aleatorio), así que cada corrida tiene su propia probabilidad de 1/16.
 
 **Qué haría distinto.** Correr Lighthouse temprano: el robots.txt y el EPERM de Windows salieron al final.
+
+## 2026-09-23 13:30 — F2-143 · Auto-update remoto del agente
+**Estado:** CERRADA al mergear el PR de `feat/F2-143` (squash a main). **El auto-update NO se ha visto
+funcionar en una máquina real**: el administrador de servicios, el swap en Program Files, las ACL y el
+instalador elevado se probaron sólo con fakes y carpetas temporales (verificación real: F1-020b).
+
+**Qué quedó hecho.** Diseño, garantías y límites en `docs/actualizacion-agente.md`.
+- **api:** canal de versiones de PLATAFORMA (`versiones_agente`, `LLAVE_EMPRESA = null`, pieza única
+  `scope/versiones-agente.ts`); bandera `sucursales.actualizacion_automatica` (nace apagada); reporte por
+  sucursal `agente_actualizacion` (upsert por PK, la racha `primera_falla_at` se conserva en reenvíos de
+  la misma versión). Rutas: `GET /agente/version` y `POST /agente/actualizacion` (API key);
+  `GET /agente/binario/:version` (público por firma HMAC de `PuertoArchivos`, 15 min, throttler nuevo
+  `binario-agente` 10/min —el plan decía 20, quedó 10, coherente en código/throttler/OpenAPI—, streaming
+  con `PuertoArchivos.abrirLectura` nuevo); `GET/POST /agente/versiones`,
+  `POST /agente/versiones/:v/retirar`, `PUT /sucursales/:id/actualizacion-automatica` (sólo admin_global,
+  403 por ruta como folios). Alerta nueva `actualizacion_fallida`. `GET /agentes/estado` +3 campos.
+  OpenAPI regenerado. Migración `20261002010000_actualizacion_agente` con CHECKs a mano.
+- **agente:** `Actualizacion/`: `RevisorActualizacion` (en cada ciclo, DESPUÉS del heartbeat y el envío;
+  una excepción nunca corta el ciclo), `ClienteCanal` (descarga SIN API key, sólo https o http loopback,
+  tope 128 MB y del tamaño anunciado, SHA al vuelo), `EstadoActualizacion` (SQLite `actualizacion\estado.db`:
+  backoff 1 h→24 h por (versión, SHA) y binarios ya aplicados), `Actualizador` (el watchdog) y
+  `ServicioActualizador`. `agente.exe actualizador` = segundo servicio `ArkonAgenteActualizador`,
+  instalado como COPIA en `Program Files\ArkonAgente\actualizador\`. `instalar.ps1` registra los dos.
+- **web:** pestaña Administración › Actualizaciones (sólo admin_global): publicar (el `pedir` ganó
+  `binario`), retirar con confirmación, y la bandera por sucursal con su estado en palabras. Textos de la
+  alerta nueva.
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)`: watchdog como **LocalSystem** (`Get-ArgumentosScActualizador` en
+  `funciones-instalador.ps1`); un proceso `agente` que no se puede inspeccionar cuenta como corriendo
+  (`ProcesosSistema`, `ServicioActualizador.cs`); regla `actualizacion_fallida` advertencia, 1 min,
+  rango 1–1440 (`alertas/reglas.ts`).
+- El api NO compara versiones: el agente compara por IGUALDAD sin `+commit`. Así retirar la vigente es
+  el rollback (las sucursales bajan a la anterior).
+- Un binario (versión+SHA) ya aplicado no se reintenta nunca; si el agente sigue reportando otra versión,
+  manda UNA vez `fallida/version_distinta`. Evita el bucle Stop/Start que marcó el revisor.
+- Nombres fijos en la carpeta de intercambio; el watchdog nunca toma rutas de `solicitud.json`, rechaza
+  reparse points y re-verifica el SHA de la COPIA en Program Files antes de detener nada.
+- ❓ **Abierta para Ricardo (anotada en F2-191):** el SHA es integridad, no autenticidad. Quien controle
+  `NT SERVICE\ArkonAgente` puede hacer que el watchdog instale cualquier exe como binario del agente.
+  Authenticode + verificación en el watchdog necesita un certificado.
+- `raw` de 128 MB sólo en `/agente/versiones` y sólo si hay `Authorization: Bearer` (corre antes de los
+  guards: sin bearer, 401 sin leer el cuerpo). Con un bearer inválido SÍ se lee: límite documentado.
+- `AGENTE_URL_DESCARGA` (zip del instalador de F2-147) no se tocó.
+- `esquema-sr.md` sin cambios: la tarea no lee ni descubre nada de SoftRestaurant.
+
+**Trampas que encontré.**
+- La migración generada salió con fecha 20260923…, ANTES de las existentes (2026100…): renombrada a
+  `20261002010000_…` para que ordene al final. Revisa siempre el prefijo.
+- `File.CreateSymbolicLink` en Windows pide privilegio: el test de enlaces usa una JUNCTION
+  (`mklink /J`, sin admin) en Windows y symlink en Linux. Y `Directory.Delete(recursivo)` sobre una
+  junction da acceso denegado: se borra no recursiva.
+- CA1416: la guarda `OperatingSystem.IsWindows()` no llega adentro de un lambda; el
+  `ControlServicioWindows` se crea fuera del lambda del DI (`Program.cs`).
+- Tres tests de lista exacta cambian con cada modelo/tipo nuevo: `scoped-prisma.service.spec.ts`,
+  `alertas.e2e` "reglas: todas", `seed-alertas.spec.ts`; más `openapi.spec.ts` (rutas y rutas del agente).
+- `git checkout main --` con cambios sin commitear no te mueve, pero no lo uses para "ver main".
+
+**Qué quedó abierto.**
+- **Ventana a media sustitución** (del revisor): si el watchdog muere entre `agente.exe→.anterior` y
+  `.nuevo→agente.exe`, la PC queda sin exe hasta la siguiente vuelta, que lo restaura (por lectura de
+  código; no probado con un corte real). Agregado a F1-020b junto con todo lo elevado.
+- La cota de 1 h sólo se cumple con intervalos cortos: con `intervaloSegundos` ~3600 no (la revisión va
+  con el ciclo). Documentado.
+- El watchdog no se auto-actualiza (se actualiza con `instalar.ps1`).
+
+**Tests.**
+- api: e2e nuevo `agentes/actualizacion-agente.e2e.spec.ts` (15: bandera, descarga firmada y sus 404,
+  publicar/409/400/413/401 sin token, roles, retirar=rollback, reporte idempotente, alerta abre/cierra);
+  unitarios del evaluador y de `fallaActualizacion`. Suite completa: **2483 verdes / 1 rojo PREEXISTENTE**
+  (`prisma/esquema.spec.ts` "al crear el admin guarda su contraseña como argon2id verificable"; ni el spec,
+  ni el seed, ni argon2 están en el diff). lint, typecheck, `prisma validate` limpios. Cero skips.
+- agente: build Release sin warnings; **367 verdes** (`ActualizacionTests` 36 con dos de punta a punta,
+  `WorkerTests` +2, `InstaladorPs1Tests` +1).
+- web: build, lint, **1388 verdes**, `check:bundle` 346.6 kB, `check:pwa` ok. **FLAKE** de
+  `Mesas.rendimiento.test.tsx` "tres pulsos sin que cambie ningún minuto" una vez bajo la suite completa
+  (1155 ms); solo pasa 3/3 y la re-corrida completa pasó. No se tocó.
+
+**Qué haría distinto.** Decidir desde el plan dónde vive el estado del backoff (el revisor lo pidió en
+SQLite y ya estaba escrito en JSON en mi cabeza) y medir la memoria del publicar antes de montar el raw.

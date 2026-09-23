@@ -335,6 +335,101 @@
         ]
       }
     },
+    "/agente/version": {
+      "get": {
+        "description": "Sin la actualización automática encendida, o sin versión vigente: `disponible = false`. Con ella: la vigente, su SHA-256, su tamaño y un enlace firmado de 15 min. El api no compara versiones: si la del agente (sin `+commit`) es distinta, el agente actualiza.",
+        "operationId": "AgenteController_version",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionCanalDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "El canal de versiones para la sucursal de la API key (F2-143).",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
+    "/agente/actualizacion": {
+      "post": {
+        "description": "Upsert por sucursal: reenviar el mismo reporte no cambia nada (la racha de fallas de esa versión se conserva). Una falla de la versión vigente abre la alerta `actualizacion_fallida` pasado su umbral.",
+        "operationId": "AgenteController_reportar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReporteActualizacionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Guardado."
+          },
+          "400": {
+            "description": "Versión que no es X.Y.Z, resultado o motivo desconocido, `motivo` que falta con `fallida` o que sobra con `aplicada`, detalle de más de 500.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin `X-Api-Key`, key desconocida o rotada, o sucursal/empresa inactiva. Mismo cuerpo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 120 requests por minuto de la misma sucursal."
+          }
+        },
+        "security": [
+          {
+            "agente": []
+          }
+        ],
+        "summary": "El agente reporta el resultado de un intento de auto-actualización (F2-143).",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
     "/agentes/estado": {
       "get": {
         "description": "Una fila por sucursal activa, también las que nunca reportaron (todo null). Devuelve edades en segundos; qué es \"desconectado\" lo decide el panel. Sin cache.",
@@ -414,6 +509,365 @@
         "summary": "Estado del agente de cada sucursal activa de la empresa (F1-061).",
         "tags": [
           "agentes"
+        ]
+      }
+    },
+    "/agente/versiones": {
+      "get": {
+        "description": "La VIGENTE es la publicada más reciente que no esté retirada: es la que toman las sucursales con la actualización automática encendida.",
+        "operationId": "VersionesAgenteController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VersionAgenteDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No es admin_global (el canal es de la plataforma, no de una empresa).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Las versiones publicadas del agente, de la más reciente a la más vieja (F2-143).",
+        "tags": [
+          "agentes"
+        ]
+      },
+      "post": {
+        "description": "El cuerpo es el `agente.exe` tal cual (`application/octet-stream`, hasta 128 MB). El servidor calcula su SHA-256 y su tamaño. La versión nueva queda VIGENTE de inmediato: las sucursales con la bandera la toman en su siguiente revisión. La versión tiene que ser la misma que reporta el exe (su `AssemblyInformationalVersion` sin el `+commit`): si no, el agente la aplica una vez y la reporta como `version_distinta`.",
+        "operationId": "VersionesAgenteController_publicar",
+        "parameters": [
+          {
+            "name": "version",
+            "required": true,
+            "in": "query",
+            "description": "X.Y.Z, cada parte de 1 a 4 dígitos (sin el `+commit`).",
+            "schema": {
+              "example": "1.4.0",
+              "type": "string"
+            }
+          },
+          {
+            "name": "notas",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 500,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionAgenteDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Versión que no es X.Y.Z, cuerpo vacío o sin Content-Type application/octet-stream.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No es admin_global (el canal es de la plataforma, no de una empresa).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Esa versión ya existe (retirada o no).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "El binario pasa de 128 MB."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Publica un binario del agente en el canal (F2-143).",
+        "tags": [
+          "agentes"
+        ]
+      }
+    },
+    "/agente/versiones/{version}/retirar": {
+      "post": {
+        "description": "Idempotente. Si era la vigente, la anterior publicada sin retirar vuelve a serlo, y las sucursales con la bandera regresan a ella (el agente compara por igualdad, no por \"más nueva\"). Una versión retirada ya no se descarga.",
+        "operationId": "VersionesAgenteController_retirar",
+        "parameters": [
+          {
+            "name": "version",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": "1.4.0",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionAgenteDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No es admin_global (el canal es de la plataforma, no de una empresa).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe esa versión.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Retira una versión del canal (F2-143). Retirar la vigente es el rollback.",
+        "tags": [
+          "agentes"
+        ]
+      }
+    },
+    "/sucursales/{id}/actualizacion-automatica": {
+      "put": {
+        "description": "Con la bandera, el agente toma la versión vigente del canal en su siguiente revisión. Apagarla no desinstala nada: el agente se queda con la versión que tenga.",
+        "operationId": "SucursalActualizacionController_cambiar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActualizacionAutomaticaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActualizacionAutomaticaHechaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`id` no es un UUID o `activa` no es booleano.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No es admin_global (el canal es de la plataforma, no de una empresa).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La sucursal no existe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enciende o apaga la actualización automática del agente de la sucursal (F2-143).",
+        "tags": [
+          "agentes"
+        ]
+      }
+    },
+    "/agente/binario/{version}": {
+      "get": {
+        "description": "Pública (10/min por IP): la firma es la credencial y vence a los 15 min de que la dio `GET /agente/version`. Firma alterada o vencida, versión inválida, retirada o sin archivo: el MISMO 404. Se sirve en streaming.",
+        "operationId": "BinarioAgenteController_descargar",
+        "parameters": [
+          {
+            "name": "version",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": "1.4.0",
+              "type": "string"
+            }
+          },
+          {
+            "name": "firma",
+            "required": true,
+            "in": "query",
+            "description": "HMAC del enlace.",
+            "schema": {}
+          },
+          {
+            "name": "expira",
+            "required": true,
+            "in": "query",
+            "description": "Segundos Unix en que vence el enlace.",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Los bytes del binario, como adjunto."
+          },
+          "404": {
+            "description": "Enlace inválido, vencido o sin binario.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 10 por minuto desde la misma IP."
+          }
+        },
+        "summary": "Descarga el binario de una versión del agente por enlace firmado (F2-143).",
+        "tags": [
+          "agente"
         ]
       }
     },
@@ -13127,6 +13581,128 @@
           "zonaHoraria"
         ]
       },
+      "VersionCanalDto": {
+        "type": "object",
+        "properties": {
+          "disponible": {
+            "type": "boolean",
+            "description": "false si la sucursal NO tiene la actualización automática encendida o si no hay versión vigente publicada. Con false no viene nada más."
+          },
+          "version": {
+            "type": "string",
+            "example": "1.4.0",
+            "description": "X.Y.Z, cada parte de 1 a 4 dígitos (sin el `+commit`)."
+          },
+          "sha256": {
+            "type": "string",
+            "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "description": "SHA-256 del binario, 64 hex minúsculas. El agente lo verifica ANTES de usarlo."
+          },
+          "tamanoBytes": {
+            "type": "integer",
+            "description": "Tamaño exacto del binario, en bytes."
+          },
+          "url": {
+            "type": "string",
+            "example": "agente/binario/1.4.0?expira=1790000000&firma=abc…",
+            "description": "Enlace de descarga firmado y temporal (15 min), RELATIVO a la URL base del api. La firma es la credencial: el agente lo baja SIN la API key."
+          }
+        },
+        "required": [
+          "disponible"
+        ]
+      },
+      "ReporteActualizacionDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "example": "1.4.0",
+            "description": "X.Y.Z, cada parte de 1 a 4 dígitos (sin el `+commit`)."
+          },
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "aplicada",
+              "fallida"
+            ]
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "hash_invalido",
+              "descarga",
+              "detener",
+              "reemplazo",
+              "arranque",
+              "version_distinta"
+            ],
+            "nullable": true,
+            "description": "Obligatorio con `fallida`; prohibido con `aplicada`."
+          },
+          "detalle": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "Texto corto para el panel. Nunca lleva la API key ni la cadena de conexión."
+          }
+        },
+        "required": [
+          "version",
+          "resultado"
+        ]
+      },
+      "ReporteActualizacionVistoDto": {
+        "type": "object",
+        "properties": {
+          "resultado": {
+            "type": "string",
+            "enum": [
+              "aplicada",
+              "fallida"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "example": "1.4.0"
+          },
+          "motivo": {
+            "type": "string",
+            "enum": [
+              "hash_invalido",
+              "descarga",
+              "detener",
+              "reemplazo",
+              "arranque",
+              "version_distinta"
+            ],
+            "nullable": true
+          },
+          "detalle": {
+            "type": "string",
+            "nullable": true
+          },
+          "primeraFallaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Inicio de la racha de fallas de esa versión (reloj del servidor)."
+          },
+          "reportadaAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cuándo llegó el reporte (reloj del servidor)."
+          }
+        },
+        "required": [
+          "resultado",
+          "version",
+          "motivo",
+          "detalle",
+          "primeraFallaAt",
+          "reportadaAt"
+        ]
+      },
       "EstadoAgenteSucursalDto": {
         "type": "object",
         "properties": {
@@ -13189,6 +13765,26 @@
             "type": "string",
             "nullable": true,
             "description": "Último error que reportó el agente."
+          },
+          "actualizacionAutomatica": {
+            "type": "boolean",
+            "description": "F2-143: la bandera de rollout. Con ella el agente toma solo la versión vigente."
+          },
+          "versionObjetivo": {
+            "type": "string",
+            "nullable": true,
+            "example": "1.4.0",
+            "description": "F2-143: la versión vigente del canal si la bandera está encendida (null sin bandera o sin versión publicada). Se compara contra `versionAgente` sin el `+commit`."
+          },
+          "actualizacion": {
+            "nullable": true,
+            "description": "F2-143: el último reporte de auto-actualización del agente. Null = nunca reportó.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReporteActualizacionVistoDto"
+              }
+            ]
           }
         },
         "required": [
@@ -13203,7 +13799,79 @@
           "versionSr",
           "tamanoCola",
           "latenciaQueryMs",
-          "ultimoError"
+          "ultimoError",
+          "actualizacionAutomatica",
+          "versionObjetivo",
+          "actualizacion"
+        ]
+      },
+      "VersionAgenteDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "example": "1.4.0"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "tamanoBytes": {
+            "type": "integer"
+          },
+          "notas": {
+            "type": "string",
+            "nullable": true
+          },
+          "publicadaAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "retiradaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "vigente": {
+            "type": "boolean",
+            "description": "La que hoy toman las sucursales con la actualización automática."
+          }
+        },
+        "required": [
+          "version",
+          "sha256",
+          "tamanoBytes",
+          "notas",
+          "publicadaAt",
+          "retiradaAt",
+          "vigente"
+        ]
+      },
+      "ActualizacionAutomaticaDto": {
+        "type": "object",
+        "properties": {
+          "activa": {
+            "type": "boolean",
+            "description": "Encender o apagar la actualización automática de la sucursal."
+          }
+        },
+        "required": [
+          "activa"
+        ]
+      },
+      "ActualizacionAutomaticaHechaDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actualizacionAutomatica": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sucursalId",
+          "actualizacionAutomatica"
         ]
       },
       "ModificadorDto": {
@@ -16413,7 +17081,8 @@
           "cuenta_sin_imprimir",
           "caida_venta",
           "bajo_minimo",
-          "traspaso_sin_conciliar"
+          "traspaso_sin_conciliar",
+          "actualizacion_fallida"
         ]
       },
       "SeveridadAlerta": {

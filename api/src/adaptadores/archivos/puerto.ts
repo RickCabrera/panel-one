@@ -1,3 +1,5 @@
+import type { Readable } from 'node:stream';
+
 /**
  * Puerto de almacenamiento de archivos (F2-202): XML y PDF de las facturas (F2-105),
  * y lo que venga. Lo consume quien inyecte `PUERTO_ARCHIVOS`.
@@ -9,6 +11,11 @@ export interface PuertoArchivos {
   guardar(clave: string, contenido: Buffer, tipo: string): Promise<void>;
   /** Truena con `ArchivoNoEncontrado` si la clave no existe. */
   leer(clave: string): Promise<Buffer>;
+  /**
+   * El archivo como flujo, con su tamaño, sin cargarlo entero en memoria (F2-143: el binario del
+   * agente pesa decenas de MB). Truena con `ArchivoNoEncontrado` si la clave no existe.
+   */
+  abrirLectura(clave: string): Promise<{ flujo: Readable; bytes: number }>;
   /** URL de descarga que vence en `ttlSegundos`. */
   urlFirmada(clave: string, ttlSegundos: number): Promise<string>;
   /**

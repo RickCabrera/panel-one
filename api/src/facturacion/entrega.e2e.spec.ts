@@ -60,6 +60,7 @@ class ArchivosControlados implements PuertoArchivos {
     return this.disco.guardar(clave, contenido);
   }
   leer: PuertoArchivos['leer'] = (c) => this.disco.leer(c);
+  abrirLectura: PuertoArchivos['abrirLectura'] = (c) => this.disco.abrirLectura(c);
   urlFirmada: PuertoArchivos['urlFirmada'] = (c, t) => this.disco.urlFirmada(c, t);
   verificarUrl: PuertoArchivos['verificarUrl'] = (c, e, f) => this.disco.verificarUrl(c, e, f);
 }

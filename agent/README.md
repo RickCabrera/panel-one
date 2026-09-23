@@ -335,3 +335,35 @@ Nunca lleva la API key, la contraseña ni la cadena de conexión: los mensajes d
 "desconectado" a los 90 s fijos, así que con un intervalo mayor la sucursal sale
 desconectada en falso entre ciclo y ciclo (decisión abierta, ver la ficha de F1-061 en
 `backlog.md`).
+
+## Auto-actualización (F2-143)
+
+El diseño completo, las garantías y los límites están en
+[`docs/actualizacion-agente.md`](../docs/actualizacion-agente.md). Lo que hay que saber aquí:
+
+- **Dos servicios, un exe.** `ArkonAgente` (este agente) y `ArkonAgenteActualizador`, que es el
+  mismo `agente.exe` copiado en `C:\Program Files\ArkonAgente\actualizador\` y arrancado como
+  `agente.exe actualizador`. `instalar.ps1` registra los dos. El actualizador corre como
+  **LocalSystem** (tiene que detener y arrancar al agente y escribir en Program Files):
+  `DECISION PROVISIONAL (nocturno)`, sin verificar con elevación (F1-020b).
+- **Sólo con la bandera.** El agente pregunta en cada ciclo `GET {apiUrl}/agente/version`; sin la
+  actualización automática encendida para su sucursal (Administración › Actualizaciones), el api
+  contesta `disponible: false` y no pasa nada.
+- **El agente nunca toca su exe.** Baja el binario (sin la API key), verifica tamaño y SHA-256 y
+  deja `C:\ProgramData\ArkonAgente\actualizacion\solicitud.json`. El actualizador lo re-verifica,
+  detiene el servicio, espera a que no quede ningún proceso del exe, cambia el archivo
+  (`agente.exe.anterior` queda de respaldo), lo arranca y, si no se queda corriendo 60 s, regresa
+  a la anterior.
+- **Logs.** El agente escribe la auto-actualización en su log normal; el actualizador en
+  `logs\actualizador-AAAAMMDD.log`.
+- **Versión.** La que se publica tiene que ser la del exe: su `AssemblyInformationalVersion` sin
+  el `+commit` (`1.4.0` para `1.4.0+1a99dc7`). Si no coincide, el agente la instala una vez, ve
+  que sigue "distinto" y la reporta como `version_distinta` sin reintentarla.
+
+Para ver en qué va, sin tocar nada:
+
+```powershell
+Get-ChildItem C:\ProgramData\ArkonAgente\actualizacion
+Get-Content C:\ProgramData\ArkonAgente\actualizacion\resultado.json   # si existe: lo último que hizo el actualizador
+sc.exe query ArkonAgenteActualizador
+```

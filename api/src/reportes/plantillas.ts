@@ -38,6 +38,7 @@ const NOMBRE_ALERTA: Record<TipoAlerta, string> = {
   caida_venta: 'Caída de venta',
   bajo_minimo: 'Artículo bajo mínimo',
   traspaso_sin_conciliar: 'Traspaso sin registrar en SR',
+  actualizacion_fallida: 'Actualización del agente fallida',
 };
 
 export const SIN_VENTAS = 'Sin ventas registradas';

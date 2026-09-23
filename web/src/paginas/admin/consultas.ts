@@ -16,6 +16,7 @@ import type {
   Empresa,
   EstadoAgenteSucursal,
   Sucursal,
+  VersionAgente,
   UsuarioAdmin,
 } from '../../api/tipos';
 
@@ -75,6 +76,22 @@ export const api = {
     pedir<Sucursal>('/sucursales', { method: 'POST', body: datos }),
   editarSucursal: (id: string, cambios: EditarSucursal) =>
     pedir<Sucursal>(`/sucursales/${id}`, { method: 'PATCH', body: cambios }),
+  // F2-143: el canal de versiones del agente y la bandera de rollout (sólo admin_global).
+  publicarVersionAgente: (version: string, notas: string, binario: Blob) =>
+    pedir<VersionAgente>('/agente/versiones', {
+      method: 'POST',
+      query: { version, notas: notas.trim() || undefined },
+      binario,
+    }),
+  retirarVersionAgente: (version: string) =>
+    pedir<VersionAgente>(`/agente/versiones/${encodeURIComponent(version)}/retirar`, {
+      method: 'POST',
+    }),
+  actualizacionAutomatica: (sucursalId: string, activa: boolean) =>
+    pedir<{ sucursalId: string; actualizacionAutomatica: boolean }>(
+      `/sucursales/${sucursalId}/actualizacion-automatica`,
+      { method: 'PUT', body: { activa } },
+    ),
   rotarApiKey: (sucursalId: string) =>
     pedir<ApiKeyEmitida>(`/sucursales/${sucursalId}/api-key`, { method: 'POST' }),
   crearUsuario: (datos: CrearUsuario) =>
@@ -102,7 +119,16 @@ export function useArranque(empresaId: string | undefined, habilitado = true) {
   });
 }
 
-type Lista = 'empresas' | 'sucursales' | 'usuarios';
+// F2-143: 'agentes' (el estado, con la bandera de rollout) y 'versiones-agente' (el canal).
+type Lista = 'empresas' | 'sucursales' | 'usuarios' | 'agentes' | 'versiones-agente';
+
+/** El canal de versiones del agente (F2-143). Sólo lo monta la pestaña de admin_global. */
+export function useVersionesAgente() {
+  return useQuery({
+    queryKey: ['versiones-agente'],
+    queryFn: ({ signal }) => pedir<VersionAgente[]>('/agente/versiones', { signal }),
+  });
+}
 
 /**
  * Corre una escritura con su estado local (en curso / error) y, si sale bien,

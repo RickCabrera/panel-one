@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+
 import { PrismaClient } from '@prisma/client';
 
 import { crearFixtures, FX, limpiarFixtures } from '../test/fixtures-auth';
@@ -269,6 +271,10 @@ class ArchivosMemoria implements PuertoArchivos {
   }
   leer(clave: string): Promise<Buffer> {
     return Promise.resolve(this.guardados.get(clave)!);
+  }
+  abrirLectura(clave: string): Promise<{ flujo: Readable; bytes: number }> {
+    const b = this.guardados.get(clave)!;
+    return Promise.resolve({ flujo: Readable.from([b]), bytes: b.length });
   }
   urlFirmada(): Promise<string> {
     return Promise.resolve('');

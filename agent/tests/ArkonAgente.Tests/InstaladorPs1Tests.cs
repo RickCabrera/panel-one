@@ -216,6 +216,25 @@ public class InstaladorPs1Tests
             salida);
     }
 
+    [Fact]
+    public void El_actualizador_se_registra_con_su_argumento_fuera_de_las_comillas_y_como_LocalSystem()
+    {
+        // F2-143: el watchdog es el mismo exe, en su subcarpeta, con el argumento "actualizador".
+        var salida = CorrerPowerShell("""
+            Get-ArgumentosScActualizador -Accion create -RutaExe 'C:\Program Files\ArkonAgente\actualizador\agente.exe'
+            Get-ArgumentosScActualizador -Accion config -RutaExe 'C:\Program Files\ArkonAgente\actualizador\agente.exe'
+            try { Get-ArgumentosScActualizador -Accion create -RutaExe 'C:\x"y\agente.exe' } catch { "ERROR|$($_.Exception.Message)" }
+            """);
+
+        Assert.Equal(
+            [
+                """create ArkonAgenteActualizador binPath= "\"C:\Program Files\ArkonAgente\actualizador\agente.exe\" actualizador" start= delayed-auto DisplayName= "ArkonAgente - actualizador" obj= LocalSystem""",
+                """config ArkonAgenteActualizador binPath= "\"C:\Program Files\ArkonAgente\actualizador\agente.exe\" actualizador" start= delayed-auto DisplayName= "ArkonAgente - actualizador" obj= LocalSystem""",
+                "ERROR|La ruta del exe no puede llevar comillas.",
+            ],
+            salida);
+    }
+
     [Theory]
     [InlineData("MSSQL$NATIONALSOFT", @".\NATIONALSOFT")]
     [InlineData("MSSQLSERVER", ".")]

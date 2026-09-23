@@ -1,5 +1,11 @@
 import { Module } from '@nestjs/common';
 
+import {
+  BinarioAgenteController,
+  SucursalActualizacionController,
+  VersionesAgenteController,
+} from './actualizacion-agente.controller';
+import { ActualizacionAgenteService } from './actualizacion-agente.service';
 import { AgenteController } from './agente.controller';
 import { AgentAuthGuard } from './agente-auth.guard';
 import { AgentesAuthService } from './agentes-auth.service';
@@ -15,8 +21,22 @@ import { SucursalApiKeyController } from './sucursal-api-key.controller';
  * panel (F1-061) también vive aquí.
  */
 @Module({
-  controllers: [SucursalApiKeyController, AgenteController, EstadoAgentesController],
-  providers: [AgentesAuthService, AgentAuthGuard, ApiKeyService, EstadoAgentesService],
+  controllers: [
+    SucursalApiKeyController,
+    AgenteController,
+    EstadoAgentesController,
+    // F2-143: auto-update del agente.
+    VersionesAgenteController,
+    SucursalActualizacionController,
+    BinarioAgenteController,
+  ],
+  providers: [
+    AgentesAuthService,
+    AgentAuthGuard,
+    ApiKeyService,
+    EstadoAgentesService,
+    ActualizacionAgenteService,
+  ],
   exports: [AgentesAuthService, AgentAuthGuard],
 })
 export class AgentesModule {}

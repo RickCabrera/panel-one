@@ -54,7 +54,11 @@ export type AccionAuditada =
   | 'facturacion.conciliacion'
   // F2-146: preferencias de notificaciones push y un navegador que cambia de usuario.
   | 'preferencia_push.editar'
-  | 'dispositivo_push.reasignar';
+  | 'dispositivo_push.reasignar'
+  // F2-143: el canal de versiones del agente (plataforma) y la bandera de rollout por sucursal.
+  | 'agente.version_publicada'
+  | 'agente.version_retirada'
+  | 'sucursal.actualizacion_automatica';
 
 export interface EventoAuditoria {
   accion: AccionAuditada;
@@ -79,7 +83,9 @@ export interface EventoAuditoria {
     | 'conciliacion_pac'
     // F2-146: notificaciones push.
     | 'preferencia_push'
-    | 'dispositivo_push';
+    | 'dispositivo_push'
+    // F2-143: una versión del agente en el canal.
+    | 'version_agente';
   recursoId: string;
   empresaId: string | null;
   /** NOMBRES de los campos que cambiaron, nunca sus valores. */

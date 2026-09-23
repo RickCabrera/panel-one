@@ -10,14 +10,17 @@
 
     Qué hace, en orden:
       1. Revisa que la consola sea de administrador y que agente.exe esté al lado.
-      2. Si el servicio ya existe (actualización), lo detiene.
-      3. Copia agente.exe a "C:\Program Files\ArkonAgente".
+      2. Si el servicio ya existe (actualización), lo detiene (y a su actualizador).
+      3. Copia agente.exe a "C:\Program Files\ArkonAgente" (y la copia del actualizador a
+         su subcarpeta "actualizador").
       4. Protege "C:\ProgramData\ArkonAgente": sólo SYSTEM y Administradores (y, más
          abajo, la cuenta del servicio). Siempre, aunque la carpeta ya exista.
       5. Escribe config.json preguntando los datos (la API key y la contraseña no se ven
          en pantalla ni quedan en el historial). Si ya hay uno, lo conserva.
-      6. Registra el servicio (arranque automático retrasado, se levanta solo si se cae).
-      7. Lo arranca.
+      6. Registra el servicio (arranque automático retrasado, se levanta solo si se cae) y el
+         del actualizador (ArkonAgenteActualizador, F2-143: instala las versiones que publica
+         el monitor, sólo en sucursales con la actualización automática encendida).
+      7. Los arranca.
       8. Corre "agente test" y dice si quedó reportando.
 
     Nunca borra cola.db ni los logs: lo que el agente no había mandado se conserva.
@@ -70,6 +73,8 @@ $ErrorActionPreference = 'Stop'
 
 $carpetaPrograma = Join-Path $env:ProgramFiles $script:NombreServicio
 $exeDestino = Join-Path $carpetaPrograma 'agente.exe'
+$carpetaActualizador = Join-Path $carpetaPrograma $script:CarpetaActualizador
+$exeActualizador = Join-Path $carpetaActualizador 'agente.exe'
 $carpetaDatos = Join-Path $env:ProgramData $script:NombreServicio
 $archivoConfig = Join-Path $carpetaDatos 'config.json'
 if (-not $Exe) { $Exe = Join-Path $PSScriptRoot 'agente.exe' }
@@ -135,6 +140,12 @@ function Invoke-Instalacion {
 
     # ---------------------------------------------------------------- 2
     Write-Paso '[2/8] Deteniendo el servicio anterior (si existe)'
+    # Primero el actualizador: que no cambie el exe mientras se instala éste.
+    $actualizador = Get-Service -Name $script:NombreActualizador -ErrorAction SilentlyContinue
+    if ($actualizador -and $actualizador.Status -ne 'Stopped') {
+        Stop-Service -Name $script:NombreActualizador -Force
+        $actualizador.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+    }
     $servicio = Get-Service -Name $script:NombreServicio -ErrorAction SilentlyContinue
     if ($servicio) {
         if ($servicio.Status -ne 'Stopped') {
@@ -168,6 +179,10 @@ function Invoke-Instalacion {
         }
         Write-Bien 'Copiado.'
     }
+    # La copia del actualizador (F2-143): el mismo exe, en su subcarpeta.
+    New-Item -ItemType Directory -Path $carpetaActualizador -Force | Out-Null
+    Copy-Item -LiteralPath $exeDestino -Destination $exeActualizador -Force
+    Write-Bien "Copia del actualizador en $carpetaActualizador."
 
     # ---------------------------------------------------------------- 4
     Write-Paso "[4/8] Protegiendo $carpetaDatos (trae la API key y la contraseña de SQL)"
@@ -241,12 +256,22 @@ function Invoke-Instalacion {
     Invoke-Icacls @($carpetaDatos, '/grant', "*$($sidServicio):(OI)(CI)M")
     Write-Bien "Servicio registrado. La cuenta del servicio ($sidServicio) puede modificar $carpetaDatos."
 
+    # El actualizador (F2-143). Sólo actúa si el agente le deja una solicitud, y el agente sólo
+    # la deja si la sucursal tiene la actualización automática encendida en el panel.
+    $accionAct = if (Get-Service -Name $script:NombreActualizador -ErrorAction SilentlyContinue) { 'config' } else { 'create' }
+    Invoke-ScExe (Get-ArgumentosScActualizador -Accion $accionAct -RutaExe $exeActualizador)
+    Invoke-ScExe "description $($script:NombreActualizador) `"$($script:DescripcionActualizador)`""
+    Invoke-ScExe "failure $($script:NombreActualizador) reset= 86400 actions= restart/60000/restart/60000/restart/60000"
+    Write-Bien "Actualizador registrado ($($script:NombreActualizador), LocalSystem)."
+
     # ---------------------------------------------------------------- 7
     Write-Paso '[7/8] Arrancando el servicio'
     try {
         Start-Service -Name $script:NombreServicio
         (Get-Service -Name $script:NombreServicio).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
         Write-Bien 'El servicio está corriendo.'
+        Start-Service -Name $script:NombreActualizador
+        Write-Bien 'El actualizador está corriendo.'
     }
     catch {
         Write-Problema "El servicio no arrancó: $($_.Exception.Message)"

@@ -230,6 +230,10 @@ describe('Estado de agentes (e2e, F1-061)', () => {
         tamanoCola: null,
         latenciaQueryMs: null,
         ultimoError: null,
+        // F2-143: sin bandera de rollout y sin reportes de actualización.
+        actualizacionAutomatica: false,
+        versionObjetivo: null,
+        actualizacion: null,
       });
       expect(filas.some((f) => f.sucursalId === SUCURSAL_A_INACTIVA)).toBe(false);
     });
@@ -262,6 +266,9 @@ describe('Estado de agentes (e2e, F1-061)', () => {
         tamanoCola: 7,
         latenciaQueryMs: 42,
         ultimoError: 'timeout sintético',
+        actualizacionAutomatica: false,
+        versionObjetivo: null,
+        actualizacion: null,
       });
     });
 

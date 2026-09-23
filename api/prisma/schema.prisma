@@ -67,25 +67,31 @@ model Empresa {
 }
 
 model Sucursal {
-  id          String   @id @default(uuid()) @db.Uuid
-  empresaId   String   @map("empresa_id") @db.Uuid
-  nombre      String
+  id                      String   @id @default(uuid()) @db.Uuid
+  empresaId               String   @map("empresa_id") @db.Uuid
+  nombre                  String
   // Zona IANA de la sucursal. Es la que corta "ventas de hoy", no la del servidor.
-  zonaHoraria String   @default("America/Mexico_City") @map("zona_horaria")
+  zonaHoraria             String   @default("America/Mexico_City") @map("zona_horaria")
   // Hash de la API key del agente. Nulo hasta que F1-012 la genere. Ojo F1-012:
   // tiene que ser un hash determinista (SHA-256 de una key de alta entropía)
   // para poder buscar por igualdad; argon2 lleva sal y no sirve para eso.
-  apiKeyHash  String?  @unique @map("api_key_hash")
-  activo      Boolean  @default(true)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  apiKeyHash              String?  @unique @map("api_key_hash")
+  activo                  Boolean  @default(true)
+  // F2-143: la bandera del rollout gradual. Con ella, el agente de la sucursal toma la
+  // versión vigente del canal (`versiones_agente`) solo. Nace APAGADA: migrar no
+  // actualiza a nadie. La escribe sólo un admin_global.
+  actualizacionAutomatica Boolean  @default(false) @map("actualizacion_automatica")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  empresa        Empresa         @relation(fields: [empresaId], references: [id], onDelete: Restrict)
-  agenteEstado   AgenteEstado?
-  agenteContacto AgenteContacto?
-  cheques        Cheque[]
-  mesaSnapshots  MesaSnapshot[]
-  alertas        Alerta[]
+  empresa             Empresa              @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  agenteEstado        AgenteEstado?
+  agenteContacto      AgenteContacto?
+  // F2-143: el último resultado de auto-actualización que reportó el agente.
+  agenteActualizacion AgenteActualizacion?
+  cheques             Cheque[]
+  mesaSnapshots       MesaSnapshot[]
+  alertas             Alerta[]
 
   // Catálogos espejo (F2-230).
   gruposProducto           GrupoProducto[]
@@ -237,6 +243,56 @@ model AgenteEstado {
   @@unique([sucursalId, empresaId], map: "agente_estado_sucursal_id_empresa_id_key")
   @@index([empresaId])
   @@map("agente_estado")
+}
+
+// F2-143 · Auto-update del agente. Qué pasó con el último intento de actualización de
+// la sucursal, como lo reporta su agente (`POST /agente/actualizacion`). Una fila por
+// sucursal (upsert). La escribe SÓLO `EscrituraSucursal.reportarActualizacion`, clavada
+// a la sucursal de la API key. CHECKs a mano en la migración: `motivo` y
+// `primera_falla_at` existen sólo con `fallida`; `detalle` ≤ 500.
+model AgenteActualizacion {
+  sucursalId     String                    @id @map("sucursal_id") @db.Uuid
+  empresaId      String                    @map("empresa_id") @db.Uuid
+  resultado      ResultadoActualizacion
+  // La versión que se intentó aplicar (X.Y.Z del canal).
+  version        String                    @db.VarChar(20)
+  motivo         MotivoFallaActualizacion?
+  detalle        String?                   @db.VarChar(500)
+  // Inicio de la racha de fallas de ESTA versión (reloj del servidor). Un reenvío o una
+  // falla nueva de la misma versión la conservan; otra versión o `aplicada` la reinician.
+  primeraFallaAt DateTime?                 @map("primera_falla_at") @db.Timestamptz(3)
+  reportadaAt    DateTime                  @map("reportada_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "agente_actualizacion_sucursal_empresa_fkey")
+
+  @@unique([sucursalId, empresaId], map: "agente_actualizacion_sucursal_id_empresa_id_key")
+  @@index([empresaId])
+  @@map("agente_actualizacion")
+}
+
+enum ResultadoActualizacion {
+  aplicada
+  fallida
+
+  @@map("resultado_actualizacion")
+}
+
+enum MotivoFallaActualizacion {
+  // El binario descargado (o el preparado, al re-verificarlo) no tiene el SHA-256 o el tamaño del canal.
+  hash_invalido
+  // La descarga no terminó (red, 404 de un enlace vencido, más grande que el tope).
+  descarga
+  // El watchdog no logró detener el servicio del agente: no se tocó nada.
+  detener
+  // Falló la copia o el renombre del exe: se restauró el anterior.
+  reemplazo
+  // La versión nueva no se quedó corriendo: se restauró la anterior (rollback).
+  arranque
+  // Se aplicó, pero el agente que quedó corriendo no reporta esa versión (el exe publicado
+  // trae otra): no se vuelve a intentar ese binario.
+  version_distinta
+
+  @@map("motivo_falla_actualizacion")
 }
 
 // Cuándo nos habló por última vez el agente de una sucursal (F1-061), con el
@@ -478,6 +534,8 @@ enum TipoAlerta {
   bajo_minimo
   // F2-124: un traspaso del panel sin conciliar con SR pasado su umbral (horas).
   traspaso_sin_conciliar
+  // F2-143: la auto-actualización del agente a la versión vigente falla (minutos de racha).
+  actualizacion_fallida
 
   @@map("tipo_alerta")
 }
@@ -2024,6 +2082,26 @@ model CfdiGlobalCodigo {
 // `empresa_id` ni índice por empresa: los lee SÓLO `LecturaFoliosPlataforma` y los escribe SÓLO
 // `EscrituraFolios` (`src/scope/folios-plataforma.ts`), con scope global.
 // ---------------------------------------------------------------------------
+
+/// F2-143 · El canal de versiones del agente. Modelo de PLATAFORMA (como `PaqueteFolios`): el
+/// binario es el mismo para todas las empresas y lo publica el admin_global. Sin `empresa_id`: lo
+/// lee y escribe SÓLO `src/scope/versiones-agente.ts`. La VIGENTE es la publicada más reciente no
+/// retirada. CHECKs a mano: `version` X.Y.Z, `sha256` 64 hex minúsculas, `tamano_bytes` > 0.
+model VersionAgente {
+  id           String    @id @default(uuid()) @db.Uuid
+  version      String    @unique @db.VarChar(20)
+  sha256       String    @db.Char(64)
+  tamanoBytes  Int       @map("tamano_bytes")
+  // Clave en `PuertoArchivos` (`agente/<version>/agente.exe`).
+  claveArchivo String    @map("clave_archivo")
+  notas        String?   @db.VarChar(500)
+  publicadaAt  DateTime  @map("publicada_at") @db.Timestamptz(3)
+  publicadaPor String?   @map("publicada_por") @db.Uuid
+  retiradaAt   DateTime? @map("retirada_at") @db.Timestamptz(3)
+
+  @@index([publicadaAt])
+  @@map("versiones_agente")
+}
 
 /// Un paquete de folios comprado al PAC. Vence 12 meses después de la compra (`vence_at`, exclusivo).
 /// CHECKs a mano en la migración: cantidad 1..1000000, vence_at > comprado_at.

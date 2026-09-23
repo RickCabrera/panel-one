@@ -1,4 +1,10 @@
-import type { Alerta, MotivoCierreAlerta, SeveridadAlerta, TipoAlerta } from '../api/tipos';
+import type {
+  Alerta,
+  MotivoCierreAlerta,
+  MotivoFallaActualizacion,
+  SeveridadAlerta,
+  TipoAlerta,
+} from '../api/tipos';
 import { aCentavos, formatearPesos } from '../dinero/dinero';
 import { edadLegible } from '../paginas/inicio/ventaEnVivo';
 import { cantidad } from '../paginas/tickets/formato';
@@ -12,6 +18,17 @@ export const NOMBRE_TIPO: Record<TipoAlerta, string> = {
   caida_venta: 'Caída de venta',
   bajo_minimo: 'Artículo bajo mínimo',
   traspaso_sin_conciliar: 'Traspaso sin registrar en SR',
+  actualizacion_fallida: 'Actualización del agente fallida',
+};
+
+/** F2-143: por qué no se instaló una versión del agente, en palabras. */
+export const NOMBRE_MOTIVO_ACTUALIZACION: Record<MotivoFallaActualizacion, string> = {
+  hash_invalido: 'el binario no coincide con el publicado (SHA-256)',
+  descarga: 'la descarga no terminó',
+  detener: 'no se pudo detener el agente para cambiarlo',
+  reemplazo: 'no se pudo reemplazar el archivo del agente',
+  arranque: 'la versión nueva no se quedó corriendo (se regresó a la anterior)',
+  version_distinta: 'el binario instalado reporta otra versión',
 };
 
 export const NOMBRE_SEVERIDAD: Record<SeveridadAlerta, string> = {
@@ -41,6 +58,8 @@ export function textoRegla(tipo: TipoAlerta, umbral: number): string {
       return `Un artículo tiene en su almacén menos del ${umbral} % de su mínimo (el mínimo se define en Existencias).`;
     case 'traspaso_sin_conciliar':
       return `Un traspaso enviado desde el panel lleva más de ${umbral} h sin aparecer en SoftRestaurant (su salida y su entrada).`;
+    case 'actualizacion_fallida':
+      return `La actualización automática del agente a la versión publicada lleva más de ${umbral} min fallando (sólo sucursales con la actualización automática encendida).`;
   }
 }
 
@@ -88,8 +107,19 @@ export function describirAlerta(a: Alerta): string {
       const folio = entero(d.folio);
       const horas = entero(d.horas);
       const origen = texto(d.almacenOrigen);
-      const destino = [texto(d.sucursalDestino), texto(d.almacenDestino)].filter(Boolean).join(' · ');
+      const destino = [texto(d.sucursalDestino), texto(d.almacenDestino)]
+        .filter(Boolean)
+        .join(' · ');
       return `Traspaso ${folio === null ? 'sin folio' : `#${folio}`} (${origen ? `${origen}, ` : ''}${a.sucursal} → ${destino || 'destino sin dato'}): ${horas === null ? 'más del umbral' : `${horas} h`} sin registrarse en SoftRestaurant al abrir la alerta.`;
+    }
+    case 'actualizacion_fallida': {
+      const version = texto(d.version) ?? a.llave;
+      const motivo = texto(d.motivo);
+      const porQue =
+        motivo !== null && motivo in NOMBRE_MOTIVO_ACTUALIZACION
+          ? NOMBRE_MOTIVO_ACTUALIZACION[motivo as MotivoFallaActualizacion]
+          : 'motivo sin dato';
+      return `${a.sucursal}: el agente no se pudo actualizar a la versión ${version}: ${porQue}. Sigue corriendo su versión anterior.`;
     }
   }
 }

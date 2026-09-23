@@ -14,6 +14,9 @@ export interface Llamada {
   query: URLSearchParams;
   autorizacion: string | null;
   cuerpo: unknown;
+  /** F2-143: un cuerpo binario (Blob) tal cual, y su Content-Type. */
+  binario?: Blob;
+  contentType?: string | null;
 }
 
 export type Manejador = (llamada: Llamada) => Response | Promise<Response>;
@@ -40,6 +43,8 @@ export function instalarApiFalsa(inicial: Record<string, Manejador> = {}) {
       query: url.searchParams,
       autorizacion: new Headers(init?.headers).get('Authorization'),
       cuerpo: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+      binario: init?.body instanceof Blob ? init.body : undefined,
+      contentType: new Headers(init?.headers).get('Content-Type'),
     };
     llamadas.push(llamada);
     const manejador = manejadores[`${llamada.metodo} ${llamada.ruta}`];

@@ -9,6 +9,7 @@ import {
   type EstadoBajoCandado,
   type Observacion,
   type SucursalObservada,
+  type FallaActualizacionObservada,
 } from './evaluador';
 import { Prisma } from '@prisma/client';
 
@@ -16,6 +17,8 @@ import {
   cuentasDelSnapshot,
   diaLocal,
   existenciasObservadas,
+  fallaActualizacion,
+  versionSinCommit,
   minutosAbierta,
   restarDias,
 } from './observar';
@@ -33,6 +36,7 @@ function sucursal(p: Partial<SucursalObservada> = {}): SucursalObservada {
     venta: null,
     existencias: null,
     traspasos: [],
+    actualizacion: null,
     ...p,
   };
 }
@@ -439,5 +443,121 @@ describe('evaluador: traspaso sin conciliar (F2-124)', () => {
         evaluar(obs(sucursal({ traspasos: [tr('t', 99 * 3600)] })), estado({ reglas: apagada })),
       ),
     ).toEqual([]);
+  });
+});
+
+describe('actualizacion_fallida (F2-143)', () => {
+  const falla = (edadS: number, version = '1.4.0'): FallaActualizacionObservada => ({
+    version,
+    motivo: 'hash_invalido',
+    detalle: 'SHA distinto',
+    edadS,
+  });
+  const soloActualizacion = (c: ReturnType<typeof evaluar>) =>
+    c.abrir.filter((a) => a.tipo === TipoAlerta.actualizacion_fallida);
+
+  it('abre con MÁS de umbral minutos de racha (1 por defecto), llave = versión, advertencia', () => {
+    expect(
+      soloActualizacion(evaluar(obs(sucursal({ actualizacion: falla(60) })), estado())),
+    ).toEqual([]);
+    expect(
+      soloActualizacion(evaluar(obs(sucursal({ actualizacion: falla(61) })), estado())),
+    ).toEqual([
+      {
+        sucursalId: S1,
+        tipo: TipoAlerta.actualizacion_fallida,
+        severidad: SeveridadAlerta.advertencia,
+        llave: '1.4.0',
+        umbral: 1,
+        detalle: { version: '1.4.0', motivo: 'hash_invalido', detalle: 'SHA distinto', minutos: 1 },
+      },
+    ]);
+  });
+
+  it('se cierra cuando ya no hay falla, o cuando la falla es de OTRA versión (se abre la nueva)', () => {
+    const abiertas = [abierta('a1', TipoAlerta.actualizacion_fallida, '1.4.0')];
+    expect(evaluar(obs(sucursal({ actualizacion: null })), estado({ abiertas })).cerrar).toEqual([
+      { id: 'a1', motivo: MotivoCierreAlerta.condicion },
+    ]);
+    const otra = evaluar(
+      obs(sucursal({ actualizacion: falla(600, '1.5.0') })),
+      estado({ abiertas }),
+    );
+    expect(otra.cerrar).toEqual([{ id: 'a1', motivo: MotivoCierreAlerta.condicion }]);
+    expect(soloActualizacion(otra).map((a) => a.llave)).toEqual(['1.5.0']);
+    const sigue = evaluar(obs(sucursal({ actualizacion: falla(600) })), estado({ abiertas }));
+    expect(sigue.cerrar).toEqual([]);
+    expect(soloActualizacion(sigue)).toEqual([]);
+  });
+
+  it('respeta el umbral guardado y la regla apagada', () => {
+    const reglas = reglasEfectivas([
+      { tipo: TipoAlerta.actualizacion_fallida, activa: true, umbral: 30 },
+    ]);
+    expect(
+      soloActualizacion(
+        evaluar(obs(sucursal({ actualizacion: falla(30 * 60) })), estado({ reglas })),
+      ),
+    ).toEqual([]);
+    expect(
+      soloActualizacion(
+        evaluar(obs(sucursal({ actualizacion: falla(30 * 60 + 1) })), estado({ reglas })),
+      ).map((a) => a.umbral),
+    ).toEqual([30]);
+    const apagada = reglasEfectivas([
+      { tipo: TipoAlerta.actualizacion_fallida, activa: false, umbral: 1 },
+    ]);
+    expect(
+      soloActualizacion(
+        evaluar(obs(sucursal({ actualizacion: falla(9999) })), estado({ reglas: apagada })),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('fallaActualizacion() y versionSinCommit() (F2-143)', () => {
+  const T = Date.parse('2026-09-23T18:00:00Z');
+  const reporte = {
+    resultado: 'fallida' as const,
+    version: '1.4.0',
+    motivo: 'descarga',
+    detalle: null,
+    primeraFallaAt: new Date(T - 125_000),
+  };
+  const base = {
+    automatica: true,
+    vigente: '1.4.0',
+    reporte,
+    versionAgente: '1.3.0+abc',
+    ahora: T,
+  };
+
+  it('observa la falla sólo si TODO se cumple', () => {
+    expect(fallaActualizacion(base)).toEqual({
+      version: '1.4.0',
+      motivo: 'descarga',
+      detalle: null,
+      edadS: 125,
+    });
+    expect(fallaActualizacion({ ...base, automatica: false })).toBeNull();
+    expect(fallaActualizacion({ ...base, vigente: null })).toBeNull();
+    expect(fallaActualizacion({ ...base, vigente: '1.5.0' })).toBeNull();
+    expect(fallaActualizacion({ ...base, reporte: null })).toBeNull();
+    expect(
+      fallaActualizacion({
+        ...base,
+        reporte: { ...reporte, resultado: 'aplicada', motivo: null, primeraFallaAt: null },
+      }),
+    ).toBeNull();
+    expect(fallaActualizacion({ ...base, versionAgente: '1.4.0+1a99dc7' })).toBeNull();
+    expect(fallaActualizacion({ ...base, versionAgente: '1.4.0' })).toBeNull();
+  });
+
+  it('versionSinCommit quita el +commit y rechaza lo que no es X.Y.Z', () => {
+    expect(versionSinCommit('1.0.0+c0908e6')).toBe('1.0.0');
+    expect(versionSinCommit('12.3.4')).toBe('12.3.4');
+    expect(versionSinCommit('desconocida')).toBeNull();
+    expect(versionSinCommit('1.0')).toBeNull();
+    expect(versionSinCommit(null)).toBeNull();
   });
 });
