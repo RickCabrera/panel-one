@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 
 import { cantidad3, dinero, diaSemana, elegir, hoyEn, prng } from './azar';
 import {
+  ALTA_RECIENTE,
   almacenDeInsumo,
   FORZADOS,
   grupoInsumo,
@@ -168,7 +169,10 @@ export function generarInventario(op: {
       nombre: NOMBRE_ALMACEN[tipo],
     })),
   );
-  const insumosDe = (tipo: TipoAlmacen) => INSUMOS.filter((i) => almacenDeInsumo(i.clave) === tipo);
+  // Los insumos de alta reciente (F2-127) NO entran a la simulación diaria: sin inicial, sin
+  // surtido, sin merma ni traspaso. Así el PRNG y los folios del resto no se mueven.
+  const insumosDe = (tipo: TipoAlmacen) =>
+    INSUMOS.filter((i) => almacenDeInsumo(i.clave) === tipo && i.altaHaceDias === undefined);
 
   // Estado por almacén e insumo. Mínimo = 2 días de consumo promedio; máximo = 7.
   const estado = new Map<string, Map<string, Estado>>();
@@ -378,6 +382,41 @@ export function generarInventario(op: {
       }
     }
   });
+
+  // 7. Insumos de alta reciente (F2-127): su primera compra el día de su alta, DESPUÉS de todo lo
+  //    demás, con folios que CONTINÚAN la secuencia (los del resto no cambian). Su póliza queda
+  //    fuera de orden cronológico en el arreglo; quien la lea ordena por día.
+  for (const i of INSUMOS) {
+    if (i.altaHaceDias === undefined) continue;
+    const alta = ALTA_RECIENTE[i.clave];
+    if (!alta) throw new Error(`Insumo de alta reciente sin su compra: ${i.clave}`);
+    // Un seed más corto que el alta (specs de pocos días): el alta cae en su primer día.
+    const dia = op.dias[Math.max(0, op.dias.length - 1 - i.altaHaceDias)];
+    const tipo = almacenDeInsumo(i.clave);
+    for (const s of op.sucursales) {
+      const e: Estado = {
+        saldo: CERO,
+        cp: new Dec(i.costo),
+        minimo: new Dec(alta.minimo),
+        maximo: new Dec(alta.maximo),
+      };
+      estado.get(`${s.clave}-${tipo}`)!.set(i.clave, e);
+      const n = siguiente(folioCompra, s.clave);
+      const folio = `${s.clave}-OC-${String(n).padStart(4, '0')}`;
+      const m = mover(e, i.clave, new Dec(alta.cantidad), new Dec(i.costo));
+      const p = poliza(s, tipo, 'compra', dia, [m], folio)!;
+      compras.push({
+        folio,
+        sucursalId: s.id,
+        almacen: p.almacen,
+        dia,
+        proveedor: grupoInsumo(i.grupo).proveedor,
+        poliza: p.folio,
+        partidas: [{ ...m }],
+        total: m.importe,
+      });
+    }
+  }
 
   const existencias: ExistenciaSeed[] = almacenes.flatMap((a) =>
     [...estado.get(a.clave)!].map(([clave, e]) => ({

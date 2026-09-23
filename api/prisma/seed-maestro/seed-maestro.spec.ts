@@ -247,6 +247,50 @@ describe('módulo existencias (F2-121)', () => {
   });
 });
 
+describe('insumo de alta reciente (F2-127)', () => {
+  it('I062 sólo tiene la compra del día de su alta (hace 10 días), sin inicial ni consumo', () => {
+    expect(insumo('I062').altaHaceDias).toBe(10);
+    const movs = u.polizas.flatMap((p) =>
+      p.movimientos.filter((m) => m.insumo === 'I062').map((m) => ({ p, m })),
+    );
+    // Una compra por sucursal, en el almacén general, el 2026-11-05 (hoy − 10).
+    expect(movs.map(({ p }) => [p.almacen, p.tipo, p.dia])).toEqual([
+      ['A1-GEN', 'compra', '2026-11-05'],
+      ['A2-GEN', 'compra', '2026-11-05'],
+    ]);
+    for (const { p, m } of movs) {
+      expect(p.movimientos).toHaveLength(1);
+      expect(m.cantidad.toFixed(3)).toBe('120.000');
+      expect(m.costoUnitario.toFixed(2)).toBe('3.50');
+      expect(m.importe.toFixed(2)).toBe('420.00');
+      const compra = u.compras.find((c) => c.poliza === p.folio)!;
+      expect(compra.total.toFixed(2)).toBe('420.00');
+    }
+    for (const a of ['A1-GEN', 'A2-GEN']) {
+      const e = u.existencias.find((x) => x.almacen === a && x.insumo === 'I062')!;
+      expect([e.cantidad.toFixed(3), e.minimo.toFixed(3), e.maximo.toFixed(3)]).toEqual([
+        '120.000',
+        '30.000',
+        '150.000',
+      ]);
+    }
+  });
+
+  it('sus folios CONTINÚAN la secuencia: los del resto del seed no se movieron', () => {
+    // Si I062 entrara a la simulación diaria, su compra desplazaría los folios siguientes. Sus
+    // folios son los ÚLTIMOS de su sucursal aunque su día no lo sea.
+    const num = (folio: string) => Number(folio.split('-').pop());
+    for (const s of ['A1', 'A2']) {
+      const pols = u.polizas.filter((p) => p.folio.startsWith(`${s}-POL-`));
+      const suya = pols.find((p) => p.movimientos.some((m) => m.insumo === 'I062'))!;
+      expect(num(suya.folio)).toBe(Math.max(...pols.map((p) => num(p.folio))));
+      const comps = u.compras.filter((c) => c.folio.startsWith(`${s}-OC-`));
+      const oc = comps.find((c) => c.poliza === suya.folio)!;
+      expect(num(oc.folio)).toBe(Math.max(...comps.map((c) => num(c.folio))));
+    }
+  });
+});
+
 describe('módulo pólizas, movimientos y kardex (F2-122, F2-123, F2-124)', () => {
   it('cuenta pólizas de cada tipo, con folio único', () => {
     const porTipo = (t: string) => u.polizas.filter((p) => p.tipo === t).length;

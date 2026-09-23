@@ -28,6 +28,12 @@ export interface Insumo {
   unidad: string;
   /** Costo base por unidad, sin IVA. */
   costo: string;
+  /**
+   * Insumo NUEVO (F2-127): se dio de alta hace estos días. No tiene inventario inicial ni entra
+   * a la simulación diaria; sólo su primera compra (ver `ALTA_RECIENTE`). Sin él, todo insumo
+   * tiene 90 días de historial y "sin datos" nunca se vería con el seed.
+   */
+  altaHaceDias?: number;
 }
 
 export type TipoAlmacen = 'GEN' | 'BAR';
@@ -124,7 +130,26 @@ export const INSUMOS: readonly Insumo[] = [
   { clave: 'I055', nombre: 'Licor de naranja', grupo: 'GI05', unidad: 'LT', costo: '220.00' },
   { clave: 'I060', nombre: 'Contenedor para llevar', grupo: 'GI06', unidad: 'PZA', costo: '5.00' },
   { clave: 'I061', nombre: 'Bolsa de entrega', grupo: 'GI06', unidad: 'PZA', costo: '1.50' },
+  {
+    clave: 'I062',
+    nombre: 'Vaso compostable 16 oz',
+    grupo: 'GI06',
+    unidad: 'PZA',
+    costo: '3.50',
+    altaHaceDias: 10,
+  },
 ];
+
+/**
+ * La primera (y única) compra de cada insumo nuevo (F2-127), en cada sucursal: el día de su alta,
+ * a costo base, sin PRNG. Mínimo y máximo son los que el encargado le puso al darlo de alta (no
+ * salen de un consumo que todavía no existe).
+ */
+export const ALTA_RECIENTE: Readonly<
+  Record<string, { cantidad: string; minimo: string; maximo: string }>
+> = {
+  I062: { cantidad: '120', minimo: '30', maximo: '150' },
+};
 
 /**
  * Casos forzados por almacén, para que F2-121 tenga qué señalar: el primero
