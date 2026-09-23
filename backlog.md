@@ -2327,7 +2327,7 @@ layout) con push notifications (web-push, VAPID): alertas configurables por usua
 llega con la app cerrada; cada alerta se puede apagar individualmente.
 
 ### F2-147 · Landing pública + onboarding
-`[ ]` Landing del producto (dominio raíz): propuesta de valor, capturas, precios, formulario de
+`[x]` **PENDIENTE DE VALIDACIÓN REAL:** ver F2-191 (contacto real por Brevo a `CONTACTO_DESTINO`, zip del instalador en `AGENTE_URL_DESCARGA` y Lighthouse en el dominio real detrás de Caddy). **ALCANCE:** capturas como ilustraciones SVG marcadas (no capturas reales) y precios "por confirmar" (decisión abierta para Ricardo, `docs/onboarding.md`). Landing del producto (dominio raíz): propuesta de valor, capturas, precios, formulario de
 contacto (a Brevo) y FAQ. Onboarding semi-self-service: alta de empresa desde admin_global con
 wizard (datos, sucursales, generación de API keys, links de descarga del agente y guía),
 checklist de arranque visible hasta completarse.
