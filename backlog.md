@@ -2393,7 +2393,7 @@ de contar la reserva conciliada; (7) el contrato del método nuevo queda fijado 
 (8) una reserva recién tomada (menos de N minutos) NO se toca.
 
 ### F2-241b · Lectores de movimientos, recetas y compras
-`[ ]` **Bloque H** · /agent · Resto del corte de F2-241 (ver su línea PARCIAL y la entrada de
+`[x]` **Bloque H** · /agent · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-192/F2-193 (agrupación de `movsinv` en pólizas, concepto→tipo, fecha de las cancelaciones y de `fechaaplicacion`, heaps sin índice vs. timeout de 5 s; esquema-sr §10–§11). Resto del corte de F2-241 (ver su línea PARCIAL y la entrada de
 `docs/nocturno-log.md` del 2026-09-23 "F2-241"). F2-241 ya dejó: los cinco catálogos de inventario, las
 existencias (`Inventario/`, `Cola/ColaExistencias.cs`, `Cola/EnviadorExistencias.cs`), `Enlist=false` y
 `SoloLecturaTests`. **El mapeo de tablas ya está hecho** en `docs/esquema-sr.md` §10 (tabla "Tablas de
