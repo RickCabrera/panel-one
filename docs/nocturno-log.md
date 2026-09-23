@@ -6451,3 +6451,153 @@ código tumbaba la venta) y APROBADO en la 2.ª pasada; gate del entregable APRO
 **Qué haría distinto.** Pensar el SAVEPOINT desde el primer borrador. Cualquier cosa que cuelgue del
 camino de la ingesta de cheques y pueda fallar tiene que aislarse, porque un rechazo no reintentable
 del api BORRA el evento de la cola del agente.
+
+## 2026-09-22 22:30 — F2-103 · Portal público de autofactura
+**Estado:** CERRADA si el PR se mergea, con **ALCANCE** (sin emisión real ni re-descarga de un
+`facturado`: ver abajo) y **PENDIENTE DE VALIDACIÓN REAL** (F2-190). Carriles /api + /web (+ docs).
+Revisor: gate del plan APROBADO en la 1.ª pasada con 7 obligatorias (O1–O7, todas incorporadas);
+gate del entregable APROBADO en la 1.ª pasada (0 bloqueos) con 6 observaciones: agregué los casos
+`cancelado` y `en_global` al e2e del portal (el título prometía más de lo que probaba), el "Y además
+(de F2-103)" en F2-190 (celular real < 2 min y revisión visual a ~390 px), y este log.
+
+**Qué quedó hecho.**
+- **api** — tabla `portales_facturacion` (migración `20260923035537_portal_facturacion`): una fila
+  por sucursal con `slug` único GLOBAL, `color` `#rrggbb`, `logo` bytea (PNG/JPEG/WebP ≤ 200 KB) y
+  `activo`; CHECKs de formato, color, tipo/tamaño del logo y "logo con su tipo o ninguno".
+  - Públicas (sin sesión, controlador `PortalPublicoController`):
+    - `GET /facturacion/catalogos-sat` (c_RegimenFiscal + c_UsoCFDI con sus regímenes), cubo
+      `portal-facturacion` 60/min por IP;
+    - `GET /facturacion/portal/{slug}` (marca + `emisionDisponible`) y `…/logo` (bytes con
+      `nosniff` y CSP `default-src 'none'`), mismo cubo;
+    - `GET /facturacion/portal/{slug}/codigo/{codigo}` (como la de F2-101 más `desglose`), cubo
+      `codigo-facturacion` 10/min;
+    - `POST /facturacion/portal/{slug}/facturas`, cubo nuevo `facturas-portal` 5/min. Orden fijo:
+      portal 404 → formato 400 → código de la empresa 404 → estado 409 (con `estado`) → receptor 400
+      (con `campos`, un mensaje en español por campo) → puerto `EMISION_PORTAL`. **Hoy el puerto es
+      `EmisionNoDisponible` y responde 503.** No escribe nada en ningún camino (el e2e compara
+      códigos, receptores, perfiles y portales antes/después).
+  - Admin (`PortalesAdminController`, sólo admins, visor 403, ajeno 404 antes que 400/409):
+    `GET /facturacion/portales?empresaId=`, `PUT /facturacion/portales/{sucursalId}`,
+    `PUT|DELETE /facturacion/portales/{sucursalId}/logo`. Escrituras por
+    `ScopedPrismaService.facturacion(scope)` (`guardarPortal`, `guardarLogoPortal`), auditadas.
+  - Lecturas públicas en el helper, con el filtro ADENTRO (obligatoria O4):
+    `portalPublico(slug)` y `logoPortal(slug)` (portal, sucursal y empresa activos) y
+    `codigoFacturacionDelPortal(codigo, empresaId)` (la empresa en el WHERE, lista blanca de select).
+  - `GET /ventas/tickets`: cada ticket trae `codigoFacturacion: { codigo, estado, mensaje } | null`
+    en la MISMA consulta con scope (include), estado público con el `Reloj`.
+  - `sat.ts`: `esRfcValidoSat` (regex del Anexo 20), catálogo `USOS_CFDI` y `usoAplica`.
+    `portal.ts`: slug, color, tipo del logo por magic bytes (SVG rechazado) y `validarReceptor`.
+  - Seed: portales `demo-centro` (#0f766e, con logo PNG sintético generado en código) y
+    `demo-norte` (#9333ea, sin logo); no pisa un portal editado por una persona. Abre
+    `/f/demo-centro?c=7JQRECP3U`.
+  - OpenAPI regenerado (sólo cambia `TicketDto` y entran las 8 rutas nuevas; el diff textual se ve
+    enorme por reordenamiento, no por contenido — lo comparé semánticamente).
+- **web** — ruta PÚBLICA `/f/:slug` (`paginas/PortalFactura.tsx`, fuera de `RutaProtegida`), móvil
+  primero: cabecera con color y logo (o iniciales), paso 1 código (precargado y consultado solo con
+  `?c=`), resumen con desglose sólo si cuadra y "puedes facturarlo hasta el …" en la zona de la
+  sucursal; estados `facturado`/`en_global`/`expirado`/`cancelado` con qué hacer; paso 2 datos
+  fiscales (régimen filtrado por el RFC, uso filtrado por régimen, errores campo por campo con
+  `aria-invalid` + `aria-describedby`, foco al primero); paso 3 confirmación → POST; éxito con UUID,
+  serie-folio, total y descargas si vienen. 400 con `campos` regresa al paso 2 con el error en su
+  campo; 409 regresa al paso 1 con el estado; 503 muestra el mensaje del api.
+  - **Con `emisionDisponible: false` (TODO el sistema hoy) el portal deja consultar el código pero
+    NO pide datos fiscales** (obligatoria O6): dice "Este restaurante todavía no emite facturas en
+    línea…". Ni siquiera pide los catálogos.
+  - Facturación → tarjeta "Portal de autofactura" (`facturacion/Portales.tsx`): enlace sugerido por
+    el nombre, color, encendido, subir/cambiar/quitar logo, enlace "Abrir /f/…".
+  - Tickets: el detalle expandido muestra "Código de facturación" con su estado (respaldo de F2-102),
+    o por qué no hay.
+  - `ErrorApi` ahora guarda el `cuerpo` del error (lo usa el portal para `campos` y `estado`).
+
+**Decisiones que tomé y por qué.**
+- **El puerto `EMISION_PORTAL` con una implementación que responde 503** en vez de emitir contra el
+  PAC falso. Emitir de verdad es el JSON del CFDI + modelo `Cfdi` + candado por código = F2-104
+  entera; hacerlo aquí era "de pasada". El revisor lo aprobó siempre que el cierre diga la verdad:
+  por eso el `[x]` lleva **ALCANCE** nombrando los dos AC nocturnos que NO se cumplen ("flujo
+  completo de las tres pantallas contra el puerto falso" y "un código ya facturado ofrece
+  re-descargar"), y F2-104/F2-105 llevan su "Y además (de F2-103)" con lo que falta.
+- **La pantalla de éxito sólo se probó con un 201 INVENTADO en el test web.** En esta tarea NINGÚN
+  camino real del api produce un 201. El OpenAPI lo dice ("HOY RESPONDE 503", "Hoy ningún camino lo
+  produce") y `openapi.spec` fija esas frases (obligatoria O7).
+- `DECISION PROVISIONAL (nocturno)`: **el portal de una sucursal acepta códigos de cualquier
+  sucursal de su empresa** (`scoped-prisma.service.ts#codigoFacturacionDelPortal`; esquema-sr §2).
+  Decisión abierta para Ricardo; la alternativa es "sólo su sucursal".
+- `DECISION PROVISIONAL (nocturno)`: **desglose sólo si `subtotal + impuestos = total`**
+  (`portal.service.ts#desgloseDe`; esquema-sr §2). En el seed cuadra porque el generador lo fuerza,
+  lo que no prueba nada de SR (obligatoria O3); el e2e usa un cheque con descuento que no cuadra.
+- **`facturado` no afirma que se envió nada** (obligatoria O2): "pídela en el restaurante". Hay
+  ~15 % de códigos `facturado` en el seed sin ningún CFDI detrás.
+- Re-descarga de un `facturado`: ❓ decisión abierta en F2-105 (reenviar SÓLO al correo con que se
+  emitió vs. pedir el RFC receptor). Conservadora: la primera.
+- 409 del slug revela que otro portal (de cualquier empresa) ya lo usa: aceptado, los slugs son URLs
+  públicas.
+- Logo en bytea y no en `PuertoArchivos`: 200 KB por sucursal, sin servicio externo, y se sirve con
+  su tipo detectado por bytes. Si algún día se muda a archivos, el endpoint público no cambia.
+- El RFC genérico (`XAXX…`/`XEXX…`) se rechaza en el portal: el público en general no se autofactura.
+- "Detalle del ticket": no existe `GET /ventas/tickets/{id}` (el detalle es la fila expandible de la
+  lista), así que el código va en cada ticket de `GET /ventas/tickets`.
+
+**Trampas que encontré.**
+- **`TokensService.firmarAccess` devuelve una PROMESA**: `Bearer ${token(u)}` manda
+  "[object Promise]" y todo da 401. Hay que `await`.
+- **`estado in OBJETO` acepta `constructor`/`toString`**: el test `estadoDelApi({estado:
+  'constructor'})` lo atrapó. Usa `Object.hasOwn`.
+- **El lint `tema/sin-colores` prohíbe literales `#fff`, `bg-white`**, también dentro de lógica: el
+  negro/blanco sobre el color de la marca sale de `contraste()` + `BLANCO`/`NEGRO` de `tema/paleta`.
+- **Comparar `openapi.json` contra main por pipe en Windows**: `git show … | python` lo decodifica
+  en cp1252 y TODO parece cambiado. Guarda el archivo y ábrelo con `encoding='utf-8'`.
+- **Un `python - <<'EOF'` que escribe `\u0300` en un regex** lo convirtió en el carácter combinante
+  real (invisible). Si necesitas un escape literal, arma el texto con `chr(92)`.
+- **Prettier sobre carpetas enteras** otra vez marcó archivos LF→CRLF sin cambios: `git checkout`
+  de esos antes de commitear (se revisa con `git diff --ignore-cr-at-eol --stat`).
+- **El logo se cachea 5 min** (`Cache-Control: public, max-age=300`): tras apagar un portal, su
+  logo puede seguir viéndose ese rato desde caché. Aceptado.
+- `nosniff`/CSP del logo: el `Cache-Control: no-store` global se pisa con `res.set` dentro del
+  handler (con `@Res({ passthrough: true })` + `StreamableFile`).
+
+**Qué quedó abierto.**
+- **F2-104** ("Y además (de F2-103)"): cambiar el provider de `EMISION_PORTAL`, `disponible()` real,
+  el 201 del contrato, la prueba de punta a punta por el POST del portal (201 → `facturado` → 409),
+  quitar el 201 inventado del test web, y guardar el receptor frecuente al emitir.
+- **F2-105** ("Y además (de F2-103)"): `descargas` con token firmado y la re-descarga de un
+  `facturado` (decisión abierta).
+- **F2-102**: el QR del ticket apunta a `/f/{slug}?c={codigo}`; el portal ya consulta solo con `?c=`.
+- **F2-190** ("Y además (de F2-103)"): el flujo en sandbox "< 2 min desde un celular" (AC
+  original), la revisión visual a ~390 px, y las dos decisiones provisionales.
+- Sigue el rojo preexistente de `prisma/esquema.spec.ts` (argon2id: FK al borrar el usuario en la
+  base local de dev), igual que F2-120…F2-101.
+
+**Tests.**
+- api nuevos: `facturacion/portal.spec.ts` (45, puros: slug, color, magic bytes con SVG, RFC SAT,
+  c_UsoCFDI, `validarReceptor` por campo), `facturacion/portal.e2e.spec.ts` (22: admin 404/403/401/
+  400/409, logo SVG/GIF/vacío/200 KB+1 rechazados y PNG servido con nosniff/CSP, 404 idéntico con
+  portal/sucursal/empresa de baja en las 4 rutas públicas, código de otra empresa = 404 idéntico,
+  otra sucursal de la misma empresa = 200, desglose que no cuadra = null, estados sin datos, 429 en
+  los dos cubos, POST: 503 sin escribir nada, 400 por campo, orden de errores, 409, cuerpo mal
+  formado; y el código en Tickets), `scope/portal-publico.spec.ts` (6: WHERE del helper, empresa
+  vacía truena antes de consultar), `prisma/seed-facturacion.spec.ts` (+3: logo sintético, portales
+  idempotentes, el panel manda), `openapi.spec` (+1), `throttlers.e2e` (+5 filas).
+- Adaptados, no aflojados: `scope.helper.spec` y `scoped-prisma.service.spec` (modelo nuevo),
+  `tickets.service.spec` (Reloj en el constructor), `openapi.spec` (rutas).
+- web nuevos: `portal/reglas.test.ts` (13), `PortalFactura.test.tsx` (15: marca, `?c=` sin
+  Authorization y con `no-referrer`, sin logo/sin desglose, 404, código mal escrito sin ir al api,
+  4 estados sin datos ni promesas, emisión apagada sin pedir datos ni catálogos, flujo completo con
+  el 201 del contrato, errores de captura todos a la vez, 400 con campos, 409, 503),
+  `Facturacion.test` (+3 del portal), `facturacion/reglas.test` (+2), `Tickets.test` (+1).
+- Números: /api lint, typecheck, `prisma validate` y `migrate dev` limpios; openapi regenerado. Jest
+  completo **1945/1946** (111 suites): el único rojo es el preexistente de `prisma/esquema.spec.ts`,
+  así que **NO es verde**. /web build y lint limpios; vitest **1162/1162** (90 archivos);
+  check:bundle 304.8 kB gzip (tope 400). Seed real corrido en dev: "Portales … sembrados: 2".
+- **"Probado en viewport de celular" (AC nocturno): SÓLO A MEDIAS.** Levanté api + web con el seed y
+  abrí `/f/demo-centro?c=7JQRECP3U` en Chrome real: carga la marca (color y logo sintético), el
+  código precargado y el api responde `pendiente` con desglose. Pero la extensión de Chrome no
+  redimensionó la ventana a 390 px y las capturas se colgaron (timeout de CDP) tres veces, así que
+  **no hay evidencia visual en ancho de celular**. El layout es de una columna (`max-w-lg`, inputs de
+  `text-base`, botones a todo lo ancho bajo `sm:`), pero eso es diseño, no prueba. Queda para
+  F2-190 / una revisión de Ricardo en un celular. OJO: en el 5173 había OTRO vite corriendo (no sé de
+  qué checkout; ¿`.wt-main/`?): levanta el tuyo en otro puerto con `--strictPort`.
+
+**Qué haría distinto.** Leer la tabla "Cierre nocturno de las tareas heredadas de Fase 2" del
+backlog ANTES de escribir el plan: ahí está el "Listo cuando" que manda de noche (para F2-103 pedía
+"contra el puerto falso"), y yo la encontré sólo porque el revisor la citó. Y probar el ancho de
+celular temprano, con el navegador, no al final cuando ya no hay margen para pelear con la extensión.

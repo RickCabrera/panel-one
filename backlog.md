@@ -1466,6 +1466,14 @@ que Facturama contesta de verdad queda corregida en el test de contrato correspo
 > §2); (2) qué hace SR al reabrir o cancelar una cuenta que ya tenía código; (3) que la vigencia
 > por default (fin del mes del cierre, zona de la sucursal) es la que el cliente quiere; (4) el
 > riesgo del `folio_sr` reusado (el código apuntaría a otra cuenta).
+>
+> **Y además (de F2-103).** El AC original del portal de autofactura: (1) **flujo completo en
+> sandbox desde un celular real en < 2 min**, escaneando el QR del ticket (F2-102) hasta la
+> factura emitida (necesita F2-104/F2-105 cerradas); (2) **revisión visual de `/f/{slug}` a ~390 px**
+> (cabecera con logo, pasos, teclado numérico en el CP, botones a todo lo ancho): la sesión nocturna
+> no pudo verificarla en un navegador real; (3) decidir si el portal de una sucursal acepta códigos
+> de otras sucursales de su empresa (hoy sí; DECISION PROVISIONAL, esquema-sr §2); (4) confirmar
+> con tickets reales que `subtotal + impuestos = total` (si no, el portal muestra sólo el total).
 
 ## F2-191 · Conectar correo y almacenamiento reales
 `[ ]` **Bloque F** · 🔒 **Razón: necesita la cuenta de Brevo, el dominio verificado con sus

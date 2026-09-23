@@ -151,17 +151,27 @@ describe('Portal público de autofactura (e2e, F2-103)', () => {
       // Descuento: subtotal + impuestos no suman el total (315.50 - 20 = 295.50).
       cheque('p2', 'POR-NO-CUADRA', { descuentos: '20.00', total: '295.50' }),
       cheque('p3', 'POR-FACT'),
+      cheque('p6', 'POR-CANC'),
+      cheque('p7', 'POR-GLOBAL'),
     ]);
+    // Cancelada en SR DESPUÉS de tener código: el estado `cancelado` se deriva del cheque.
+    await lote(KEYS.a1, [cheque('p6b', 'POR-CANC', { cancelado: true })]);
     await lote(KEYS.a2, [cheque('p4', 'POR-A2')]);
     await lote(KEYS.b1, [cheque('p5', 'POR-B1')]);
     codigos.pend = await codigoDe('POR-PEND', FX.sucursalA1);
     codigos.noCuadra = await codigoDe('POR-NO-CUADRA', FX.sucursalA1);
     codigos.fact = await codigoDe('POR-FACT', FX.sucursalA1);
+    codigos.canc = await codigoDe('POR-CANC', FX.sucursalA1);
+    codigos.global = await codigoDe('POR-GLOBAL', FX.sucursalA1);
     codigos.a2 = await codigoDe('POR-A2', FX.sucursalA2);
     codigos.b1 = await codigoDe('POR-B1', FX.sucursalB1);
     await prisma.codigoFacturacion.updateMany({
       where: { codigo: codigos.fact },
       data: { estado: 'facturado' },
+    });
+    await prisma.codigoFacturacion.updateMany({
+      where: { codigo: codigos.global },
+      data: { estado: 'en_global' },
     });
 
     expect(
@@ -471,18 +481,32 @@ describe('Portal público de autofactura (e2e, F2-103)', () => {
       expect(minus.body.codigo).toBe(codigos.pend);
     });
 
-    it('facturado, expirado y cancelado: sólo el estado y su mensaje, sin datos del ticket', async () => {
-      const fact = await consultar(SLUG_A1, codigos.fact);
-      expect(fact.body).toEqual({
-        codigo: codigos.fact,
-        estado: 'facturado',
-        mensaje: 'Este ticket ya fue facturado.',
-        ticket: null,
-      });
+    it('facturado, en global, cancelado y expirado: sólo el estado y su mensaje, sin datos del ticket', async () => {
+      const esperados = [
+        [codigos.fact, 'facturado', 'Este ticket ya fue facturado.'],
+        [
+          codigos.global,
+          'en_global',
+          'Este ticket ya se incluyó en la factura global del periodo y no se puede facturar.',
+        ],
+        [
+          codigos.canc,
+          'cancelado',
+          'La cuenta de este ticket fue cancelada y no se puede facturar.',
+        ],
+      ] as const;
+      const respuestas = [];
+      for (const [codigo, estado, mensaje] of esperados) {
+        const res = await consultar(SLUG_A1, codigo);
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ codigo, estado, mensaje, ticket: null });
+        respuestas.push(res);
+      }
       reloj.t = Date.parse(FIN_DE_SEPTIEMBRE);
       const exp = await consultar(SLUG_A1, codigos.pend);
       expect(exp.body).toMatchObject({ estado: 'expirado', ticket: null });
-      for (const r of [fact, exp]) {
+      respuestas.push(exp);
+      for (const r of respuestas) {
         expect(r.text).not.toContain('315.50');
         expect(r.text).not.toContain('A1');
       }
