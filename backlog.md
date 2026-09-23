@@ -1845,7 +1845,7 @@ factura existente en lugar de fallar.
 >    y `cancelado` (este último se deriva de la cuenta). Cada uno trae `mensaje` en español.
 
 ### F2-104 · Emisión de CFDI vía Facturama
-`[ ]` Servicio `CfdiService.emitir(chequeId, receptor)`: construye el JSON de Facturama
+`[x]` **ALCANCE:** sin guardar XML/PDF (F2-105) y sin resolver reservas ambiguas colgadas en `timbrando` (F2-110). **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190 (tabla de errores del SAT, 429/503 vs 5xx ambiguos, base = total sin propina, IVA 16 %, tarjeta 04; esquema-sr §2 "La emisión del CFDI"). Servicio `CfdiService.emitir(chequeId, receptor)`: construye el JSON de Facturama
 (emisor = perfil fiscal de la empresa, receptor, concepto único "Consumo de alimentos y
 bebidas" clave SAT `90101500`, unidad `E48`/Servicio, importes desde el cheque, forma de
 pago mapeada del `ChequePago` dominante, método `PUE`, moneda MXN, lugar de expedición = CP
