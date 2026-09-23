@@ -3,5 +3,8 @@
   "serieFolio": "A-1024",
   "total": "315.50",
   "email": "facturas@ejemplo.test",
-  "descargas": { "xml": null, "pdf": null }
+  "descargas": {
+    "xml": "/api/archivos/cfdi/7d1f3c2a-0b4e-4c55-9a61-2f0e8b7c9d10/2026/09/5FB2822E-396D-4725-8521-CDC4BDD20CCF.xml?expira=1790044500&firma=IS1r2C7EiZrtrjo1piozn5Dwj8x9sG3D67EvX8tBJuk",
+    "pdf": "/api/archivos/cfdi/7d1f3c2a-0b4e-4c55-9a61-2f0e8b7c9d10/2026/09/5FB2822E-396D-4725-8521-CDC4BDD20CCF.pdf?expira=1790044500&firma=IS1r2C7EiZrtrjo1piozn5Dwj8x9sG3D67EvX8tBJuk"
+  }
 }

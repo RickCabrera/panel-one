@@ -92,6 +92,27 @@ describe('Contrato OpenAPI', () => {
     }
   });
 
+  it('F2-105: la descarga firmada es pública con 404 único y 429; lo demás, con bearer, roles y 404', async () => {
+    const { paths } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    const publica = paths['/archivos/{clave}']?.get;
+    expect(publica?.security).toBeUndefined();
+    expect(codigos(publica)).toEqual(['200', '404', '429']);
+    for (const ext of ['xml', 'pdf']) {
+      const op = paths[`/facturacion/cfdis/{id}/${ext}`]?.get;
+      expect(op?.security).toEqual([{ bearer: [] }]);
+      expect(codigos(op)).toEqual(['200', '400', '401', '404']);
+    }
+    expect(codigos(paths['/facturacion/envios']?.get)).toEqual(['200', '400', '401', '403', '404']);
+    const reintento = paths['/facturacion/cfdis/{id}/envios/reintento']?.post;
+    expect(codigos(reintento)).toEqual(['200', '400', '401', '403', '404', '409']);
+    expect(JSON.stringify(reintento?.responses?.['409'])).toContain('archivos guardados');
+    // El 201 del portal ya no dice que las descargas vienen en nulos "hasta F2-105".
+    const post = paths['/facturacion/portal/{slug}/facturas']?.post;
+    expect(JSON.stringify(post?.responses?.['201'])).not.toContain('hasta F2-105');
+    expect(JSON.stringify(post?.responses?.['201'])).toContain('enlaces firmados');
+  });
+
   it('F2-103/F2-104: el portal es público y con 429; el POST emite (201) y documenta sus fallas; admin con roles y 404', async () => {
     const { paths, components } = await generarDocumento();
     const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
@@ -792,6 +813,8 @@ describe('Contrato OpenAPI', () => {
       [
         '/agente/yo',
         '/agentes/estado',
+        // F2-105: descarga pública de XML/PDF por enlace firmado.
+        '/archivos/{clave}',
         // F2-120: catálogos de inventario.
         '/catalogos/almacenes',
         '/catalogos/grupos-insumo',
@@ -845,6 +868,11 @@ describe('Contrato OpenAPI', () => {
         '/facturacion/portales',
         '/facturacion/portales/{sucursalId}',
         '/facturacion/portales/{sucursalId}/logo',
+        // F2-105: entrega de facturas (descargas autenticadas, envíos y su reintento).
+        '/facturacion/cfdis/{id}/envios/reintento',
+        '/facturacion/cfdis/{id}/pdf',
+        '/facturacion/cfdis/{id}/xml',
+        '/facturacion/envios',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',

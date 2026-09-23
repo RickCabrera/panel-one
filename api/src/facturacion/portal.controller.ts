@@ -190,7 +190,11 @@ export class PortalPublicoController {
   @ApiParam({ name: 'slug', example: 'demo-centro' })
   @ApiCreatedResponse({
     type: FacturaPortalDto,
-    description: 'CFDI timbrado. `descargas` viene en nulos hasta F2-105 (entrega).',
+    description:
+      'CFDI timbrado (F2-105): el XML y el PDF quedan guardados y salen por correo al del ' +
+      'receptor, con bitácora de envío. `descargas` trae enlaces firmados de 1 h; nulos si el ' +
+      'archivo no se pudo guardar. Una falla del correo NO cambia esta respuesta: el envío queda ' +
+      'para reintento.',
   })
   @ApiBadRequestResponse({
     type: ErrorReceptorDto,

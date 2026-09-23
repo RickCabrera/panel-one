@@ -96,7 +96,8 @@ export interface ReservaCfdi {
   serie: string;
   folio: number;
   emisor: { rfc: string; razonSocial: string; regimenFiscal: string; cp: string };
-  sucursal: { zonaHoraria: string };
+  /** La sucursal que expide, con la marca de su portal para el correo (F2-105). */
+  sucursal: { zonaHoraria: string; nombre: string; colorPortal: string | null };
   cheque: { folio: string; total: Prisma.Decimal };
   formaPago: string;
   importes: { subtotal: Prisma.Decimal; iva: Prisma.Decimal; total: Prisma.Decimal };
@@ -107,6 +108,52 @@ export interface TimbreCfdi {
   uuid: string;
   idPac: string;
   fechaTimbrado: Date;
+}
+
+/** Las claves en `PuertoArchivos` del XML y el PDF de un CFDI (F2-105). */
+export interface ArchivosCfdi {
+  xmlClave: string;
+  pdfClave: string;
+}
+
+/** Un envío por correo reclamado: la fila y a quién va (el correo guardado en el CFDI). */
+export interface EnvioReclamado {
+  envioId: string;
+  email: string;
+  intentos: number;
+}
+
+/** Cómo terminó un intento de envío. */
+export type ResultadoEnvio = { ok: true; correoId: string } | { ok: false; error: string };
+
+/**
+ * Un envío en `enviando` más viejo que esto se da por muerto (el proceso cayó a media llamada) y se
+ * puede reintentar a mano. 20 veces el tope HTTP del puerto (`TIMEOUT_HTTP_MS` = 30 s): un envío que
+ * sigue en vuelo nunca se ve vencido, así que el reintento no manda un correo doble.
+ */
+export const ENVIO_VENCIDO_MS = 10 * 60 * 1000;
+
+/** Largo máximo del error que se guarda de un envío fallido. */
+export const MAX_ERROR_ENVIO = 500;
+
+export const MENSAJE_SIN_ENVIO_QUE_REINTENTAR =
+  'Esta factura no tiene un envío fallido que reintentar (ya salió, o se está enviando ahora).';
+
+/** Envíos que alguien tiene que reintentar: fallidos, o `enviando` vencidos. */
+export function whereEnvioAReintentar(ahora: Date): Prisma.CfdiEnvioWhereInput {
+  return {
+    OR: [
+      { estado: 'fallido' },
+      { estado: 'enviando', ultimoIntentoAt: { lt: new Date(ahora.getTime() - ENVIO_VENCIDO_MS) } },
+    ],
+  };
+}
+
+/** El correo guardado en el receptor del CFDI, o null si no trae uno usable. */
+export function emailDelReceptor(receptor: Prisma.JsonValue): string | null {
+  if (receptor === null || typeof receptor !== 'object' || Array.isArray(receptor)) return null;
+  const email = (receptor as Record<string, unknown>).email;
+  return typeof email === 'string' && email.trim().length > 0 ? email.trim() : null;
 }
 
 export const MENSAJE_SIN_FORMA_PAGO =
@@ -411,7 +458,13 @@ export class EscrituraFacturacion {
                 },
               },
               sucursal: {
-                select: { activo: true, zonaHoraria: true, empresa: { select: { activo: true } } },
+                select: {
+                  activo: true,
+                  zonaHoraria: true,
+                  nombre: true,
+                  portalFacturacion: { select: { color: true } },
+                  empresa: { select: { activo: true } },
+                },
               },
             },
           }),
@@ -487,7 +540,11 @@ export class EscrituraFacturacion {
             regimenFiscal: perfil.regimenFiscal,
             cp: perfil.cp,
           },
-          sucursal: { zonaHoraria: codigo.sucursal.zonaHoraria },
+          sucursal: {
+            zonaHoraria: codigo.sucursal.zonaHoraria,
+            nombre: codigo.sucursal.nombre,
+            colorPortal: codigo.sucursal.portalFacturacion?.color ?? null,
+          },
           cheque: { folio: codigo.cheque.folio, total: codigo.cheque.total },
           formaPago,
           importes,
@@ -567,6 +624,169 @@ export class EscrituraFacturacion {
           estado: 'timbrando',
         }),
       });
+    });
+  }
+
+  /**
+   * Anota dónde quedaron el XML y el PDF de un CFDI vigente (F2-105). Sólo si todavía no tenía:
+   * repetirlo no mueve nada. 404 si el CFDI no está en el scope.
+   */
+  async registrarArchivosCfdi(
+    empresaId: string,
+    cfdiId: string,
+    archivos: ArchivosCfdi,
+    ahora: Date,
+  ): Promise<void> {
+    await this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      const cfdi = encontradoOr404(
+        await tx.cfdi.findFirst({
+          where: whereScoped(this.#scope, 'Cfdi', {
+            id: exigir('cfdiId', cfdiId),
+            empresaId,
+            estado: 'vigente',
+          }),
+          select: { id: true },
+        }),
+      );
+      await tx.cfdi.updateMany({
+        where: whereScoped(this.#scope, 'Cfdi', {
+          id: cfdi.id,
+          empresaId,
+          xmlClave: null,
+          pdfClave: null,
+        }),
+        data: {
+          xmlClave: exigir('xmlClave', archivos.xmlClave),
+          pdfClave: exigir('pdfClave', archivos.pdfClave),
+          updatedAt: ahora,
+        },
+      });
+    });
+  }
+
+  /**
+   * RECLAMA el primer envío por correo de un CFDI (F2-105): la fila nace en `enviando` con el correo
+   * DEL CFDI (el del receptor con que se timbró), nunca con uno que pase quien llama. Null si el
+   * receptor no tiene correo o si el envío ya existía (no se manda dos veces). 404 fuera del scope.
+   */
+  async reclamarEnvioCfdi(
+    empresaId: string,
+    cfdiId: string,
+    ahora: Date,
+  ): Promise<EnvioReclamado | null> {
+    try {
+      return await this.#enTransaccion(async (tx) => {
+        await this.#empresa(tx, empresaId);
+        const cfdi = encontradoOr404(
+          await tx.cfdi.findFirst({
+            where: whereScoped(this.#scope, 'Cfdi', {
+              id: exigir('cfdiId', cfdiId),
+              empresaId,
+              estado: 'vigente',
+            }),
+            select: { id: true, receptor: true },
+          }),
+        );
+        const email = emailDelReceptor(cfdi.receptor);
+        if (email === null) return null;
+        const { id } = await tx.cfdiEnvio.create({
+          data: {
+            empresaId,
+            cfdiId: cfdi.id,
+            email,
+            estado: 'enviando',
+            intentos: 1,
+            ultimoIntentoAt: ahora,
+            updatedAt: ahora,
+          },
+          select: { id: true },
+        });
+        return { envioId: id, email, intentos: 1 };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * RECLAMA el reintento manual del envío de un CFDI (F2-105): uno `fallido`, o `enviando` vencido
+   * (`ENVIO_VENCIDO_MS`), pasa a `enviando` con intentos + 1 en UN `updateMany` condicionado: si dos
+   * administradores lo piden a la vez, sólo uno gana y el otro recibe 409. Primero el scope: un
+   * CFDI de otra empresa es 404 antes de decir nada de sus envíos.
+   */
+  async reclamarReintentoEnvio(
+    empresaId: string,
+    cfdiId: string,
+    ahora: Date,
+  ): Promise<EnvioReclamado> {
+    return this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      const cfdi = encontradoOr404(
+        await tx.cfdi.findFirst({
+          where: whereScoped(this.#scope, 'Cfdi', { id: exigir('cfdiId', cfdiId), empresaId }),
+          select: { id: true },
+        }),
+      );
+      const aReintentar = whereScoped(this.#scope, 'CfdiEnvio', {
+        cfdiId: cfdi.id,
+        empresaId,
+        ...whereEnvioAReintentar(ahora),
+      });
+      const envio = await tx.cfdiEnvio.findFirst({
+        where: aReintentar,
+        select: { id: true, email: true, intentos: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!envio) throw new ConflictException(MENSAJE_SIN_ENVIO_QUE_REINTENTAR);
+      const { count } = await tx.cfdiEnvio.updateMany({
+        where: { ...aReintentar, id: envio.id },
+        data: {
+          estado: 'enviando',
+          intentos: { increment: 1 },
+          ultimoIntentoAt: ahora,
+          updatedAt: ahora,
+        },
+      });
+      if (count !== 1) throw new ConflictException(MENSAJE_SIN_ENVIO_QUE_REINTENTAR);
+      return { envioId: envio.id, email: envio.email, intentos: envio.intentos + 1 };
+    });
+  }
+
+  /** Cierra un intento de envío: `enviado` con el id del correo, o `fallido` con el error recortado. */
+  async cerrarEnvioCfdi(
+    empresaId: string,
+    envioId: string,
+    resultado: ResultadoEnvio,
+    ahora: Date,
+  ): Promise<void> {
+    await this.#enTransaccion(async (tx) => {
+      await this.#empresa(tx, empresaId);
+      const { count } = await tx.cfdiEnvio.updateMany({
+        where: whereScoped(this.#scope, 'CfdiEnvio', {
+          id: exigir('envioId', envioId),
+          empresaId,
+          estado: 'enviando',
+        }),
+        data: resultado.ok
+          ? {
+              estado: 'enviado',
+              correoId: resultado.correoId,
+              error: null,
+              ultimoIntentoAt: ahora,
+              updatedAt: ahora,
+            }
+          : {
+              estado: 'fallido',
+              error: resultado.error.slice(0, MAX_ERROR_ENVIO),
+              ultimoIntentoAt: ahora,
+              updatedAt: ahora,
+            },
+      });
+      encontradoOr404(count === 1 ? true : null);
     });
   }
 

@@ -6716,3 +6716,105 @@ tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-190.
 **Qué haría distinto.** Diseñar el candado como "reserva en la tabla" desde el principio fue lo que
 hizo fácil el resto (doble clic, ambiguo, confirmación que falla son la misma fila en `timbrando`).
 Y escribir los scripts de edición a archivo desde el inicio: el shell se comió dos heredocs.
+
+## 2026-09-23 06:30 — F2-105 · Entrega de la factura
+**Estado:** CERRADA (PR de `feat/F2-105`, squash a main) con el AC nocturno de la tabla "Cierre nocturno de las
+tareas heredadas de Fase 2" · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-191. Revisor: plan bloqueado 1 vez
+(B1 envío colgado en `enviando`, B2 tests de scope por rol) y aprobado a la segunda.
+
+**Qué quedó hecho.**
+- Migración `20260925010000_entrega_cfdi` (generada con `prisma migrate diff --from-schema-datasource`
+  y retocada a mano): `cfdis.xml_url/pdf_url` se RENOMBRARON (RENAME COLUMN, no drop/add) a
+  `xml_clave/pdf_clave`: guardan la CLAVE en `PuertoArchivos`, no una URL (la URL se firma al pedirla y
+  vence). Único `(id, empresa_id)` en `cfdis`; tabla `cfdi_envios` (una fila por CFDI+correo, estado
+  `enviando|enviado|fallido`, `intentos` con CHECK ≥ 1, `error`, `correo_id`, `ultimo_intento_at`) con
+  FK compuesta al CFDI. Registrada en `scope.helper.ts` como `CfdiEnvio: 'empresaId'`.
+- `EntregaCfdiService` (`api/src/facturacion/entrega.service.ts`) + lo puro en `entrega.ts`. Corre en
+  `CfdiService.emitir` DESPUÉS de `confirmarCfdi`, fuera de toda transacción, y NUNCA lanza:
+  1. guarda XML y PDF en `cfdi/{empresaId}/{AAAA}/{MM}/{UUID}.{xml|pdf}` (año/mes del timbrado en la
+     zona de la sucursal; con `ARCHIVOS_RAIZ=/data` es el `/data/cfdi/...` del backlog) y los anota
+     con `EscrituraFacturacion.registrarArchivosCfdi`;
+  2. firma los enlaces de `descargas` (1 h);
+  3. reclama el envío (`reclamarEnvioCfdi`: el correo sale del receptor GUARDADO en el CFDI), manda
+     `factura-emitida` con PDF+XML (los buffers EN MEMORIA del timbre: sale aunque el disco falle) y
+     cierra el envío (`enviado` o `fallido` con el error recortado a 500).
+- Endpoints (OpenAPI regenerado): `GET /archivos/*clave?expira&firma` (público, 60/min por IP, sólo
+  `cfdi/…{.xml,.pdf}`, TODO fallo es el mismo 404), `GET /facturacion/cfdis/{id}/xml|pdf` (cualquier
+  rol, 404 fuera de scope o sin archivo), `GET /facturacion/envios?empresaId&estado=fallido|atorado`
+  (admins) y `POST /facturacion/cfdis/{id}/envios/reintento` (admins, sin cuerpo; auditoría
+  `cfdi.reenvio`).
+- `PuertoArchivos` ganó `verificarUrl(clave, expira, firma)` (el secreto se queda en el adaptador).
+  `URL_BASE_ARCHIVOS_FALSO` pasó de `/archivos` a `/api/archivos`: es lo que ve el navegador detrás del
+  proxy del web, que quita `/api` antes de Nest. Ningún snapshot cambió por eso.
+
+**Decisiones que tomé y por qué.**
+- `DECISION PROVISIONAL (nocturno)` `TTL_DESCARGA_PORTAL_S` = 1 h (`entrega.ts`). El correo lleva los
+  archivos; el enlace es para la pantalla de éxito. **Para Ricardo:** si el cliente vuelve después, se
+  topa con la RE-DESCARGA de un código ya facturado, que sigue siendo la decisión abierta (a)/(b) de
+  F2-105 en el backlog (reenviar SÓLO al correo de emisión vs pedir el RFC exacto). No implementé
+  ninguna: el portal sigue diciendo "pídela en el restaurante". Con lo de hoy, (a) es barato:
+  `reclamarReintentoEnvio` + `#enviar` ya mandan al correo guardado.
+- El correo sale DENTRO de la petición del portal (el 201 espera al puerto; Brevo tiene tope
+  `TIMEOUT_HTTP_MS` = 30 s). Más simple y determinista para los tests. Alternativa para F2-106/F2-191:
+  mandarlo en segundo plano después de responder.
+- `ENVIO_VENCIDO_MS` = 10 min (20× el tope HTTP): un `enviando` más viejo se da por muerto (proceso caído
+  a media llamada) y se puede reintentar; uno más reciente NO (podría estar en vuelo → correo doble).
+  El reclamo del reintento es UN `updateMany` condicionado a `fallido OR (enviando AND vencido)`, con el
+  WHERE armado por `whereScoped`: dos admins a la vez → uno 200 y el otro 409 (probado).
+- Orden del reintento: scope (404) → archivos guardados (409) → reclamo (409). Si no hay archivos NO se
+  reclama nada (el envío queda como estaba).
+- Receptor sin `email` (no pasa hoy: el portal lo exige; sí puede pasar con F2-107): no se crea fila ni se
+  llama al puerto.
+- El 201 del portal no cambia si el correo falla: el envío queda `fallido` y el portal da sus enlaces.
+
+**Trampas que encontré.**
+- `test/fixtures-auth.ts` y `prisma/seed-ventas.ts` borran `cfdis`: ahora hay que borrar antes
+  `cfdi_envios` (FK Restrict). Ya está en los dos. Quien agregue otra tabla que cuelgue de `cfdis`
+  (F2-109, F2-110) tiene que hacer lo mismo o `scoped-prisma.service.spec.ts` truena en cadena.
+- Nest 11 / path-to-regexp v8: el comodín es `@Get('*clave')` y el `@Param` llega como ARREGLO de
+  segmentos (el controlador acepta los dos y hace `join('/')`).
+- supertest no te da los bytes de un `application/xml`/`pdf` sin un parser propio (`binario()` en
+  `entrega.e2e.spec.ts`).
+- El script de Python que editaba el e2e falló a la mitad (un `assert`) y luego corrí prettier: no
+  escribió nada, y prettier reformateó `codigo.spec.ts`, que no era de la tarea (lo revertí). **No
+  corras `prettier --write` con comodines sobre carpetas**: `prettier --check` marca ~250 archivos en
+  main por los CRLF de `core.autocrlf=true`, no es una señal útil; ESLint es el gate.
+- `.wt-main/` sigue en la raíz sin seguimiento: nunca `git add -A`.
+
+**Qué quedó abierto.**
+- **Copia al restaurante** (del texto original de F2-105): no hay dónde configurar su correo. Queda
+  fuera (ALCANCE).
+- **Disco Y correo fallan a la vez**: el CFDI queda sin archivos y sin correo; el reintento responde 409
+  "sin archivos" y el log dice `SIN archivos guardados y SIN correo`. Se recupera del PAC por `idPac`
+  (`peticionDescarga` de Facturama) → F2-110/F2-191. Los CFDI de desarrollo emitidos antes de esta tarea
+  tampoco tienen archivos (con el PAC falso no se pueden recuperar).
+- **UI del reintento**: sólo API; la lista de envíos a reintentar la pinta el dashboard (F2-106).
+- **F2-191**: Brevo real con inbox real, volumen persistente en el VPS y que `ARCHIVOS_RAIZ` entre al
+  backup de F1-004.
+- `docs/esquema-sr.md` NO se tocó: esta tarea no lee SoftRestaurant, no hubo hallazgo.
+
+**Tests.**
+- api nuevos: `facturacion/entrega.spec.ts` (clave por zona —30/09 21:00 CDMX = septiembre—, plantilla
+  que escapa HTML y descarta un color que no es `#rrggbb`, adjuntos, y el servicio con dobles: disco que
+  falla → correo sale con los bytes en memoria; correo que falla → no lanza y queda fallido; ambos;
+  receptor sin correo), `facturacion/entrega.e2e.spec.ts` (10, app real + Postgres: ruta y bytes, enlace
+  firmado con cabeceras y el MISMO 404 para alterado/otra clave/sin firma/fuera de `cfdi/`/inexistente/
+  vencido; Brevo REAL contra HTTP falso 401 → fallido sin la api key; listado con scope A/B y visor 403;
+  reintento visor 403, B 404, A 200 intentos 2 y luego 409; dos reintentos simultáneos = un correo;
+  atorado de 11 min se lista y se recupera, uno de 1 min da 409; disco que falla; descarga autenticada
+  visor A 200 / B 404; reinicio de la app sobre la misma raíz).
+- `archivos.spec.ts` +2 (`verificarUrl`, URL base falsa), `openapi.spec.ts` +1 (códigos de los 4
+  endpoints nuevos) y la lista de rutas.
+- Adaptados al comportamiento nuevo (no aflojados): `cfdi.service.spec.ts` (la entrega se llama con el
+  contexto exacto después de confirmar, y NO si la confirmación falla), `cfdi.e2e.spec.ts` (`descargas`
+  ya no son nulos: enlaces con la forma exacta), fixture compartida
+  `web/src/paginas/portal/factura-portal.fixture.json` (con enlaces) y `PortalFactura.test.tsx` (el flujo
+  completo corre dos veces: con enlaces y con nulos).
+- Números: /api lint, typecheck y `prisma validate` limpios; migración aplicada con `migrate deploy` y
+  `migrate diff` contra la base = vacío (sin drift); openapi regenerado. Jest completo **2036/2037**
+  (117 suites): el único rojo es el preexistente de `prisma/esquema.spec.ts` ("al crear el admin…",
+  FK de `suscripciones_reporte` del seed de reportes en la base local, igual que en F2-104), así que
+  **NO es verde** en esta base local. /web build y lint limpios; vitest **1167/1167** (90 archivos).
+
+**Qué haría distinto.** Escribir el e2e con Edit desde el principio y no con un script de reemplazos:
+el heredoc largo se rompió una vez y el script de Python otra.

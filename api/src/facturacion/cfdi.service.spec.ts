@@ -24,6 +24,7 @@ import {
   type Espera,
 } from './cfdi.service';
 import type { SolicitudFacturaPortal } from './emision-portal';
+import type { CfdiParaEntregar, EntregaCfdiService } from './entrega.service';
 
 /**
  * La política de la emisión (F2-104), sin base: qué se reintenta, qué se libera, qué se queda en
@@ -41,7 +42,7 @@ const RESERVA: ReservaCfdi = {
     regimenFiscal: '601',
     cp: '06700',
   },
-  sucursal: { zonaHoraria: 'America/Mexico_City' },
+  sucursal: { zonaHoraria: 'America/Mexico_City', nombre: 'Sucursal Sintética', colorPortal: null },
   cheque: { folio: 'T-1', total: new Prisma.Decimal('315.50') },
   formaPago: '01',
   importes: {
@@ -84,6 +85,7 @@ function armar(respuestas: Array<CfdiTimbrado | Error>, confirmar?: () => Promis
     esperas: [] as number[],
     liberadas: [] as string[],
     confirmadas: 0,
+    entregas: [] as CfdiParaEntregar[],
   };
   const escritura = {
     reservarCfdi: jest.fn(() => Promise.resolve(RESERVA)),
@@ -115,7 +117,14 @@ function armar(respuestas: Array<CfdiTimbrado | Error>, confirmar?: () => Promis
     },
   };
   const reloj = { ahora: () => Date.parse('2026-09-22T02:20:00Z') } as Reloj;
-  return { servicio: new CfdiService(datos, reloj, espera, pac), llamadas, escritura };
+  // La entrega (F2-105) se prueba en `entrega.*.spec.ts`; aquí sólo cuándo y con qué se llama.
+  const entrega = {
+    entregar: (c: CfdiParaEntregar) => {
+      llamadas.entregas.push(c);
+      return Promise.resolve({ xml: '/api/archivos/x.xml', pdf: '/api/archivos/x.pdf' });
+    },
+  } as unknown as EntregaCfdiService;
+  return { servicio: new CfdiService(datos, reloj, espera, pac, entrega), llamadas, escritura };
 }
 
 describe('CfdiService.emitir (F2-104)', () => {
@@ -126,9 +135,27 @@ describe('CfdiService.emitir (F2-104)', () => {
       serieFolio: 'A-12',
       total: '315.50',
       email: 'cliente@ejemplo.test',
-      descargas: { xml: null, pdf: null },
+      descargas: { xml: '/api/archivos/x.xml', pdf: '/api/archivos/x.pdf' },
     });
     expect(llamadas.emitir).toHaveLength(1);
+    // Entrega DESPUÉS de confirmar, con lo del timbre y de la reserva (nada del público).
+    expect(llamadas.entregas).toEqual([
+      {
+        empresaId: 'empresa-1',
+        cfdiId: 'reserva-1',
+        uuid: TIMBRE.uuid,
+        idPac: 'pac-1',
+        serieFolio: 'A-12',
+        total: '315.50',
+        fechaTimbrado: TIMBRE.fechaTimbrado,
+        zonaHoraria: 'America/Mexico_City',
+        sucursal: 'Sucursal Sintética',
+        colorPortal: null,
+        emisor: 'ESCUELA KEMPER URGATE',
+        xml: TIMBRE.xml,
+        pdf: TIMBRE.pdf,
+      },
+    ]);
     expect(llamadas.emitir[0]).toMatchObject({ referencia: 'reserva-1', serie: 'A', folio: '12' });
     expect(llamadas.confirmadas).toBe(1);
     expect(llamadas.liberadas).toEqual([]);
@@ -222,6 +249,8 @@ describe('CfdiService.emitir (F2-104)', () => {
     expect(MENSAJE_EMISION_INCIERTA).toMatch(/No la vuelvas a solicitar/);
     expect(llamadas.emitir).toHaveLength(1);
     expect(llamadas.liberadas).toEqual([]);
+    // Sin confirmar no hay entrega: ni archivos ni correo de un CFDI que la base no tiene vigente.
+    expect(llamadas.entregas).toEqual([]);
   });
 
   it('la reserva manda: si no se puede reservar, el PAC ni se llama', async () => {

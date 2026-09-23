@@ -2,7 +2,12 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { ArchivosDisco, validarClave, verificarFirma } from './archivos-disco';
+import {
+  ArchivosDisco,
+  URL_BASE_ARCHIVOS_FALSO,
+  validarClave,
+  verificarFirma,
+} from './archivos-disco';
 import { ArchivoNoEncontrado, type PuertoArchivos } from './puerto';
 
 /**
@@ -88,6 +93,24 @@ describe('Archivos en disco (F2-202)', () => {
       expect(verificarFirma(SECRETO, clave, expira + 1, firma, AHORA)).toBe(false);
       expect(verificarFirma(`${SECRETO}x`, clave, expira, firma, AHORA)).toBe(false);
       expect(verificarFirma(SECRETO, '../x', expira, firma, AHORA)).toBe(false);
+    });
+
+    it('verificarUrl (F2-105): por el puerto, con SU secreto y SU reloj', async () => {
+      const { clave, expira, firma } = partes(await archivos.urlFirmada('cfdi/e1/A-1.xml', 60));
+      expect(archivos.verificarUrl(clave, expira, firma)).toBe(true);
+      expect(archivos.verificarUrl(clave, expira, `${firma}x`)).toBe(false);
+      expect(archivos.verificarUrl('cfdi/e1/A-2.xml', expira, firma)).toBe(false);
+      expect(archivos.verificarUrl(clave, Number.NaN, firma)).toBe(false);
+      reloj.ahora = () => AHORA + 60_000;
+      expect(archivos.verificarUrl(clave, expira, firma)).toBe(false);
+      // Otro adaptador (otro secreto) no reconoce la firma.
+      const otro = new ArchivosDisco(raiz, `${SECRETO}-otro`, '/api/archivos', reloj);
+      reloj.ahora = () => AHORA;
+      expect(otro.verificarUrl(clave, expira, firma)).toBe(false);
+    });
+
+    it('la URL base del modo falso es la que ve el navegador (detrás de /api)', () => {
+      expect(URL_BASE_ARCHIVOS_FALSO).toBe('/api/archivos');
     });
 
     it('rechaza ttl no positivo o no entero', async () => {

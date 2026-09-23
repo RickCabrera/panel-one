@@ -92,6 +92,8 @@ export const LLAVE_EMPRESA = {
   // F2-104: los CFDI emitidos y sus reservas (dato propio; los escribe SÓLO
   // `EscrituraFacturacion`).
   Cfdi: 'empresaId',
+  // F2-105: la entrega por correo de cada CFDI (la escribe SÓLO `EscrituraFacturacion`).
+  CfdiEnvio: 'empresaId',
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId'>;
 
 export type WhereGenerico = Record<string, unknown>;

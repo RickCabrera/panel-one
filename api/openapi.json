@@ -9875,7 +9875,7 @@
         },
         "responses": {
           "201": {
-            "description": "CFDI timbrado. `descargas` viene en nulos hasta F2-105 (entrega).",
+            "description": "CFDI timbrado (F2-105): el XML y el PDF quedan guardados y salen por correo al del receptor, con bitácora de envío. `descargas` trae enlaces firmados de 1 h; nulos si el archivo no se pudo guardar. Una falla del correo NO cambia esta respuesta: el envío queda para reintento.",
             "content": {
               "application/json": {
                 "schema": {
@@ -10298,6 +10298,368 @@
           }
         ],
         "summary": "Quita el logo del portal de la sucursal (F2-103).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/cfdis/{id}/xml": {
+      "get": {
+        "description": "Cualquier rol, dentro de su alcance. Se sirve como adjunto con `nosniff`.",
+        "operationId": "EntregaController_xml",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Los bytes del XML."
+          },
+          "400": {
+            "description": "El id no es un UUID.",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El CFDI no existe, es de otra empresa, o no tiene ese archivo guardado. Misma respuesta siempre (nunca 403).",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Descarga el XML de un CFDI emitido (F2-105).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/cfdis/{id}/pdf": {
+      "get": {
+        "description": "Cualquier rol, dentro de su alcance. Se sirve como adjunto con `nosniff`.",
+        "operationId": "EntregaController_pdf",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Los bytes del PDF."
+          },
+          "400": {
+            "description": "El id no es un UUID.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El CFDI no existe, es de otra empresa, o no tiene ese archivo guardado. Misma respuesta siempre (nunca 403).",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Descarga el PDF de un CFDI emitido (F2-105).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/envios": {
+      "get": {
+        "description": "Fallidos (el servicio de correo falló) y atorados (se quedaron `enviando` más de 10 min). Hasta 500, los más recientes primero.",
+        "operationId": "EntregaController_envios",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Fuera del alcance del usuario o inexistente = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "description": "`fallido` = el correo falló; `atorado` = se quedó `enviando` más de 10 min (el proceso cayó a media llamada). Sin filtro: los dos, que son los que hay que reintentar.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fallido",
+                "atorado"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EnvioCfdiDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Envíos de facturas por correo que hay que reintentar (F2-105).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/facturacion/cfdis/{id}/envios/reintento": {
+      "post": {
+        "description": "Sin cuerpo: el correo sale SIEMPRE al del receptor con que se timbró. Orden: alcance (404) → archivos guardados (409) → hay un envío fallido o atorado (409; si dos lo piden a la vez, sólo uno lo manda) → correo. Responde cómo quedó el envío: `fallido` otra vez si el servicio de correo volvió a fallar.",
+        "operationId": "EntregaController_reintentar",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvioCfdiDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "El id no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El CFDI no existe o es de otra empresa (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No hay nada que reintentar (el envío ya salió, se está enviando ahora, o no existe), o el CFDI no tiene sus archivos guardados (se recupera del PAC).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reintenta el correo de un CFDI cuyo envío falló o se quedó atorado (F2-105).",
+        "tags": [
+          "facturacion"
+        ]
+      }
+    },
+    "/archivos/{clave}": {
+      "get": {
+        "description": "Pública (60/min por IP): la firma es la credencial y vence (1 h desde que la dio el portal). Sólo sirve archivos de CFDI (`cfdi/…` que terminan en .xml o .pdf). Firma alterada o vencida, clave inválida o archivo inexistente: el MISMO 404.",
+        "operationId": "ArchivosPublicosController_descargar",
+        "parameters": [
+          {
+            "name": "firma",
+            "required": true,
+            "in": "query",
+            "description": "HMAC del enlace.",
+            "schema": {}
+          },
+          {
+            "name": "expira",
+            "required": true,
+            "in": "query",
+            "description": "Segundos Unix en que vence el enlace.",
+            "schema": {}
+          },
+          {
+            "name": "clave",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": "cfdi/<empresaId>/2026/09/<UUID>.pdf"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Los bytes del archivo, como adjunto."
+          },
+          "404": {
+            "description": "Enlace inválido, vencido o sin archivo.",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Más de 60 por minuto desde la misma IP."
+          }
+        },
+        "summary": "Descarga un XML o PDF de CFDI por enlace firmado y temporal (F2-105).",
         "tags": [
           "facturacion"
         ]
@@ -19764,12 +20126,12 @@
           "xml": {
             "type": "string",
             "nullable": true,
-            "description": "Null hasta F2-105."
+            "description": "Enlace de descarga FIRMADO y temporal (1 h) del XML (F2-105). Null si el archivo no se pudo guardar: entonces sólo llega por correo."
           },
           "pdf": {
             "type": "string",
             "nullable": true,
-            "description": "Null hasta F2-105."
+            "description": "Como `xml`, para el PDF."
           }
         },
         "required": [
@@ -19998,6 +20360,63 @@
         },
         "required": [
           "contenidoBase64"
+        ]
+      },
+      "EnvioCfdiDto": {
+        "type": "object",
+        "properties": {
+          "cfdiId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uuid": {
+            "type": "string",
+            "example": "5FB2822E-396D-4725-8521-CDC4BDD20CCF"
+          },
+          "serieFolio": {
+            "type": "string",
+            "example": "A-1024"
+          },
+          "email": {
+            "type": "string",
+            "description": "El correo del receptor con que se timbró. Siempre ése."
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "enviando",
+              "enviado",
+              "fallido"
+            ]
+          },
+          "requiereReintento": {
+            "type": "boolean",
+            "description": "Fallido, o `enviando` desde hace más de 10 min: se puede reintentar."
+          },
+          "intentos": {
+            "type": "number",
+            "example": 1
+          },
+          "error": {
+            "type": "string",
+            "nullable": true,
+            "description": "Último error del servicio de correo (recortado). Null si no falló."
+          },
+          "ultimoIntentoAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "cfdiId",
+          "uuid",
+          "serieFolio",
+          "email",
+          "estado",
+          "requiereReintento",
+          "intentos",
+          "error",
+          "ultimoIntentoAt"
         ]
       }
     }
