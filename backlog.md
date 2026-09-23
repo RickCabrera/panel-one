@@ -993,7 +993,7 @@ re-sync de catálogos.
 > operación real**: eso queda en Diurnas (F2-193).
 
 ### F2-240 · Lector de catálogos de SoftRestaurant
-`[ ]` **Bloque H** · /agent
+`[x]` **Bloque H** · /agent · **PENDIENTE DE VALIDACIÓN REAL:** ver F2-192 (el flujo contra una SR real no se ha visto correr: con login sysadmin el agente no lee; sentido de visible/Estatus/bloqueado y cruces con cheques sin FK, esquema-sr §6–§8). **ALCANCE:** sin estaciones (SR las tiene, el panel no tiene espejo ni contrato) y canales leídos de dbo.tiposervicio (❓ abierta en §8).
 
 Extender `ISoftRestaurantReader` con la lectura de catálogos: productos con su grupo, precio y
 estado; meseros; áreas y estaciones; clientes si la instalación los usa. Envío por el mismo
