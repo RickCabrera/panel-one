@@ -1881,7 +1881,7 @@ el error crudo; doble click en "emitir" no genera dos CFDI (lock por código).
 >    dejó listo para esto), en la misma operación que el CFDI.
 
 ### F2-105 · Entrega de la factura
-`[ ]` Al timbrar: guardar XML y PDF (obtenidos de Facturama) en disco del VPS bajo
+`[x]` **ALCANCE:** sin copia al restaurante (no hay dónde configurar su correo), sin re-descarga de un código ya facturado desde el portal (sigue la decisión abierta (a)/(b) de abajo), sin UI del reintento (F2-106) y sin recuperar del PAC los archivos de un CFDI que no se pudieron guardar (F2-110/F2-191). **PENDIENTE DE VALIDACIÓN REAL:** ver F2-191 (inbox real con Brevo, volumen persistente y backup F1-004). Al timbrar: guardar XML y PDF (obtenidos de Facturama) en disco del VPS bajo
 `/data/cfdi/{empresa}/{año}/{mes}/`, servir por endpoint autenticado + token firmado de
 descarga pública temporal para el portal; enviar correo vía Brevo (plantilla con branding de
 la sucursal, XML y PDF adjuntos, copia opcional al restaurante). Registro `CfdiEnvio(cfdi_id,
