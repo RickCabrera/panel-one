@@ -70,6 +70,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
   it('no expone más escritura que updateMany, ni findUnique, SQL crudo ni transacciones', () => {
     const datos = servicio.para(A) as unknown as Record<string, Record<string, unknown>>;
     expect(Object.keys(datos).sort()).toEqual([
+      // F2-143: el último reporte de auto-actualización; se escribe por `deSucursal(agente)`.
+      'agenteActualizacion',
       'agenteContacto',
       'agenteEstado',
       // F2-224: centro de alertas; sus escrituras van por `alertas(scope)`, no por aquí.
@@ -160,6 +162,9 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'traspaso',
       'unidadCatalogo',
       'usuario',
+      // F2-143: el canal de versiones del agente, de PLATAFORMA como los folios: con scope de
+      // empresa no casa con nada. Se lee y escribe por `versionesAgente()` / `escrituraVersionesAgente(scope)`.
+      'versionAgente',
     ]);
     expect(Object.keys(datos.sucursal).sort()).toEqual(
       [

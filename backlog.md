@@ -1283,6 +1283,17 @@ todavía no tiene trabajo), el log registra `Critical` + "código 1" y el servic
 La medición de "una persona no técnica en < 15 minutos" de F1-026 **no** es de aquí: es de
 F1-091, con una persona real.
 
+> **Y además (de F2-143):** la auto-actualización se probó de noche con el administrador de
+> servicios SIMULADO (`ActualizacionTests`, `docs/actualizacion-agente.md`). Aquí, con elevación:
+> `instalar.ps1` deja también `ArkonAgenteActualizador` en `RUNNING` como **LocalSystem**
+> (`DECISION PROVISIONAL (nocturno)` en `funciones-instalador.ps1`); publicar en el panel una
+> versión con la bandera de la sucursal encendida la instala sola (`sc query ArkonAgente` sigue
+> `RUNNING`, el panel la ve "Al día" y `logsctualizador-*.log` cuenta el swap); una versión que
+> se cae al arrancar regresa sola a la anterior (queda `agente.exe.fallido`); con el agente
+> detenido a mano durante el swap no quedan dos procesos `agente.exe` del agente
+> (`Get-Process agente | Select Path`); y la cuenta virtual del agente puede borrar el
+> `resultado.json` que escribe el watchdog (herencia del `icacls` de la carpeta).
+
 ## F1-002 · Docker Compose de producción + Caddy
 `[ ]` **Epic 0** · 🔒 **Razón: necesita el VPS contratado y el dominio con DNS apuntando.**
 El AC se mide *en el VPS*, con Caddy emitiendo certificados reales contra Let's Encrypt.
@@ -1597,6 +1608,15 @@ y los archivos sobreviven un redespliegue y quedan incluidos en el respaldo de F
 > mensaje real desde la landing y verlo llegar. Poner `AGENTE_URL_DESCARGA` (https) con el zip del
 > instalador para que el asistente de alta y la lista de arranque lo enlacen (hasta F2-143, que la
 > firma). Los dos están en `docs/onboarding.md`.
+>
+> **Y además (de F2-143):** el binario del agente que se publica en el canal de versiones vive en el
+> mismo `ARCHIVOS_IMPL=disco` (`agente/<version>/agente.exe`) y su enlace se firma con el mismo
+> `ARCHIVOS_SECRETO`: con el almacenamiento real, publicar una versión, reiniciar el api y bajarla
+> por el enlace del canal. ❓ **Decisión abierta para Ricardo:** el SHA-256 del canal protege la
+> integridad, no la autenticidad (`docs/actualizacion-agente.md`, "Seguridad"): ¿se firma el exe
+> con Authenticode y el watchdog verifica la firma antes de instalar? Necesita un certificado de
+> firma de código. `AGENTE_URL_DESCARGA` (el zip del instalador de F2-147) NO se tocó: sigue siendo
+> una variable de entorno.
 
 ## F2-192 · Validar los lectores de catálogos e inventario contra SoftRestaurant
 `[ ]` **Bloque H** · 🔒 **Razón: necesita el usuario SQL de solo lectura creado (F1-020b) y una

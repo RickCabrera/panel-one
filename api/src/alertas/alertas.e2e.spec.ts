@@ -484,7 +484,15 @@ describe('Centro de alertas (e2e, F2-224)', () => {
         'bajo_minimo',
         // F2-124.
         'traspaso_sin_conciliar',
+        // F2-143.
+        'actualizacion_fallida',
       ]);
+      expect(r.body[6]).toMatchObject({
+        unidad: 'minutos',
+        minimo: 1,
+        maximo: 1440,
+        valorPorDefecto: 1,
+      });
       expect(r.body[5]).toMatchObject({
         unidad: 'horas',
         minimo: 1,
