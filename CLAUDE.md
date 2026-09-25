@@ -74,9 +74,9 @@ cosa.
 - Nunca avances de tarea sin autorización explícita de Ricardo.
 - Nunca marques `[x]` sin merge confirmado.
 - Nunca uses `--dangerously-skip-permissions` en sesiones interactivas. La única excepción
-  es el orquestador del Modo autónomo, `scripts/nocturno-v2.ps1`, que lo lanza con el hook
-  `pre-push` como guardia. La sesión que abre ese script **es interactiva y lleva ese
-  flag**: eso es el orquestador haciendo su trabajo, no una sesión tuya saltándose la regla.
+  es el orquestador local del Modo autónomo, que lo lanza con el hook `pre-push` como
+  guardia. La sesión que abre ese orquestador **es interactiva y lleva ese flag**: eso es el
+  orquestador haciendo su trabajo, no una sesión tuya saltándose la regla.
 
 ### Las reglas de dominio, que no se negocian nunca
 
@@ -127,106 +127,7 @@ se usa solo. Lo que cambia:
 
 ## Modo autónomo (nocturno)
 
-Se activa SOLO cuando Ricardo lanza una sesión con la instrucción literal "MODO AUTÓNOMO".
-En ese modo el bucle cambia así, y NADA MÁS cambia:
-
-- No hay paradas humanas: no esperes autorización del plan ni del resultado. El revisor
-  SIGUE siendo obligatorio en ambos puntos (plan y entregable).
-- Toma la PRIMERA tarea de la sección "Cola nocturna" de `backlog.md` que no esté `[x]` ni
-  aparezca como SALTADA en `docs/nocturno-log.md`. Haz UNA sola tarea por sesión y termina.
-  **No toques el bloque "Diurnas"**: esas tareas necesitan a Ricardo o acceso externo y no
-  se pueden cerrar de noche por definición.
-- **Una tarea = una sesión, y la sesión TERMINA al cerrarla.** No encadenes la siguiente
-  aunque quede tiempo y aunque sea obvia cuál sigue: `scripts/nocturno-v2.ps1` lanza un
-  proceso nuevo por tarea, y ese proceso nuevo es lo que hace que la tarea 12 arranque con
-  tanto contexto útil como la 1. Encadenar dentro de la misma sesión arrastra el historial
-  entero y degrada todo lo que venga después.
-- **El log es el ÚNICO canal entre sesiones.** La siguiente sesión **no recuerda nada** de
-  ésta: no ha visto tu razonamiento, tus dudas ni lo que descubriste a medio camino. Escribe
-  en `docs/nocturno-log.md` lo que necesitaría saber alguien que llega en frío: decisiones
-  que tomaste, lo que quedó abierto, las trampas que encontraste y lo que ibas a hacer
-  distinto. Si algo importa y no está escrito, se perdió.
-- **Y el log se escribe DENTRO DE LA RAMA, antes del push y del PR.** No después del merge.
-  Su commit va en la rama de la tarea y viaja en el PR como un archivo más del entregable.
-  *Por qué:* el vigilante mata la ventana en cuanto la tarea cierra, y escribir la nota
-  después del merge es escribirla en el minuto en que te están apagando. En un repo hermano
-  que corre este mismo protocolo, **nueve sesiones seguidas cerraron sin dejar nota** por
-  exactamente eso. Tras el merge, a main sólo va el commit del `[x]` en `backlog.md`.
-- Si la Cola nocturna ya no tiene tareas pendientes, **no inventes ninguna** ni te adelantes
-  a las Diurnas ni a la Fase 2: crea el archivo vacío `COLA_VACIA.txt` en la raíz del repo y
-  termina. El loop lo lee y para.
-- Rama `feat/<id>` desde main actualizado. Construye. Checks locales. Revisor. Si el revisor
-  BLOQUEA, corrige y vuelve a pasar; si bloquea dos veces **en el mismo gate**, la tarea se
-  SALTA (ver abajo).
-- **Los dos bloqueos son POR GATE, no acumulados entre gates.** Hay dos gates: el del plan y
-  el del entregable, cada uno con su contador propio que arranca en cero.
-  - Dos bloqueos en el gate del **plan** → SALTA (nunca llegaste a construir).
-  - Dos bloqueos en el gate del **entregable** → SALTA.
-  - Un bloqueo en el plan **más** un bloqueo en el entregable → **NO se salta**: son gates
-    distintos y ninguno llegó a dos. Sigue trabajando.
-  - Aprobar el plan **no perdona** nada del entregable, y un bloqueo del entregable no
-    reabre el contador del plan.
-- Con revisor aprobado: **escribe y commitea la entrada del log en la rama**, push,
-  `gh pr create`, `gh pr checks --watch`; con CI verde:
-  `gh pr merge --squash --delete-branch` (sin `--auto`). Si el CI falla: máximo 2 intentos
-  de arreglo; si sigue rojo, SALTA.
-- **Cierre.** Merge confirmado (`gh pr view --json state` dice MERGED):
-  `git checkout main && git pull`, marca `[x]` en `backlog.md`, commit directo a main con
-  push. La nota del log ya entró con el PR: no la repitas aquí. Como **último paso**, crea el
-  archivo vacío `TAREA_CERRADA.txt` en la raíz del repo y termina la sesión. Ése es el aviso
-  de que ya no te queda nada por escribir y la ventana se puede cerrar.
-- **Salto.** Al SALTAR una tarea —revisor que bloquea dos veces en un gate, o CI que sigue
-  rojo tras dos intentos—: `gh pr close` si llegaste a abrirlo, escribe la razón en
-  `docs/nocturno-log.md` marcándola **SALTADA**, y **commitea y pushea esa entrada DIRECTO a
-  main** (el `pre-push` lo permite). No la dejes en la rama: la vas a borrar, y entonces la
-  siguiente sesión no ve el salto y vuelve a tomar la misma tarea. Después borra la rama,
-  crea el archivo vacío `TAREA_SALTADA.txt` en la raíz y termina **sin marcar nada** en el
-  backlog.
-- **Corte por tiempo: la tarea que no cabe se PARTE, no se abandona ni se salta.** Si a
-  media construcción ves que la tarea completa no entra en el tiempo de la sesión, no la
-  dejes a medias en una rama que nadie va a retomar ni la marques SALTADA: córtala. Un
-  corte son cuatro movimientos, y los cuatro:
-  1. **Mergea la parte que funciona y no rompe nada.** Misma rama, mismo PR, mismos checks
-     locales, mismo revisor, mismo CI verde. Lo que entra tiene que quedar coherente por sí
-     solo: nada a medio cablear, ningún test borrado ni en skip, ninguna validación
-     aflojada. Si el pedazo que tienes no cumple eso, no hay corte que valga y la tarea
-     sigue el camino normal (cerrar o SALTAR).
-  2. **Marca `[x]` en `backlog.md` y en esa misma línea escribe `**PARCIAL:** falta ...`**
-     con lo que quedó fuera, concreto. El `[x]` es lo que hace que las tareas que dependían
-     de ésta avancen con lo que ya existe; el `PARCIAL` es lo que evita que alguien lea ese
-     `[x]` como "completa".
-  3. **Agrega al final del `backlog.md` una tarea nueva `<ID>b`** —`F1-032b` si cortaste
-     `F1-032`— con el resto y con **su propio "Listo cuando"**, y **métela en la Cola
-     nocturna justo después de la tarea actual**: su fila en la tabla y su lugar en el
-     orden. Ahí es donde va, no al final de la cola: el resto de una tarea cortada suele
-     ser justo lo que las siguientes esperan.
-  4. **Escribe en `docs/nocturno-log.md` por qué se cortó y DÓNDE se cortó**: qué quedó
-     dentro, qué quedó fuera, y por dónde retomar. La sesión que tome la `<ID>b` llega en
-     frío y ese log es lo único que tiene.
-  El `[x]`, el `PARCIAL`, la tarea nueva y su fila en la cola son **todos `backlog.md`**:
-  el commit de cierre sigue tocando ese archivo y ninguno más, así que el respaldo por
-  commit del orquestador lo sigue reconociendo como cierre. El resto del cierre no cambia:
-  la nota del log viaja en el PR de la parte que sí entró, y el centinela final es
-  `TAREA_CERRADA.txt`.
-- Decisiones que dependen del mundo (una instalación real de SoftRestaurant que todavía no
-  se ha visto, una versión del POS que no está mapeada): busca primero en
-  `docs/esquema-sr.md`. Si no está cubierta ahí, toma la opción MÁS CONSERVADORA, déjala
-  señalada con un comentario `# DECISION PROVISIONAL (nocturno):` en el código, anótala en
-  `docs/esquema-sr.md` como supuesto no validado y en el log, y continúa. Nunca te detengas
-  a preguntar.
-- **Límite de uso.** Si la sesión muere porque se agotó el límite de tokens, no es un fallo
-  de la tarea y no se anota como SALTADA: `scripts/nocturno-v2.ps1` espera y **reintenta la
-  misma tarea** en una sesión nueva. Deja el árbol en un estado del que se pueda continuar
-  —rama pusheada o cambios commiteados— y no marques nada. Es el único camino que NO deja
-  centinela: sin ninguno de los tres archivos, el loop asume límite de uso y reintenta.
-- **Los tres centinelas, juntos.** Son archivos vacíos en la raíz del repo, están
-  gitignorados, y el loop los borra al empezar cada vuelta. Crea **uno solo** y siempre como
-  último acto de la sesión: `TAREA_CERRADA.txt` (cerraste), `TAREA_SALTADA.txt` (saltaste),
-  `COLA_VACIA.txt` (no había nada que tomar).
-- Prohibido en modo autónomo, sin excepción: deploy (SSH al VPS, `docker compose up` en
-  producción, GitHub Actions de deploy), tocar producción, secretos o llaves,
-  **`git push --force` y `git push --no-verify`** —los dos juntos, porque `--no-verify`
-  brinca el `pre-push`, que es la única guardia real de main, y `--force` reescribe lo que
-  ya pasó por ella—, `filter-repo`, borrar ramas que no sean tuyas ya mergeadas, escribir
-  en la base de SoftRestaurant, cambiar este CLAUDE.md o `.claude/settings.json`, y aflojar
-  tests o CI para lograr el verde.
+Existe un modo autónomo local que se activa SOLO cuando Ricardo lanza una sesión con la
+instrucción literal "MODO AUTÓNOMO". Sus reglas y su orquestador viven fuera del repo, en
+archivos locales de la máquina de Ricardo; la sesión que lo lanza recibe en su prompt cuál
+leer. Sin esa instrucción literal, aplica el bucle normal de este archivo.
