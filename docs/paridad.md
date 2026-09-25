@@ -115,7 +115,7 @@ están al final de `backlog.md`, en "RONDA 3".
 | **F2-203** | Export "Hoy" en hora pico (corte por recepción) | Supuesto provisional | `api/src/ventas/tickets.service.ts` | Salvedad en esquema-sr §2 "Corte por recepción". |
 | **F2-203** | Throttles de login/reset, lint Prisma, `statement_timeout` | Construido | `api/src/auth/throttlers.ts` | Throttle por cuenta NO (log F2-203). → F3-022 |
 | **F2-203** | Layout a 390 px | Construido | `web/src/paginas/inicio/Tarjetas.tsx` | Medido en Chrome real; sin test automatizado. → F3-019 |
-| **F2-203** | Consola UTF-8 del orquestador | Construido | `scripts/nocturno-v2.ps1` | — |
+| **F2-203** | Consola UTF-8 del orquestador | Construido | Orquestador local, fuera del repo (ver F2-203 en `docs/nocturno-log.md`) | — |
 
 ### Bloque B · Cascarón
 

@@ -1,8 +1,8 @@
 # Instalación — monitor SoftRestaurant, desde cero
 
 Este kit **no se instala sobre un repo existente**: crea uno. Al terminar tienes el repo en
-GitHub, el CI corriendo en verde, la guardia de `main` puesta y el orquestador nocturno
-probado.
+GitHub, el CI corriendo en verde y la guardia de `main` puesta. El orquestador nocturno es
+local y se instala y prueba con sus propios archivos, fuera del repo.
 
 Tiempo: unos 20 minutos, casi todo esperando a GitHub.
 
@@ -61,7 +61,6 @@ backlog.md                                 cola nocturna + las 56 tareas
 .claude/agents/revisor.md
 .claude/hooks/auto-approve-readonly.mjs
 .github/workflows/ci.yml
-scripts/nocturno-v2.ps1                    orquestador del modo autónomo
 scripts/git-hooks/pre-push                 copia versionada de la guardia de main
 docs/nocturno-log.md                       canal entre sesiones (vacío, sólo cabecera)
 docs/esquema-sr.md                         memoria sobre SoftRestaurant (esqueleto)
@@ -152,8 +151,8 @@ la punta. Y `git diff A..B` es el diff **neto**. Están sin cerrar por decisión
 descuido; el detalle está en los comentarios del propio hook.
 
 **Lo que ninguna versión puede:** `git push --no-verify` lo brinca entero. Contra eso no hay
-mecanismo, sólo protocolo — está prohibido en `CLAUDE.md`, *Modo autónomo*, junto con
-`--force`.
+mecanismo, sólo protocolo — está prohibido en el protocolo del modo autónomo, junto con
+`--force`, y los dos están en la lista `deny` de `.claude/settings.json`.
 
 ---
 
@@ -217,7 +216,7 @@ GitHub → el repo → **Settings → Branches → Add branch protection rule**:
 >   marques *Do not allow bypassing*). Tú puedes empujar el `[x]`; nadie más puede empujar
 >   nada. El `pre-push` sigue siendo quien decide *qué* archivo puede ir directo.
 > - **Alternativa:** protección total, y entonces el `[x]` del backlog también va por PR.
->   Cuesta un PR de una línea por tarea y hay que cambiar la sección *Cierre* de `CLAUDE.md`.
+>   Cuesta un PR de una línea por tarea y hay que cambiar la sección *Cierre* del protocolo local del modo autónomo.
 >
 > **Y si el repo es privado en plan gratuito**, la API de branch protection responde **403
 > pidiendo Pro**: no vas a poder proteger `main` en absoluto. En ese caso el `pre-push` **es
@@ -228,7 +227,8 @@ GitHub → el repo → **Settings → Branches → Add branch protection rule**:
 
 ## 6 · Prueba de humo
 
-Tres comprobaciones, en este orden. Si las tres pasan, el kit está montado.
+Si esta comprobación pasa, el kit está montado. La prueba de humo del orquestador nocturno
+vive con él, en sus archivos locales.
 
 ### 6.1 · El hook de Claude Code auto-aprueba lo seguro y no lo demás
 
@@ -243,73 +243,12 @@ echo '{"tool_input":{"command":"rm -rf node_modules"}}' | node .claude/hooks/aut
 Es fail-safe: ante la duda no aprueba. Si el hook truena o Node no está, simplemente deja de
 auto-aprobar — no bloquea al agente.
 
-### 6.2 · El orquestador arranca, encuentra la cola y se detiene solo
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\nocturno-v2.ps1 -MaxTareas 1
-```
-
-Qué debe pasar, en orden:
-
-1. Imprime `Preflight ok: claude en PATH, gh autenticado.`
-2. Borra los centinelas que hubiera y abre **una ventana con el panel de Claude Code**.
-3. La sesión lee `CLAUDE.md` y `backlog.md`, toma **F1-001** (la primera no-`[x]` de la Cola
-   nocturna) y se pone a trabajar.
-
-Si quieres cortar la corrida de prueba antes de que cierre la tarea, cierra la ventana: el
-loop lo detecta y termina. Con `-MaxTareas 1` no encadena nada más.
-
-**Comprobar la otra mitad —que el loop para cuando no hay nada que hacer— sin gastar una
-tarea:** crea el centinela a mano en otra consola mientras el loop corre.
-
-```powershell
-New-Item -ItemType File COLA_VACIA.txt
-```
-
-Dentro del minuto siguiente el loop debe imprimir `Cola nocturna vacia. Fin del loop.` y
-terminar. Borra el archivo después (el loop lo borra solo en la siguiente vuelta, pero mejor
-no dejarlo puesto: una sesión que arranca con un centinela ya puesto muere en el primer
-minuto sin haber hecho nada).
-
-### 6.3 · El primer ciclo completo de verdad
-
-Deja correr una tarea entera y comprueba que el ciclo cierra donde debe:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\nocturno-v2.ps1 -MaxTareas 1
-```
-
-Al terminar, el repo debe tener:
-
-- una rama `feat/F1-001` **borrada** (mergeada con `--delete-branch`),
-- un PR cerrado como MERGED, cuyo diff incluye **la entrada de `docs/nocturno-log.md`**
-  (esto es lo importante: la nota viaja *dentro* del PR, no después del merge),
-- en `main`, un commit suelto que toca **sólo `backlog.md`** marcando `[x] F1-001`,
-- `TAREA_CERRADA.txt` en la raíz, sin commitear.
-
-```powershell
-git log --oneline -5
-gh pr list --state merged --limit 1
-git show --stat HEAD        # debe tocar backlog.md y nada más
-```
-
-Si el commit del `[x]` toca algún archivo además de `backlog.md`, el respaldo por commit del
-orquestador deja de reconocer el cierre. Esa distinción no es cosmética: el squash del PR
-*también* toca `backlog.md`, y por eso `Test-CommitDelCierre` exige que sea el único archivo
-del commit.
-
 ---
 
 ## 7 · Y de aquí en adelante
 
 **Trabajo con Ricardo presente** — el bucle normal de `CLAUDE.md`: plan → revisor →
 autorización → rama → checks → revisor → autorización → PR → merge → `[x]`.
-
-**Trabajo nocturno** — lanzar el orquestador con las tareas que quepan en la noche:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\nocturno-v2.ps1 -MaxTareas 6
-```
 
 **Lo primero que hay que hacer aparte de la cola:** conseguir acceso a una instalación real
 de SoftRestaurant. **F1-090 sigue siendo el cuello de botella** y es diurna: mientras no
@@ -321,8 +260,8 @@ todo lo que el proyecto "sabe" del POS son supuestos marcados como tales en
 están cerradas; lo que existe y con qué salvedades está en
 [`docs/paridad.md`](docs/paridad.md). Lo que queda es de dos tipos: las **Diurnas** de
 `backlog.md` (necesitan a Ricardo, un servidor, credenciales o un restaurante real) y la
-**RONDA 3** al final del backlog, que **no está autorizada**: mientras Ricardo no la mueva a una
-cola vigente, el orquestador encuentra la cola vacía, deja `COLA_VACIA.txt` y se detiene.
+**RONDA 3** al final del backlog, que **no está autorizada** mientras Ricardo no la mueva a una
+cola vigente.
 
 ---
 

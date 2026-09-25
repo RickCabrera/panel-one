@@ -90,3 +90,11 @@ COLA_VACIA.txt
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---------- Sistema nocturno local (no compartir) ----------
+# El orquestador del modo autónomo y su protocolo viven sólo en la máquina de
+# Ricardo. Rutas exactas a propósito: ningún patrón aquí puede alcanzar a
+# backlog.md, docs/nocturno-log.md ni scripts/git-hooks/pre-push, que el loop
+# necesita versionados.
+/scripts/nocturno-v2.ps1
+/MODO-AUTONOMO.local.md

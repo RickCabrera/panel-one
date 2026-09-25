@@ -37,8 +37,8 @@
 # LO QUE ESTA GUARDIA NO PUEDE
 # ----------------------------
 # `git push --no-verify` la brinca entera, y un clon nuevo no tiene hook (.git/hooks no se
-# versiona). Contra eso no hay mecanismo, solo protocolo: ver "Prohibido en modo autonomo"
-# en CLAUDE.md.
+# versiona). Contra eso no hay mecanismo, solo protocolo: el del modo autonomo lo prohibe, y
+# la lista `deny` de .claude/settings.json lo niega en las sesiones de Claude Code.
 #
 # ESTA ES LA COPIA VERSIONADA. La viva es .git/hooks/pre-push, que no se versiona.
 # 0-INSTALACION.md dice como instalarla.
