@@ -1,6 +1,7 @@
 name: CI
 
-# Un workflow, tres carriles: /api (NestJS), /web (React+Vite) y /agent (.NET 8).
+# Un workflow, cuatro carriles: /api (NestJS), /web (React+Vite), /agent (.NET 8) y,
+# desde F1-004, /infra (respaldo y restauración con Docker real).
 #
 # POR QUE NACIO CASI TODO COMENTADO
 # --------------------------------
@@ -209,3 +210,29 @@ jobs:
       # compila en Linux de sobra para el gate del PR.
       - run: dotnet build --no-restore --configuration Release
       - run: dotnet test --no-build --configuration Release --verbosity normal
+
+  # ---------------------------------------------------------------------------
+  # CARRIL /infra: respaldo y restauración (F1-004)
+  # ACTIVO desde F1-004. `infra/backup.sh` y `infra/probar-restauracion.sh` corren
+  # con Docker de verdad: dump del Postgres del compose de desarrollo con las
+  # migraciones aplicadas, restauración en un Postgres efímero con las mismas filas,
+  # tar del volumen de archivos, retención (el borde de los 14 días), rclone contra
+  # un remoto local, candado, y que un respaldo fallido no borre los viejos. Todo
+  # en `infra/pruebas/backup.test.sh`, que también se corre a mano.
+  # ---------------------------------------------------------------------------
+  infra:
+    name: Respaldo y restauración (infra)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      # Sólo para `prisma migrate deploy` (el dump tiene que traer el esquema real).
+      - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y rclone
+      - run: shellcheck -x infra/backup.sh infra/probar-restauracion.sh infra/pruebas/backup.test.sh
+      - run: bash infra/pruebas/backup.test.sh
