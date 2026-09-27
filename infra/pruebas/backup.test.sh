@@ -43,8 +43,15 @@ services:
   postgres:
     container_name: !reset null
 YAML
-# Como el de producción: declara el volumen `archivos` (lo vuelve obligatorio en backup.sh).
+# Como el de producción: un servicio MONTA el volumen `archivos` (lo vuelve obligatorio en
+# backup.sh). Sólo declararlo no basta: compose descarta de su configuración los volúmenes
+# que ningún servicio usa. Aquí lo monta el postgres sólo en la configuración que lee
+# `docker compose config`; el contenedor que ya corre no se recrea.
 cat >"$tmp/con-archivos.yml" <<'YAML'
+services:
+  postgres:
+    volumes:
+      - archivos:/archivos-prueba
 volumes:
   archivos:
 YAML
