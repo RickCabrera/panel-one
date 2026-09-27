@@ -1,9 +1,10 @@
 # Compose de DESARROLLO LOCAL. Levanta únicamente el Postgres del monitor, vacío:
 # el esquema lo crea Prisma en F1-010 (`npx prisma migrate dev` desde /api).
 #
-# El compose de PRODUCCIÓN —api + caddy con certificados reales— es F1-002, que es
-# una tarea diurna porque necesita el VPS y el DNS. Cuando llegue, extiende ESTE
-# archivo con esos servicios; no lo sustituye.
+# El de PRODUCCIÓN (F1-002) es `docker-compose.prod.yml`: se aplica ENCIMA de éste,
+# agrega api, migraciones y caddy, y le quita al Postgres el puerto publicado y la
+# contraseña por defecto. Solo, este archivo sigue siendo el de desarrollo. Guía:
+# docs/produccion.md.
 #
 # Nada de esto toca la base de SoftRestaurant: el POS vive en su propio SQL Server,
 # en la máquina del restaurante, y el agente sólo lo lee.

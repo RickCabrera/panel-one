@@ -245,9 +245,10 @@ de refresh de `/auth` a `/api/auth`. Así no hace falta CORS con credenciales y 
 > funciona pero el refresh silencioso no, y cada recarga pide contraseña. **Ya está escrito**
 > en los snippets de [`infra/caddy/seguridad.caddy`](infra/caddy/seguridad.caddy) (F1-092),
 > junto con las cabeceras de seguridad (HSTS, CSP estricta de la SPA), la compresión y la
-> caché de los assets: el Caddyfile de F1-002 sólo los importa. La API detrás de Caddy
-> arranca con `TRUST_PROXY_SALTOS=1` (ver `api/.env.example`), o el rate limit del login
-> cuenta a todos los usuarios como una sola IP.
+> caché de los assets: el Caddyfile de producción (`infra/caddy/Caddyfile`) sólo los
+> importa. La API detrás de Caddy arranca con `TRUST_PROXY_SALTOS=1` (el compose de
+> producción lo fija), o el rate limit del login cuenta a todos los usuarios como una sola
+> IP. Cómo se levanta todo en el VPS, y qué comprobar allá: [`docs/produccion.md`](docs/produccion.md).
 >
 > Para probarlo en local (con la API en :3000 y `npm run build` hecho en `/web`), desde la
 > raíz: `caddy run --config infra/caddy/Caddyfile.local --adapter caddyfile` y abre
