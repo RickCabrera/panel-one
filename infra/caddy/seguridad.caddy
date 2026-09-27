@@ -1,10 +1,8 @@
-# Snippets de Caddy del panel (F1-092). Los IMPORTA el Caddyfile de producción de
-# F1-002 (tarea diurna: necesita VPS y DNS); aquí sólo se escriben y se prueban en
-# local con `Caddyfile.local`. NO es un Caddyfile completo ni se despliega.
+# Snippets de Caddy del panel (F1-092). Los IMPORTA el Caddyfile de producción
+# (`Caddyfile`, F1-002); `Caddyfile.local` los prueba en local. Este archivo NO es un
+# Caddyfile completo. Uso, dentro del sitio app.DOMINIO:
 #
-# Uso en F1-002, dentro del sitio app.DOMINIO:
-#
-#     import /ruta/a/seguridad.caddy          # define los snippets
+#     import seguridad.caddy                   # define los snippets
 #     app.DOMINIO {
 #         import cabeceras_seguridad
 #         import api api:3000                  # /api/* → la API, sin el prefijo
@@ -57,27 +55,34 @@
 	}
 }
 
-# La SPA ({args[0]} = carpeta del build de /web). La CSP va SÓLO aquí: en /api/*
-# rompería el Swagger de /api/docs y a un JSON no le sirve.
+# Lo común a los estáticos de Vite ({args[0]} = carpeta del build): la SPA y, desde
+# F1-002, la landing. La CSP va SÓLO en los estáticos: en /api/* rompería el Swagger
+# de /api/docs y a un JSON no le sirve. Se importa dentro de un `handle`.
+(estaticos) {
+	root * {args[0]}
+	# Comprimido: el JS pesa ~660 kB crudo y ~200 kB en gzip; sin esto Lighthouse
+	# móvil no pasa de ~77. Sólo los estáticos: en /api/* no, porque ahí van
+	# tokens junto a datos que el usuario controla (BREACH).
+	encode zstd gzip
+	# CSP estricta, sin 'unsafe-inline' ni 'unsafe-eval': el build de Vite no trae
+	# scripts ni estilos inline, y los estilos que pone React (y Recharts) van por
+	# CSSOM (`element.style`), que la CSP no bloquea. Probado con Lighthouse (Chrome
+	# headless) contra este snippet en local, sobre las vistas con gráficas (docs/nocturno-log.md, F1-092). web/src/seguridad/csp.test.ts
+	# vigila que siga así. La landing tampoco carga nada de terceros (F2-147).
+	header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	# Los assets llevan hash en el nombre: caché de un año. index.html (y todo lo
+	# demás, `sw.js` incluido) se revalida siempre, para que un deploy se vea en la
+	# siguiente carga y un service worker viejo no se quede pegado (F2-146).
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@noAssets not path /assets/*
+	header @noAssets Cache-Control "no-cache"
+}
+
+# La SPA ({args[0]} = carpeta del build de /web).
 (spa) {
 	handle {
-		root * {args[0]}
-		# Comprimido: el JS pesa ~660 kB crudo y ~200 kB en gzip; sin esto Lighthouse
-		# móvil no pasa de ~77. Sólo la SPA (estáticos): en /api/* no, porque ahí van
-		# tokens junto a datos que el usuario controla (BREACH).
-		encode zstd gzip
-		# CSP estricta, sin 'unsafe-inline' ni 'unsafe-eval': el build de Vite no trae
-		# scripts ni estilos inline, y los estilos que pone React (y Recharts) van por
-		# CSSOM (`element.style`), que la CSP no bloquea. Probado con Lighthouse (Chrome
-		# headless) contra este snippet en local, sobre las vistas con gráficas (docs/nocturno-log.md, F1-092). web/src/seguridad/csp.test.ts
-		# vigila que siga así.
-		header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
-		# Los assets llevan hash en el nombre: caché de un año. index.html (y todo lo
-		# demás) se revalida siempre, para que un deploy se vea en la siguiente carga.
-		@assets path /assets/*
-		header @assets Cache-Control "public, max-age=31536000, immutable"
-		@noAssets not path /assets/*
-		header @noAssets Cache-Control "no-cache"
+		import estaticos {args[0]}
 		# Las rutas de la SPA caen en index.html; un asset que no existe (un chunk viejo
 		# pedido tras un deploy) NO: da 404 en vez de un index.html disfrazado de JS.
 		@rutaSpa {
@@ -85,6 +90,15 @@
 			not file
 		}
 		rewrite @rutaSpa /index.html
+		file_server
+	}
+}
+
+# La landing pública (F2-147; {args[0]} = carpeta de `web/dist-landing`). Es una sola
+# página, no una SPA: lo que no existe da 404 de verdad, no un index.html con 200.
+(landing) {
+	handle {
+		import estaticos {args[0]}
 		file_server
 	}
 }

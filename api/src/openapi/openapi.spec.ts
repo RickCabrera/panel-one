@@ -1140,6 +1140,8 @@ describe('Contrato OpenAPI', () => {
         '/facturacion/folios/reporte',
         // F2-110b: conciliación con el PAC a pedido.
         '/facturacion/conciliacion',
+        // F1-002: la señal de vida (API + base) del healthcheck y de UptimeRobot.
+        '/health',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',
@@ -1408,5 +1410,15 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(esquemas.VentaSucursalDto)).toMatch(
       /"ticketPromedio":\{[^}]*"nullable":true/,
     );
+  });
+
+  it('salud (F1-002): pública, 200 y 503 con el mismo cuerpo de dos campos', async () => {
+    const { paths, components } = await generarDocumento();
+    const salud = paths['/health']?.get;
+    expect(Object.keys(salud?.responses ?? {}).sort()).toEqual(['200', '503']);
+    expect(salud?.security).toBeUndefined();
+    expect(
+      Object.keys((components?.schemas?.SaludDto as { properties: object }).properties).sort(),
+    ).toEqual(['db', 'status']);
   });
 });

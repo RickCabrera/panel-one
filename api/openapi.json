@@ -4081,6 +4081,39 @@
         ]
       }
     },
+    "/health": {
+      "get": {
+        "description": "Pública (sin token): la consultan el healthcheck del contenedor y el monitor de disponibilidad (F1-002, F1-004). No lee ninguna tabla ni expone versión o detalles del error.",
+        "operationId": "SaludController_salud",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "La API y la base responden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaludDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "La base no contestó en 3 s: `{ status: \"error\", db: \"error\" }`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaludDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Señal de vida de la instancia: la API y su base de datos.",
+        "tags": [
+          "sistema"
+        ]
+      }
+    },
     "/alertas/abiertas": {
       "get": {
         "description": "Sin paginar: su número está acotado por sucursales × cuentas abiertas. Orden: crítica primero, luego la más vieja. Las abre y cierra la evaluación periódica del API (`ALERTAS_INTERVALO_S`, 60 s por defecto) y el cambio de una regla; este GET no escribe.",
@@ -17071,6 +17104,33 @@
         },
         "required": [
           "modoDemo"
+        ]
+      },
+      "SaludDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "description": "`ok` si la API y su base responden; `error` si la base no contestó.",
+            "example": "ok"
+          },
+          "db": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "description": "`ok` si la base contestó `SELECT 1` en menos de 3 s.",
+            "example": "ok"
+          }
+        },
+        "required": [
+          "status",
+          "db"
         ]
       },
       "TipoAlerta": {

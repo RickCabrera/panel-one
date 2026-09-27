@@ -1,0 +1,35 @@
+# Contexto de las imágenes de F1-002 (api/Dockerfile, infra/caddy/Dockerfile): la
+# raíz del repo. Lo que no entra NUNCA, aunque un COPY lo pida por error:
+
+# Secretos y configuración local. `api/.env` en la imagen lo leería `cargarEnvLocal()`
+# al arrancar y rellenaría lo que el compose no mande (F2-200).
+**/.env
+**/.env.*
+!**/.env.example
+**/config.json
+**/*.pem
+**/*.key
+**/*.cer
+**/*.pfx
+**/secrets/
+**/.ssh/
+
+# Dependencias y builds locales: la imagen instala y construye las suyas (en musl).
+**/node_modules/
+**/dist/
+**/dist-landing/
+**/coverage/
+**/*.tsbuildinfo
+
+# Lo que ninguna imagen usa.
+.git/
+.github/
+.claude/
+agent/
+docs/
+scripts/
+infra/pgdata/
+infra/caddy_data/
+infra/caddy_config/
+infra/backups/
+**/*.log

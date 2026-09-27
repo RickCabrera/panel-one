@@ -1,0 +1,109 @@
+# Compose de PRODUCCIÓN (F1-002). NO se usa solo: se aplica ENCIMA del de desarrollo
+# (`docker-compose.yml`), que sigue definiendo el Postgres. En el VPS, `infra/.env`
+# lleva `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml`, así que desde `infra/`
+# basta con:
+#
+#     docker compose up -d --build
+#
+# Todo lo que falta saber (DNS, variables, primer arranque, lista de verificación) está
+# en docs/produccion.md. Las variables salen de `infra/.env`, que NUNCA se commitea
+# (plantilla: la sección PRODUCCIÓN de `infra/.env.example`).
+#
+# Nada de esto toca la base de SoftRestaurant: esa vive en la máquina de cada
+# restaurante y sólo la lee el agente.
+
+name: monitor-sr
+
+services:
+  postgres:
+    # El nombre fijo del contenedor es del stack de desarrollo: en producción manda el
+    # del proyecto (`monitor-sr-postgres-1`), así los dos no chocan en una misma máquina.
+    container_name: !reset null
+    # Docker publica puertos por encima del firewall del host (ufw no los ve): un
+    # `ports` aquí es un Postgres abierto a internet. En producción sólo lo alcanza la
+    # red interna del compose.
+    ports: !reset []
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Falta POSTGRES_USER en infra/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en infra/.env}
+      POSTGRES_DB: ${POSTGRES_DB:?Falta POSTGRES_DB en infra/.env}
+
+  # Aplica las migraciones pendientes y termina. La API no arranca hasta que esto
+  # salga con 0: si una migración falla, `up` se detiene antes de reemplazar la API.
+  migrar:
+    image: monitor-sr/migrar
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+      target: migrar
+    restart: 'no'
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: monitor-sr/api
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+      target: api
+    restart: unless-stopped
+    # Node como PID 1 no atiende SIGTERM: sin un init, cada `down` o redespliegue espera
+    # 10 s y termina en SIGKILL.
+    init: true
+    # Las variables de la API (secretos JWT, los cuatro *_IMPL y sus credenciales,
+    # VAPID, CONTACTO_DESTINO...) salen del mismo `infra/.env`.
+    env_file: .env
+    # Lo que NO se deja al operador: pisa lo que diga `infra/.env`.
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      # Detrás de Caddy hay exactamente UN proxy. Sin esto todos los usuarios comparten
+      # la IP de Caddy en los rate limits (F1-092). Ni más saltos: el cliente podría
+      # inventarse la IP.
+      TRUST_PROXY_SALTOS: '1'
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      # Los XML/PDF de las facturas y los binarios del agente (ARCHIVOS_IMPL=disco,
+      # F2-191) viven en el volumen `archivos`, que respalda F1-004.
+      ARCHIVOS_RAIZ: /datos/archivos
+      # Salen del esquema de subdominios del Caddyfile: el panel vive en `app.` y la API
+      # se le sirve en el mismo origen bajo /api (ahí caen las descargas firmadas).
+      PANEL_URL: https://app.${DOMINIO:?Falta DOMINIO en infra/.env}
+      ARCHIVOS_URL_BASE: https://app.${DOMINIO}/api/archivos
+    volumes:
+      - archivos:/datos/archivos
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrar:
+        condition: service_completed_successfully
+
+  caddy:
+    image: monitor-sr/caddy
+    build:
+      context: ..
+      dockerfile: infra/caddy/Dockerfile
+      args:
+        URL_PANEL: https://app.${DOMINIO:?Falta DOMINIO en infra/.env}/login
+    restart: unless-stopped
+    environment:
+      DOMINIO: ${DOMINIO}
+      ACME_EMAIL: ${ACME_EMAIL:?Falta ACME_EMAIL en infra/.env (aviso de Let's Encrypt)}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      # Certificados y llaves de Let's Encrypt: sin este volumen, cada recreación del
+      # contenedor pide certificados nuevos y se topa con el límite de emisión.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  archivos:
+  caddy_data:
+  caddy_config:

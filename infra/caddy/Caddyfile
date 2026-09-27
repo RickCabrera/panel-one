@@ -1,0 +1,75 @@
+# Caddyfile de PRODUCCIÓN (F1-002). Va dentro de la imagen de `infra/caddy/Dockerfile`
+# y lo levanta `infra/docker-compose.prod.yml`. Los snippets (cabeceras, /api, SPA) son
+# los de F1-092 en `seguridad.caddy`, probados en local con `Caddyfile.local`.
+#
+# Cuatro sitios sobre el mismo DOMINIO (variables de `infra/.env`):
+#   DOMINIO          la landing pública, con /api en el mismo origen (el formulario de
+#                    contacto postea a /api/publico/contacto: sin CORS).
+#   www.DOMINIO      redirige al dominio raíz.
+#   app.DOMINIO      el panel (la SPA), con /api en el mismo origen (la cookie de refresh).
+#   api.DOMINIO      la API directa, sin prefijo: el `apiUrl` del agente y el /health de
+#                    UptimeRobot (F1-004).
+#
+# Certificados: Caddy los saca solo de Let's Encrypt para los cuatro nombres. Necesita
+# que los cuatro registros DNS ya apunten al VPS y los puertos 80 y 443 abiertos.
+#
+# Sin directiva `log` a propósito: Caddy no escribe access log por omisión, y la
+# búsqueda de Clientes viaja en la query (`q`): no se queda en disco (F2-250).
+# `trusted_proxies` tampoco: Caddy ES el origen público y no debe creerle al cliente
+# un X-Forwarded-For (ver seguridad.caddy). La API cuenta el salto con
+# TRUST_PROXY_SALTOS=1, que el compose fija.
+{
+	email {$ACME_EMAIL}
+}
+
+import seguridad.caddy
+
+# `manifest.webmanifest` con su MIME de verdad (F2-146): no depende de la tabla de
+# tipos de la imagen. Sólo existe en la SPA.
+(manifest) {
+	@manifest path /manifest.webmanifest
+	header @manifest Content-Type "application/manifest+json"
+}
+
+{$DOMINIO} {
+	import cabeceras_seguridad
+	# La landing sólo necesita lo público de la API (el formulario de contacto,
+	# `/api/publico/*`). El resto de /api —login, /docs, todo— no se sirve en el dominio
+	# de la landing: vive en app. y api.
+	handle /api/publico/* {
+		uri strip_prefix /api
+		reverse_proxy api:3000 {
+			transport http {
+				keepalive 4s
+			}
+		}
+	}
+	handle /api/* {
+		respond 404
+	}
+	import landing /srv/landing
+}
+
+www.{$DOMINIO} {
+	# También el redirect lleva HSTS: si no, www. se queda sin él.
+	import cabeceras_seguridad
+	redir https://{$DOMINIO}{uri} permanent
+}
+
+app.{$DOMINIO} {
+	import cabeceras_seguridad
+	import manifest
+	import api api:3000
+	import spa /srv/web
+}
+
+api.{$DOMINIO} {
+	import cabeceras_seguridad
+	# Mismo transporte que el snippet `api` (keepalive por debajo del de Node, F1-092),
+	# pero sin quitar prefijo ni reescribir la cookie: aquí no hay navegador del panel.
+	reverse_proxy api:3000 {
+		transport http {
+			keepalive 4s
+		}
+	}
+}
