@@ -1305,6 +1305,41 @@ snapshot la fija F1-023. Código: `web/src/paginas/mesas/` (`mesa.ts`, `reglas.t
     snapshot recibido (reloj del servidor). Depende del mismo supuesto de F1-061: que el
     agente mande un lote por ciclo aunque no haya cheques.
 
+**El lector de cuentas abiertas del agente (F1-023, `agent/src/ArkonAgente/Mesas/`,
+`Sql/Consultas/sr_mesas_abiertas.sql`).** Escrito sobre lo VALIDADO en F1-090 (2026-10-22, SR 10
+local) y probado contra esa base con `monitor_lector` (sólo lectura): con una cobrada, una abierta sin
+imprimir y una impresa sin cobrar en `tempcheques`, el snapshot trae exactamente las dos por cobrar
+(la sin imprimir con su total, 3 comensales y 2 partidas; la impresa con su folio de ticket) y no la
+cobrada. Lo que fija:
+
+- **Una mesa = una fila de `tempcheques` con `pagado = 0` y `cancelado = 0`.** Las cobradas del
+  turno siguen en la tabla hasta el corte y NO salen. Snapshot completo en CADA ciclo, también
+  vacío (`mesas: []`), ANTES del heartbeat. Una lectura que falla no manda nada (nunca un vacío
+  que diga "no hay mesas"); su motivo va al log y al `ultimoError` del heartbeat.
+- **Sólo con SOLO LECTURA confirmada** (`diagnostico.sql`, cada 15 min; un rechazo se revisa a
+  los 5): sin confirmarla NO se leen `tempcheques`/`tempcheqdet`. Es la opción conservadora de la
+  ficha de F1-022 mientras Ricardo no decida otra.
+- **Forma que manda** (la que lee `leerMesa` del panel): `folio`, `folioTicket`, `mesa`, `mesero`
+  (`meseros.nombre` por `idmesero`, recortado), `abiertoAt` (`fecha`, hora local del POS → UTC con la
+  zona de Windows, como el resto del agente), `comensales` (`nopersonas`), `impreso`, `total`
+  (`tempcheques.total`, con IVA y descuentos, a 2 decimales mitad lejos de cero) y `partidas` desde
+  `tempcheqdet` en orden de `movimiento`: `producto` (`productos.descripcion`, o la clave),
+  `categoria` (`grupos.descripcion`), `cantidad`, `precioUnit` (`precio`), `total`
+  (`cantidad × precio × (1 − descuento/100)`, porque SR guarda el PORCENTAJE, §3), `modificadores` y
+  `comandaImpresa` (`comanda_impresa = 1`).
+- `DECISION PROVISIONAL (nocturno)` — **`folio` es `tempcheques.folio`**, no `numcheque`: es el único
+  que no cambia mientras la cuenta está abierta (`numcheque` vale 0 hasta imprimir y, si fuera la
+  identidad, la tarjeta, el modal y las alertas verían una cuenta nueva al imprimirse). El folio del
+  ticket viaja aparte en **`folioTicket`** (`numcheque` > 0, si no `null`), un campo que el panel
+  todavía ignora. ❓ **Decisión para Ricardo:** mostrarlo en el Monitor y el detalle (cambio de web).
+- `DECISION PROVISIONAL (nocturno)` — **modificadores:** una fila con `modificador = 1` se manda como
+  modificador de la partida anterior, con su `precio`; nunca se ha visto uno vendido (§3). Una sin
+  partida antes viaja como partida, con aviso en el log.
+- **`comandaImpresa` ya se manda** (pendiente de F2-223): el 1 se vio en todas las partidas
+  enviadas; ⚠️ que 0 = "pendiente de enviar" sigue siendo SUPUESTO.
+- `meseros.idmesero` no tiene índice único: si el LEFT JOIN repite una cuenta, se toma la primera y
+  se avisa. Más de 500 cuentas o un snapshot de más de 4 MB no se manda (nunca uno recortado).
+
 > ⚠️ **Sobre §6–§10 y el seed maestro (F2-201).** `api/prisma/seed-maestro/` genera
 > productos, grupos, precios por sucursal, meseros, clientes, áreas y canales, insumos,
 > almacenes, pólizas, existencias, recetas, compras y gastos **sintéticos**. Esas formas
@@ -2966,6 +3001,8 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | `agent/src/ArkonAgente/Inventario/SincronizadorInventario.cs#1` | 84 | F2-241b | Movimientos cada 15 min, compras 30, recetas 60. | SR | §10 |
 | `agent/src/ArkonAgente/Inventario/SincronizadorInventario.cs#2` | 92 | F2-241b | Ventanas: vivos cursor−3 d (mov.) / −35 d (compras); cancelados −35 d; sin cursor 35 d; cursor topado a ahora+5 min. | SR | §10 |
 | `agent/src/ArkonAgente/Inventario/SincronizadorInventario.cs#3` | 110 | F2-241b | Freno: ≥ 5 desaparecidos y > mitad de la ventana → no encola ni mueve cursor. | SR | §10 |
+| `agent/src/ArkonAgente/Mesas/MapeoMesas.cs#1` | 50 | F1-023 | `folio` del snapshot = `tempcheques.folio` (estable mientras la cuenta está abierta); el del ticket viaja aparte en `folioTicket` (`numcheque` > 0), que el panel aún no muestra. | SR | §5 |
+| `agent/src/ArkonAgente/Mesas/MapeoMesas.cs#2` | 56 | F1-023 | Fila `modificador = 1` = modificador de la partida anterior con su `precio`; sin partida antes viaja como partida con aviso (nunca visto vendido). | SR | §3, §5 |
 | `agent/src/ArkonAgente/Sql/Consultas/sr_catalogo_unidades.sql#1` | 7 | F2-241 | Sin tabla de unidades: unidad = texto distinto de `insumos.unidad`; clave TrimEnd + mayúsculas; DISTINCT con collation binaria. | SR | §9, §12 |
 | `agent/src/ArkonAgente/Sql/Consultas/sr_cheques.sql#1` | 31 | F1-022 | Una cuenta cerrada antes de `@piso` (7 días) y movida a `cheques` tras una caída larga del agente no se lee por cursor. | SR | §2 |
 | `agent/src/ArkonAgente/Sql/Consultas/sr_movimientos.sql#1` | 25 | F2-241b | Documento = (clase+número, almacén, concepto); prioridad traspaso > idcompra > invfisico > foliocheque > movto > fecha. | SR | §10 |

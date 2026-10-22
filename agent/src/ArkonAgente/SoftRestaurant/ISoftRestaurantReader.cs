@@ -44,6 +44,9 @@ internal interface ISoftRestaurantReader
 
     /// <summary>La consulta embebida de cuentas cerradas (cobradas o canceladas) en ESTA versión (F1-022).</summary>
     string ConsultaCheques { get; }
+
+    /// <summary>La consulta embebida de cuentas abiertas (mesas en vivo) en ESTA versión (F1-023).</summary>
+    string ConsultaMesasAbiertas { get; }
 }
 
 /// <summary>
@@ -91,4 +94,10 @@ internal sealed class SrV11Reader(VersionSr version) : ISoftRestaurantReader
     /// docs/esquema-sr.md §2–§4.
     /// </summary>
     public string ConsultaCheques => "sr_cheques";
+
+    /// <summary>
+    /// ✅ <c>tempcheques</c> + <c>tempcheqdet</c> VALIDADAS en SR 10 con datos (F1-090, 2026-10-22);
+    /// ⚠️ en la 11, SUPUESTO. docs/esquema-sr.md §5.
+    /// </summary>
+    public string ConsultaMesasAbiertas => "sr_mesas_abiertas";
 }

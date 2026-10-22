@@ -11,6 +11,7 @@ internal sealed class EstadoSoftRestaurant
     private ResultadoDeteccion? _ultimo;
     private ResultadoSondeo? _ultimoSondeo;
     private DateTimeOffset? _ultimaLecturaAt;
+    private string? _errorMesas;
 
     /// <summary>Resultado de la última detección; <c>null</c> si aún no se intentó.</summary>
     public ResultadoDeteccion? Ultimo
@@ -40,6 +41,23 @@ internal sealed class EstadoSoftRestaurant
     public string? ErrorLectura
     {
         get { lock (_candado) { return _ultimoSondeo?.Error; } }
+    }
+
+    /// <summary>
+    /// Por qué NO salió el snapshot de mesas abiertas (F1-023): permisos sin confirmar, lectura que
+    /// falló o snapshot que no cabe. <c>null</c> si la última lectura salió o aún no corre.
+    /// </summary>
+    public string? ErrorMesas
+    {
+        get { lock (_candado) { return _errorMesas; } }
+    }
+
+    public void RegistrarErrorMesas(string? error)
+    {
+        lock (_candado)
+        {
+            _errorMesas = error;
+        }
     }
 
     public void Registrar(ResultadoDeteccion resultado)
