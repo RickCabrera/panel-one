@@ -1316,9 +1316,12 @@ cobrada. Lo que fija:
   turno siguen en la tabla hasta el corte y NO salen. Snapshot completo en CADA ciclo, también
   vacío (`mesas: []`), ANTES del heartbeat. Una lectura que falla no manda nada (nunca un vacío
   que diga "no hay mesas"); su motivo va al log y al `ultimoError` del heartbeat.
-- **Sólo con SOLO LECTURA confirmada** (`diagnostico.sql`, cada 15 min; un rechazo se revisa a
-  los 5): sin confirmarla NO se leen `tempcheques`/`tempcheqdet`. Es la opción conservadora de la
-  ficha de F1-022 mientras Ricardo no decida otra.
+- **Sólo con SOLO LECTURA confirmada** (`diagnostico.sql`, cada 15 min; un "puede escribir"
+  confirmado se revisa a los 5): sin confirmarla NO se leen `tempcheques`/`tempcheqdet`. Es la
+  opción conservadora de la ficha de F1-022 mientras Ricardo no decida otra. Si la revisión misma
+  falla (el SQL no contesta), no se espera 5 min: se vuelve a revisar al siguiente ciclo (el mismo
+  `NoSeSupo` que usa F1-022). Y si la sonda de ese ciclo ya falló, las mesas ni se intentan: el
+  heartbeat no espera otro timeout de conexión.
 - **Forma que manda** (la que lee `leerMesa` del panel): `folio`, `folioTicket`, `mesa`, `mesero`
   (`meseros.nombre` por `idmesero`, recortado), `abiertoAt` (`fecha`, hora local del POS → UTC con la
   zona de Windows, como el resto del agente), `comensales` (`nopersonas`), `impreso`, `total`
@@ -1339,6 +1342,13 @@ cobrada. Lo que fija:
   enviadas; ⚠️ que 0 = "pendiente de enviar" sigue siendo SUPUESTO.
 - `meseros.idmesero` no tiene índice único: si el LEFT JOIN repite una cuenta, se toma la primera y
   se avisa. Más de 500 cuentas o un snapshot de más de 4 MB no se manda (nunca uno recortado).
+- **El total de una partida NO lleva el descuento general de la cuenta** (`tempcheques.descuento`, un
+  porcentaje, §2): con descuento general, Σ partidas ≠ `total` de la mesa. El `total` de la mesa sí
+  viene bien (sale de `tempcheques.total`); el panel nunca lo recalcula de las partidas (§3).
+- **`folio` reinicia en cada turno** (§2). Hoy no choca: SR no deja cerrar un turno con cuentas
+  abiertas y el snapshot vacío de ese momento cierra las alertas. ⚠️ Si durante el corte no llega
+  ningún snapshot vivo (agente caído), una alerta abierta con el folio 3 del turno viejo podría
+  seguir viva cuando nace la cuenta 3 del turno nuevo. Es de F1-050/F2-224 (la llave de la alerta).
 
 > ⚠️ **Sobre §6–§10 y el seed maestro (F2-201).** `api/prisma/seed-maestro/` genera
 > productos, grupos, precios por sucursal, meseros, clientes, áreas y canales, insumos,

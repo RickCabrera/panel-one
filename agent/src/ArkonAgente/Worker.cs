@@ -255,7 +255,17 @@ internal sealed class Worker : BackgroundService
         await ConsultarSrAsync(config, cheques, envio.Cola, stoppingToken);
         if (mesas is not null && _dep.EstadoSr.Reader is { } readerMesas)
         {
-            await LeerMesasAsync(mesas, readerMesas, envio.Cola, stoppingToken);
+            // Con la sonda de ESTE ciclo caída, leer mesas sólo retrasaría el heartbeat otro timeout
+            // de conexión: se salta y el panel ve el snapshot envejecer, como con cualquier lectura fallida.
+            if (_dep.EstadoSr.ErrorLectura is null)
+            {
+                await LeerMesasAsync(mesas, readerMesas, envio.Cola, stoppingToken);
+            }
+            else
+            {
+                _dep.EstadoSr.RegistrarErrorMesas(
+                    "Mesas abiertas: no se leyeron en este ciclo porque SoftRestaurant no respondió a la sonda.");
+            }
         }
 
         EncolarHeartbeat(envio);

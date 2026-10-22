@@ -169,6 +169,15 @@ internal sealed class SincronizadorMesas : ISincronizadorMesas
             return true;
         }
 
+        // Sólo un "puede escribir" CONFIRMADO espera EsperaReintento. Si la revisión misma falló (un
+        // parpadeo del SQL), el siguiente ciclo vuelve a revisar: no deja el Monitor 5 min sin mesas.
+        if (permisos.NoSeSupo)
+        {
+            Fallar($"Mesas abiertas: no se leen las cuentas abiertas de SoftRestaurant en este ciclo. {permisos.Mensaje} " +
+                   "Se vuelve a revisar en el siguiente ciclo.");
+            return false;
+        }
+
         _reintentarPermisosDesde = ahora + EsperaReintento;
         Fallar($"Mesas abiertas: no se leen las cuentas abiertas de SoftRestaurant. {permisos.Mensaje} El agente sólo lee " +
                $"el POS con un usuario de SOLO LECTURA confirmado (ver 'agente test'). Se vuelve a revisar en " +

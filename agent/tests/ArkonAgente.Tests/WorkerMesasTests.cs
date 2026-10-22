@@ -72,14 +72,18 @@ public partial class WorkerTests
         public void Dispose() => _interno.Dispose();
     }
 
+    private static Task<ResultadoSondeo> SondeoCaido(ConfiguracionAgente config, CancellationToken cancelacion) =>
+        Task.FromResult(ResultadoSondeo.Falla(InstanteSondeo, "SoftRestaurant no respondió (sintético)."));
+
     private DependenciasWorker ConMesas(
-        CarpetaTemporal carpeta, ICicloEnvio envio, EstadoSoftRestaurant estado, ISincronizadorMesas mesas) =>
+        CarpetaTemporal carpeta, ICicloEnvio envio, EstadoSoftRestaurant estado, ISincronizadorMesas mesas,
+        Func<ConfiguracionAgente, CancellationToken, Task<ResultadoSondeo>>? sondeo = null) =>
         new(
             carpeta.Rutas,
             _ => new ResultadoConfiguracion(Datos.Config() with { IntervaloSegundos = ConfiguracionAgente.IntervaloMinimo }, [], []),
             _ => [],
             DetectaSr10,
-            SondeoOk,
+            sondeo ?? SondeoOk,
             estado,
             (_, _) => envio,
             TimeProvider.System,
@@ -104,6 +108,24 @@ public partial class WorkerTests
         Assert.Equal(0, mesas.EnviosAlCorrer[0]); // antes del primer envío
         Assert.All(envio.SnapshotsPorCiclo, n => Assert.Equal(1, n)); // uno por ciclo, en ese mismo lote
         Assert.True(worker.ExecuteTask!.IsCompletedSuccessfully);
+    }
+
+    [Fact]
+    public async Task Con_la_sonda_del_ciclo_caida_no_lee_mesas_y_el_heartbeat_sale_igual_diciendo_por_que()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var envio = new EnvioFalso();
+        var estado = new EstadoSoftRestaurant();
+        var mesas = new MesasFalsas(envio, estado, error: null, truena: false);
+        var worker = new Worker(new LogEnMemoria(), ConMesas(carpeta, envio, estado, mesas, SondeoCaido));
+
+        await worker.StartAsync(CancellationToken.None);
+        await Esperar(() => envio.Ciclos >= 2);
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Empty(mesas.EnviosAlCorrer); // nunca se intentó leer mesas
+        Assert.All(envio.HeartbeatsPorCiclo, n => Assert.Equal(1, n));
+        Assert.Contains("no respondió a la sonda", envio.Heartbeats[0].GetProperty("ultimoError").GetString());
     }
 
     [Fact]

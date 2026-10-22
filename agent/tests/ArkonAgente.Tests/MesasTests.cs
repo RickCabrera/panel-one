@@ -5,13 +5,16 @@ using ArkonAgente.Cola;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Mesas;
 using ArkonAgente.SoftRestaurant;
+using ArkonAgente.Sql;
 using Microsoft.Extensions.Logging;
 
 namespace ArkonAgente.Tests;
 
 /// <summary>
-/// Fixtures SINTÉTICAS de <c>sr_mesas_abiertas.sql</c> (F1-023). Imitan la forma de lo visto en
-/// la SR 10 local (docs/esquema-sr.md §5), no sus datos: nada de aquí es de un cliente.
+/// Fixtures de <c>sr_mesas_abiertas.sql</c> (F1-023). Reproducen a propósito las cuentas que se vieron
+/// en la SR 10 de DEMO local (docs/esquema-sr.md §5: mesas 41 y 42, sus totales y comensales, el
+/// folio de ticket 22), con nombres de mesero y producto inventados. No es dato de ningún cliente:
+/// es la base de demostración que se operó a mano en F1-090.
 /// </summary>
 internal static class FixturesMesas
 {
@@ -240,6 +243,28 @@ public class MapeoMesasTests
     }
 }
 
+public class ConsultaMesasAbiertasTests
+{
+    /// <summary>
+    /// Las cobradas del turno siguen en <c>tempcheques</c> hasta el corte (§2): si alguien quita el
+    /// filtro, saldrían como mesas abiertas. Los dos resultados (cuentas y partidas) lo traen.
+    /// </summary>
+    [Fact]
+    public void Los_dos_resultados_excluyen_las_cuentas_cobradas_y_las_canceladas()
+    {
+        var sql = string.Join('\n', ConsultasEmbebidas.Leer("sr_mesas_abiertas").Split('\n')
+            .Where(l => !l.TrimStart().StartsWith("--", StringComparison.Ordinal)));
+        var selects = sql.Split("SELECT", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        Assert.Equal(2, selects.Length);
+        Assert.All(selects, s =>
+        {
+            Assert.Contains("ISNULL(c.pagado, 0) = 0", s, StringComparison.Ordinal);
+            Assert.Contains("ISNULL(c.cancelado, 0) = 0", s, StringComparison.Ordinal);
+        });
+    }
+}
+
 public class SincronizadorMesasTests
 {
     private sealed class LectorFalso : ILectorMesas
@@ -352,6 +377,26 @@ public class SincronizadorMesasTests
         m.Reloj.Avanzar(SincronizadorMesas.EsperaReintento);
         m.Lector.Permisos = new PermisosLectura(true, null);
         await m.Ciclo();
+        Assert.Single(m.Snapshots());
+        Assert.Null(m.Estado.ErrorMesas);
+    }
+
+    [Fact]
+    public async Task Si_la_revision_de_permisos_misma_falla_reintenta_en_el_siguiente_ciclo_y_no_en_5_min()
+    {
+        using var m = new Montaje();
+        m.Lector.Permisos = new PermisosLectura(false, "No se pudieron revisar los permisos del usuario SQL. Timeout.", NoSeSupo: true);
+
+        await m.Ciclo();
+        Assert.Equal(0, m.Lector.Lecturas);
+        Assert.Empty(m.Snapshots());
+        Assert.Contains("siguiente ciclo", m.Estado.ErrorMesas);
+
+        m.Reloj.Avanzar(TimeSpan.FromSeconds(30)); // un ciclo, muy por debajo de EsperaReintento
+        m.Lector.Permisos = new PermisosLectura(true, null);
+        await m.Ciclo();
+
+        Assert.Equal(2, m.Lector.Revisiones);
         Assert.Single(m.Snapshots());
         Assert.Null(m.Estado.ErrorMesas);
     }
