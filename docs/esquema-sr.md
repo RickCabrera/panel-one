@@ -97,8 +97,9 @@ una tabla de configuración que el POS casi no escribe, no toca las tablas de op
 - ✅ **VALIDADO** 2026-09-21 contra la SR 10 local (`.\NATIONALSOFT`, `softrestaurant10`),
   con login sysadmin: responde en ~1 ms.
 - ⚠️ **Una sonda que responde ≠ una lectura de ventas.** Dice que la base contesta, no que
-  los cheques estén llegando. Mientras F1-022 no exista, la "última lectura" del panel sale
-  de aquí.
+  los cheques estén llegando. Desde F1-022 la "última lectura" del panel sale de la lectura de
+  cheques (§2, "Query incremental"), que corre después de la sonda en el mismo ciclo y la
+  reemplaza.
 - ⚠️ **SUPUESTO:** que un usuario `db_datareader` pueda leer `parametros2`. No probado (igual
   que el resto de §1).
 
@@ -119,11 +120,71 @@ una tabla de configuración que el POS casi no escribe, no toca las tablas de op
 
 **Cómo se ve una reapertura:** _(pendiente — clave para la ventana de relectura de 2 h)_
 
-**Query incremental:**
+**Query incremental (F1-022):** `agent/src/ArkonAgente/Sql/Consultas/sr_cheques.sql`, mapeo en
+`Ventas/MapeoCheques.cs`, ciclo en `Ventas/SincronizadorCheques.cs`. ✅ **Corrida 2026-10-22 con
+`monitor_lector` contra la SR 10 local** (captura de F1-090; el mapeo de columnas de §2–§5 lo
+documenta F1-090, que se mergea ANTES que esto): 20 cuentas en `cheques` con Σ `total` = 3065.50, 1 cobrada en `tempcheques` (VISA), 4
+cerradas el 22-oct por 418.00 con 7 comensales, y **ninguna** impresa sin cobrar; 56 ms.
 
 ```sql
--- pendiente: F1-022
+-- Forma (resumida; el archivo trae los cuatro SELECT completos):
+SELECT MAX(c.folio) FROM dbo.cheques AS c WITH (NOLOCK);                    -- (1) para el cursor
+-- (2) cuentas: tempcheques cobradas o canceladas  +  cheques por cursor o relectura
+SELECT 'T', t.folio, t.numcheque, ... FROM dbo.tempcheques AS t WITH (NOLOCK)
+WHERE t.pagado = 1 OR t.cancelado = 1
+UNION ALL
+SELECT 'C', c.folio, c.numcheque, ... FROM dbo.cheques AS c WITH (NOLOCK)
+WHERE (c.folio > @ultimofolio AND ISNULL(c.cierre, c.fecha) >= @piso) OR c.fecha >= @desde;
+-- (3) partidas y (4) pagos: el MISMO filtro, por foliodet / folio de SU tabla
 ```
+
+- **Fuentes:** las dos tablas, porque una cuenta cobrada se queda en `tempcheques` hasta el corte. Una
+  de `tempcheques` con `pagado = 0` y `cancelado = 0` es una mesa abierta (F1-023) y **no** se lee aquí,
+  aunque ya esté impresa (ya trae `cierre`).
+- **Llave:** `folioSr` = `folio` = `numcheque` (con `"<serie>-"` delante si `seriefolio` no está
+  vacía). `DECISION PROVISIONAL (nocturno)`; ver "¿SR reinicia folios?" arriba. Una cuenta cerrada
+  con `numcheque` NULL o 0 **no se manda** (Warning en el log). Dos cuentas con el mismo `numcheque`
+  en una lectura tampoco (Error). Y si un `folioSr` ya mandado reaparece con OTRA apertura, el agente
+  no lo manda (Error): pisaría la venta anterior en el panel.
+- **Cursor:** en `cola.db` (`agente_marcas`, `cheques.ultimo_folio`), nunca en SR. `@piso` = ahora −
+  7 días (la primera lectura no trae toda la historia; `DECISION PROVISIONAL (nocturno)`). `@desde` =
+  ahora − 2 h (relectura por `cheques.fecha`, que tiene índice). Si `MAX(cheques.folio)` baja del
+  cursor (SR reinició la numeración interna), el cursor se pierde y se relee desde `@piso`.
+- **Sólo lo que cambió:** huella SHA-256 del `datos` por `folioSr` en `cola.db`
+  (`cheques_vistos`). Tras el corte la cuenta reaparece en `cheques` con otro `folio` interno y la
+  misma huella: no se reenvía.
+- **Traducción:** `subtotal` = `subtotal − descuentoimporte`; `descuentos` = `totaldescuentos +
+  totalcortesias` (las cortesías van ahí porque el contrato no tiene campo; `DECISION PROVISIONAL
+  (nocturno)`); `total` y `propina` tal cual (nunca `efectivo`/`tarjeta`, que traen la propina);
+  `cerradoAt` = `cierre` (hora de impresión); fechas locales de la PC con el offset de la zona de
+  Windows en ese instante; partida = `cantidad × precio × (1 − descuento/100)`; `formaRaw` =
+  `formasdepago.descripcion`; mesero por `meseros.idmesero` con `TOP (1)` (no es única).
+- **Integridad:** una cuenta cobrada sin partidas, o cuyos pagos no suman el total, se considera
+  leída a media escritura: no se manda y el cursor no la salta durante 20 lecturas seguidas (~10 min);
+  después va al log como Error y el cursor sigue (una que nunca cuadra no puede atorar la lectura).
+  Una cuenta dada por perdida **no se manda nunca**, aunque luego cuadre, si ya salió de la
+  relectura de 2 h: hay que revisarla a mano en SR.
+  Una cancelada viaja aunque sus pagos no sumen.
+- ⚠️ **SUPUESTO — cancelaciones y reaperturas (no vistas en F1-090).** El lector lee `cancelado`
+  tal cual y supone que una cuenta cancelada conserva partidas y total. Y la relectura de 2 h es
+  por `cheques.fecha` (la APERTURA, que tiene índice): una cancelación posterior al corte de una
+  cuenta abierta hace más de 2 h **no se ve**. ❓ **Decisión para Ricardo:** releer también por
+  `fechacancelado` (sin índice) una vez visto cómo lo llena SR. Se valida cancelando una cuenta ya
+  cobrada, antes y después del corte.
+- ⚠️ **SUPUESTO de rendimiento.** Los 56 ms son con 20 cuentas. El filtro de `cheques` lleva un OR
+  con `ISNULL(cierre, fecha)` y se repite en cuentas, partidas y pagos: con años de historia puede
+  escanear `cheques` cada ciclo. Revisar el plan con volumen real (F1-091) y, si hace falta,
+  partirlo en un SELECT por `folio` (PK) y otro por `fecha` (índice).
+- ⚠️ **SUPUESTO — una reimpresión después del cobro no cambia `numcheque`.** Si lo cambiara, el
+  panel tendría la venta dos veces (con el folio viejo y el nuevo). No visto.
+- **Pendiente de F1-021:** si una lectura falla porque SR se actualizó con el agente corriendo, el
+  lector reintenta con el mismo reader; volver a detectar la versión sigue sin hacerse (basta
+  reiniciar el servicio).
+- **Lo que NO viaja:** las partidas canceladas (`cancela`): el contrato no las trae, y esa tabla
+  nunca se une por folio (trampa del `foliocheque = 0`).
+- **Permisos:** con un usuario que puede escribir, NO se leen las tablas de operación (Error en el
+  log y en el `ultimoError` del heartbeat). La lectura de cheques es la "última lectura" del
+  heartbeat; la sonda de §1 quedó como respaldo.
 
 **Lo que el modelo de Postgres (F1-030, tabla `cheques`) ya supone de esta sección.** Nada
 de esto se ha visto en una instalación real; cada punto es una
@@ -2562,8 +2623,7 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | Clave | Línea (F2-250) | Tarea | Decisión | Tipo | Dónde |
 |---|---|---|---|---|---|
 | `agent/README.md#1` | 180 | F1-026 | Servicio corre con cuenta virtual `NT SERVICE\ArkonAgente` por defecto; nunca probado como servicio; fallback `-CuentaServicio LocalSystem`. | SR | §11, §14 «Agente: cuenta del servicio» |
-| `agent/README.md#2` | 323 | F1-025 | Sin lector de cheques, "última lectura" = última vez que respondió la sonda, no llegada de ventas. | SR | §1 |
-| `agent/README.md#3` | 431 | F2-143 | El servicio actualizador corre como LocalSystem, sin verificar con elevación (F1-020b). | SR | §11, §14 «Agente: cuenta del servicio» |
+| `agent/README.md#2` | 430 | F2-143 | El servicio actualizador corre como LocalSystem, sin verificar con elevación (F1-020b). | SR | §11, §14 «Agente: cuenta del servicio» |
 | `agent/instalador/funciones-instalador.ps1#1` | 237 | F2-143 | El servicio actualizador corre como LocalSystem, sin verificar con elevación (F1-020b). | panel | §11, §14 «Agente: cuenta del servicio» |
 | `agent/instalador/instalar.ps1#1` | 248 | F1-026 | Servicio corre con cuenta virtual `NT SERVICE\ArkonAgente` por defecto; nunca probado como servicio; fallback `-CuentaServicio LocalSystem`. | panel | §11, §14 «Agente: cuenta del servicio» |
 | `agent/src/ArkonAgente/Actualizacion/ServicioActualizador.cs#1` | 70 | F2-143 | Un proceso "agente" que no se puede inspeccionar cuenta como corriendo (no arrancar otro encima). | panel | §14 «Agente: cuenta del servicio» |
@@ -2573,6 +2633,7 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | `agent/src/ArkonAgente/Catalogos/MapeoCatalogos.cs#3` | 340 | F2-241 | `insumosdetalle` con estados distintos entre empresas → insumo viaja sin estado, con aviso. | SR | §9 |
 | `agent/src/ArkonAgente/Catalogos/MapeoCatalogos.cs#4` | 384 | F2-240/F2-241 | 1 = vigente, 0 = baja en `meseros.visible`, `areasrestaurant.Estatus`, `proveedores.estatus`, `insumosdetalle.estatus`; otro/NULL = nulo con aviso. | SR | §7, §8, §9 |
 | `agent/src/ArkonAgente/Catalogos/SincronizadorCatalogos.cs#1` | 48 | F2-240 | Con usuario que puede escribir (o sin confirmar) no se leen catálogos. | SR | §11 |
+| `agent/src/ArkonAgente/Cola/ColaCheques.cs#1` | 24 | F1-022 | La huella de un cheque se olvida a los 90 días sin verlo; un `numcheque` reusado después ya no se detecta en el agente. | SR | §2 |
 | `agent/src/ArkonAgente/Cola/ColaLocal.cs#1` | 45 | F1-024 | El heartbeat pendiente también se colapsa en la cola (sólo el último), como el snapshot. | SR | §2, §14 «Agente: cuenta del servicio» |
 | `agent/src/ArkonAgente/Cola/ColaLocal.cs#2` | 127 | F1-024 | El heartbeat pendiente también se colapsa en la cola (sólo el último), como el snapshot. | SR | §2, §14 «Agente: cuenta del servicio» |
 | `agent/src/ArkonAgente/Configuracion/CargadorConfiguracion.cs#1` | 113 | F1-061 | El panel marca "desconectado" a 90 s fijos; el agente avisa si `intervaloSegundos` > 30. | SR | §5 |
@@ -2588,9 +2649,14 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | `agent/src/ArkonAgente/Inventario/SincronizadorInventario.cs#1` | 84 | F2-241b | Movimientos cada 15 min, compras 30, recetas 60. | SR | §10 |
 | `agent/src/ArkonAgente/Inventario/SincronizadorInventario.cs#2` | 92 | F2-241b | Ventanas: vivos cursor−3 d (mov.) / −35 d (compras); cancelados −35 d; sin cursor 35 d; cursor topado a ahora+5 min. | SR | §10 |
 | `agent/src/ArkonAgente/Inventario/SincronizadorInventario.cs#3` | 110 | F2-241b | Freno: ≥ 5 desaparecidos y > mitad de la ventana → no encola ni mueve cursor. | SR | §10 |
-| `agent/src/ArkonAgente/SoftRestaurant/SondeoSr.cs#1` | 31 | F1-025 | Sin lector de cheques, "última lectura" = última vez que respondió la sonda, no llegada de ventas. | SR | §1 |
 | `agent/src/ArkonAgente/Sql/Consultas/sr_catalogo_unidades.sql#1` | 7 | F2-241 | Sin tabla de unidades: unidad = texto distinto de `insumos.unidad`; clave TrimEnd + mayúsculas; DISTINCT con collation binaria. | SR | §9, §12 |
+| `agent/src/ArkonAgente/Sql/Consultas/sr_cheques.sql#1` | 31 | F1-022 | Una cuenta cerrada antes de `@piso` (7 días) y movida a `cheques` tras una caída larga del agente no se lee por cursor. | SR | §2 |
 | `agent/src/ArkonAgente/Sql/Consultas/sr_movimientos.sql#1` | 25 | F2-241b | Documento = (clase+número, almacén, concepto); prioridad traspaso > idcompra > invfisico > foliocheque > movto > fecha. | SR | §10 |
+| `agent/src/ArkonAgente/Ventas/MapeoCheques.cs#1` | 87 | F1-022 | Dos cuentas con el mismo `numcheque` en una lectura no se mandan (la base no lo obliga a ser único). | SR | §2 |
+| `agent/src/ArkonAgente/Ventas/MapeoCheques.cs#2` | 162 | F1-022 | `folioSr` = `folio` = `numcheque` (con `serie-` si hay serie): el folio del ticket, estable tras el corte; su reinicio por año/serie no se ha visto. | SR | §2 |
+| `agent/src/ArkonAgente/Ventas/MapeoCheques.cs#3` | 201 | F1-022 | Las cortesías (`totalcortesias`) se suman en `descuentos`: el contrato no tiene campo propio. | SR | §2 |
+| `agent/src/ArkonAgente/Ventas/MapeoCheques.cs#4` | 252 | F1-022 | Una fila de `cheqdet` con `modificador = 1` es modificador de la partida anterior; nunca visto vendido. | SR | §3 |
+| `agent/src/ArkonAgente/Ventas/SincronizadorCheques.cs#1` | 53 | F1-022 | La primera lectura trae sólo las cuentas de `cheques` cerradas en los últimos 7 días, no toda la historia. | SR | §2 |
 | `agent/src/ArkonAgente/Worker.cs#1` | 193 | F1-020 | Conexión que falla al arrancar (incl. usuario con escritura) = Warning y el servicio sigue; negarse a leer es decisión abierta. | SR | §11, §14 «Agente: cuenta del servicio» |
 | `agent/tests/ArkonAgente.Tests/ArkonAgente.Tests.csproj#1` | 15 | F1-020 | `InvariantGlobalization=false`: SR guarda varchar CP1252 (Modern_Spanish_CI_AS). | SR | §11 |
 | `api/prisma/schema.prisma#1` | 221 | F1-010 | `agente_estado` lleva `empresa_id` denormalizado con FK compuesta, aunque el backlog sólo pedía `sucursal_id`. | panel | §14 «Panel, landing, correo» |

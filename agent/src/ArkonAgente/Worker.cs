@@ -7,6 +7,7 @@ using ArkonAgente.Inventario;
 using ArkonAgente.Salud;
 using ArkonAgente.SoftRestaurant;
 using ArkonAgente.Sql;
+using ArkonAgente.Ventas;
 
 namespace ArkonAgente;
 
@@ -26,7 +27,8 @@ internal sealed record DependenciasWorker(
     Func<ConfiguracionAgente, ILogger, IRevisorActualizacion>? CrearRevisor = null,
     Func<ConfiguracionAgente, ILogger, ISincronizadorCatalogos>? CrearCatalogos = null,
     Func<ConfiguracionAgente, ILogger, ISincronizadorExistencias>? CrearExistencias = null,
-    Func<ConfiguracionAgente, ILogger, ISincronizadorInventario>? CrearInventario = null)
+    Func<ConfiguracionAgente, ILogger, ISincronizadorInventario>? CrearInventario = null,
+    Func<ConfiguracionAgente, ILogger, ISincronizadorCheques>? CrearCheques = null)
 {
     public static readonly TimeSpan ReintentoConfigPorDefecto = TimeSpan.FromSeconds(60);
 
@@ -37,7 +39,8 @@ internal sealed record DependenciasWorker(
             (config, logger) => CrearRevisorDeVerdad(rutas, config, logger),
             (config, logger) => SincronizadorCatalogos.DeVerdad(rutas, config, logger),
             (config, logger) => SincronizadorExistencias.DeVerdad(rutas, config, logger),
-            (config, logger) => SincronizadorInventario.DeVerdad(rutas, config, logger));
+            (config, logger) => SincronizadorInventario.DeVerdad(rutas, config, logger),
+            (config, logger) => SincronizadorCheques.DeVerdad(rutas, config, logger));
 
     /// <summary>La auto-actualización real (F2-143): el canal del api y el estado en <c>actualizacion\estado.db</c>.</summary>
     internal static RevisorActualizacion CrearRevisorDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger)
@@ -77,8 +80,8 @@ internal sealed record DependenciasWorker(
 /// El servicio. Carga la config, deja en el log un diagnóstico de las dos
 /// conexiones, detecta la versión de SoftRestaurant y elige el reader (F1-021), y
 /// entra al ciclo cada <c>intervaloSegundos</c>: sonda a SR, heartbeat a la cola
-/// (F1-025), la cola hacia el API (F1-024) y los catálogos (F2-240). Leer ventas y
-/// encolarlas llega en F1-022 / F1-023.
+/// (F1-025), las cuentas cerradas (F1-022), la cola hacia el API (F1-024) y los catálogos
+/// (F2-240). Las cuentas abiertas llegan en F1-023.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -218,31 +221,32 @@ internal sealed class Worker : BackgroundService
         using var catalogos = _dep.CrearCatalogos?.Invoke(config, _logger);
         using var existencias = _dep.CrearExistencias?.Invoke(config, _logger);
         using var inventario = _dep.CrearInventario?.Invoke(config, _logger);
+        var cheques = _dep.CrearCheques?.Invoke(config, _logger);
         // El primer ciclo corre al arrancar: lo pendiente de antes de un reinicio sale
         // sin esperar al primer tick, y el panel ve al agente de inmediato.
-        await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, stoppingToken);
+        await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, stoppingToken);
 
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
-            await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, stoppingToken);
+            await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, stoppingToken);
         }
     }
 
     /// <summary>
-    /// Un ciclo: consultar SR, encolar el heartbeat y vaciar la cola. El heartbeat se
-    /// encola SIEMPRE, antes de enviar: así sale un lote por ciclo aunque no haya cheques,
-    /// que es lo que el panel lee como "conectado" (F1-061). F1-022 / F1-023 encolan
-    /// cheques y snapshot aquí, también antes de enviar. Los catálogos (F2-240, F2-241) y las
+    /// Un ciclo: consultar SR (con los cheques cerrados, F1-022), encolar el heartbeat y vaciar
+    /// la cola. El heartbeat se encola SIEMPRE, antes de enviar: así sale un lote por ciclo aunque
+    /// no haya cheques, que es lo que el panel lee como "conectado" (F1-061). F1-023 encolará el
+    /// snapshot aquí, también antes de enviar. Los catálogos (F2-240, F2-241) y las
     /// existencias (F2-241) y movimientos, compras y recetas (F2-241b) van DESPUÉS del heartbeat y del envío: leer once catálogos puede tardar,
     /// y el panel no puede quedarse sin reporte mientras tanto.
     /// </summary>
     private async Task UnCicloAsync(
         ConfiguracionAgente config, ICicloEnvio envio, IRevisorActualizacion? revisor,
         ISincronizadorCatalogos? catalogos, ISincronizadorExistencias? existencias, ISincronizadorInventario? inventario,
-        CancellationToken stoppingToken)
+        ISincronizadorCheques? cheques, CancellationToken stoppingToken)
     {
-        await ConsultarSrAsync(config, stoppingToken);
+        await ConsultarSrAsync(config, cheques, envio.Cola, stoppingToken);
         EncolarHeartbeat(envio);
         await envio.CicloAsync(stoppingToken);
         if (catalogos is not null && _dep.EstadoSr.Reader is { } reader)
@@ -373,19 +377,26 @@ internal sealed class Worker : BackgroundService
     }
 
     /// <summary>
-    /// Detección (mientras no haya reader) y sonda (con reader). Una excepción de aquí que
+    /// Detección (mientras no haya reader), sonda y cuentas cerradas (con reader). La lectura de
+    /// cheques, cuando corre, es la "última lectura" del heartbeat (nota de F1-025): reemplaza a la
+    /// de la sonda, y si falla su error es el que ve el panel. Una excepción de aquí que
     /// no sea la parada del servicio NO corta el ciclo: si lo cortara, no saldría el
     /// heartbeat y el panel vería "desconectado" cuando el agente está vivo y el problema es
     /// otro. Queda en el log y en el <c>ultimoError</c> del heartbeat.
     /// </summary>
-    private async Task ConsultarSrAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
+    private async Task ConsultarSrAsync(
+        ConfiguracionAgente config, ISincronizadorCheques? cheques, ColaLocal cola, CancellationToken stoppingToken)
     {
         try
         {
             await DetectarSiFaltaAsync(config, stoppingToken);
-            if (_dep.EstadoSr.Reader is not null)
+            if (_dep.EstadoSr.Reader is { } reader)
             {
                 await SondearAsync(config, stoppingToken);
+                if (cheques is not null)
+                {
+                    _dep.EstadoSr.RegistrarSondeo(await cheques.CicloAsync(reader, cola, stoppingToken));
+                }
             }
 
             _ultimaFallaInterna = null;

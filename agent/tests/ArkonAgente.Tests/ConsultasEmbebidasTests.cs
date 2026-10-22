@@ -35,6 +35,7 @@ public partial class ConsultasEmbebidasTests
                      "sr_catalogo_meseros", "sr_catalogo_areas", "sr_catalogo_canales", "sr_catalogo_clientes",
                      "sr_catalogo_unidades", "sr_catalogo_grupos_insumo", "sr_catalogo_insumos", "sr_catalogo_almacenes",
                      "sr_catalogo_proveedores", "sr_existencias", "sr_movimientos", "sr_compras", "sr_recetas",
+                     "sr_cheques",
                  })
         {
             Assert.Contains(esperada, nombres);
@@ -139,7 +140,24 @@ public partial class ConsultasEmbebidasTests
         {
             Assert.Contains(leidas, l => l.Tabla == tabla);
         }
+        foreach (var tabla in new[] { "cheques", "tempcheques", "cheqdet", "tempcheqdet", "chequespagos", "tempchequespagos", "formasdepago" }) // F1-022
+        {
+            Assert.Contains(leidas, l => l.Tabla == tabla);
+        }
         Assert.Empty(leidas.Where(l => !revisadas.Contains(l.Tabla)).Select(l => $"{l.Consulta}.sql lee dbo.{l.Tabla}"));
+    }
+
+    [Fact]
+    public void Los_cheques_nunca_unen_cancela_y_de_tempcheques_solo_traen_las_cobradas_o_canceladas()
+    {
+        // F1-090: cancela.foliocheque = 0 (cuentas borradas) choca con el folio 0 real de cheques; y
+        // una cuenta de tempcheques sin cobrar es una mesa abierta (F1-023), aunque ya esté impresa.
+        var sql = SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_cheques"));
+        Assert.DoesNotMatch(new Regex(@"\bcancela\b", RegexOptions.IgnoreCase), sql);
+        Assert.Equal(3, Regex.Matches(sql, @"FROM dbo\.temp\w+ AS \w+ WITH \(NOLOCK\)", RegexOptions.IgnoreCase).Count);
+        Assert.Equal(3, Regex.Matches(sql, @"WHERE t\.pagado = 1 OR t\.cancelado = 1", RegexOptions.IgnoreCase).Count);
+        // Nunca las columnas de dinero por tipo de pago de la cuenta: incluyen la propina (§2).
+        Assert.DoesNotMatch(new Regex(@"\b[tc]\.(efectivo|tarjeta|vales|otros)\b", RegexOptions.IgnoreCase), sql);
     }
 
     [Fact]
