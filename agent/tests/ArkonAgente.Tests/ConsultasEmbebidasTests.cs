@@ -35,7 +35,7 @@ public partial class ConsultasEmbebidasTests
                      "sr_catalogo_meseros", "sr_catalogo_areas", "sr_catalogo_canales", "sr_catalogo_clientes",
                      "sr_catalogo_unidades", "sr_catalogo_grupos_insumo", "sr_catalogo_insumos", "sr_catalogo_almacenes",
                      "sr_catalogo_proveedores", "sr_existencias", "sr_movimientos", "sr_compras", "sr_recetas",
-                     "sr_cheques",
+                     "sr_cheques", "sr_mesas_abiertas",
                  })
         {
             Assert.Contains(esperada, nombres);

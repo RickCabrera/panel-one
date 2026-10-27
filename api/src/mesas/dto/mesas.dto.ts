@@ -50,12 +50,14 @@ export class SnapshotMesasDto implements SnapshotMesas {
     description:
       'Las cuentas abiertas tal como las mandó el agente; el API no valida su forma. Forma ' +
       'PROVISIONAL que lee el panel (F1-050/F1-051; SUPUESTO, esquema-sr.md §5, la valida ' +
-      'F1-023): `{ mesa, mesero, folio, abiertoAt (ISO UTC, reloj del POS), total ("350.50" ' +
-      'o número), comensales, impreso (bool), partidas: [{ producto, categoria, cantidad, ' +
+      'F1-023): `{ mesa, mesero, folio, folioTicket, abiertoAt (ISO UTC, reloj del POS), total ' +
+      '("350.50" o número), comensales, impreso (bool), partidas: [{ producto, categoria, cantidad, ' +
       'precioUnit, total, modificadores: [{ nombre, precio, modificadores?: [...] }], ' +
       'comandaImpresa? (bool) }] }`. `comandaImpresa` (F2-223, SUPUESTO: forma nuestra, no de ' +
       'SR) dice si la comanda de esa partida ya salió impresa; ausente = el panel dice que no ' +
-      'recibe el dato. ' +
+      'recibe el dato. F1-023: `folio` es el número interno de la cuenta abierta en SR (estable ' +
+      'mientras está abierta) y `folioTicket` el folio del ticket (`null` hasta imprimirla); el ' +
+      'panel todavía no muestra `folioTicket` (esquema-sr.md §5). ' +
       'Los modificadores se anidan con la misma llave (el panel lee hasta 4 niveles). ' +
       'Importes con 2 decimales como máximo. Un campo ausente o ilegible se muestra como ' +
       '"Sin dato".',

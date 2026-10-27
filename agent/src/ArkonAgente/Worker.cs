@@ -4,6 +4,7 @@ using ArkonAgente.Cola;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Diagnostico;
 using ArkonAgente.Inventario;
+using ArkonAgente.Mesas;
 using ArkonAgente.Salud;
 using ArkonAgente.SoftRestaurant;
 using ArkonAgente.Sql;
@@ -28,7 +29,8 @@ internal sealed record DependenciasWorker(
     Func<ConfiguracionAgente, ILogger, ISincronizadorCatalogos>? CrearCatalogos = null,
     Func<ConfiguracionAgente, ILogger, ISincronizadorExistencias>? CrearExistencias = null,
     Func<ConfiguracionAgente, ILogger, ISincronizadorInventario>? CrearInventario = null,
-    Func<ConfiguracionAgente, ILogger, ISincronizadorCheques>? CrearCheques = null)
+    Func<ConfiguracionAgente, ILogger, ISincronizadorCheques>? CrearCheques = null,
+    Func<ConfiguracionAgente, ILogger, ISincronizadorMesas>? CrearMesas = null)
 {
     public static readonly TimeSpan ReintentoConfigPorDefecto = TimeSpan.FromSeconds(60);
 
@@ -40,7 +42,8 @@ internal sealed record DependenciasWorker(
             (config, logger) => SincronizadorCatalogos.DeVerdad(rutas, config, logger),
             (config, logger) => SincronizadorExistencias.DeVerdad(rutas, config, logger),
             (config, logger) => SincronizadorInventario.DeVerdad(rutas, config, logger),
-            (config, logger) => SincronizadorCheques.DeVerdad(rutas, config, logger));
+            (config, logger) => SincronizadorCheques.DeVerdad(rutas, config, logger),
+            (config, logger) => SincronizadorMesas.DeVerdad(config, logger, estadoSr));
 
     /// <summary>La auto-actualización real (F2-143): el canal del api y el estado en <c>actualizacion\estado.db</c>.</summary>
     internal static RevisorActualizacion CrearRevisorDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger)
@@ -80,8 +83,8 @@ internal sealed record DependenciasWorker(
 /// El servicio. Carga la config, deja en el log un diagnóstico de las dos
 /// conexiones, detecta la versión de SoftRestaurant y elige el reader (F1-021), y
 /// entra al ciclo cada <c>intervaloSegundos</c>: sonda a SR, heartbeat a la cola
-/// (F1-025), las cuentas cerradas (F1-022), la cola hacia el API (F1-024) y los catálogos
-/// (F2-240). Las cuentas abiertas llegan en F1-023.
+/// (F1-025), las cuentas cerradas (F1-022), las mesas abiertas (F1-023), la cola hacia el API
+/// (F1-024) y los catálogos (F2-240).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -107,6 +110,7 @@ internal sealed class Worker : BackgroundService
     private string? _ultimaFallaCatalogos;
     private string? _ultimaFallaExistencias;
     private string? _ultimaFallaInventario;
+    private string? _ultimaFallaMesas;
 
     public Worker(ILogger<Worker> logger, DependenciasWorker dependencias)
     {
@@ -222,31 +226,50 @@ internal sealed class Worker : BackgroundService
         using var existencias = _dep.CrearExistencias?.Invoke(config, _logger);
         using var inventario = _dep.CrearInventario?.Invoke(config, _logger);
         var cheques = _dep.CrearCheques?.Invoke(config, _logger);
+        var mesas = _dep.CrearMesas?.Invoke(config, _logger);
         // El primer ciclo corre al arrancar: lo pendiente de antes de un reinicio sale
         // sin esperar al primer tick, y el panel ve al agente de inmediato.
-        await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, stoppingToken);
+        await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, mesas, stoppingToken);
 
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
-            await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, stoppingToken);
+            await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, mesas, stoppingToken);
         }
     }
 
     /// <summary>
     /// Un ciclo: consultar SR (con los cheques cerrados, F1-022), encolar el heartbeat y vaciar
     /// la cola. El heartbeat se encola SIEMPRE, antes de enviar: así sale un lote por ciclo aunque
-    /// no haya cheques, que es lo que el panel lee como "conectado" (F1-061). F1-023 encolará el
-    /// snapshot aquí, también antes de enviar. Los catálogos (F2-240, F2-241) y las
+    /// no haya cheques, que es lo que el panel lee como "conectado" (F1-061). El snapshot de mesas
+    /// abiertas (F1-023) se encola aquí, también antes de enviar, para que el lote de este ciclo lo
+    /// lleve junto con los cheques. Los catálogos (F2-240, F2-241) y las
     /// existencias (F2-241) y movimientos, compras y recetas (F2-241b) van DESPUÉS del heartbeat y del envío: leer once catálogos puede tardar,
     /// y el panel no puede quedarse sin reporte mientras tanto.
     /// </summary>
     private async Task UnCicloAsync(
         ConfiguracionAgente config, ICicloEnvio envio, IRevisorActualizacion? revisor,
         ISincronizadorCatalogos? catalogos, ISincronizadorExistencias? existencias, ISincronizadorInventario? inventario,
-        ISincronizadorCheques? cheques, CancellationToken stoppingToken)
+        ISincronizadorCheques? cheques, ISincronizadorMesas? mesas, CancellationToken stoppingToken)
     {
-        await ConsultarSrAsync(config, cheques, envio.Cola, stoppingToken);
+        var sondaRespondio = await ConsultarSrAsync(config, cheques, envio.Cola, stoppingToken);
+        if (mesas is not null && _dep.EstadoSr.Reader is { } readerMesas)
+        {
+            // Con la sonda de ESTE ciclo caída, leer mesas sólo retrasaría el heartbeat otro timeout
+            // de conexión: se salta y el panel ve el snapshot envejecer, como con cualquier lectura fallida.
+            // Se mira la sonda y no ErrorLectura: con cheques, ErrorLectura es el de la lectura de
+            // cheques, y una falla de esa consulta no dice nada de la de mesas.
+            if (sondaRespondio)
+            {
+                await LeerMesasAsync(mesas, readerMesas, envio.Cola, stoppingToken);
+            }
+            else
+            {
+                _dep.EstadoSr.RegistrarErrorMesas(
+                    "Mesas abiertas: no se leyeron en este ciclo porque SoftRestaurant no respondió a la sonda.");
+            }
+        }
+
         EncolarHeartbeat(envio);
         await envio.CicloAsync(stoppingToken);
         if (catalogos is not null && _dep.EstadoSr.Reader is { } reader)
@@ -267,6 +290,35 @@ internal sealed class Worker : BackgroundService
         if (revisor is not null)
         {
             await RevisarActualizacionAsync(revisor, stoppingToken);
+        }
+    }
+
+    /// <summary>
+    /// Las mesas abiertas (F1-023), ANTES del heartbeat: el snapshot y su error salen en el mismo
+    /// lote. Una excepción no prevista (SQLite propio) queda en el log una vez por tipo, y en el
+    /// heartbeat, y el ciclo sigue. Una falla de LECTURA ni llega aquí: la maneja el sincronizador.
+    /// </summary>
+    private async Task LeerMesasAsync(
+        ISincronizadorMesas mesas, ISoftRestaurantReader reader, ColaLocal cola, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await mesas.CicloAsync(reader, cola, stoppingToken);
+            _ultimaFallaMesas = null;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _dep.EstadoSr.RegistrarErrorMesas(
+                $"Falla interna del agente al encolar las mesas abiertas ({ex.GetType().Name}); el detalle está en el log del agente.");
+            if (ex.GetType().FullName != _ultimaFallaMesas)
+            {
+                _ultimaFallaMesas = ex.GetType().FullName;
+                _logger.LogError(ex, "Mesas abiertas: falla interna; se reintenta en el siguiente ciclo.");
+            }
         }
     }
 
@@ -382,17 +434,19 @@ internal sealed class Worker : BackgroundService
     /// de la sonda, y si falla su error es el que ve el panel. Una excepción de aquí que
     /// no sea la parada del servicio NO corta el ciclo: si lo cortara, no saldría el
     /// heartbeat y el panel vería "desconectado" cuando el agente está vivo y el problema es
-    /// otro. Queda en el log y en el <c>ultimoError</c> del heartbeat.
+    /// otro. Queda en el log y en el <c>ultimoError</c> del heartbeat. Devuelve si la sonda de
+    /// ESTE ciclo respondió, para que las mesas abiertas (F1-023) se salten si no.
     /// </summary>
-    private async Task ConsultarSrAsync(
+    private async Task<bool> ConsultarSrAsync(
         ConfiguracionAgente config, ISincronizadorCheques? cheques, ColaLocal cola, CancellationToken stoppingToken)
     {
+        var sondaRespondio = false;
         try
         {
             await DetectarSiFaltaAsync(config, stoppingToken);
             if (_dep.EstadoSr.Reader is { } reader)
             {
-                await SondearAsync(config, stoppingToken);
+                sondaRespondio = await SondearAsync(config, stoppingToken);
                 if (cheques is not null)
                 {
                     _dep.EstadoSr.RegistrarSondeo(await cheques.CicloAsync(reader, cola, stoppingToken));
@@ -425,16 +479,19 @@ internal sealed class Worker : BackgroundService
                 _logger.LogError(ex, "{Mensaje} El agente sigue y lo vuelve a intentar en el siguiente ciclo.", mensaje);
             }
         }
+
+        return sondaRespondio;
     }
 
-    private async Task SondearAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
+    /// <summary>La sonda del ciclo (F1-025); devuelve si SoftRestaurant respondió.</summary>
+    private async Task<bool> SondearAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
     {
         var resultado = await _dep.SondearSr(config, stoppingToken);
         _dep.EstadoSr.RegistrarSondeo(resultado);
 
         if (resultado.Error == _ultimoErrorSondeo)
         {
-            return;
+            return resultado.Ok;
         }
 
         if (resultado.Error is { } error)
@@ -447,6 +504,7 @@ internal sealed class Worker : BackgroundService
         }
 
         _ultimoErrorSondeo = resultado.Error;
+        return resultado.Ok;
     }
 
     /// <summary>
@@ -459,7 +517,7 @@ internal sealed class Worker : BackgroundService
         var entrada = new EntradaHeartbeat(
             _dep.VersionAgente,
             sr.VersionSr,
-            sr.Reader is null ? sr.UltimoError : sr.ErrorLectura,
+            sr.Reader is null ? sr.UltimoError : UnirErrores(sr.ErrorLectura, sr.ErrorMesas),
             sr.UltimaLecturaAt,
             sr.Reader is null ? null : sr.LatenciaQueryMs,
             envio.Cola.ContarPendientesSinHeartbeat(),
@@ -468,6 +526,9 @@ internal sealed class Worker : BackgroundService
             _dep.Reloj.GetUtcNow());
         envio.Cola.Encolar(TipoEvento.Heartbeat, ArmadorHeartbeat.ArmarJson(entrada));
     }
+
+    private static string? UnirErrores(string? lectura, string? mesas) =>
+        lectura is null ? mesas : mesas is null ? lectura : $"{lectura} | {mesas}";
 
     /// <summary>
     /// Mientras no haya reader, detecta la versión de SoftRestaurant en cada ciclo:
