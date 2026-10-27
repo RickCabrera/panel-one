@@ -14,7 +14,11 @@ internal sealed record LecturaCatalogo(CatalogoLeido Leido, long Milisegundos);
 /// ¿Se puede leer SoftRestaurant con este usuario? <paramref name="SoloLectura"/> es true sólo
 /// si se CONFIRMÓ; <paramref name="Mensaje"/> dice por qué no (sin secretos).
 /// </summary>
-internal sealed record PermisosLectura(bool SoloLectura, string? Mensaje);
+/// <param name="NoSeSupo">
+/// La revisión misma falló (timeout, red): no se confirmó nada. Distinto de "puede escribir" (F1-022 lo
+/// reintenta al siguiente ciclo en vez de bloquear las ventas).
+/// </param>
+internal sealed record PermisosLectura(bool SoloLectura, string? Mensaje, bool NoSeSupo = false);
 
 /// <summary>Lee catálogos en SoftRestaurant; los tests lo sustituyen con fixtures.</summary>
 internal interface ILectorCatalogos
@@ -71,12 +75,13 @@ internal sealed class LectorCatalogosSr(ConexionSoftRestaurant conexion, ISoftRe
         catch (SqlException ex)
         {
             var (detalle, _) = VerificacionSql.ClasificarError(ex, conexion);
-            return new PermisosLectura(false, $"No se pudieron revisar los permisos del usuario SQL. {detalle}");
+            return new PermisosLectura(false, $"No se pudieron revisar los permisos del usuario SQL. {detalle}", NoSeSupo: true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancelacion.IsCancellationRequested)
         {
             // Sólo el tipo: el mensaje podría citar la cadena de conexión.
-            return new PermisosLectura(false, $"No se pudieron revisar los permisos del usuario SQL ({ex.GetType().Name}).");
+            return new PermisosLectura(
+                false, $"No se pudieron revisar los permisos del usuario SQL ({ex.GetType().Name}).", NoSeSupo: true);
         }
     }
 

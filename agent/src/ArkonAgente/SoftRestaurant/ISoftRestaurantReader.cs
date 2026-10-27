@@ -8,9 +8,9 @@ namespace ArkonAgente.SoftRestaurant;
 /// (<see cref="SelectorReader"/>).
 /// </summary>
 /// <remarks>
-/// Los catálogos (F2-240) dicen aquí qué consulta usan. La lectura de cheques cerrados
-/// la agrega F1-022 y la de cuentas abiertas F1-023, cuando el mapeo de tablas se valide
-/// en F1-090. Toda query que agreguen va en un <c>.sql</c> embebido, con
+/// Los catálogos (F2-240) dicen aquí qué consulta usan, y también los cheques cerrados
+/// (F1-022, mapeo validado en F1-090). La de cuentas abiertas la agrega F1-023. Toda query
+/// va en un <c>.sql</c> embebido, con
 /// <c>WITH (NOLOCK)</c> y el comando de <c>ConexionSoftRestaurant.CrearComando</c>
 /// (timeout corto).
 /// </remarks>
@@ -41,6 +41,9 @@ internal interface ISoftRestaurantReader
 
     /// <summary>La consulta embebida de recetas (explosión de insumos) en ESTA versión (F2-241b).</summary>
     string ConsultaRecetas { get; }
+
+    /// <summary>La consulta embebida de cuentas cerradas (cobradas o canceladas) en ESTA versión (F1-022).</summary>
+    string ConsultaCheques { get; }
 }
 
 /// <summary>
@@ -80,4 +83,12 @@ internal sealed class SrV11Reader(VersionSr version) : ISoftRestaurantReader
 
     /// <summary>Ídem: <c>costos</c> vista sólo en metadatos (§10).</summary>
     public string ConsultaRecetas => "sr_recetas";
+
+    /// <summary>
+    /// ✅ VALIDADA 2026-10-22 contra SR 10 local con <c>monitor_lector</c> y una captura operada a
+    /// mano (F1-090): <c>tempcheques</c> + <c>cheques</c> y sus partidas y pagos. ⚠️ SUPUESTO: las cuentas
+    /// CANCELADAS y las reabiertas (nunca vistas) y el rendimiento con volumen real. En la 11, SUPUESTO.
+    /// docs/esquema-sr.md §2–§4.
+    /// </summary>
+    public string ConsultaCheques => "sr_cheques";
 }

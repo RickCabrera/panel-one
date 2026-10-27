@@ -28,12 +28,10 @@ internal sealed record ResultadoSondeo(DateTimeOffset Instante, int? LatenciaMs,
 /// </summary>
 /// <remarks>
 /// <para>
-/// DECISION PROVISIONAL (nocturno): mientras el agente no lea ventas (F1-022/F1-023,
-/// bloqueadas por F1-090), "última lectura" es la última vez que la SONDA respondió.
-/// Una sonda que responde dice que la base de SR contesta, NO que las ventas estén
-/// llegando: el panel puede mostrar "última lectura hace 10 s" sin un solo cheque.
-/// Cuando F1-022 lea cheques, su lectura reemplaza a la sonda como fuente de las dos
-/// cifras (nota en su ficha de backlog.md).
+/// Desde F1-022 la "última lectura" del heartbeat es la lectura de cheques
+/// (<c>SincronizadorCheques</c>), que el worker registra DESPUÉS de esta sonda y la
+/// reemplaza: si las ventas no se pueden leer, el panel lo ve aunque la sonda responda.
+/// La sonda sólo queda como la cifra del ciclo cuando no hay lector de cheques.
 /// </para>
 /// <para>
 /// Nunca lanza, salvo la cancelación del servicio. Una <see cref="SqlException"/>

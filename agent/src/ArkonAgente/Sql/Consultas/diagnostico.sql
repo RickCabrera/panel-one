@@ -39,7 +39,8 @@ SELECT
     HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'ALTER')             AS dbo_puede_alter,
     (SELECT COUNT(*)
      FROM (VALUES (N'dbo.parametros2'), (N'dbo.cheques'), (N'dbo.cheqdet'), (N'dbo.chequespagos'),
-                 (N'dbo.tempcheques'), (N'dbo.tempcheqdet'), (N'dbo.grupos'), (N'dbo.productos'),
+                 (N'dbo.tempcheques'), (N'dbo.tempcheqdet'), (N'dbo.tempchequespagos'),
+                 (N'dbo.formasdepago'), (N'dbo.grupos'), (N'dbo.productos'),
                  (N'dbo.productosdetalle'), (N'dbo.meseros'), (N'dbo.areasrestaurant'),
                  (N'dbo.tiposervicio'), (N'dbo.clientes'), (N'dbo.insumos'), (N'dbo.insumosdetalle'),
                  (N'dbo.gruposi'), (N'dbo.almacen'), (N'dbo.proveedores'), (N'dbo.acumuladoinsumos'),
@@ -49,7 +50,8 @@ SELECT
      WHERE HAS_PERMS_BY_NAME(o.nombre, 'OBJECT', p.permiso) = 1) AS obj_escritura_total,
     (SELECT TOP (1) o.nombre + N': ' + p.permiso
      FROM (VALUES (N'dbo.parametros2'), (N'dbo.cheques'), (N'dbo.cheqdet'), (N'dbo.chequespagos'),
-                 (N'dbo.tempcheques'), (N'dbo.tempcheqdet'), (N'dbo.grupos'), (N'dbo.productos'),
+                 (N'dbo.tempcheques'), (N'dbo.tempcheqdet'), (N'dbo.tempchequespagos'),
+                 (N'dbo.formasdepago'), (N'dbo.grupos'), (N'dbo.productos'),
                  (N'dbo.productosdetalle'), (N'dbo.meseros'), (N'dbo.areasrestaurant'),
                  (N'dbo.tiposervicio'), (N'dbo.clientes'), (N'dbo.insumos'), (N'dbo.insumosdetalle'),
                  (N'dbo.gruposi'), (N'dbo.almacen'), (N'dbo.proveedores'), (N'dbo.acumuladoinsumos'),

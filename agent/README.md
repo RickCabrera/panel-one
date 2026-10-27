@@ -312,16 +312,15 @@ Qué lleva el heartbeat:
 |---|---|
 | `versionAgente` | La versión del exe, con el commit recortado (`1.0.0+1a99dc7`). |
 | `versionSr` | La versión leída de SR (`10.021800`); también si no se soporta (`12.000000`). Null si no se pudo leer. |
-| `ultimaLecturaAt` | La última vez que la **sonda** respondió (UTC). No avanza si falla. |
-| `latenciaQueryMs` | Lo que tardó la sonda de este ciclo; null si falló o todavía no hay reader. |
+| `ultimaLecturaAt` | La última vez que se pudieron **leer las ventas** (cheques, F1-022) (UTC). No avanza si falla. |
+| `latenciaQueryMs` | Lo que tardó la lectura de ventas de este ciclo; null si falló o todavía no hay reader. |
 | `tamanoCola` | Pendientes en `cola.db` **sin contar el heartbeat** (se colapsa y viaja en el lote que lo reporta). |
 | `ultimoError` | Ver abajo; null si todo está bien. |
 
-> ⚠️ **"Última lectura" hoy es la sonda, no una lectura de ventas.** El agente todavía no lee
-> cheques (F1-022/F1-023, bloqueadas por F1-090). Que el panel diga "última lectura hace 10 s"
-> quiere decir que la base de SR contesta, **no que las ventas estén llegando**. Cuando F1-022
-> lea cheques, su lectura reemplaza a la sonda (`DECISION PROVISIONAL (nocturno)` en
-> `SondeoSr.cs`).
+> **"Última lectura" es la lectura de ventas (F1-022).** Cada ciclo corre la sonda de
+> `parametros2` y después lee las cuentas cerradas; la segunda reemplaza a la primera en el
+> heartbeat. Si el usuario SQL puede escribir, o la lectura de ventas falla, `ultimoError` lo
+> dice aunque la base conteste.
 
 `ultimoError` junta hasta tres partes, separadas por ` | `, en este orden (cada una de hasta
 600 caracteres; el total, hasta 2000):
