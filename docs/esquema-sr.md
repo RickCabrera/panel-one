@@ -2173,12 +2173,33 @@ mano es la de desarrollo con SR (lo decide Ricardo de día, F1-020b).
 >   hereda escritura por `public`. No se miró qué son esos 140 objetos.
 > - La base no tiene usuarios propios (SQL, Windows ni grupos) además de los de sistema.
 > - 6 procedimientos almacenados en la base.
-> - **`sqlcmd` de SQL 2014** (el que trae esta instalación, en
->   `C:\Program Files (x86)\Microsoft SQL Server\120\Tools\Binn`): lee bien un `.sql` en UTF-8
+> - **`sqlcmd` de SQL 2014** (el que trae esta instalación, versión 12.0.2000.8; **corrección
+>   del 2026-10-03:** está en el PATH y vive en
+>   `C:\Program Files (x86)\Microsoft SQL Server\Client SDK\ODBC\110\Tools\Binn`, no en
+>   `...\120\Tools\Binn` como decía esta nota; esa carpeta no existe aquí): lee bien un `.sql` en UTF-8
 >   **con BOM** (sin BOM los acentos salen rotos), y **toma las variables de entorno como
 >   variables de script** (`$(BASE_SR)`); si una variable no existe, dice "*scripting variable
 >   not defined*", sale con código 1 y no manda el lote. Se probó con un `PRINT`, sin
 >   escribir nada.
+
+> **Lo que se vio al preparar F1-090 (2026-10-03).** ✅ VALIDADO sólo para esta instalación, con
+> consultas de catálogo del servidor (`sqlcmd -E -t 10`, sin tocar datos ni crear nada):
+>
+> - La instancia tiene **una sola base de usuario**, `softrestaurant10`. "CAFETERIA DEMO" es el
+>   nombre de la empresa dentro de SR, no el de una base.
+> - Modelo de recuperación **SIMPLE**; la base pesa ~13 MB (`.mdf` y `.ldf` en
+>   `C:\nationalsoft\Softrestaurant10.0\DATOSSQL\`).
+> - El servicio del SQL corre como **`NT AUTHORITY\NETWORKSERVICE`**. Carpeta de respaldos por
+>   defecto: `C:\Program Files (x86)\Microsoft SQL Server\MSSQL12.NATIONALSOFT\MSSQL\Backup`.
+> - El usuario de Windows de la PC es **sysadmin del SQL también desde una consola NO elevada**
+>   (`IS_SRVROLEMEMBER('sysadmin') = 1`).
+> - **Extended Events existe en este Express**: están los eventos `sql_batch_completed`,
+>   `rpc_completed`, `sql_statement_completed` y `sp_statement_completed`, el filtro
+>   `sqlserver.database_name` y el destino `package0.event_file`. Sólo hay las dos sesiones de
+>   fábrica (`system_health`, `AlwaysOn_health`).
+> - El login `monitor_lector` **todavía no existe**.
+>
+> Los comandos de respaldo, restauración y captura están en `docs/preparacion-f1-090.md`.
 
 Supuestos del instalador (⚠️ ninguno visto funcionando):
 
