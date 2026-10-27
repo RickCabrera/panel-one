@@ -70,7 +70,8 @@ versión; no se copió ningún dato de negocio):
   - `FKVersionControlId` en `CancellationReason`, `Month`, `Periodicity` y `TaxSubject`.
 - Existen en `dbo`: `cheques`, `cheqdet`, `chequespagos`, `tempcheques`, `tempcheqdet`,
   `tempchequespagos`, `productos`, `meseros`, `formasdepago`, `turnos`, `configuracion`.
-  **Sólo se confirmó que existen**; sus columnas siguen sin mapear (§2–§7, F1-090).
+  En F1-021 **sólo se confirmó que existen**. Las de cuentas, partidas, pagos y turnos ya se
+  mapearon en F1-090 (§2–§5); las de catálogo, en F2-240 (§6–§8).
 - La base se llama `softrestaurant10`. El agente **no** depende del nombre: toma el de
   `Database` en la cadena.
 
@@ -102,6 +103,15 @@ una tabla de configuración que el POS casi no escribe, no toca las tablas de op
   reemplaza.
 - ⚠️ **SUPUESTO:** que un usuario `db_datareader` pueda leer `parametros2`. No probado (igual
   que el resto de §1).
+  **F1-090 (2026-10-22), sin cerrar este supuesto:** con `monitor_lector` (login SQL creado el
+  2026-10-03 a las 08:36, después de la preparación de esa mañana, con `crear-usuario-lector.ps1`:
+  sólo `db_datareader`, sin `db_datawriter`, `db_owner` ni sysadmin) ✅ se leyeron `cheques`,
+  `cheqdet`, `chequespagos`, las `temp*`, `turnos`, `cancela`, `formasdepago`, `meseros`,
+  `areasrestaurant`, `productos`, `productosdetalle`, `configuracion` y `parametros`, y ✅
+  **`agente test` dio OK en SQL** ("Sin permisos de escritura a nivel servidor, base ni esquema
+  dbo, ni sobre las tablas de SoftRestaurant que lee el agente"). Pero `parametros2` no se leyó con
+  ese usuario y `agente test` no corre la detección de versión: **este supuesto sigue ⚠️** hasta que
+  el servicio arranque con `monitor_lector` (F1-020b).
 
 ---
 
@@ -110,15 +120,47 @@ una tabla de configuración que el POS casi no escribe, no toca las tablas de op
 > Alimenta a `F1-022`. Necesitamos: folio, fecha de apertura y cierre, mesa, mesero,
 > comensales, subtotal, impuestos, total, descuentos, propina.
 
-**Tablas:** _(pendiente — tipo `cheques`)_
+> ✅ **VALIDADO 2026-10-19 → 2026-10-22 (F1-090)** contra la SR 10 local (`.\NATIONALSOFT`,
+> `softrestaurant10`, `versiondb` 10.021800, exe 10.0.323). Se operó el POS a mano siguiendo la
+> plantilla de casos (`docs/casos-prueba-pos.md`, que entra con el PR #79; la hoja ya llenada no
+> entra al repo): 20 cuentas en un turno, un corte, 3 cuentas en el turno siguiente, con traza de
+> Extended Events y lectura posterior con `monitor_lector` (`db_datareader`, `WITH (NOLOCK)`).
+> Las 23 cuentas cuadraron con la hoja, y los totales con los reportes nativos (abajo, "Cómo
+> cuadra con los reportes de SR"), **salvo un centavo en los impuestos sumados**, que se explica
+> ahí. Lo que NO se pudo ejercitar queda marcado ⚠️.
 
-| Columna | Tipo | Qué es de verdad | Estado |
+**El ciclo de vida de una cuenta: DOS tablas, y el corte de turno las mueve.** Es el hallazgo que
+más cambia el diseño del lector (F1-022):
+
+1. Al abrirla, la cuenta nace en **`tempcheques`** (PK `folio`), sus partidas en `tempcheqdet` y,
+   al cobrarla, sus pagos en `tempchequespagos`.
+2. **Cobrada sigue en `tempcheques`** (`pagado = 1`) **hasta el corte del turno.** `cheques`
+   puede estar en cero filas con un día entero de ventas cobradas.
+3. **En el corte ("CERRAR TURNO")** SR copia TODAS las cuentas del turno a **`cheques`** /
+   `cheqdet` / `chequespagos` y vacía las `temp*`. SR **no deja cerrar el turno con cuentas
+   abiertas** ("No se puede cerrar el turno porque existen cuentas abiertas").
+4. **El corte renumera `folio`.** En `cheques` cada cuenta recibe un `folio` nuevo, consecutivo
+   en orden de `orden`, y el `folio` que tenía en `tempcheques` queda en
+   **`cheques.foliotempcheques`**. Ejemplo visto: la cuenta con `tempcheques.folio` 2 quedó como
+   `cheques.folio` 1. **El folio interno NO es estable**: no sirve de llave de ingesta.
+   ⚠️ Sólo se vio UN corte (que empezó en `cheques.folio` 0 porque la tabla estaba vacía): no se
+   sabe si el siguiente sigue en `MAX + 1` o vuelve a empezar. De eso depende la trampa de
+   `cancela.foliocheque = 0` (abajo).
+5. **`tempcheques.folio` reinicia en cada turno** (el turno siguiente volvió a empezar en 1).
+
+**Los tres números de una cuenta** (ninguno es el otro):
+
+| Columna | Qué es de verdad | Estable | Estado |
 |---|---|---|---|
-| | | | |
+| **`numcheque`** (`tempcheques`: bigint; `cheques`: numeric(8,0)) | **El folio que ve el cliente**: el que imprime el ticket y el "FOLIO INICIAL/FINAL" del Corte X. Se asigna **al imprimir** la cuenta (0 mientras no se imprime; también lo recibe una venta RÁPIDO, que se cobra sin imprimir), en **orden de impresión**, y **NO reinicia con el turno** (el turno siguiente siguió en 21 tras el 20) | ✅ el mismo antes y después del corte | ✅ VALIDADO |
+| `folio` (PK en las dos tablas) | Número interno. En `tempcheques` reinicia por turno; en `cheques` lo reasigna el corte | ❌ | ✅ VALIDADO |
+| `orden` (numeric(6,0)) | Consecutivo de cuentas **abiertas** del turno (la pantalla lo muestra como "Orden"); reinicia por turno. Una cuenta borrada deja hueco | ❌ | ✅ VALIDADO |
+| `seriefolio` (varchar(15)) | Serie del folio. **Vacía** en esta instalación | — | ✅ (vacía); ⚠️ su uso, SUPUESTO |
 
-**Cómo se marca una cancelación:** _(pendiente — clave para no contar ventas que no fueron)_
-
-**Cómo se ve una reapertura:** _(pendiente — clave para la ventana de relectura de 2 h)_
+⚠️ **SUPUESTO — `numcheque` no se repite nunca dentro de una sucursal.** Sólo se vio ir de 1 a 22
+cruzando un corte. No se ha visto un cambio de año, de serie ni una reinstalación. Si reinicia,
+la llave de ingesta tiene que llevar algo más (serie o fecha). Ver la decisión "¿SR reinicia
+folios?" más abajo, en esta misma sección (sigue abierta, ahora con este dato).
 
 **Query incremental (F1-022):** `agent/src/ArkonAgente/Sql/Consultas/sr_cheques.sql`, mapeo en
 `Ventas/MapeoCheques.cs`, ciclo en `Ventas/SincronizadorCheques.cs`. ✅ **Corrida 2026-10-22 con
@@ -189,6 +231,142 @@ WHERE (c.folio > @ultimofolio AND ISNULL(c.cierre, c.fecha) >= @piso) OR c.fecha
 **Lo que el modelo de Postgres (F1-030, tabla `cheques`) ya supone de esta sección.** Nada
 de esto se ha visto en una instalación real; cada punto es una
 `DECISION PROVISIONAL (nocturno)` en `api/prisma/schema.prisma` y se valida en F1-090.
+**Columnas de `cheques` / `tempcheques`** (mismas columnas en las dos, con tipos casi iguales;
+`tempcheques` tiene además `cuentaenuso`):
+
+| Columna | Tipo (`cheques`) | Qué es de verdad | Estado |
+|---|---|---|---|
+| `fecha` | datetime NULL | **Apertura**, hora local de la PC, sin milisegundos (`.000`). En una venta RÁPIDO vale lo mismo que `cierre`: la hora del cobro | ✅ |
+| `cierre` | datetime NULL | **Hora de IMPRESIÓN** de la cuenta, no de cobro (se llena al imprimir; una abierta sin imprimir lo tiene NULL). Hora local. ⚠️ No se vio si una REimpresión la actualiza (cambiaría el día de la venta) | ✅ |
+| — | — | **La base NO guarda la hora de cobro** en ninguna columna de la cuenta ni del pago (salvo en RÁPIDO, donde `fecha` = `cierre` = cobro). Sólo la traza la tiene | ✅ |
+| `mesa` | varchar(100) | El **nombre de la cuenta** (en comedor, el número de mesa; al dividir, `"15-A"`; al "renombrar cuenta" para cambiar de mesa, el nuevo número). Vacío (`''`) en una venta RÁPIDO | ✅ |
+| `nopersonas` | numeric(3,0) | Comensales. Al dividir una cuenta deja 1 en cada una | ✅ |
+| `idmesero` | varchar(4) | Clave del mesero (`meseros.idmesero`, §7). Vacía en RÁPIDO | ✅ |
+| `idarearestaurant` / `tipodeservicio` | varchar(5) / numeric(1,0) | Área de la cuenta (§8) y su tipo de servicio: COMEDOR = `01` / 1, RÁPIDO = `03` / 3 | ✅ |
+| `pagado` / `impreso` / `cancelado` | bit | Cobrada / impresa / cancelada | ✅ `pagado`, `impreso`; ⚠️ `cancelado` nunca se vio en 1 (abajo) |
+| `idturno` | numeric(6,0) | Turno donde se **cobró**. En `tempcheques`, **0 mientras no se cobra** | ✅ |
+| `subtotal` | money | Venta **SIN IVA y ANTES del descuento general** de la cuenta, pero **ya neta del descuento por producto** (el `%` de cada partida, §3, ya aplicado al importe de la partida) | ✅ |
+| `descuentoimporte` | money | Importe SIN IVA del **descuento general** de la cuenta | ✅ |
+| `descuento` | `cheques`: numeric(8,4); `tempcheques`: money | El **PORCENTAJE** del descuento general (10 = 10 %), no un importe | ✅ |
+| `totaldescuentos` / `totalcortesias` | money | Lo descontado SIN IVA, separado: **un descuento del 100 % (general o de una partida) va a `totalcortesias`**, no a `totaldescuentos`. SR no tiene botón de "cortesía": la cortesía ES un descuento del 100 % | ✅ |
+| `totalimpuesto1` | money | IVA de la cuenta (impuestos 2 y 3 en 0 en esta configuración) | ✅ |
+| `total` | money | **Lo cobrado: con IVA, neto de descuentos y SIN propina.** `total = subtotal − descuentoimporte + totalimpuesto1` cuadró al centavo en las 23 cuentas | ✅ |
+| `propina` / `propinatarjeta` | money | Propina de la cuenta / la parte cobrada con tarjeta | ✅ |
+| `efectivo` / `tarjeta` / `vales` / `otros` | money | Cobrado por tipo de forma de pago, **CON la propina incluida** (tarjeta 228 = 208 + 20 de propina). **No usarlas para la venta** | ✅ |
+| `cambio` | money | Cambio entregado. El pago (§4) se guarda por el importe NETO, no por lo que dio el cliente | ✅ |
+| `reabiertas` / `fechacancelado` | numeric / datetime | Siempre 0 / NULL en la captura (abajo) | ✅ (no ejercitadas) |
+| `foliotempcheques` | bigint (sólo `cheques`) | El `folio` que tenía en `tempcheques` antes del corte | ✅ |
+| `comandaimpresa` | bit | En 0 en todas las cuentas vistas, aunque sus partidas salieron a comanda: **no es** el dato por partida (§5) | ✅ valor; ⚠️ sentido |
+
+Índices: PK en `folio` de las dos tablas; `cheques` tiene además índices sobre `foliotempcheques` y
+sobre `fecha` (no únicos). **No hay índice único sobre `numcheque`**: su unicidad no la garantiza
+la base.
+
+**Cómo se marca una cancelación.** Lo que se vio:
+
+- **Partida cancelada en una cuenta viva** (motivo obligatorio del catálogo `motivoscancelacion`):
+  la partida **desaparece** de `tempcheqdet` (los movimientos se renumeran) y queda una fila en
+  **`cancela`** (`foliocheque`, `clave` = producto, `cantidad`, `precio`, `razon` = motivo +
+  `" Mesa: N"`, `fecha`). El total de la cuenta ya no la incluye. **El corte renumera también
+  `cancela.foliocheque`** al folio nuevo de `cheques` y le pone `idturno_cierre` y `procesado`.
+- **Cuenta cancelada ANTES de cobrar** ("BORRAR CUENTA", que sólo se deja con la cuenta sin
+  partidas, así que primero se cancelan todas): **no queda NINGUNA fila en `cheques`**, ni folio,
+  ni `numcheque`. Sólo sus partidas en `cancela`, con **`foliocheque = 0`**, sin
+  `idturno_cierre` ni `procesado`.
+  - ⚠️ **TRAMPA:** `cheques.folio = 0` existe (es una cuenta real cuando el turno arrancó con una
+    abierta vieja). **Unir `cancela` con `cheques` por folio pega esas cancelaciones a la cuenta 0.**
+    Un lector no debe hacer esa unión sin filtrar `foliocheque = 0`.
+- **Cancelar una cuenta YA COBRADA ("CANCELAR FOLIO") e imprimir/reabrir** no se pudo ejercitar:
+  desde COMEDOR, con la cuenta cobrada, los botones quedan deshabilitados o no abren nada. Con la
+  cuenta impresa SIN cobrar sí aparecen habilitados (no se usaron). ⚠️ **Por eso
+  `cheques.cancelado = 1`, `fechacancelado` y `reabiertas > 0` siguen SIN verse.** Se supone que
+  marcan lo que dicen; no se sabe si una cuenta cancelada conserva su `total`.
+
+**Cómo se ve una reapertura:** ⚠️ **no se vio** (REABRIR CUENTA queda gris con la cuenta cobrada).
+`reabiertas` existe y valió 0 en todo. Una cuenta impresa sin cobrar sí se puede reabrir: si se
+reabre, se supone que `impreso` vuelve a 0 y `numcheque` se conserva; no verificado.
+
+**El día de una venta según SR.** El Monitor de ventas (reporte nativo) ubica cada cuenta por la
+fecha de su **cierre/cobro**, no de su apertura: una cuenta abierta el 13-sep y cobrada el 22-oct
+salió en el 22-oct. Y su "día" va de **06:00:00 a 05:59:59** del día siguiente, no de medianoche
+a medianoche: ✅ es configuración (`configuracion.cortezinicio`/`cortezfin`/
+`cortezfindiasiguiente`, ver "Lo que leen el Monitor de ventas y el Corte X", abajo). Por esa
+ventana, una cuenta cerrada a las 02:00 cae en el día de negocio anterior; ⚠️ no se vio una venta
+real a esa hora.
+
+**Query incremental:** la escribe F1-022 sobre este mapeo: lee `tempcheques` (cobradas o
+canceladas del turno en curso) **y** `cheques` (lo que el corte ya movió), con `numcheque` como
+llave visible.
+
+**Turnos (`turnos`).** ✅ VALIDADO F1-090. Una fila por turno: `idturno` (1, 2…), `fondo` (fondo
+inicial), `apertura` y `cierre` (hora local, sin milisegundos; `cierre` NULL = turno abierto),
+`idestacion`. **`efectivo`/`tarjeta`/`vales`/`credito` son los importes que el cajero DECLARA al
+cerrar**, no lo vendido: se declararon en $0.00 y así quedaron, con $3,065.50 vendidos. `cajero` e
+`idmesero` vacíos. Al cerrar, SR avisa si hay propinas sin pagar al mesero y deja seguir. Un turno
+puede durar días (el visto duró del 19 al 22-oct; SR avisa "más de 24 horas" al imprimir, y deja).
+
+**Cómo cuadra con los reportes de SR** (F1-090, 2026-10-22 14:05–14:08, capturas fuera del repo):
+
+| Reporte nativo | Lo que mostró | Contra la base (`monitor_lector`) |
+|---|---|---|
+| Monitor de ventas, 22-oct, "TODAS" | Venta total **$613.00**; impuestos **$36.97**; Comedor 100 % | ✅ total: cobradas ($418) + por cobrar ($195). ⚠️ impuestos: ver la nota del centavo, abajo |
+| Monitor de ventas, 22-oct, **"COBRADAS"** | **$418.00**; impuestos $25.93; 7 comensales | ✅ las 3 cuentas de `cheques` con `cierre` dentro de la ventana del 22-oct ($310) + la de `tempcheques` con `pagado = 1` y `cierre` en la ventana ($108). Una de las 3 se abrió el 13-sep: **cuenta por su `cierre`, no por su apertura** |
+| Monitor de ventas, 22-oct, "POR COBRAR" | **$195.00**; impuestos $11.03; 1 abierta + 1 impresa; 4 comensales | ✅ `tempcheques` con `pagado = 0`: la abierta sin imprimir ($120) + la impresa sin cobrar ($75) |
+| Monitor de ventas, "Día anterior" | $0.00 | ✅ ninguna cuenta con `cierre` (ni abierta sin imprimir con `fecha`) en la ventana del 21-oct |
+| Corte X del turno en curso | VISA **$108.00**; subtotal $93.10; IVA $14.90; folio inicial y final **21**; 1 cuenta; 2 comensales | ✅ la única cobrada del turno: `numcheque` 21, `tempchequespagos` VISA 108. **El Corte X sólo cuenta lo cobrado**; las 2 por cobrar no salen |
+
+- **Contra qué cifra de SR tiene que cuadrar el panel: "COBRADAS".** "TODAS" (la vista por
+  defecto) suma también las abiertas y las impresas sin cobrar, que el panel nunca cuenta como
+  venta. El criterio para F1-091: venta del día del panel = Σ `total` de las cuentas con
+  `pagado = 1`, no canceladas, ubicadas por `cierre` (que es lo que el lector manda como
+  `cerrado_at`, §2) = "COBRADAS" del Monitor de ventas del mismo día, mientras el panel use el
+  mismo corte de día que SR (decisión abierta de "día de cierre", abajo).
+- **El centavo de los impuestos.** TODAS dice $36.97, pero COBRADAS $25.93 + POR COBRAR $11.03 =
+  $36.96. Con `SUM(totalimpuesto1)` sobre las mismas 6 cuentas: **36.9656** a 4 decimales (SR
+  suma con 4 decimales y redondea al final, → 36.97) contra **36.96** si cada cuenta se redondea
+  a 2 decimales antes de sumar. Los **totales** de cuenta sí vienen en centavos exactos, así que
+  la venta cuadra; los componentes fraccionarios (impuestos, subtotal, descuentos) **no van a
+  cuadrar peso a peso** con nuestro `NUMERIC(12,2)` por cuenta. ❓ **Decisión para Ricardo:**
+  guardar esos componentes con 4 decimales o aceptar diferencias de centavos (ver §3, "precisión").
+
+- El desglose "Bebidas / Alimentos / Otros" del Monitor va **SIN IVA** aunque el encabezado diga
+  "incluye impuestos": Bebidas + Alimentos + Otros + Impuestos = Venta total.
+- El Monitor de ventas **no tiene vista por mesero ni por forma de pago**; la forma de pago sale en
+  el Corte X. Tampoco muestra propinas.
+
+**Lo que leen el Monitor de ventas y el Corte X** (✅ traza de Extended Events, 2026-10-22
+14:03:47–14:08; corren DENTRO de `softrestaurant.exe`, con el login de SR):
+
+- **El día de negocio es configuración:** `configuracion.cortezinicio` = `'06:00:00 AM'`,
+  `cortezfin` = `'05:59:59 AM'`, `cortezfindiasiguiente` = 1 (todo `varchar`). El Monitor arma la
+  ventana con eso, en hora local.
+- **Monitor de ventas, una fecha** = la unión de tres lecturas:
+  1. `tempcheques` con **`cierre` dentro de la ventana** (cuentas ya impresas del turno en curso);
+  2. `tempcheques` con **`fecha` dentro de la ventana y `cierre IS NULL`** (abiertas sin imprimir:
+     ésas van por su apertura);
+  3. `cheques` con **`cierre` dentro de la ventana** y (`pagado = 1` o `cancelado = 1`).
+
+  "COBRADAS" agrega `pagado = 1 AND cancelado = 0`; "POR COBRAR", `pagado = 0 AND cancelado = 0`.
+  Ordena por `numcheque`. Además suma `facturas.total` del día (`cancelada = 0`).
+- **Corte X de un turno** = `tempcheques` con `idturno = N` y (`pagado = 1` o `cancelado = 1`), más
+  `movtoscaja` (depósitos, retiros y propinas pagadas) y las canceladas del turno (`cancelado = 1`).
+  **El turno de una cuenta es `idturno`, que SR pone al cobrar** (§2). Usa
+  `totaldescuentoycortesia` como importe de descuentos.
+- El acumulado mensual del corte suma `cheques.total` por **mes de `fecha` (apertura)**, no de cierre.
+- Consecuencia para el panel: con la definición de SR, **el día de una cuenta es el de su
+  `cierre`** (impresión; para las cobradas, el más cercano al cobro) dentro de la ventana
+  06:00–05:59; sólo una abierta sin imprimir cae por su apertura. Ver la decisión abierta del
+  "día local de cierre" en los supuestos de los agregados (F1-032), más abajo en esta sección.
+- La traza también muestra que **SR escribe en su base todo el tiempo** aunque nadie venda
+  (`UPDATE ESTACIONES SET PosLastOnline = GETDATE()` cada minuto) y que las estadísticas
+  automáticas de SQL Server se recalculan sobre `cheques`/`tempcheques` al consultarlas. ⚠️ No se
+  ha medido el efecto de un lector nuestro (con `NOLOCK` y timeout corto) bajo carga real: es de
+  F1-091.
+
+**Lo que el modelo de Postgres (F1-030, tabla `cheques`) ya supone de esta sección.** Cuando se
+escribió, nada de esto se había visto en una instalación real; cada punto es una
+`DECISION PROVISIONAL (nocturno)` en `api/prisma/schema.prisma`. Debajo de cada supuesto, "Lo que
+F1-090 vio" dice qué confirmó o refutó la captura de 2026-10.
 
 - ⚠️ **SUPUESTO — hay un identificador estable del cheque dentro de SR, y no se repite
   dentro de una misma sucursal.** Es `cheques.folio_sr` y, junto con `sucursal_id`, es la
@@ -206,6 +384,11 @@ de esto se ha visto en una instalación real; cada punto es una
   `clave` de `cola.db`) deja un solo pendiente por `folioSr`, así que un folio repetido
   descartaría en la cola un cheque *distinto* aún no enviado, antes de llegar al API. Si
   la llave cambia, se cambian juntos el upsert del API y la `clave` de la cola.
+  **Lo que F1-090 vio (2026-10-22):** el `folio` interno de SR **sí** se reasigna (en el corte) y
+  `tempcheques.folio` reinicia por turno, así que ninguno de los dos sirve de `folio_sr`. El
+  candidato es **`numcheque`**: es el folio del ticket, sobrevive al corte y no reinició al cambiar
+  de turno. Lo que falta saber para cerrar la decisión: si reinicia por año, serie o
+  reinstalación (no visto; la base no lo obliga a ser único).
 - ⚠️ **SUPUESTO — un cheque puede no tener fecha de cierre** (por ejemplo, uno cancelado).
   `cerrado_at` admite nulo. Los agregados de F1-032 filtran por `cerrado_at`, así que un
   nulo no entra en ningún rango.
@@ -218,10 +401,16 @@ de esto se ha visto en una instalación real; cada punto es una
   pero el modelo sólo tiene `descuentos`: no hay forma de distinguir una cortesía. Falta
   saber cómo las marca SR (¿un descuento del 100 %?, ¿una forma de pago?, ¿un flag en la
   partida?) antes de decidir la columna.
+  **Lo que F1-090 vio:** ✅ SR no tiene cortesía aparte: es **un descuento del 100 %** (de la
+  cuenta o de una partida) y lo acumula en **`cheques.totalcortesias`** (sin IVA), separado de
+  `totaldescuentos`. La decisión de la columna sigue siendo de Ricardo; el dato ya existe.
 - ❓ **DECISIÓN ABIERTA PARA RICARDO — cancelaciones parciales.** Sólo existe
   `cheques.cancelado`, que vale para el cheque completo. Si SR cancela partidas sueltas
   dentro de un cheque que sigue vivo, hoy no hay dónde guardarlo. Hay que saber cómo lo
   representa SR.
+  **Lo que F1-090 vio:** ✅ sí cancela partidas sueltas: la partida sale de la cuenta y queda en
+  la tabla **`cancela`** con motivo, precio y cantidad (ver "Cómo se marca una cancelación",
+  arriba, y su trampa del `foliocheque = 0`). El cheque sigue vivo con el total ya sin ella.
 
 **Lo que los agregados (F1-032, `api/src/ventas/agregados-ventas.service.ts`) suponen de
 esta sección.** Todo esto se valida en F1-090 contra los reportes nativos de SR del mismo día,
@@ -231,6 +420,10 @@ esta sección.** Todo esto se valida en F1-090 contra los reportes nativos de SR
   incluye la propina.** La propina se reporta aparte (`resumen.propina`). Si el reporte nativo
   de SR incluye la propina en la venta, o aplica los descuentos de otra forma, el panel no va a
   cuadrar: hay que ajustar la definición en `resumen`, no el dato.
+  **Lo que F1-090 vio:** ✅ correcto en la definición: la "Venta total" del Monitor de ventas (vista
+  **COBRADAS**) y "VENTAS CON IMP." del Corte X son Σ `total`, con IVA, netos de descuento y sin
+  propina. La vista TODAS suma además lo que está por cobrar: no es la que se compara (§2, "Cómo
+  cuadra con los reportes de SR").
 - ⚠️ **SUPUESTO — `cheques.subtotal` es la venta NETA de descuento, SIN IVA y SIN propina**
   (F2-126). El estado de resultados de "Gastos y utilidad" mide la venta neta como Σ `subtotal` de
   las cuentas no canceladas, porque el costo (existencias y pólizas) es sin IVA.
@@ -238,10 +431,19 @@ esta sección.** Todo esto se valida en F1-090 contra los reportes nativos de SR
   subtotal es ANTES del descuento, la utilidad sale inflada justo por los descuentos; si trae IVA,
   inflada por el IVA. Se valida en F2-193 contra el cálculo del contador. El seed lo genera así
   (subtotal = total / 1.16), lo que no es evidencia de SR.
+  **Lo que F1-090 vio:** ⚠️ **en SR `cheques.subtotal` es SIN IVA pero ANTES del descuento
+  general** (el de la cuenta), y ya neto del descuento por partida. La venta neta sin IVA es
+  `subtotal − descuentoimporte`. El lector (F1-022) tiene que mandar ESA resta como `subtotal`,
+  o el supuesto de este punto se rompe con cualquier descuento general.
 - ⚠️ **SUPUESTO — el día de una venta es el día LOCAL de la sucursal en que se CERRÓ la cuenta**
   (`cerrado_at` en `Sucursal.zona_horaria`), y la hora de la serie por hora también. Una cuenta
   abierta a las 23:30 y cerrada a las 00:20 cuenta para el día siguiente. Falta confirmar que
   SR corta igual (algunos POS cortan por turno o por "fecha de negocio").
+  **Lo que F1-090 vio:** SR ubica la cuenta por su cierre/cobro (✅, como aquí), pero su día de
+  negocio va de **06:00 a 05:59** (✅ lo dice el Monitor de ventas), no de medianoche. Una venta
+  cobrada entre 00:00 y 05:59 sale en un día distinto en SR y en el panel. ❓ **Decisión para
+  Ricardo:** adoptar la hora de corte de SR o quedarse con el día calendario. Además, ⚠️ la base no
+  guarda la hora de cobro: `cheques.cierre` es la hora de IMPRESIÓN (§2), la más cercana que hay.
 - ⚠️ **SUPUESTO — los cancelados sin `cerrado_at` se ubican por su `abierto_at`** para contarlos
   (`resumen.cancelados`). Nunca entran en la venta.
 - ❓ **Cortesías: siguen sin representarse.** `resumen.cortesias` sale siempre `null`
@@ -276,6 +478,10 @@ descubre nada nuevo de SR; hereda los supuestos de arriba y fija este criterio:
   (nocturno)` en `schema.prisma` (modelo `Cheque`) y en `DatosChequeDto.areaOrigenSrId`. Se
   confirma en F1-090/F2-192: si el cheque no trae ese id, toda la venta sale "sin clasificar" o
   "sin canal" en Áreas y canales.
+  **Lo que F1-090 vio:** ✅ la cuenta trae `idarearestaurant` (`01` comedor, `03` rápido), la misma
+  clave que la PK de `areasrestaurant` (§8), de donde sale el `origenSrId` del catálogo. ⚠️ Que el
+  lector de cheques y el de catálogo produzcan exactamente el mismo texto (recortes, mayúsculas)
+  lo confirma F1-022 con datos.
 - Nulo = la cuenta no trae área ("sin clasificar"). Sin FK al espejo. Máximo 64, CHECK "no vacío"
   en base. **Hoy ningún agente lo manda** (no hay lector de cheques, F1-022).
 
@@ -298,8 +504,9 @@ descubre nada nuevo de SR; hereda los supuestos de arriba y fija este criterio:
   cheques que ya habían llegado a NUESTRA base en él (`cheques.created_at`, expuesto como
   `recibido_at` en las CTEs; no es un dato de SR y el upsert de la ingesta no lo reescribe).
   ⚠️ **SUPUESTO NO VALIDADO (nocturno): el agente sólo manda cheques ya cerrados o cancelados.**
-  El modelo y la ingesta aceptan un no cancelado con `cerrado_at` nulo, y todavía no hay un
-  lector de cheques en el agente que diga si SR expone la cuenta al abrirla. Si la llegara a
+  El modelo y la ingesta aceptan un no cancelado con `cerrado_at` nulo. **F1-090 vio que SR sí
+  expone la cuenta desde que se abre** (en `tempcheques`, §2 y §5), así que el agente tiene que
+  filtrar: requisito de F1-022 = mandar sólo `pagado = 1` o `cancelado = 1`. Si la llegara a
   mandar abierta, la cuenta llega ANTES del corte y entra al rango al cerrarse: el corte no la
   congela, el conteo se mueve a media descarga y el export aborta (nunca falta en silencio;
   lo fija `lectura.e2e.spec.ts`). En ese caso el corte sólo estabiliza las cuentas que llegan
@@ -325,6 +532,9 @@ descubre nada de SR: son supuestos del modelo, sin validar, y se revisan en F1-0
 - ⚠️ **SUPUESTO — `cheques.mesa` nula = cuenta sin mesa asignada.** Se muestra como "Sin mesa" y
   no entra a la rotación. Que en SR sean mostrador o domicilio es una invención del **seed**, no
   un hallazgo: no se dice en pantalla.
+  **Lo que F1-090 vio:** ⚠️ SR NO guarda nulo: una venta RÁPIDO trae `mesa = ''` e `idmesero = ''`
+  (§2). Con la regla de abajo ("texto vacío no es sin dato"), cada venta RÁPIDO saldría como una
+  mesa llamada `''`. **Requisito para F1-022:** mandar `mesa`/`mesero` vacíos como nulo.
 - ⚠️ **SUPUESTO — la mesa es (sucursal, texto de `cheques.mesa`).** La "5" de una sucursal no es
   la "5" de otra. Si SR renombra mesas, una misma mesa física sale como dos filas.
 - ⚠️ **SUPUESTO — duración de la cuenta = `cerrado_at − abierto_at`.** Si SR guarda la apertura
@@ -389,6 +599,9 @@ savepoint. Lo que eso supone de esta sección, nada visto en una instalación re
   CERRADA (`cerrado_at` no nulo), NO cancelada y con `total > 0`.** Se supone que "cerrada" en SR ya
   quiere decir "cobrada": si SR cierra cuentas antes de cobrarlas (o las cobra en otro paso), habrá
   códigos para cuentas sin pagar. Una cortesía total ($0) y una cuenta cancelada no llevan código.
+  **Lo que F1-090 vio:** ⚠️ en SR una cuenta impresa SIN cobrar ya tiene `cierre` (es la hora de
+  impresión, §2). El supuesto sólo se sostiene si el agente manda como cerradas únicamente las
+  `pagado = 1` (o canceladas), nunca una impresa sin cobrar. Es requisito de F1-022.
 - ⚠️ **SUPUESTO (`DECISION PROVISIONAL (nocturno)` en `estadoPublico`) — si SR cancela la cuenta
   DESPUÉS de que tuvo código, la fila del código no cambia**; la consulta pública deriva `cancelado`
   del cheque y no da datos del ticket. `cancelado` no se guarda: no está en el enum de la ficha
@@ -751,14 +964,33 @@ sólo concilia su empresa).
 
 > Alimenta a `F1-022`. Producto, cantidad, precio, modificadores.
 
-**Tablas:** _(pendiente — tipo `cheqdet`)_
+**Tablas:** ✅ **`cheqdet`** (cuentas ya pasadas por el corte) y **`tempcheqdet`** (turno en curso),
+mismas columnas; la partida cuelga de la cuenta por **`foliodet` = `folio`** de SU tabla (y el corte
+la renumera junto con la cuenta, §2). Sin PK; sólo un índice no único en `foliodet`. VALIDADO en
+F1-090 (2026-10-19 → 22, SR 10 local).
 
 | Columna | Tipo | Qué es de verdad | Estado |
 |---|---|---|---|
-| | | | |
+| `foliodet` | bigint NULL | `folio` de la cuenta en la MISMA tabla (`cheques` o `tempcheques`) | ✅ |
+| `movimiento` | numeric(3,0) | Orden de la partida en la cuenta, 1..n. **Se renumera** al cancelar una partida | ✅ |
+| `idproducto` | varchar(15) | Clave del producto (`productos.idproducto`, §6); en `tempcheqdet` puede venir con espacios a la derecha | ✅ |
+| `cantidad` | numeric(14,6) | Cantidad (`1.000000`) | ✅ |
+| `precio` | money | Precio unitario **de catálogo, CON IVA, ANTES del descuento de la partida** | ✅ |
+| `descuento` | numeric(6,2) | **Porcentaje** de descuento de ESA partida (20 = 20 %; 100 = cortesía de la partida). El importe de la partida es `cantidad × precio × (1 − descuento/100)`; **no hay columna con ese importe** | ✅ |
+| `comentariodescuento` | varchar(60) | El motivo que se escribió al descontar | ✅ |
+| `impuesto1` | numeric(5,2) | Tasa de IVA de la partida en % (16.00 o 0.00, según el producto, §6) | ✅ |
+| `preciosinimpuestos` | money | Precio unitario sin IVA | ✅ columna |
+| `hora` | datetime | Cuándo se capturó la partida (hora local); dos partidas enviadas juntas comparten hora | ✅ |
+| `modificador` | bit | 1 = la fila es un **modificador** de una partida, no una partida | ✅ columna (0 en todo lo visto); ⚠️ sentido |
+| `comanda_impresa` | bit (**sólo existe en `tempcheqdet`**; `cheqdet` no la tiene, a diferencia del resto de columnas) | 1 en todas las partidas enviadas a comanda (§5) | ✅ valor 1; ⚠️ el 0 no se vio |
+| `idcortesia`, `idtipodescuento` | varchar(5) | Vacíos en todo lo visto, también en las cortesías | ✅ (vacíos) |
 
-**Cómo se representan los modificadores:** _(pendiente — incluidos los de $0.00, que sí se
-muestran en el detalle)_
+**Cómo se representan los modificadores:** ⚠️ **NO VISTO.** El catálogo los define en
+`modificadores` (producto padre + producto modificador + `precio` propio, por grupo de
+`gruposmodificadores`/`gruposmodificadoresproductos`; en esta base, 1 grupo y 10 filas, todos con
+costo, ninguno de $0.00 ni anidado). El caso de prueba con modificador **no se pudo capturar**: el
+producto no aparecía en el menú táctil. Se supone que un modificador vendido es una fila de
+`cheqdet` con `modificador = 1` justo después de su partida, pero nadie lo ha visto.
 
 **Lo que el modelo de Postgres (F1-030, tabla `cheque_partidas`) ya supone de esta sección:**
 
@@ -771,6 +1003,11 @@ muestran en el detalle)_
   cheque. Por eso **el total del cheque se guarda tal como lo reporta SR y nunca se
   recalcula sumando partidas** (regla para F1-031 y F1-032). Hay que confirmar la precisión
   real en F1-090.
+  **Lo que F1-090 vio:** ✅ SR guarda 4 decimales en los componentes (`subtotal` 117.2414,
+  `totalimpuesto1` 18.7586) y el `total` de la cuenta en centavos exactos. Sus reportes suman los
+  componentes a 4 decimales y redondean al final: un día con 6 cuentas dio impuestos 36.97 en SR
+  contra 36.96 sumando cada cuenta ya redondeada (§2). La venta cuadra; los impuestos, subtotales y
+  descuentos sumados pueden diferir por centavos. ❓ Decisión abierta para Ricardo (§2).
 - ⚠️ **SUPUESTO — el orden de las partidas importa** para mostrar el ticket. Se guarda
   `orden` (0..n, la posición en que llegan en el lote), único dentro de cada cheque.
 - Los modificadores se guardan como una lista JSON (`jsonb`, `[]` por defecto) con la forma
@@ -796,18 +1033,38 @@ muestran en el detalle)_
 
 > Alimenta a `F1-022` y al desglose por forma de pago de `F1-032`.
 
-**Tablas:** _(pendiente — tipo `chequespagos`)_
+**Tablas:** ✅ **`chequespagos`** (tras el corte) y **`tempchequespagos`** (turno en curso), una fila
+por pago; cuelgan de la cuenta por **`folio`** de SU tabla. VALIDADO en F1-090 (2026-10-19 → 22).
 
 | Columna | Tipo | Qué es de verdad | Estado |
 |---|---|---|---|
-| | | | |
+| `folio` | bigint | `folio` de la cuenta en la MISMA tabla (lo renumera el corte, §2) | ✅ |
+| `idformadepago` | varchar(5) | Clave de la forma de pago: `formasdepago.idformadepago` (`EF`, `VISA`…). **El texto está en `formasdepago.descripcion`** | ✅ |
+| `importe` | money | Lo que cubre ese pago **SIN propina y SIN cambio**: un pago en efectivo de $200 para una cuenta de $136 se guarda como 136 (el cambio va en `cheques.cambio`). **Σ `importe` de la cuenta = `cheques.total`**: cuadró en todas las cuentas cerradas | ✅ |
+| `propina` | money | La propina dejada con ESE pago (tarjeta o efectivo) | ✅ |
+| `idturno_cierre`, `procesado` | bigint, bit | Los llena el corte (sólo en `chequespagos`) | ✅ |
+| `referencia`, `cardBrand` | varchar | Vacíos en lo visto | ✅ (vacíos) |
 
-**Catálogo de formas de pago tal como las nombra esta instalación** (el texto crudo que
-guardamos en `forma_raw` y su mapeo a nuestro ENUM `efectivo/tarjeta/transferencia/otro`):
+Una cortesía total (cuenta en $0) **sí trae un pago**: una fila `EF` con `importe` 0.
 
-| `forma_raw` en SR | Nuestro ENUM | Estado |
-|---|---|---|
-| | | |
+**Catálogo de formas de pago tal como las nombra esta instalación** (`formasdepago.descripcion`,
+el texto crudo que guardamos en `forma_raw`; 11 formas, todas visibles). Son los nombres **de
+fábrica** de esta SR de demo, no de un cliente; el mapeo a nuestro ENUM es la propuesta, ⚠️ no
+está dado de alta en ningún `formas_pago_catalogo`:
+
+| `forma_raw` en SR | `idformadepago` · `tipo` · SAT | Nuestro ENUM | Estado |
+|---|---|---|---|
+| `EFECTIVO` | `EF` · 1 · 01 | `efectivo` | ✅ visto en pagos |
+| `VISA` | `VISA` · 2 · 04 | `tarjeta` | ✅ visto en pagos |
+| `MASTERCARD` | `MC` · 2 · 04 | `tarjeta` | ✅ catálogo |
+| `AMERICAN EXPRESS` | `AMEX` · 2 · 04 | `tarjeta` | ✅ catálogo |
+| `DOLARES` | `DLL` · 1 · 01 | `efectivo` | ✅ catálogo; ⚠️ el importe en dólares (`tipodecambio`) no se vio |
+| `VALES` | `VAL` · 3 · 08 | `otro` | ✅ catálogo |
+| `CREDITO` | `CR` · 4 · 99 | `otro` | ✅ catálogo |
+| `TOKENCASH PAYMENTS`, `TOKENCASH REWARDS`, `MARC PAYMENTS`, `MARC REWARDS` | `TPY`/`TRW`/`MPY`/`MRW` · 4 · 01 | `otro` | ✅ catálogo; no aceptan propina |
+
+`formasdepago.tipo` agrupa: 1 efectivo, 2 tarjeta, 3 vales, 4 otros (son las columnas
+`efectivo`/`tarjeta`/`vales`/`otros` de la cuenta). `idformapago_SAT` trae la clave `c_FormaPago`.
 
 **Dónde vive el mapeo (F1-032):** en la tabla `formas_pago_catalogo(empresa_id, forma_raw,
 forma)`, y se aplica **al leer**: el desglose por forma de pago hace `LEFT JOIN` del pago con el
@@ -826,7 +1083,9 @@ usa ningún agregado.
   el backlog no lo pide: queda como decisión abierta para Ricardo (ver `docs/nocturno-log.md`,
   entrada de F1-060). Mientras tanto se da de alta directo en la base.
 
-**Cuentas con pago mixto:** _(pendiente — cómo se reparten los montos)_
+**Cuentas con pago mixto:** ✅ una fila por forma, cada una con su importe (efectivo 100 + VISA
+175 = una cuenta de 275). Un pago capturado en una forma y corregido antes de aceptar no deja
+rastro: sólo queda la forma final.
 
 **Lo que la emisión del CFDI (F2-104) supone de esta sección:** la `c_FormaPago` del CFDI sale de
 la forma DOMINANTE del cheque (mayor monto), leída con este mismo catálogo; un texto sin catálogo es
@@ -847,15 +1106,32 @@ pago con un texto que se puede mapear. Mientras no haya catálogo, la ingesta (F
 
 > Alimenta a `F1-023` y al monitor de mesas.
 
-**Tablas:** _(pendiente — tipo `tempcheques` / `tempcheqdet`)_
+**Tablas:** ✅ **`tempcheques`** + **`tempcheqdet`** (partidas). VALIDADO en F1-090 (2026-10-22,
+3 cuentas del turno en curso: una cobrada, una abierta sin imprimir y una impresa sin cobrar). Las
+columnas son las de `cheques` (§2) y `cheqdet` (§3). **Una cuenta ABIERTA es una fila de
+`tempcheques` con `pagado = 0` y `cancelado = 0`**: la tabla también trae las cobradas del turno
+(§2), que ya NO son mesas abiertas.
 
-| Columna | Tipo | Qué es de verdad | Estado |
-|---|---|---|---|
-| | | | |
+| Dato del snapshot | De dónde sale | Estado |
+|---|---|---|
+| mesa | `tempcheques.mesa` (el nombre de la cuenta) | ✅ |
+| mesero | `idmesero` → `meseros.nombre` (§7) | ✅ |
+| apertura | `fecha` (hora local de la PC) | ✅ |
+| comensales | `nopersonas` | ✅ |
+| total | **`tempcheques.total`: ya con IVA y descuentos** (la abierta de $120 trae 11.03 de IVA —el 16 % de una partida de $80; la otra es de IVA 0— y la impresa de $75 es toda de productos con IVA 0: los 11.03 de "por cobrar" del Monitor de ventas cuadran). `money`: 4 decimales | ✅ |
+| impreso | **`tempcheques.impreso`** (1 = ya se imprimió la precuenta). Al imprimir también se llenan `cierre` y `numcheque` | ✅ |
+| folio | **`numcheque` sólo existe desde la impresión** (0 antes). El que no cambia mientras la cuenta está abierta es `tempcheques.folio` (PK del turno) | ✅ |
+| partidas | `tempcheqdet` por `foliodet = folio`, en `movimiento` | ✅ |
+| comanda impresa por partida | **`tempcheqdet.comanda_impresa`**: 1 en todas las partidas ya enviadas a cocina/barra (las vistas eran todas enviadas). ⚠️ No se vio un 0: se supone que 0 = pendiente de enviar | ✅ columna y el 1; ⚠️ el 0 |
 
-**Cómo se sabe si la cuenta ya se imprimió:** _(pendiente — KPI "cuentas sin imprimir")_
+**Cómo se sabe si la cuenta ya se imprimió:** ✅ `tempcheques.impreso` (y `cierre`/`numcheque`
+dejan de ser NULL/0). Una impresa sin cobrar trae `impreso = 1`, `pagado = 0`. SR **no deja cobrar
+sin imprimir** ("No se puede pagar. La cuenta no está impresa"), salvo en RÁPIDO.
 
-**Qué pasa con la fila al cerrar la cuenta:** _(pendiente — ¿se borra, se marca?)_
+**Qué pasa con la fila al cerrar la cuenta:** ✅ **al COBRARLA no se borra ni se mueve**: se queda
+en `tempcheques` con `pagado = 1` e `idturno` del turno hasta el corte, que la pasa a `cheques`
+(§2). Al BORRARLA (cuenta sin partidas) desaparece sin dejar fila. Una mesa puede tener varias
+cuentas: al dividir, SR crea otra fila con el nombre `"<mesa>-A"`, mismo `fecha` y `orden` nuevo.
 
 **Lo que la ingesta (F1-031) ya supone de esta sección:** el snapshot llega completo en cada
 ciclo como `{ capturadoAt, mesas: object[] }` y se guarda sin validar la forma de cada mesa
@@ -877,14 +1153,21 @@ centavos exactos; si **una sola** mesa no trae un `total` legible, muestra "Sin 
 de una suma parcial. Falta confirmar contra `tempcheques` (o la tabla que sea) que el total
 de una cuenta abierta **ya incluye** descuentos e impuestos como el `total` de un cheque
 cerrado, y si una mesa puede traer varias cuentas. El seed de F1-032 no genera snapshots:
-esto sólo se probó con respuestas falsas. Código: `totalDe`/`importeDe` en
+esto sólo se probó con respuestas falsas.
+**Lo que F1-090 vio:** ✅ `tempcheques.total` de una cuenta abierta ya incluye descuentos e
+impuestos, igual que el de una cerrada (tabla de arriba). ✅ Una mesa sí puede tener varias
+cuentas: al dividir, SR crea otra fila (`"15-A"`). ❓ Queda para F1-023 si el snapshot va por
+cuenta (una tarjeta por fila de `tempcheques`, lo que ya supone "Una fila = una cuenta", abajo)
+o agrupado por mesa. Código: `totalDe`/`importeDe` en
 `web/src/paginas/mesas/mesa.ts` (se movieron ahí desde `inicio/ventaEnVivo.ts` en F1-094);
 la tarjeta (`inicio/ventaEnVivo.ts`) calcula con `armarMonitor` del Monitor. La edad que
 muestra la tarjeta es `edadRecepcionSegundos` (reloj del servidor).
 
-**Lo que el Monitor de mesas (F1-050) supone.** Todo lo de este bloque es ⚠️ **SUPUESTO no
-validado**: nadie ha visto todavía `tempcheques` ni la tabla que sea. Lo valida F1-023 contra
-una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `reglas.ts`).
+**Lo que el Monitor de mesas (F1-050) supone.** Cuando se escribió, era todo ⚠️ **SUPUESTO no
+validado**. **F1-090 ya vio `tempcheques`** (tabla de arriba): `total` sí incluye IVA y
+descuentos, `impreso` sale de `tempcheques.impreso`, y el folio estable de una abierta es
+`tempcheques.folio` (el del ticket, `numcheque`, aparece hasta imprimir). La forma exacta del
+snapshot la fija F1-023. Código: `web/src/paginas/mesas/` (`mesa.ts`, `reglas.ts`).
 
 - **Forma provisional de cada mesa del snapshot** (`DECISION PROVISIONAL (nocturno)` en
   `mesa.ts`). El agente (F1-023) tendría que mandarla así; el API sigue sin validarla (§13):
@@ -897,12 +1180,12 @@ una instalación real (F1-090). Código: `web/src/paginas/mesas/` (`mesa.ts`, `r
   El panel lee campo por campo, a la defensiva. Lo que falta o no se entiende sale como
   "Sin dato", nunca $0.00 ni 0 min. Un `abiertoAt` sin zona se rechaza, por la misma regla
   de §13.
-- ⚠️ **`total`:** la misma regla y la misma duda que "Venta en vivo" (arriba): falta saber si
-  ya incluye descuentos e impuestos. Si UNA mesa no trae un total legible, el KPI "$ en
-  curso" dice "Sin dato" en vez de dar una suma parcial.
-- ⚠️ **`impreso` (KPI "Cuentas sin imprimir"):** se supone un booleano que dice si la cuenta
-  ya se imprimió. Falta saber de qué columna de SR sale (ver "Cómo se sabe si la cuenta ya
-  se imprimió", arriba). Si alguna mesa no lo trae, el KPI dice "Sin dato" en vez de dar un
+- **`total`:** la misma regla que "Venta en vivo" (arriba). ✅ F1-090: `tempcheques.total` ya
+  incluye descuentos e impuestos (trae 4 decimales: el agente lo redondea a 2). Si UNA mesa no
+  trae un total legible, el KPI "$ en curso" dice "Sin dato" en vez de dar una suma parcial.
+- **`impreso` (KPI "Cuentas sin imprimir"):** un booleano que dice si la cuenta ya se
+  imprimió. ✅ F1-090: sale de `tempcheques.impreso` (ver "Cómo se sabe si la cuenta ya se
+  imprimió", arriba). Si alguna mesa no lo trae, el KPI dice "Sin dato" en vez de dar un
   conteo parcial.
 - ⚠️ **`abiertoAt` va con el reloj de la PC del POS**, igual que `capturadoAt`. Los minutos
   abierta se calculan como `(capturadoAt − abiertoAt)`, que resta dos horas del mismo reloj
@@ -2234,12 +2517,33 @@ mano es la de desarrollo con SR (lo decide Ricardo de día, F1-020b).
 >   hereda escritura por `public`. No se miró qué son esos 140 objetos.
 > - La base no tiene usuarios propios (SQL, Windows ni grupos) además de los de sistema.
 > - 6 procedimientos almacenados en la base.
-> - **`sqlcmd` de SQL 2014** (el que trae esta instalación, en
->   `C:\Program Files (x86)\Microsoft SQL Server\120\Tools\Binn`): lee bien un `.sql` en UTF-8
+> - **`sqlcmd` de SQL 2014** (el que trae esta instalación, versión 12.0.2000.8; **corrección
+>   del 2026-10-03:** está en el PATH y vive en
+>   `C:\Program Files (x86)\Microsoft SQL Server\Client SDK\ODBC\110\Tools\Binn`, no en
+>   `...\120\Tools\Binn` como decía esta nota; esa carpeta no existe aquí): lee bien un `.sql` en UTF-8
 >   **con BOM** (sin BOM los acentos salen rotos), y **toma las variables de entorno como
 >   variables de script** (`$(BASE_SR)`); si una variable no existe, dice "*scripting variable
 >   not defined*", sale con código 1 y no manda el lote. Se probó con un `PRINT`, sin
 >   escribir nada.
+
+> **Lo que se vio al preparar F1-090 (2026-10-03).** ✅ VALIDADO sólo para esta instalación, con
+> consultas de catálogo del servidor (`sqlcmd -E -t 10`, sin tocar datos ni crear nada):
+>
+> - La instancia tiene **una sola base de usuario**, `softrestaurant10`. "CAFETERIA DEMO" es el
+>   nombre de la empresa dentro de SR, no el de una base.
+> - Modelo de recuperación **SIMPLE**; la base pesa ~13 MB (`.mdf` y `.ldf` en
+>   `C:\nationalsoft\Softrestaurant10.0\DATOSSQL\`).
+> - El servicio del SQL corre como **`NT AUTHORITY\NETWORKSERVICE`**. Carpeta de respaldos por
+>   defecto: `C:\Program Files (x86)\Microsoft SQL Server\MSSQL12.NATIONALSOFT\MSSQL\Backup`.
+> - El usuario de Windows de la PC es **sysadmin del SQL también desde una consola NO elevada**
+>   (`IS_SRVROLEMEMBER('sysadmin') = 1`).
+> - **Extended Events existe en este Express**: están los eventos `sql_batch_completed`,
+>   `rpc_completed`, `sql_statement_completed` y `sp_statement_completed`, el filtro
+>   `sqlserver.database_name` y el destino `package0.event_file`. Sólo hay las dos sesiones de
+>   fábrica (`system_health`, `AlwaysOn_health`).
+> - El login `monitor_lector` **todavía no existe**.
+>
+> Los comandos de respaldo, restauración y captura están en `docs/preparacion-f1-090.md`.
 
 Supuestos del instalador (⚠️ ninguno visto funcionando):
 
@@ -2298,6 +2602,19 @@ Supuestos del instalador (⚠️ ninguno visto funcionando):
   que suman `cantidad` por (insumo, almacén) al insertar, restan al borrar y ajustan la diferencia al
   actualizar. Es la existencia corrida del POS; el agente sólo la LEE.
 - **No hay tabla de unidades** (F2-241, ✅ SR 10): `insumos.unidad` es texto libre (varchar(10), CI).
+- **Las fechas de operación son hora LOCAL de la PC, sin zona y sin milisegundos** (F1-090, ✅ SR 10):
+  `tempcheques.fecha`/`cierre`, `turnos.apertura`/`cierre`, `cancela.fecha` y `tempcheqdet.hora`
+  traen `.000`. Hay que interpretarlas con la zona de Windows de esa PC (aquí Central Standard Time
+  (Mexico), UTC−06:00, sin horario de verano), como ya hace el lector de inventario
+  (`DocumentosInventario.Instante`); los de cheques y mesas (F1-022/F1-023) tienen que hacer lo
+  mismo. Si el reloj de la PC está mal, las horas de SR también.
+- **El `money` de SR guarda 4 decimales** (F1-090, ✅): `subtotal` 117.2414, `totalimpuesto1`
+  18.7586. El total cuadra al centavo; los componentes no son de 2 decimales.
+- **`tempcheqdet.idproducto` puede traer espacios a la derecha** (F1-090, ✅ visto en una venta
+  RÁPIDO): comparar con `RTRIM`.
+- **La conexión del agente a este SQL 2014 SP1 negocia TLS 1.0** (F1-090, ✅ `agente test` imprime
+  "el elemento TLS 1.0 negociado es un protocolo inseguro"). Funciona, pero es un aviso de
+  seguridad para el piloto: depende de los parches del SQL del restaurante, no del agente.
 - **Hay identificadores que no son ASCII**, por ejemplo la columna
   `configuracion.contraseñainventarios`, con eñe. El agente no la lee. Queda anotado para
   cuando alguna query tenga que nombrar una columna así: el `.sql` embebido es UTF-8.
@@ -2798,6 +3115,7 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 
 | Fecha | Versión SR | Restaurante / entorno | Qué se validó |
 |---|---|---|---|
+| 2026-10-19 → 2026-10-22 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, empresa de demo). El POS se operó a mano con una hoja de casos: 23 cuentas en 2 turnos y un corte. Traza de Extended Events y lectura con `monitor_lector` (`db_datareader`). La hoja, la traza, los respaldos y las capturas quedan FUERA del repo | **F1-090**: cuentas cerradas y abiertas, partidas, pagos, cancelaciones, turnos y corte (§2–§5); el cuadre contra el Monitor de ventas y el Corte X de SR (§2); qué lee el Monitor de ventas (§2); `db_datareader` alcanza (§1). **No** valida: cancelación de cuenta cobrada, reapertura, modificadores vendidos, venta a domicilio ni el reinicio de `numcheque` (no se pudieron ejercitar, §2–§3). |
 | 2026-09-23 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, login sysadmin). Metadatos (`sys.columns`, `sys.indexes`, `sys.foreign_keys`, `sys.sql_modules`) y conteos; las 17 filas de `conceptos` y los 3 almacenes de demo; ningún valor de negocio al repo | Tablas de inventario (F2-241, §9, §10, §12): insumos, insumosdetalle, gruposi, almacen, proveedores, acumuladoinsumos y sus triggers, movsinv, conceptos, costos, compras, comprasmovtos, traspasosalmacen, presentaciones; que las 5 consultas `sr_catalogo_*` de inventario y `sr_existencias.sql` compilan y corren (0/0/0/3/0 filas y 3 almacenes vacíos). **No** valida valores ni signos (tablas vacías) ni qué costo usa SR: eso es F2-192/F2-193. |
 | 2026-09-23 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, login sysadmin). Metadatos (`sys.*`) y conteos agregados; ningún valor de negocio al repo | Tablas y columnas de catálogos: productos, productosdetalle, grupos, meseros, areasrestaurant, tiposervicio, clientes, estaciones y el señuelo `areas`; FKs reales; permisos por objeto de `diagnostico.sql`; que las 6 consultas `sr_catalogo_*.sql` compilan y devuelven 14/217/2/3/0/0 filas (F2-240, §6–§8, §11, §12). **No** valida el SENTIDO de las columnas de estado ni el cruce con cheques (sin FK): eso es F2-192. |
 | 2026-09-21 | 10 (exe 10.0.323, `versiondb` 10.021800) | Instalación local de desarrollo (SQL Server 2014 SP1 Express, instancia `.\NATIONALSOFT`). Sin datos de negocio: sólo catálogo y la columna de versión. Login sysadmin (no es config de producción) | Detección de versión y elección del reader (F1-021); conexión, certificado y TLS; `diagnostico.sql` (§1, §11, §12). Modo mixto, permisos de `public` y comportamiento de `sqlcmd` 2014 (F1-026, §11). **No** valida el mapeo de cuentas, pagos ni productos: eso es F1-090. |
