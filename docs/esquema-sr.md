@@ -1321,7 +1321,8 @@ cobrada. Lo que fija:
   opción conservadora de la ficha de F1-022 mientras Ricardo no decida otra. Si la revisión misma
   falla (el SQL no contesta), no se espera 5 min: se vuelve a revisar al siguiente ciclo (el mismo
   `NoSeSupo` que usa F1-022). Y si la sonda de ese ciclo ya falló, las mesas ni se intentan: el
-  heartbeat no espera otro timeout de conexión.
+  heartbeat no espera otro timeout de conexión. Lo que decide es la SONDA, no la lectura de
+  cheques de F1-022: una falla (o excepción) al leer los cheques no salta las mesas.
 - **Forma que manda** (la que lee `leerMesa` del panel): `folio`, `folioTicket`, `mesa`, `mesero`
   (`meseros.nombre` por `idmesero`, recortado), `abiertoAt` (`fecha`, hora local del POS → UTC con la
   zona de Windows, como el resto del agente), `comensales` (`nopersonas`), `impreso`, `total`
@@ -3021,7 +3022,7 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | `agent/src/ArkonAgente/Ventas/MapeoCheques.cs#3` | 201 | F1-022 | Las cortesías (`totalcortesias`) se suman en `descuentos`: el contrato no tiene campo propio. | SR | §2 |
 | `agent/src/ArkonAgente/Ventas/MapeoCheques.cs#4` | 252 | F1-022 | Una fila de `cheqdet` con `modificador = 1` es modificador de la partida anterior; nunca visto vendido. | SR | §3 |
 | `agent/src/ArkonAgente/Ventas/SincronizadorCheques.cs#1` | 53 | F1-022 | La primera lectura trae sólo las cuentas de `cheques` cerradas en los últimos 7 días, no toda la historia. | SR | §2 |
-| `agent/src/ArkonAgente/Worker.cs#1` | 193 | F1-020 | Conexión que falla al arrancar (incl. usuario con escritura) = Warning y el servicio sigue; negarse a leer es decisión abierta. | SR | §11, §14 «Agente: cuenta del servicio» |
+| `agent/src/ArkonAgente/Worker.cs#1` | 200 | F1-020 | Conexión que falla al arrancar (incl. usuario con escritura) = Warning y el servicio sigue; negarse a leer es decisión abierta. | SR | §11, §14 «Agente: cuenta del servicio» |
 | `agent/tests/ArkonAgente.Tests/ArkonAgente.Tests.csproj#1` | 15 | F1-020 | `InvariantGlobalization=false`: SR guarda varchar CP1252 (Modern_Spanish_CI_AS). | SR | §11 |
 | `api/prisma/schema.prisma#1` | 221 | F1-010 | `agente_estado` lleva `empresa_id` denormalizado con FK compuesta, aunque el backlog sólo pedía `sucursal_id`. | panel | §14 «Panel, landing, correo» |
 | `api/prisma/schema.prisma#2` | 327 | F1-030 | Sin CHECK de signo en importes (devoluciones/ajustes podrían venir negativos). | panel | §2 |

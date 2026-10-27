@@ -252,12 +252,14 @@ internal sealed class Worker : BackgroundService
         ISincronizadorCatalogos? catalogos, ISincronizadorExistencias? existencias, ISincronizadorInventario? inventario,
         ISincronizadorCheques? cheques, ISincronizadorMesas? mesas, CancellationToken stoppingToken)
     {
-        await ConsultarSrAsync(config, cheques, envio.Cola, stoppingToken);
+        var sondaRespondio = await ConsultarSrAsync(config, cheques, envio.Cola, stoppingToken);
         if (mesas is not null && _dep.EstadoSr.Reader is { } readerMesas)
         {
             // Con la sonda de ESTE ciclo caída, leer mesas sólo retrasaría el heartbeat otro timeout
             // de conexión: se salta y el panel ve el snapshot envejecer, como con cualquier lectura fallida.
-            if (_dep.EstadoSr.ErrorLectura is null)
+            // Se mira la sonda y no ErrorLectura: con cheques, ErrorLectura es el de la lectura de
+            // cheques, y una falla de esa consulta no dice nada de la de mesas.
+            if (sondaRespondio)
             {
                 await LeerMesasAsync(mesas, readerMesas, envio.Cola, stoppingToken);
             }
@@ -432,17 +434,19 @@ internal sealed class Worker : BackgroundService
     /// de la sonda, y si falla su error es el que ve el panel. Una excepción de aquí que
     /// no sea la parada del servicio NO corta el ciclo: si lo cortara, no saldría el
     /// heartbeat y el panel vería "desconectado" cuando el agente está vivo y el problema es
-    /// otro. Queda en el log y en el <c>ultimoError</c> del heartbeat.
+    /// otro. Queda en el log y en el <c>ultimoError</c> del heartbeat. Devuelve si la sonda de
+    /// ESTE ciclo respondió, para que las mesas abiertas (F1-023) se salten si no.
     /// </summary>
-    private async Task ConsultarSrAsync(
+    private async Task<bool> ConsultarSrAsync(
         ConfiguracionAgente config, ISincronizadorCheques? cheques, ColaLocal cola, CancellationToken stoppingToken)
     {
+        var sondaRespondio = false;
         try
         {
             await DetectarSiFaltaAsync(config, stoppingToken);
             if (_dep.EstadoSr.Reader is { } reader)
             {
-                await SondearAsync(config, stoppingToken);
+                sondaRespondio = await SondearAsync(config, stoppingToken);
                 if (cheques is not null)
                 {
                     _dep.EstadoSr.RegistrarSondeo(await cheques.CicloAsync(reader, cola, stoppingToken));
@@ -475,16 +479,19 @@ internal sealed class Worker : BackgroundService
                 _logger.LogError(ex, "{Mensaje} El agente sigue y lo vuelve a intentar en el siguiente ciclo.", mensaje);
             }
         }
+
+        return sondaRespondio;
     }
 
-    private async Task SondearAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
+    /// <summary>La sonda del ciclo (F1-025); devuelve si SoftRestaurant respondió.</summary>
+    private async Task<bool> SondearAsync(ConfiguracionAgente config, CancellationToken stoppingToken)
     {
         var resultado = await _dep.SondearSr(config, stoppingToken);
         _dep.EstadoSr.RegistrarSondeo(resultado);
 
         if (resultado.Error == _ultimoErrorSondeo)
         {
-            return;
+            return resultado.Ok;
         }
 
         if (resultado.Error is { } error)
@@ -497,6 +504,7 @@ internal sealed class Worker : BackgroundService
         }
 
         _ultimoErrorSondeo = resultado.Error;
+        return resultado.Ok;
     }
 
     /// <summary>

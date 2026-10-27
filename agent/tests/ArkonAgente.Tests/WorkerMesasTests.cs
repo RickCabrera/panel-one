@@ -2,6 +2,7 @@ using ArkonAgente.Cola;
 using ArkonAgente.Configuracion;
 using ArkonAgente.Mesas;
 using ArkonAgente.SoftRestaurant;
+using ArkonAgente.Ventas;
 using Microsoft.Extensions.Logging;
 
 namespace ArkonAgente.Tests;
@@ -77,7 +78,8 @@ public partial class WorkerTests
 
     private DependenciasWorker ConMesas(
         CarpetaTemporal carpeta, ICicloEnvio envio, EstadoSoftRestaurant estado, ISincronizadorMesas mesas,
-        Func<ConfiguracionAgente, CancellationToken, Task<ResultadoSondeo>>? sondeo = null) =>
+        Func<ConfiguracionAgente, CancellationToken, Task<ResultadoSondeo>>? sondeo = null,
+        ISincronizadorCheques? cheques = null) =>
         new(
             carpeta.Rutas,
             _ => new ResultadoConfiguracion(Datos.Config() with { IntervaloSegundos = ConfiguracionAgente.IntervaloMinimo }, [], []),
@@ -90,6 +92,7 @@ public partial class WorkerTests
             VersionDePrueba,
             Reintento,
             NoTermina,
+            CrearCheques: cheques is null ? null : (_, _) => cheques,
             CrearMesas: (_, _) => mesas);
 
     [Fact]
@@ -124,6 +127,71 @@ public partial class WorkerTests
         await worker.StopAsync(CancellationToken.None);
 
         Assert.Empty(mesas.EnviosAlCorrer); // nunca se intentó leer mesas
+        Assert.All(envio.HeartbeatsPorCiclo, n => Assert.Equal(1, n));
+        Assert.Contains("no respondió a la sonda", envio.Heartbeats[0].GetProperty("ultimoError").GetString());
+    }
+
+    [Fact]
+    public async Task Si_la_sonda_responde_pero_fallan_los_cheques_las_mesas_se_leen_igual()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var envio = new EnvioFalso();
+        var estado = new EstadoSoftRestaurant();
+        var mesas = new MesasFalsas(envio, estado, error: null, truena: false);
+        var cheques = new ChequesFalsos(envio, ResultadoSondeo.Falla(DateTimeOffset.UtcNow, "No se leen las ventas (sintético)."));
+        var worker = new Worker(new LogEnMemoria(), ConMesas(carpeta, envio, estado, mesas, cheques: cheques));
+
+        await worker.StartAsync(CancellationToken.None);
+        await Esperar(() => envio.Heartbeats.Count >= 1);
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(0, mesas.EnviosAlCorrer[0]); // la falla de cheques no salta las mesas
+        var error = envio.Heartbeats[0].GetProperty("ultimoError").GetString();
+        Assert.Equal("No se leen las ventas (sintético).", error);
+        Assert.DoesNotContain("no respondió a la sonda", error);
+    }
+
+    /// <summary>Unos cheques cuya lectura truena con una excepción no prevista.</summary>
+    private sealed class ChequesQueTruenan : ISincronizadorCheques
+    {
+        public Task<ResultadoSondeo> CicloAsync(ISoftRestaurantReader reader, ColaLocal cola, CancellationToken cancelacion) =>
+            throw new IOException("cola.db bloqueado (sintético)");
+    }
+
+    [Fact]
+    public async Task Si_la_lectura_de_cheques_truena_las_mesas_se_leen_igual()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var envio = new EnvioFalso();
+        var estado = new EstadoSoftRestaurant();
+        var mesas = new MesasFalsas(envio, estado, error: null, truena: false);
+        var worker = new Worker(new LogEnMemoria(), ConMesas(carpeta, envio, estado, mesas, cheques: new ChequesQueTruenan()));
+
+        await worker.StartAsync(CancellationToken.None);
+        await Esperar(() => envio.Heartbeats.Count >= 1);
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(0, mesas.EnviosAlCorrer[0]); // la sonda respondió: la excepción de cheques no salta las mesas
+        var error = envio.Heartbeats[0].GetProperty("ultimoError").GetString();
+        Assert.Contains("Falla interna del agente al consultar SoftRestaurant (IOException)", error);
+        Assert.DoesNotContain("no respondió a la sonda", error);
+    }
+
+    [Fact]
+    public async Task Si_la_sonda_truena_no_lee_mesas_y_el_heartbeat_sale_igual()
+    {
+        using var carpeta = new CarpetaTemporal();
+        var envio = new EnvioFalso();
+        var estado = new EstadoSoftRestaurant();
+        var mesas = new MesasFalsas(envio, estado, error: null, truena: false);
+        var worker = new Worker(new LogEnMemoria(), ConMesas(carpeta, envio, estado, mesas,
+            (_, _) => throw new System.Net.Sockets.SocketException(10054)));
+
+        await worker.StartAsync(CancellationToken.None);
+        await Esperar(() => envio.Ciclos >= 2);
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Empty(mesas.EnviosAlCorrer);
         Assert.All(envio.HeartbeatsPorCiclo, n => Assert.Equal(1, n));
         Assert.Contains("no respondió a la sonda", envio.Heartbeats[0].GetProperty("ultimoError").GetString());
     }
