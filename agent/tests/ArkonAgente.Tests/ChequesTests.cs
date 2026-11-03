@@ -37,10 +37,12 @@ internal static class FixturesCheques
         string? area = "A1",
         int? comensales = 3,
         DateTime? fecha = null,
-        DateTime? cierre = null) =>
+        DateTime? cierre = null,
+        long? idTurno = 7) =>
         new(origen, folio, numCheque, serie, fecha ?? new DateTime(2026, 3, 10, 13, 0, 0),
             cierre ?? new DateTime(2026, 3, 10, 13, 45, 30), mesa, comensales, mesero, area, cliente,
-            subtotal ?? total, descuentoImporte, impuestos, totalDescuentos, totalCortesias, propina, total, cancelado);
+            subtotal ?? total, descuentoImporte, impuestos, totalDescuentos, totalCortesias, propina, total, cancelado,
+            idTurno);
 
     public static FilaPartida Partida(
         long folio, int movimiento, string producto, decimal precio, decimal cantidad = 1m, decimal descuento = 0m,
@@ -72,7 +74,8 @@ public class MapeoChequesTests
         var c = Unico(mapeo);
         Assert.Equal(
             ["folioSr", "folio", "abiertoAt", "cerradoAt", "mesa", "mesero", "comensales", "clienteOrigenSrId",
-             "areaOrigenSrId", "subtotal", "impuestos", "descuentos", "propina", "total", "cancelado", "partidas", "pagos"],
+             "areaOrigenSrId", "turnoSr", "subtotal", "impuestos", "descuentos", "propina", "total", "cancelado", "partidas",
+             "pagos"],
             c.EnumerateObject().Select(p => p.Name));
         Assert.Equal("105", c.GetProperty("folioSr").GetString());
         Assert.Equal("105", c.GetProperty("folio").GetString());
@@ -83,6 +86,8 @@ public class MapeoChequesTests
         Assert.Equal(3, c.GetProperty("comensales").GetInt32());
         Assert.Equal(JsonValueKind.Null, c.GetProperty("clienteOrigenSrId").ValueKind);
         Assert.Equal("A1", c.GetProperty("areaOrigenSrId").GetString());
+        // MVP de cortes: el turno del cobro (idturno) viaja como texto.
+        Assert.Equal("7", c.GetProperty("turnoSr").GetString());
         Assert.Equal("129.3103", c.GetProperty("subtotal").GetString());
         Assert.Equal("20.6897", c.GetProperty("impuestos").GetString());
         Assert.Equal("0", c.GetProperty("descuentos").GetString());
@@ -99,6 +104,27 @@ public class MapeoChequesTests
         Assert.Empty(mapeo.Avisos);
         Assert.Empty(mapeo.Errores);
         Assert.Empty(mapeo.Releer);
+    }
+
+    [Theory]
+    [InlineData(12L, "12")]
+    [InlineData(0L, null)] // SR pone 0 mientras no se cobra
+    [InlineData(null, null)]
+    public void El_idturno_del_cobro_viaja_como_turnoSr_y_0_o_NULL_es_sin_turno(long? idTurno, string? esperado)
+    {
+        var c = Unico(Mapear(
+            [FixturesCheques.Cuenta(4, 105, 150m, idTurno: idTurno)],
+            [FixturesCheques.Partida(4, 1, "CALDO", 150m)],
+            [FixturesCheques.Pago(4, "EFECTIVO", 150m)]));
+
+        if (esperado is null)
+        {
+            Assert.Equal(JsonValueKind.Null, c.GetProperty("turnoSr").ValueKind);
+        }
+        else
+        {
+            Assert.Equal(esperado, c.GetProperty("turnoSr").GetString());
+        }
     }
 
     [Fact]
