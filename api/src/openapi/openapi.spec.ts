@@ -1182,6 +1182,10 @@ describe('Contrato OpenAPI', () => {
         // F2-127: proyección de demanda y sugerido de compra.
         '/inventario/proyecciones',
         '/mesas/abiertas',
+        // MVP de cortes: turnos de SR y lo cobrado en cada uno.
+        '/cortes',
+        '/cortes/en-curso',
+        '/cortes/{id}',
         '/sucursales',
         '/sucursales/{id}',
         '/sucursales/{id}/actualizacion-automatica',
@@ -1190,6 +1194,8 @@ describe('Contrato OpenAPI', () => {
         '/ventas/comparativo-sucursales',
         '/ventas/formas-pago',
         '/ventas/hora-dia',
+        // MVP: meseros en tiempo real.
+        '/ventas/meseros-en-vivo',
         '/ventas/por-area',
         '/ventas/por-dia',
         '/ventas/por-hora',
@@ -1212,6 +1218,27 @@ describe('Contrato OpenAPI', () => {
       '429',
     ]);
     expect(paths['/auth/logout']?.post?.security).toEqual([{ monitor_refresh: [] }]);
+  });
+
+  it('cortes y meseros en vivo (MVP): Bearer, 400/401/404 y el evento turno sin tenant', async () => {
+    const { paths, components } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    for (const ruta of ['/cortes', '/cortes/en-curso', '/cortes/{id}', '/ventas/meseros-en-vivo']) {
+      expect(paths[ruta]?.get?.security).toEqual([{ bearer: [] }]);
+      expect(codigos(paths[ruta]?.get)).toEqual(['200', '400', '401', '404']);
+    }
+    const nombres = (ruta: string) =>
+      (paths[ruta]?.get?.parameters ?? []).map((p) => ('name' in p ? p.name : '')).sort();
+    expect(nombres('/cortes')).toEqual(['desde', 'empresaId', 'hasta', 'sucursalId']);
+    expect(nombres('/cortes/en-curso')).toEqual(['empresaId', 'sucursalId']);
+    expect(nombres('/ventas/meseros-en-vivo')).toEqual(['dia', 'empresaId', 'sucursalId']);
+    const esquemas = components?.schemas ?? {};
+    expect(esquemas).toHaveProperty('EventoTurnoDto');
+    const turno = JSON.stringify(esquemas.DatosTurnoDto);
+    expect(turno).not.toContain('sucursalId');
+    expect(turno).not.toContain('empresaId');
+    expect(JSON.stringify(esquemas.DatosChequeDto)).toContain('turnoSr');
+    expect(JSON.stringify(esquemas.DetalleCorteDto)).toContain('cuadre');
   });
 
   it('documenta la administración (F1-060): 404 por alcance, 403 sólo por rol, y el cambio propio', async () => {

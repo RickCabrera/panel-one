@@ -7,5 +7,7 @@ import { MesasService } from './mesas.service';
 @Module({
   controllers: [MesasController],
   providers: [MesasService],
+  // La usa Meseros en vivo (`ventas/meseros-en-vivo.service.ts`) para lo que está en curso.
+  exports: [MesasService],
 })
 export class MesasModule {}

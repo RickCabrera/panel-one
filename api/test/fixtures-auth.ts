@@ -110,6 +110,8 @@ export async function limpiarFixtures(
   await prisma.chequePago.deleteMany(deEstas);
   await prisma.cheque.deleteMany(deEstas);
   await prisma.mesaSnapshot.deleteMany(deEstas);
+  // Los turnos de SR (MVP de cortes) cuelgan de la sucursal.
+  await prisma.turno.deleteMany(deEstas);
   // El estado del agente (F1-031: lo escribe el heartbeat de la ingesta).
   await prisma.agenteEstado.deleteMany(deEstas);
   // El último contacto del agente (F1-061: lo escribe todo lote aceptado).

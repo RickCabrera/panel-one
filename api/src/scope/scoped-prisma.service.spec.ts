@@ -160,6 +160,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'sucursal',
       'suscripcionReporte',
       'traspaso',
+      // MVP de cortes: turnos de SR; se escriben por `deSucursal(agente).guardarTurno`.
+      'turno',
       'unidadCatalogo',
       'usuario',
       // F2-143: el canal de versiones del agente, de PLATAFORMA como los folios: con scope de

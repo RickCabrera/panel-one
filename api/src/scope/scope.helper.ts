@@ -21,6 +21,9 @@ export const LLAVE_EMPRESA = {
   ChequePartida: 'empresaId',
   ChequePago: 'empresaId',
   MesaSnapshot: 'empresaId',
+  // MVP de cortes. Los turnos de SR: los escribe SÓLO `EscrituraSucursal.guardarTurno`
+  // (clavada a la sucursal del agente); el panel sólo los lee.
+  Turno: 'empresaId',
   FormaPagoCatalogo: 'empresaId',
   // F1-093. Nunca se lee con scope: sólo AuthService, por `sid` y usuario.
   SesionUsuario: 'empresaId',

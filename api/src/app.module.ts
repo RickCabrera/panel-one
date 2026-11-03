@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CatalogosModule } from './catalogos/catalogos.module';
+import { CortesModule } from './cortes/cortes.module';
 import { FacturacionModule } from './facturacion/facturacion.module';
 import { FinanzasModule } from './finanzas/finanzas.module';
 import { InventarioModule } from './inventario/inventario.module';
@@ -47,6 +48,8 @@ import { VentasModule } from './ventas/ventas.module';
     InventarioModule,
     FinanzasModule,
     FacturacionModule,
+    // MVP de cortes (al final: sus rutas se agregan al final del contrato).
+    CortesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

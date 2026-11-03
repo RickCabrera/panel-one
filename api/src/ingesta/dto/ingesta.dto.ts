@@ -33,7 +33,7 @@ import { CANTIDAD, DINERO, ISO_CON_ZONA } from '../normalizar';
  */
 
 export const MAX_EVENTOS_POR_LOTE = 100;
-export const TIPOS_EVENTO = ['cheque', 'snapshot', 'heartbeat'] as const;
+export const TIPOS_EVENTO = ['cheque', 'snapshot', 'heartbeat', 'turno'] as const;
 export type TipoEvento = (typeof TIPOS_EVENTO)[number];
 
 const DOC_DINERO = {
@@ -218,6 +218,22 @@ export class DatosChequeDto {
   @MaxLength(64)
   areaOrigenSrId?: string | null;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '12',
+    maxLength: 64,
+    description:
+      'MVP de cortes: el turno de SR donde se COBRÓ la cuenta (`idturno`), el MISMO `turnoSr` que ' +
+      'manda el evento `turno` de esta sucursal. Nulo, ausente o sólo espacios = la cuenta no lo ' +
+      'trae (SR pone 0 mientras no se cobra; el agente manda nulo). Omitirlo guarda nulo. No hace ' +
+      'falta que el turno ya haya llegado.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  turnoSr?: string | null;
+
   @ApiProperty(DOC_DINERO)
   @IsString()
   @Matches(DINERO, { message: MENSAJE_DINERO })
@@ -363,6 +379,78 @@ export class DatosHeartbeatDto {
 }
 
 // ---------------------------------------------------------------------------
+// turno
+// ---------------------------------------------------------------------------
+
+export class DatosTurnoDto {
+  @ApiProperty({
+    example: '12',
+    description:
+      'Llave estable del turno en SR (`turnos.idturno`). Única por sucursal: el upsert va por aquí.',
+  })
+  @IsString()
+  @Length(1, 64)
+  turnoSr!: string;
+
+  @ApiProperty({ ...DOC_FECHA, description: `Apertura del turno. ${DOC_FECHA.description}` })
+  @IsString()
+  @Matches(ISO_CON_ZONA, { message: MENSAJE_FECHA })
+  @IsISO8601({ strict: true, strictSeparator: true })
+  aperturaAt!: string;
+
+  @ApiPropertyOptional({
+    ...DOC_FECHA,
+    nullable: true,
+    description: `Cierre (corte) del turno; nulo = turno abierto. ${DOC_FECHA.description}`,
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(ISO_CON_ZONA, { message: MENSAJE_FECHA })
+  @IsISO8601({ strict: true, strictSeparator: true })
+  cierreAt?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'CAJA1',
+    maxLength: 100,
+    description: '`turnos.idestacion` tal cual. Nulo, ausente o sólo espacios = sin estación.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  estacion?: string | null;
+
+  @ApiProperty({ ...DOC_DINERO, description: `Fondo inicial de caja. ${DOC_DINERO.description}` })
+  @IsString()
+  @Matches(DINERO, { message: MENSAJE_DINERO })
+  fondo!: string;
+
+  @ApiProperty({
+    ...DOC_DINERO,
+    description: `Efectivo que el cajero DECLARÓ al cerrar (no lo vendido). ${DOC_DINERO.description}`,
+  })
+  @IsString()
+  @Matches(DINERO, { message: MENSAJE_DINERO })
+  declaradoEfectivo!: string;
+
+  @ApiProperty({ ...DOC_DINERO, description: `Tarjeta declarada. ${DOC_DINERO.description}` })
+  @IsString()
+  @Matches(DINERO, { message: MENSAJE_DINERO })
+  declaradoTarjeta!: string;
+
+  @ApiProperty({ ...DOC_DINERO, description: `Vales declarados. ${DOC_DINERO.description}` })
+  @IsString()
+  @Matches(DINERO, { message: MENSAJE_DINERO })
+  declaradoVales!: string;
+
+  @ApiProperty({ ...DOC_DINERO, description: `Crédito declarado. ${DOC_DINERO.description}` })
+  @IsString()
+  @Matches(DINERO, { message: MENSAJE_DINERO })
+  declaradoCredito!: string;
+}
+
+// ---------------------------------------------------------------------------
 // eventos y sobre
 // ---------------------------------------------------------------------------
 
@@ -419,7 +507,23 @@ export class EventoHeartbeatDto {
   datos!: DatosHeartbeatDto;
 }
 
-export const MODELOS_EVENTO = [EventoChequeDto, EventoSnapshotDto, EventoHeartbeatDto];
+export class EventoTurnoDto {
+  @ApiProperty(DOC_ID_EVENTO)
+  id!: string;
+
+  @ApiProperty({ enum: ['turno'] })
+  tipo!: 'turno';
+
+  @ApiProperty({ type: DatosTurnoDto })
+  datos!: DatosTurnoDto;
+}
+
+export const MODELOS_EVENTO = [
+  EventoChequeDto,
+  EventoSnapshotDto,
+  EventoHeartbeatDto,
+  EventoTurnoDto,
+];
 
 export class LoteIngestaDto {
   @ApiProperty({

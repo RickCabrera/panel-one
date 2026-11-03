@@ -11,6 +11,7 @@ import type {
   DatosEstado,
   DatosPago,
   DatosPartida,
+  DatosTurno,
   EscrituraSucursal,
 } from '../scope/escritura-sucursal';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
@@ -21,6 +22,7 @@ import {
   DatosChequeDto,
   DatosHeartbeatDto,
   DatosSnapshotDto,
+  DatosTurnoDto,
   type RechazoDto,
   type ResultadoIngestaDto,
 } from './dto/ingesta.dto';
@@ -35,7 +37,8 @@ type EventoNormalizado =
       pagos: DatosPago[];
     }
   | { tipo: 'snapshot'; capturadoAt: Date; payload: Prisma.InputJsonValue }
-  | { tipo: 'heartbeat'; estado: DatosEstado };
+  | { tipo: 'heartbeat'; estado: DatosEstado }
+  | { tipo: 'turno'; turnoSr: string; datos: DatosTurno };
 
 type Resultado<T> = { ok: true; valor: T } | { ok: false; motivo: string };
 
@@ -221,6 +224,15 @@ export class IngestaService {
           await ops.guardarSnapshot(evento.capturadoAt, evento.payload);
           await ops.purgarSnapshots(new Date());
         });
+      case 'turno':
+        return escritura.enTransaccion(async (ops) => {
+          // Reenvío idéntico: el turno no se toca (ni `updated_at`).
+          const guardado = await ops.leerTurno(evento.turnoSr);
+          if (guardado && mismoTurno(guardado, evento.datos)) {
+            return;
+          }
+          await ops.guardarTurno(evento.turnoSr, evento.datos);
+        });
       case 'heartbeat':
         return escritura.enTransaccion(async (ops) => {
           const actual = await ops.leerEstado();
@@ -252,6 +264,20 @@ function idDe(evento: unknown): string | null {
     }
   }
   return null;
+}
+
+/** El turno guardado contra el que llega, ya normalizados (fechas al ms, importes a 2 decimales). */
+function mismoTurno(a: DatosTurno, b: DatosTurno): boolean {
+  return (
+    a.aperturaAt.getTime() === b.aperturaAt.getTime() &&
+    (a.cierreAt?.getTime() ?? null) === (b.cierreAt?.getTime() ?? null) &&
+    a.estacion === b.estacion &&
+    a.fondo.equals(b.fondo) &&
+    a.declaradoEfectivo.equals(b.declaradoEfectivo) &&
+    a.declaradoTarjeta.equals(b.declaradoTarjeta) &&
+    a.declaradoVales.equals(b.declaradoVales) &&
+    a.declaradoCredito.equals(b.declaradoCredito)
+  );
 }
 
 /** `a` es lo guardado: en la tabla `version_agente` admite nulo. */
@@ -349,6 +375,10 @@ async function validarYNormalizar(evento: unknown): Promise<Resultado<EventoNorm
         const r = await validarComo(DatosHeartbeatDto, datos, 'datos');
         return r.ok ? { ok: true, valor: normalizarHeartbeat(r.valor) } : r;
       }
+      case 'turno': {
+        const r = await validarComo(DatosTurnoDto, datos, 'datos');
+        return r.ok ? { ok: true, valor: normalizarTurno(r.valor) } : r;
+      }
     }
   } catch (err) {
     if (err instanceof FueraDeRango) {
@@ -382,6 +412,8 @@ function normalizarCheque(d: DatosChequeDto): EventoNormalizado {
       clienteOrigenSrId: d.clienteOrigenSrId?.trim() ? d.clienteOrigenSrId : null,
       // F2-233: misma regla que el cliente (tal cual; sólo espacios = sin área).
       areaOrigenSrId: d.areaOrigenSrId?.trim() ? d.areaOrigenSrId : null,
+      // MVP de cortes: misma regla (tal cual; sólo espacios = sin turno).
+      turnoSr: d.turnoSr?.trim() ? d.turnoSr : null,
       subtotal: importe('datos.subtotal', d.subtotal),
       impuestos: importe('datos.impuestos', d.impuestos),
       descuentos: importe('datos.descuentos', d.descuentos),
@@ -426,6 +458,23 @@ function normalizarHeartbeat(d: DatosHeartbeatDto): EventoNormalizado {
       ultimoError: d.ultimoError ?? null,
       tamanoCola: d.tamanoCola ?? null,
       latenciaQueryMs: d.latenciaQueryMs ?? null,
+    },
+  };
+}
+
+function normalizarTurno(d: DatosTurnoDto): EventoNormalizado {
+  return {
+    tipo: 'turno',
+    turnoSr: d.turnoSr,
+    datos: {
+      aperturaAt: fechaUtc(d.aperturaAt),
+      cierreAt: d.cierreAt ? fechaUtc(d.cierreAt) : null,
+      estacion: d.estacion?.trim() ? d.estacion : null,
+      fondo: importe('datos.fondo', d.fondo),
+      declaradoEfectivo: importe('datos.declaradoEfectivo', d.declaradoEfectivo),
+      declaradoTarjeta: importe('datos.declaradoTarjeta', d.declaradoTarjeta),
+      declaradoVales: importe('datos.declaradoVales', d.declaradoVales),
+      declaradoCredito: importe('datos.declaradoCredito', d.declaradoCredito),
     },
   };
 }
