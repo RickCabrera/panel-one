@@ -45,44 +45,10 @@ $ErrorActionPreference = 'Stop'
 
 $archivoSql = Join-Path $PSScriptRoot 'crear-usuario-lector.sql'
 
-# sqlcmd viene con SQL Server (también con el Express de SoftRestaurant) pero no siempre
-# está en el PATH.
-function Find-Sqlcmd {
-    $comando = Get-Command 'sqlcmd.exe' -ErrorAction SilentlyContinue
-    if ($comando) { return $comando.Source }
-
-    $raices = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }
-    foreach ($raiz in $raices) {
-        $candidatos = @(
-            Get-ChildItem -Path (Join-Path $raiz 'Microsoft SQL Server') -Filter 'sqlcmd.exe' -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.FullName -match '\\Tools\\Binn\\' } |
-                Sort-Object FullName -Descending
-        )
-        if ($candidatos.Count -gt 0) { return $candidatos[0].FullName }
-    }
-    return $null
-}
-
-function Get-ArgumentosAcceso {
-    if ($UsuarioAdmin) { return @('-U', $UsuarioAdmin) }
-    return @('-E')
-}
-
-# Sólo LEE la lista de bases (sys.databases), para no tener que adivinar el nombre.
-function Get-BasesDelServidor {
-    param([string] $Sqlcmd, [string] $Srv)
-
-    # En 5.1, con 'Stop', una línea de stderr de un exe con 2>&1 corta el script.
-    $ErrorActionPreference = 'Continue'
-
-    $consulta = 'SET NOCOUNT ON; SELECT name FROM sys.databases WHERE database_id > 4 AND state = 0 ORDER BY name;'
-    $acceso = Get-ArgumentosAcceso
-    $salida = & $Sqlcmd -S $Srv @acceso -b -l 10 -t 10 -h -1 -W -Q $consulta 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw ("No se pudo entrar al SQL Server '$Srv': " + (($salida | Out-String).Trim()))
-    }
-    return @($salida | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
-}
+# Find-Sqlcmd, Get-BasesSql e Invoke-CrearLectorSql viven en funciones-instalador.ps1 (las usa
+# también el instalador de un clic). Arman los argumentos de sqlcmd como UN arreglo completo:
+# antes, con autenticación de Windows, el acceso iba aparte (`@acceso`) y sqlcmd recibía un
+# argumento en blanco ("Sqlcmd: ' ': Unknown Option").
 
 function Invoke-CrearLector {
     Write-Host 'Usuario de SOLO LECTURA para el agente ArkonAgente' -ForegroundColor White
@@ -118,7 +84,7 @@ function Invoke-CrearLector {
 
     $bd = $Base
     if (-not $bd) {
-        $bases = Get-BasesDelServidor -Sqlcmd $sqlcmd -Srv $srv
+        $bases = Get-BasesSql -Sqlcmd $sqlcmd -Servidor $srv -UsuarioAdmin $UsuarioAdmin
         if ($bases.Count -eq 0) {
             Write-Problema "El servidor '$srv' no tiene bases de usuario. ¿Es el SQL Server de SoftRestaurant?"
             return 3
@@ -144,20 +110,15 @@ function Invoke-CrearLector {
     $password = Read-Secreto -Pregunta '  Contraseña nueva (no se ve al escribir)' -Validar { param($v) Test-PasswordNueva $v } -Confirmar
 
     Write-Paso "[4/4] Creando monitor_lector en $srv / $bd (sólo lectura)"
-    # Por variable de entorno y no con -v: así la contraseña no queda en la línea de
-    # comando (ni en el historial). Sólo vive en este proceso y en el sqlcmd hijo.
-    $env:BASE_SR = $bd
-    $env:PASSWORD_LECTOR = $password
+    # La contraseña y la base van por variable de entorno y no con -v: así no quedan en la línea
+    # de comando (ni en el historial). Sólo viven en este proceso y en el sqlcmd hijo.
     try {
-        $acceso = Get-ArgumentosAcceso
-        # -t 30: CREATE USER y sp_addrolemember toman bloqueos de metadatos en la base del
-        # POS; si algo los hace esperar, mejor fallar que quedarse colgado.
-        & $sqlcmd -S $srv @acceso -b -l 10 -t 30 -i $archivoSql | Out-Host
-        $codigo = $LASTEXITCODE
+        $resultado = Invoke-CrearLectorSql -Sqlcmd $sqlcmd -ArchivoSql $archivoSql -Servidor $srv `
+            -Base $bd -Password $password -UsuarioAdmin $UsuarioAdmin
+        $resultado.Salida | ForEach-Object { Write-Host "  $_" }
+        $codigo = $resultado.Codigo
     }
     finally {
-        Remove-Item Env:\PASSWORD_LECTOR -ErrorAction SilentlyContinue
-        Remove-Item Env:\BASE_SR -ErrorAction SilentlyContinue
         Remove-Item Env:\SQLCMDPASSWORD -ErrorAction SilentlyContinue
         $password = $null
     }

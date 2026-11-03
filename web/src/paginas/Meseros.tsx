@@ -14,6 +14,7 @@ import { BotonCsv } from './analisis/Bloques';
 import { paginar } from './analisis/reglas';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './inicio/Tarjeta';
 import { useRendimientoMeseros } from './meseros/consultas';
+import { MeserosEnVivoTarjeta } from './meseros/EnVivo';
 import { meserosACsv, nombreCsvMeseros } from './meseros/csv';
 import {
   comparar,
@@ -46,7 +47,7 @@ const minutos = (v: string | null) => (v === null ? '—' : `${v} min`);
  */
 export function Meseros() {
   const filtro = useFiltroAlcance();
-  const { rango } = usePeriodo();
+  const { rango, hoy, zona } = usePeriodo();
   const { sucursal, sucursales } = useAlcance();
   const consulta = useRendimientoMeseros(filtro, rango);
   const [pagina, setPagina] = useState(1);
@@ -69,6 +70,10 @@ export function Meseros() {
         POS sólo trae el nombre del mesero: se liga con el catálogo del POS por nombre. Las
         cancelaciones y los descuentos se muestran aparte, nunca dentro de la venta.
       </p>
+      {/* MVP: cuánto lleva cada mesero HOY, en vivo (cobrado + mesas abiertas). */}
+      <div className="mb-4">
+        <MeserosEnVivoTarjeta filtro={filtro} dia={hoy} zona={zona} />
+      </div>
       {rango === null ? (
         <Tarjeta titulo="Rendimiento">
           <Vacio>Elige un periodo válido para ver el rendimiento de los meseros.</Vacio>

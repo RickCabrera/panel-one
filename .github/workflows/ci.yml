@@ -143,6 +143,20 @@ jobs:
       - run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
+      # El schema y las migraciones dicen lo mismo: una migración escrita a mano (o un cambio al
+      # schema sin migración) que no cuadre truena aquí, no en el `migrate dev` de la siguiente
+      # persona. La base sombra es temporal y sólo vive en este job. Los CHECK escritos a mano
+      # no cuentan como desvío (Prisma no los modela).
+      - name: Sin desvío entre schema.prisma y las migraciones
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE prisma_sombra;'
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url postgresql://postgres:postgres@localhost:5432/prisma_sombra \
+            --exit-code
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
       - run: npm test
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
@@ -185,6 +199,45 @@ jobs:
       - run: npm test
 
   # ---------------------------------------------------------------------------
+  # IMÁGENES DE RAILWAY (api/Dockerfile y web/Dockerfile, docs/deploy-railway.md)
+  # Construye las dos imágenes SIN publicarlas en ningún registro (no hay login ni
+  # push) y les corre la prueba de humo de infra/humo-railway.sh contra un Postgres
+  # vacío: migraciones, admin inicial, /health, login con cookie Secure, socket.io y
+  # rate limit por IP a través del Caddy del web, todo con NODE_ENV=production.
+  # ---------------------------------------------------------------------------
+  docker:
+    name: Imágenes Docker (Railway)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: monitor_humo
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      # Node 22 para el WebSocket nativo de la prueba de humo (no para construir: eso
+      # pasa dentro de las imágenes).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Construir la imagen de la API
+        run: docker build -f api/Dockerfile -t monitor-api .
+      - name: Construir la imagen del web (SPA + landing + Caddy, con caddy validate)
+        run: docker build -f web/Dockerfile -t monitor-web .
+      - name: Prueba de humo (producción simulada)
+        run: infra/humo-railway.sh
+        env:
+          HUMO_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_humo
+
+  # ---------------------------------------------------------------------------
   # CARRIL /agent (.NET 8 Worker Service)
   # ACTIVO desde F1-001: corre restore + build. El paso `test` lo encendió F1-020
   # (el backlog se lo asignaba a F1-021): la config, la redacción de secretos y
@@ -209,3 +262,26 @@ jobs:
       # compila en Linux de sobra para el gate del PR.
       - run: dotnet build --no-restore --configuration Release
       - run: dotnet test --no-build --configuration Release --verbosity normal
+
+  # ---------------------------------------------------------------------------
+  # INSTALADOR DEL AGENTE en Windows (instalador de un clic). Los mismos tests del
+  # instalador que el carril de arriba, pero con `powershell.exe` 5.1, el de las
+  # PCs de los restaurantes: el paso de argumentos a programas nativos (sqlcmd),
+  # la codificación y Invoke-RestMethod se portan distinto que en pwsh 7, y ahí
+  # fue donde vivió el bug de sqlcmd. Sólo el filtro `Instalador`: el resto del
+  # agente ya lo cubre el carril de Linux.
+  # ---------------------------------------------------------------------------
+  agent-instalador-windows:
+    name: Instalador del agente (Windows PowerShell 5.1)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet restore
+      - run: dotnet build --no-restore --configuration Release
+      - run: dotnet test --no-build --configuration Release --verbosity normal --filter "FullyQualifiedName~ArkonAgente.Tests.Instalador"

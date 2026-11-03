@@ -25,6 +25,7 @@ import type { PuertoPush } from './push/puerto';
 import type { PuertoTimbrado } from './timbrado/puerto';
 import { TimbradoFacturama } from './timbrado/timbrado-facturama';
 import { TimbradoFalso } from './timbrado/timbrado-falso';
+import { TimbradoNoConectado } from './timbrado/timbrado-no-conectado';
 
 /**
  * Tokens de los puertos externos (F2-202). Un servicio de negocio inyecta el TOKEN y
@@ -37,8 +38,24 @@ export const PUERTO_TIMBRADO = Symbol('PUERTO_TIMBRADO');
 export const PUERTO_CORREO = Symbol('PUERTO_CORREO');
 export const PUERTO_ARCHIVOS = Symbol('PUERTO_ARCHIVOS');
 export const PUERTO_PUSH = Symbol('PUERTO_PUSH');
+/**
+ * `true` = producción SIN PAC (`PAC_IMPL=falso` permitido en producción): las rutas que timbran
+ * responden 503 con un mensaje claro (`PacConectadoGuard`) y el puerto nunca simula.
+ */
+export const PAC_NO_CONECTADO = Symbol('PAC_NO_CONECTADO');
 
-export function crearTimbrado(config: AdaptadoresConfig, reloj: Reloj): PuertoTimbrado {
+export function pacNoConectado(
+  config: AdaptadoresConfig,
+  entorno: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return entorno.NODE_ENV === 'production' && config.pac.impl === 'falso';
+}
+
+export function crearTimbrado(
+  config: AdaptadoresConfig,
+  reloj: Reloj,
+  entorno: NodeJS.ProcessEnv = process.env,
+): PuertoTimbrado {
   const pac = config.pac;
   if (pac.impl === 'facturama') {
     const basic = Buffer.from(`${pac.usuario}:${pac.password}`).toString('base64');
@@ -48,6 +65,8 @@ export function crearTimbrado(config: AdaptadoresConfig, reloj: Reloj): PuertoTi
       reloj,
     );
   }
+  // En producción el falso NO simula: facturas inventadas no existen ante el SAT.
+  if (pacNoConectado(config, entorno)) return new TimbradoNoConectado();
   return new TimbradoFalso(reloj);
 }
 
@@ -88,7 +107,16 @@ const PROVEEDORES: Provider[] = [
   // Se lee al crear la app: una combinación prohibida (producción + falso) o una
   // credencial faltante TRUENA aquí y el arranque aborta.
   { provide: ADAPTADORES_CONFIG, useFactory: () => leerAdaptadoresConfig() },
-  { provide: PUERTO_TIMBRADO, useFactory: crearTimbrado, inject: [ADAPTADORES_CONFIG, Reloj] },
+  {
+    provide: PUERTO_TIMBRADO,
+    useFactory: (config: AdaptadoresConfig, reloj: Reloj) => crearTimbrado(config, reloj),
+    inject: [ADAPTADORES_CONFIG, Reloj],
+  },
+  {
+    provide: PAC_NO_CONECTADO,
+    useFactory: (config: AdaptadoresConfig) => pacNoConectado(config),
+    inject: [ADAPTADORES_CONFIG],
+  },
   PROVEEDOR_BANDEJA_CORREO_FALSO,
   {
     provide: PUERTO_CORREO,
@@ -102,6 +130,13 @@ const PROVEEDORES: Provider[] = [
 @Global()
 @Module({
   providers: PROVEEDORES,
-  exports: [ADAPTADORES_CONFIG, PUERTO_TIMBRADO, PUERTO_CORREO, PUERTO_ARCHIVOS, PUERTO_PUSH],
+  exports: [
+    ADAPTADORES_CONFIG,
+    PUERTO_TIMBRADO,
+    PAC_NO_CONECTADO,
+    PUERTO_CORREO,
+    PUERTO_ARCHIVOS,
+    PUERTO_PUSH,
+  ],
 })
 export class AdaptadoresModule {}

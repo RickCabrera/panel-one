@@ -21,6 +21,9 @@ export const LLAVE_EMPRESA = {
   ChequePartida: 'empresaId',
   ChequePago: 'empresaId',
   MesaSnapshot: 'empresaId',
+  // MVP de cortes. Los turnos de SR: los escribe SÓLO `EscrituraSucursal.guardarTurno`
+  // (clavada a la sucursal del agente); el panel sólo los lee.
+  Turno: 'empresaId',
   FormaPagoCatalogo: 'empresaId',
   // F1-093. Nunca se lee con scope: sólo AuthService, por `sid` y usuario.
   SesionUsuario: 'empresaId',
@@ -97,6 +100,9 @@ export const LLAVE_EMPRESA = {
   ConfiguracionFacturacion: 'empresaId',
   // F2-103: el portal público de autofactura de cada sucursal (slug y marca, dato propio).
   PortalFacturacion: 'empresaId',
+  // Instalador de un clic: los códigos de enlace (sólo su hash). Los escribe SÓLO
+  // `escritura-enlaces.ts` (emitir con scope; el canje público, por el hash del código).
+  CodigoEnlace: 'empresaId',
   // F2-104: los CFDI emitidos y sus reservas (dato propio; los escribe SÓLO
   // `EscrituraFacturacion`).
   Cfdi: 'empresaId',

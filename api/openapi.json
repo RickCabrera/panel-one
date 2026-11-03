@@ -881,6 +881,149 @@
         ]
       }
     },
+    "/sucursales/{id}/codigo-enlace": {
+      "post": {
+        "description": "Un código corto (`K7P4-42XQ`) que el instalador cambia por la API key de la sucursal en `POST /agente/enlace`. Se devuelve UNA sola vez (en la base queda su hash), sirve UNA vez y vence a los 30 min. Generar otro invalida el anterior sin usar. Generarlo NO toca la key vigente: ésa se rota hasta que el instalador canjea el código.",
+        "operationId": "SucursalCodigoEnlaceController_emitir",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodigoEnlaceEmitidoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`id` no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La sucursal no existe o es de otra empresa. Misma respuesta en los dos casos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La sucursal o su empresa están dadas de baja.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Genera el código de enlace del instalador de un clic para una sucursal.",
+        "tags": [
+          "agentes"
+        ]
+      }
+    },
+    "/agente/enlace": {
+      "post": {
+        "description": "Pública. Devuelve una API key NUEVA de la sucursal (la anterior deja de servir) y quema el código: un segundo canje es 404. Límites (una IPv6 cuenta por su /64): 20 por minuto por IP, 5 por código cada 15 min (de cualquier IP), tras 10 códigos equivocados en una hora desde la misma IP 429 por el resto de esa hora, y un cortacircuito GLOBAL: con 100 códigos equivocados en una hora entre todas las IPs, 429 para todos hasta que pase la hora. No existe, ya se usó, venció o la sucursal está dada de baja: el MISMO 404, y no cambia nada.",
+        "operationId": "CanjeEnlaceController_canjear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanjeEnlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnlaceCanjeadoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sin `codigo`, o no tiene el formato (8 de A–Z y 2–9 sin O, 0, I, 1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Código que no sirve. Mismo cuerpo siempre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Alguno de los cuatro límites."
+          }
+        },
+        "summary": "Cambia un código de enlace por la API key de su sucursal (instalador de un clic).",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
     "/ingesta/eventos": {
       "post": {
         "description": "Idempotente: reenviar el mismo lote deja exactamente los mismos datos. Cheques por (sucursal, folioSr), reemplazando partidas y pagos; snapshots por (sucursal, capturadoAt), con 24 h de histórico más el último; heartbeat al estado del agente. La sucursal sale de la API key: ningún evento manda ids de tenant. Acepta `Content-Encoding: gzip`. Todo lote con sobre válido registra además el CONTACTO del agente (reloj del servidor, `agente_contacto`; lo lee `GET /agentes/estado`), aunque sus eventos salgan rechazados. El contacto queda fuera de la idempotencia a propósito: un reenvío lo mueve, porque el agente sí volvió a hablar; los datos quedan idénticos. El heartbeat puede traer `tamanoCola` y `latenciaQueryMs` (F1-025).",
@@ -2293,6 +2436,95 @@
           }
         ],
         "summary": "Análisis (F2-221): una fila por (sucursal, mesero) con venta, cuentas, ticket promedio, comensales, propina, descuentos y cancelados.",
+        "tags": [
+          "ventas"
+        ]
+      }
+    },
+    "/ventas/meseros-en-vivo": {
+      "get": {
+        "description": "Cobrado = /ventas/por-mesero con desde = hasta = `dia` (cuentas cerradas no canceladas). En curso = las mesas abiertas del ÚLTIMO snapshot de cada sucursal (/mesas/abiertas), con su edad: el panel decide si una sucursal está desconectada. Σ cobrado = /ventas/resumen del día. Sin cache; el socket avisa con cada ingesta (docs/tiempo-real.md).",
+        "operationId": "VentasController_meserosEnVivo",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "dia",
+            "required": true,
+            "in": "query",
+            "description": "El día LOCAL (`YYYY-MM-DD`) de lo cobrado; el panel manda el \"hoy\" de la zona de la sucursal. Cada sucursal se corta en SU zona, como en /ventas/*.",
+            "schema": {
+              "example": "2026-11-03",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeserosEnVivoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Meseros en tiempo real: por (sucursal, mesero), lo cobrado del día, lo que tiene en curso en mesas abiertas, y el ranking.",
         "tags": [
           "ventas"
         ]
@@ -4106,6 +4338,39 @@
           }
         },
         "summary": "Configuración pública del servidor que la interfaz necesita antes del login.",
+        "tags": [
+          "sistema"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Pública (sin token): la consultan el healthcheck del contenedor y el monitor de disponibilidad (F1-002, F1-004). No lee ninguna tabla ni expone versión o detalles del error.",
+        "operationId": "SaludController_salud",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "La API y la base responden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaludDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "La base no contestó en 3 s: `{ status: \"error\", db: \"error\" }`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaludDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Señal de vida de la instancia: la API y su base de datos.",
         "tags": [
           "sistema"
         ]
@@ -15025,6 +15290,254 @@
           "cuenta"
         ]
       }
+    },
+    "/cortes": {
+      "get": {
+        "description": "Un turno entra si se abrió antes del fin del rango y no se cerró antes de su inicio (días locales de SU sucursal); un turno abierto que empezó antes también sale. Venta = Σ total de las cuentas no canceladas cuyo `idturno` (el del COBRO en SR) es el del turno. Orden: apertura más reciente primero; máximo 500.",
+        "operationId": "CortesController_listar",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de la sucursal (`YYYY-MM-DD`), inclusivo. Cada sucursal se corta en SU zona. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-10-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "required": true,
+            "in": "query",
+            "description": "Día LOCAL de la sucursal (`YYYY-MM-DD`), inclusivo. Cada sucursal se corta en SU zona. Rango máximo: 366 días.",
+            "schema": {
+              "example": "2026-10-31",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListaCortesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa (o el corte) no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cortes (turnos de SR) que estuvieron abiertos en el rango, con su venta.",
+        "tags": [
+          "cortes"
+        ]
+      }
+    },
+    "/cortes/en-curso": {
+      "get": {
+        "description": "Una fila por turno abierto de la empresa o de la sucursal. Vacío si no hay.",
+        "operationId": "CortesController_enCurso",
+        "parameters": [
+          {
+            "name": "empresaId",
+            "required": true,
+            "in": "query",
+            "description": "Empresa a consultar. Fuera del alcance = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "sucursalId",
+            "required": false,
+            "in": "query",
+            "description": "Una sucursal de esa empresa. Sin él, todas. De otra empresa = 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResumenCorteDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa (o el corte) no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Los turnos abiertos ahora (sin cierre), con lo cobrado hasta el momento.",
+        "tags": [
+          "cortes"
+        ]
+      }
+    },
+    "/cortes/{id}": {
+      "get": {
+        "description": "Turno abierto = acumulado en curso (sin diferencias del cuadre). Un corte de otra empresa responde 404, igual que uno que no existe.",
+        "operationId": "CortesController_detalle",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetalleCorteDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La empresa (o el corte) no existe o no está en tu alcance, o la sucursal no es de esa empresa. Misma respuesta en todos los casos (nunca 403).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalle de un corte: venta, cuentas, comensales, formas de pago, declarado vs cobrado.",
+        "tags": [
+          "cortes"
+        ]
+      }
     }
   },
   "info": {
@@ -15554,6 +16067,80 @@
           "actualizacionAutomatica"
         ]
       },
+      "CodigoEnlaceEmitidoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo": {
+            "type": "string",
+            "example": "K7P4-42XQ",
+            "description": "El código para el instalador de un clic, con guión. Se muestra SÓLO en esta respuesta: en la base queda su hash. Sirve una vez y vence en `expiraAt`."
+          },
+          "expiraAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cuándo deja de servir (UTC), a los 30 min."
+          },
+          "vigenciaSegundos": {
+            "type": "number",
+            "example": 1800,
+            "description": "Segundos de vigencia desde que se emitió."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "codigo",
+          "expiraAt",
+          "vigenciaSegundos"
+        ]
+      },
+      "CanjeEnlaceDto": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "example": "K7P4-42XQ",
+            "description": "El código del panel. Acepta minúsculas, espacios y con o sin guión."
+          }
+        },
+        "required": [
+          "codigo"
+        ]
+      },
+      "EnlaceCanjeadoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string",
+            "example": "Centro",
+            "description": "Para que el instalador diga qué conectó."
+          },
+          "apiKey": {
+            "type": "string",
+            "example": "msr_3q2-7wXz...",
+            "description": "La API key NUEVA de la sucursal, en claro y UNA sola vez. La anterior deja de servir en este momento (como `POST /sucursales/:id/api-key`)."
+          },
+          "apiUrl": {
+            "type": "string",
+            "nullable": true,
+            "example": "https://monitor.ejemplo.com",
+            "description": "La URL base de la API para `config.json` (`API_URL_PUBLICA` del despliegue). `null` si el despliegue no la define: el instalador usa la URL con la que llamó."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "apiKey",
+          "apiUrl"
+        ]
+      },
       "ModificadorDto": {
         "type": "object",
         "properties": {
@@ -15695,6 +16282,13 @@
             "example": "A01",
             "maxLength": 64,
             "description": "F2-233: el id estable del área del POS donde se atendió la cuenta (comedor, terraza, barra…), el MISMO `origenSrId` que manda el catálogo de áreas de esta sucursal. Nulo, ausente o sólo espacios = la cuenta no trae área (\"sin clasificar\"; el cheque se manda completo cada vez: omitirlo guarda nulo). No hace falta que el área ya esté en el catálogo."
+          },
+          "turnoSr": {
+            "type": "string",
+            "nullable": true,
+            "example": "12",
+            "maxLength": 64,
+            "description": "MVP de cortes: el turno de SR donde se COBRÓ la cuenta (`idturno`), el MISMO `turnoSr` que manda el evento `turno` de esta sucursal. Nulo, ausente o sólo espacios = la cuenta no lo trae (SR pone 0 mientras no se cobra; el agente manda nulo). Omitirlo guarda nulo. No hace falta que el turno ya haya llegado."
           },
           "subtotal": {
             "type": "string",
@@ -15899,6 +16493,101 @@
           "datos"
         ]
       },
+      "DatosTurnoDto": {
+        "type": "object",
+        "properties": {
+          "turnoSr": {
+            "type": "string",
+            "example": "12",
+            "description": "Llave estable del turno en SR (`turnos.idturno`). Única por sucursal: el upsert va por aquí."
+          },
+          "aperturaAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-20T19:42:10.123Z",
+            "description": "Apertura del turno. ISO-8601 con zona obligatoria (`Z` u offset). Sin zona se rechaza."
+          },
+          "cierreAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?(Z|[+-]\\d{2}:\\d{2})$",
+            "example": "2026-09-20T19:42:10.123Z",
+            "description": "Cierre (corte) del turno; nulo = turno abierto. ISO-8601 con zona obligatoria (`Z` u offset). Sin zona se rechaza.",
+            "nullable": true
+          },
+          "estacion": {
+            "type": "string",
+            "nullable": true,
+            "example": "CAJA1",
+            "maxLength": 100,
+            "description": "`turnos.idestacion` tal cual. Nulo, ausente o sólo espacios = sin estación."
+          },
+          "fondo": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "125.50",
+            "description": "Fondo inicial de caja. Importe como STRING decimal, nunca número JSON. Hasta 4 decimales; se guarda redondeado a 2 (mitad lejos de cero). Puede ser negativo."
+          },
+          "declaradoEfectivo": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "125.50",
+            "description": "Efectivo que el cajero DECLARÓ al cerrar (no lo vendido). Importe como STRING decimal, nunca número JSON. Hasta 4 decimales; se guarda redondeado a 2 (mitad lejos de cero). Puede ser negativo."
+          },
+          "declaradoTarjeta": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "125.50",
+            "description": "Tarjeta declarada. Importe como STRING decimal, nunca número JSON. Hasta 4 decimales; se guarda redondeado a 2 (mitad lejos de cero). Puede ser negativo."
+          },
+          "declaradoVales": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "125.50",
+            "description": "Vales declarados. Importe como STRING decimal, nunca número JSON. Hasta 4 decimales; se guarda redondeado a 2 (mitad lejos de cero). Puede ser negativo."
+          },
+          "declaradoCredito": {
+            "type": "string",
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "125.50",
+            "description": "Crédito declarado. Importe como STRING decimal, nunca número JSON. Hasta 4 decimales; se guarda redondeado a 2 (mitad lejos de cero). Puede ser negativo."
+          }
+        },
+        "required": [
+          "turnoSr",
+          "aperturaAt",
+          "fondo",
+          "declaradoEfectivo",
+          "declaradoTarjeta",
+          "declaradoVales",
+          "declaradoCredito"
+        ]
+      },
+      "EventoTurnoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "1042",
+            "description": "Id del evento en la cola local del agente (1..64 caracteres). Vuelve en la respuesta."
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "turno"
+            ]
+          },
+          "datos": {
+            "$ref": "#/components/schemas/DatosTurnoDto"
+          }
+        },
+        "required": [
+          "id",
+          "tipo",
+          "datos"
+        ]
+      },
       "LoteIngestaDto": {
         "type": "object",
         "properties": {
@@ -15916,6 +16605,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/EventoHeartbeatDto"
+                },
+                {
+                  "$ref": "#/components/schemas/EventoTurnoDto"
                 }
               ]
             },
@@ -17422,6 +18114,207 @@
           "cuentasConDuracion"
         ]
       },
+      "SnapshotEnVivoDto": {
+        "type": "object",
+        "properties": {
+          "capturadoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Lectura del agente (reloj del POS), UTC."
+          },
+          "recibidoAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Recepción en el API, UTC."
+          },
+          "edadRecepcionSegundos": {
+            "type": "number",
+            "description": "Segundos desde `recibidoAt` (reloj del servidor). El panel decide con esto si la sucursal está desconectada (mismo umbral que el Monitor de mesas)."
+          }
+        },
+        "required": [
+          "capturadoAt",
+          "recibidoAt",
+          "edadRecepcionSegundos"
+        ]
+      },
+      "SucursalEnVivoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City"
+          },
+          "snapshot": {
+            "nullable": true,
+            "description": "El último snapshot de mesas, o null si nunca ha llegado uno.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SnapshotEnVivoDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sucursalId",
+          "nombre",
+          "zonaHoraria",
+          "snapshot"
+        ]
+      },
+      "MeseroEnVivoDto": {
+        "type": "object",
+        "properties": {
+          "posicion": {
+            "type": "number",
+            "nullable": true,
+            "description": "Lugar dentro de SU sucursal por total (cobrado + en curso). Null = sin mesero."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "mesero": {
+            "type": "string",
+            "nullable": true,
+            "description": "Texto del POS (recortado). Null = cuentas o mesas sin mesero."
+          },
+          "cobrado": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de sus cuentas cerradas del día (= su venta en /ventas/por-mesero)."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas cerradas del día (no canceladas)."
+          },
+          "comensales": {
+            "type": "number",
+            "description": "Comensales de sus cuentas cerradas del día."
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "nullable": true,
+            "description": "cobrado / cuentas; null sin cuentas."
+          },
+          "mesasAbiertas": {
+            "type": "number",
+            "description": "Mesas abiertas que atiende en el último snapshot."
+          },
+          "enCurso": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ de los totales legibles de sus mesas abiertas."
+          },
+          "mesasSinTotal": {
+            "type": "number",
+            "description": "Mesas abiertas suyas sin total legible (no entran en enCurso)."
+          },
+          "comensalesEnMesa": {
+            "type": "number",
+            "description": "Comensales en sus mesas abiertas."
+          },
+          "total": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "cobrado + enCurso."
+          }
+        },
+        "required": [
+          "posicion",
+          "sucursalId",
+          "sucursal",
+          "mesero",
+          "cobrado",
+          "cuentas",
+          "comensales",
+          "ticketPromedio",
+          "mesasAbiertas",
+          "enCurso",
+          "mesasSinTotal",
+          "comensalesEnMesa",
+          "total"
+        ]
+      },
+      "TotalesEnVivoDto": {
+        "type": "object",
+        "properties": {
+          "cobrado": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ cobrado = la venta de /ventas/resumen del día."
+          },
+          "cuentas": {
+            "type": "number"
+          },
+          "enCurso": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "mesasAbiertas": {
+            "type": "number"
+          },
+          "mesasSinTotal": {
+            "type": "number"
+          },
+          "total": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          }
+        },
+        "required": [
+          "cobrado",
+          "cuentas",
+          "enCurso",
+          "mesasAbiertas",
+          "mesasSinTotal",
+          "total"
+        ]
+      },
+      "MeserosEnVivoDto": {
+        "type": "object",
+        "properties": {
+          "dia": {
+            "type": "string",
+            "example": "2026-11-03"
+          },
+          "sucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalEnVivoDto"
+            }
+          },
+          "meseros": {
+            "description": "Orden: total desc, cobrado desc, sucursal, mesero (sin mesero al final).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeseroEnVivoDto"
+            }
+          },
+          "totales": {
+            "$ref": "#/components/schemas/TotalesEnVivoDto"
+          }
+        },
+        "required": [
+          "dia",
+          "sucursales",
+          "meseros",
+          "totales"
+        ]
+      },
       "ProductoAnalisisDto": {
         "type": "object",
         "properties": {
@@ -18835,6 +19728,33 @@
         "required": [
           "modoDemo",
           "colorAcento"
+        ]
+      },
+      "SaludDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "description": "`ok` si la API y su base responden; `error` si la base no contestó.",
+            "example": "ok"
+          },
+          "db": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "description": "`ok` si la base contestó `SELECT 1` en menos de 3 s.",
+            "example": "ok"
+          }
+        },
+        "required": [
+          "status",
+          "db"
         ]
       },
       "TipoAlerta": {
@@ -28884,6 +29804,334 @@
         },
         "required": [
           "membresia"
+        ]
+      },
+      "ResumenCorteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Id del corte en el panel (para el detalle)."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA de la sucursal."
+          },
+          "turnoSr": {
+            "type": "string",
+            "example": "12",
+            "description": "`turnos.idturno` de SoftRestaurant."
+          },
+          "aperturaAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Apertura del turno, UTC."
+          },
+          "cierreAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cierre (corte) del turno, UTC. Null = turno abierto."
+          },
+          "abierto": {
+            "type": "boolean",
+            "description": "Turno sin cierre: las cifras son el acumulado en curso."
+          },
+          "estacion": {
+            "type": "string",
+            "nullable": true,
+            "description": "`turnos.idestacion` de SR."
+          },
+          "fondo": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Fondo inicial de caja."
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total (sin propina) de las cuentas NO canceladas cobradas en el turno (`idturno` del cobro). Es la cifra que cuadra con el Corte X de SR."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas no canceladas cobradas en el turno."
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "nullable": true,
+            "description": "venta / cuentas; null sin cuentas."
+          },
+          "posiblementeIncompleto": {
+            "type": "boolean",
+            "description": "El turno se CERRÓ antes de que llegara a la API el primer turno de su sucursal (antes de que el agente mandara turnos y el turno de cada cuenta): sus cuentas pueden no estar ligadas y la venta puede salir incompleta. Un turno abierto nunca lo es."
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "sucursal",
+          "zonaHoraria",
+          "turnoSr",
+          "aperturaAt",
+          "cierreAt",
+          "abierto",
+          "estacion",
+          "fondo",
+          "venta",
+          "cuentas",
+          "ticketPromedio",
+          "posiblementeIncompleto"
+        ]
+      },
+      "ListaCortesDto": {
+        "type": "object",
+        "properties": {
+          "cortes": {
+            "description": "Apertura más reciente primero.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResumenCorteDto"
+            }
+          },
+          "truncado": {
+            "type": "boolean",
+            "description": "Hubo más de 500 turnos en el rango: sólo salen los más recientes."
+          }
+        },
+        "required": [
+          "cortes",
+          "truncado"
+        ]
+      },
+      "ComensalesCorteDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "cuentasConDato": {
+            "type": "number",
+            "description": "Cuentas que traían comensales (SR puede no reportarlos)."
+          }
+        },
+        "required": [
+          "total",
+          "cuentasConDato"
+        ]
+      },
+      "DescuentosCorteDto": {
+        "type": "object",
+        "properties": {
+          "monto": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Pesos, 2 decimales, en texto."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas con descuento distinto de cero."
+          }
+        },
+        "required": [
+          "monto",
+          "cuentas"
+        ]
+      },
+      "CanceladosCorteDto": {
+        "type": "object",
+        "properties": {
+          "cuentas": {
+            "type": "number"
+          },
+          "monto": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total de las canceladas del turno (no suman)."
+          }
+        },
+        "required": [
+          "cuentas",
+          "monto"
+        ]
+      },
+      "RenglonCuadreDto": {
+        "type": "object",
+        "properties": {
+          "concepto": {
+            "type": "string",
+            "enum": [
+              "efectivo",
+              "tarjeta",
+              "vales",
+              "credito",
+              "total"
+            ]
+          },
+          "declarado": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Lo que el cajero DECLARÓ en SR al cerrar el turno."
+          },
+          "cobrado": {
+            "type": "string",
+            "nullable": true,
+            "description": "Lo cobrado en el turno por esa forma (pagos, sin propina ni cambio). Null si SR declara un concepto sin forma equivalente en el panel (vales, crédito)."
+          },
+          "diferencia": {
+            "type": "string",
+            "nullable": true,
+            "description": "declarado − cobrado. Null sin cobrado comparable o con el turno abierto. SUPUESTO: no se ha visto si el efectivo declarado en SR incluye fondo o propinas (esquema-sr.md §2)."
+          }
+        },
+        "required": [
+          "concepto",
+          "declarado",
+          "cobrado",
+          "diferencia"
+        ]
+      },
+      "DetalleCorteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Id del corte en el panel (para el detalle)."
+          },
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string"
+          },
+          "zonaHoraria": {
+            "type": "string",
+            "example": "America/Mexico_City",
+            "description": "Zona IANA de la sucursal."
+          },
+          "turnoSr": {
+            "type": "string",
+            "example": "12",
+            "description": "`turnos.idturno` de SoftRestaurant."
+          },
+          "aperturaAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Apertura del turno, UTC."
+          },
+          "cierreAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cierre (corte) del turno, UTC. Null = turno abierto."
+          },
+          "abierto": {
+            "type": "boolean",
+            "description": "Turno sin cierre: las cifras son el acumulado en curso."
+          },
+          "estacion": {
+            "type": "string",
+            "nullable": true,
+            "description": "`turnos.idestacion` de SR."
+          },
+          "fondo": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Fondo inicial de caja."
+          },
+          "venta": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ total (sin propina) de las cuentas NO canceladas cobradas en el turno (`idturno` del cobro). Es la cifra que cuadra con el Corte X de SR."
+          },
+          "cuentas": {
+            "type": "number",
+            "description": "Cuentas no canceladas cobradas en el turno."
+          },
+          "ticketPromedio": {
+            "type": "string",
+            "nullable": true,
+            "description": "venta / cuentas; null sin cuentas."
+          },
+          "posiblementeIncompleto": {
+            "type": "boolean",
+            "description": "El turno se CERRÓ antes de que llegara a la API el primer turno de su sucursal (antes de que el agente mandara turnos y el turno de cada cuenta): sus cuentas pueden no estar ligadas y la venta puede salir incompleta. Un turno abierto nunca lo es."
+          },
+          "comensales": {
+            "$ref": "#/components/schemas/ComensalesCorteDto"
+          },
+          "propina": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ propina de las cuentas cobradas en el turno."
+          },
+          "descuentos": {
+            "$ref": "#/components/schemas/DescuentosCorteDto"
+          },
+          "cancelados": {
+            "$ref": "#/components/schemas/CanceladosCorteDto"
+          },
+          "formasPago": {
+            "description": "Lo cobrado por forma de pago, con el catálogo de la empresa aplicado al leer.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FormasPagoDto"
+              }
+            ]
+          },
+          "cobrado": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Σ pagos de las cuentas no canceladas del turno (= Σ de `formasPago`)."
+          },
+          "cuadre": {
+            "description": "Declarado por el cajero contra lo cobrado: efectivo, tarjeta, vales, crédito, total.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RenglonCuadreDto"
+            }
+          },
+          "topProductos": {
+            "description": "Los 10 productos con más importe en el turno (por nombre).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductoTopDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "sucursalId",
+          "sucursal",
+          "zonaHoraria",
+          "turnoSr",
+          "aperturaAt",
+          "cierreAt",
+          "abierto",
+          "estacion",
+          "fondo",
+          "venta",
+          "cuentas",
+          "ticketPromedio",
+          "posiblementeIncompleto",
+          "comensales",
+          "propina",
+          "descuentos",
+          "cancelados",
+          "formasPago",
+          "cobrado",
+          "cuadre",
+          "topProductos"
         ]
       }
     }

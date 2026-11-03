@@ -5,6 +5,7 @@ import { RelojModule } from '../comun/reloj';
 import { PrismaModule } from '../prisma/prisma.module';
 import {
   AdaptadoresModule,
+  PAC_NO_CONECTADO,
   PUERTO_ARCHIVOS,
   PUERTO_CORREO,
   PUERTO_PUSH,
@@ -21,6 +22,10 @@ import type { PuertoPush } from './push/puerto';
 import type { PuertoTimbrado } from './timbrado/puerto';
 import { TimbradoFacturama } from './timbrado/timbrado-facturama';
 import { TimbradoFalso } from './timbrado/timbrado-falso';
+import {
+  MENSAJE_FACTURACION_NO_CONECTADA,
+  TimbradoNoConectado,
+} from './timbrado/timbrado-no-conectado';
 
 /**
  * Un "servicio de negocio" de prueba: inyecta los TOKENS y tipa con las interfaces,
@@ -56,6 +61,7 @@ const VARIABLES = [
   'PUSH_DIR_FALSO',
   'PUSH_HOSTS_PERMITIDOS',
   'MODO_DEMO',
+  'PERMITIR_FALSOS_EN_PRODUCCION',
 ] as const;
 
 const REALES: Record<string, string> = {
@@ -95,12 +101,15 @@ describe('AdaptadoresModule (F2-202)', () => {
     Object.assign(process.env, { NODE_ENV: 'test', ...valores });
   }
 
-  async function servicio(): Promise<ServicioDeNegocio> {
-    const modulo = await Test.createTestingModule({
+  async function compilar() {
+    return Test.createTestingModule({
       imports: [PrismaModule, RelojModule, AdaptadoresModule],
       providers: [ServicioDeNegocio],
     }).compile();
-    return modulo.get(ServicioDeNegocio);
+  }
+
+  async function servicio(): Promise<ServicioDeNegocio> {
+    return (await compilar()).get(ServicioDeNegocio);
   }
 
   it('sin variables, el servicio recibe los cuatro falsos', async () => {
@@ -154,5 +163,32 @@ describe('AdaptadoresModule (F2-202)', () => {
   it('NODE_ENV=production sin ninguna variable: no compila', async () => {
     entorno({ NODE_ENV: 'production' });
     await expect(servicio()).rejects.toThrow(/PAC_IMPL=falso.*NODE_ENV=production/);
+  });
+
+  it('producción con el PAC falso PERMITIDO: el puerto NUNCA simula, truena con el mensaje claro', async () => {
+    entorno({
+      NODE_ENV: 'production',
+      PERMITIR_FALSOS_EN_PRODUCCION: 'PAC_IMPL,CORREO_IMPL,ARCHIVOS_IMPL,PUSH_IMPL',
+    });
+    const modulo = await compilar();
+    const s = modulo.get(ServicioDeNegocio);
+    expect(s.timbrado).toBeInstanceOf(TimbradoNoConectado);
+    expect(modulo.get(PAC_NO_CONECTADO)).toBe(true);
+    // Los otros tres sí quedan en falso (correo a su bandeja, archivos a disco efímero).
+    expect(s.correo).toBeInstanceOf(CorreoFalso);
+    await expect(s.timbrado.emitir({} as never)).rejects.toMatchObject({
+      codigo: 'PAC_SIN_CONEXION',
+      reintentable: false,
+      message: MENSAJE_FACTURACION_NO_CONECTADA,
+    });
+  });
+
+  it('fuera de producción el PAC falso sigue simulando, y con PAC real no hay bloqueo', async () => {
+    entorno({});
+    expect((await compilar()).get(PAC_NO_CONECTADO)).toBe(false);
+    entorno({ ...REALES, NODE_ENV: 'production' });
+    const modulo = await compilar();
+    expect(modulo.get(PAC_NO_CONECTADO)).toBe(false);
+    expect(modulo.get(ServicioDeNegocio).timbrado).toBeInstanceOf(TimbradoFacturama);
   });
 });

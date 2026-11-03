@@ -34,6 +34,7 @@ import {
   type FacturaEmitidaAdmin,
   type ResultadoRefacturacion,
 } from './emision-admin.service';
+import { RequierePacConectado } from './pac-conectado.guard';
 
 const DESC_AMBIGUO =
   'El PAC no confirmó a tiempo (la factura pudo emitirse): no la vuelvas a pedir sin revisar la ' +
@@ -60,6 +61,7 @@ export class EmisionAdminController {
   constructor(private readonly emision: EmisionAdminService) {}
 
   @Post('cfdis/manual')
+  @RequierePacConectado()
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({
     summary: 'Factura sin ticket: emite un CFDI por un importe capturado a mano (F2-107).',
@@ -91,6 +93,7 @@ export class EmisionAdminController {
   }
 
   @Post('cfdis/:id/refacturar')
+  @RequierePacConectado()
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({
     summary:

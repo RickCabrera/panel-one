@@ -171,7 +171,10 @@ function New-ContenidoConfig {
     param(
         [Parameter(Mandatory)] [string] $ApiUrl,
         [Parameter(Mandatory)] [string] $ApiKey,
-        [Parameter(Mandatory)] [string] $Cadena
+        [Parameter(Mandatory)] [string] $Cadena,
+        # Opcional: la hora de la sincronización diaria de catálogos ("HH:mm"). El instalador de un
+        # clic la conserva al reinstalar si el config anterior la traía. Inválida = no se escribe.
+        [AllowEmptyString()] [AllowNull()] [string] $HoraCatalogos
     )
 
     # intervaloSegundos 30: el panel marca "desconectado" a los 90 s fijos (F1-061).
@@ -179,11 +182,16 @@ function New-ContenidoConfig {
         '{',
         ('  "apiUrl": ' + (ConvertTo-TextoJson $ApiUrl.Trim()) + ','),
         ('  "apiKey": ' + (ConvertTo-TextoJson $ApiKey.Trim()) + ','),
-        ('  "connectionString": ' + (ConvertTo-TextoJson $Cadena) + ','),
-        '  "intervaloSegundos": 30',
-        '}',
-        ''
+        ('  "connectionString": ' + (ConvertTo-TextoJson $Cadena) + ',')
     )
+    if ($HoraCatalogos -and $HoraCatalogos -match '^([01][0-9]|2[0-3]):[0-5][0-9]$') {
+        $lineas += '  "intervaloSegundos": 30,'
+        $lineas += ('  "horaSincronizacionCatalogos": ' + (ConvertTo-TextoJson $HoraCatalogos))
+    }
+    else {
+        $lineas += '  "intervaloSegundos": 30'
+    }
+    $lineas += @('}', '')
     return ($lineas -join "`r`n")
 }
 
@@ -267,6 +275,373 @@ function ConvertTo-ServidorLocal {
         return '.\' + $NombreServicioSql.Substring(6)
     }
     return $null
+}
+
+# --- Instalador de un clic: código de enlace, contraseña y paquete (puras) -------------
+
+# El código de enlace que da el panel (Administración > Sucursales > Conectar sucursal): 6 de
+# A-Z y 2-9 sin O, 0, I, 1, mostrado como K7P4-42XQ. La misma regla que la API (codigo-enlace.ts).
+$script:RegexCodigoEnlace = '^[A-HJ-NP-Z2-9]{8}$'
+
+# Lo que alguien teclea: sin espacios ni guiones, en mayúsculas.
+function ConvertTo-CodigoEnlace {
+    param([AllowEmptyString()] [AllowNull()] [string] $Texto)
+
+    if ([string]::IsNullOrEmpty($Texto)) { return '' }
+    return ($Texto -replace '[\s-]', '').ToUpperInvariant()
+}
+
+function Test-CodigoEnlace {
+    param([AllowEmptyString()] [AllowNull()] [string] $Texto)
+
+    $codigo = ConvertTo-CodigoEnlace $Texto
+    if ($codigo -cnotmatch $script:RegexCodigoEnlace) {
+        return 'El código tiene 8 letras y números, como K7P4-42XQ (no lleva O, 0, I ni 1). Revísalo en el panel.'
+    }
+    return $null
+}
+
+# Contraseña ALEATORIA del lector para el instalador de un clic: nadie la ve ni la escribe. Cumple
+# Test-PasswordNueva (sólo letras sin acento, números y los símbolos que no hay que escapar) y la
+# política de complejidad de Windows (CHECK_POLICY = ON): al menos una minúscula, una mayúscula, un
+# número y un símbolo. Generador criptográfico, sin sesgo de módulo.
+function New-PasswordLector {
+    param([ValidateRange(16, 64)] [int] $Largo = 32)
+
+    $grupos = @('abcdefghijkmnopqrstuvwxyz', 'ABCDEFGHJKLMNPQRSTUVWXYZ', '23456789', '-_.!@#*+=?')
+    $todos = -join $grupos
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $byte = New-Object byte[] 1
+        $chars = New-Object System.Collections.Generic.List[char]
+        $indice = {
+            param([int] $n)
+            $tope = 256 - (256 % $n)
+            do { $rng.GetBytes($byte) } while ([int] $byte[0] -ge $tope)
+            [int] $byte[0] % $n
+        }
+        foreach ($g in $grupos) { $chars.Add($g[(& $indice $g.Length)]) }
+        while ($chars.Count -lt $Largo) { $chars.Add($todos[(& $indice $todos.Length)]) }
+        # Fisher-Yates: que los obligatorios no queden siempre al principio.
+        for ($i = $chars.Count - 1; $i -gt 0; $i--) {
+            $j = & $indice ($i + 1)
+            $tmp = $chars[$i]
+            $chars[$i] = $chars[$j]
+            $chars[$j] = $tmp
+        }
+        return (-join $chars)
+    }
+    finally {
+        $rng.Dispose()
+    }
+}
+
+# Las bases que parecen de SoftRestaurant (softrestaurant10, SoftRestaurant11...).
+function Select-BaseSoftRestaurant {
+    param([AllowEmptyCollection()] [AllowNull()] [string[]] $Bases)
+
+    if ($null -eq $Bases) { return , @() }
+    return , @($Bases | Where-Object { $_ -like 'softrestaurant*' })
+}
+
+# La URL del panel que trae el paquete (archivos\instalador.json, la escribe
+# empaquetar-instalador.ps1). $null si no hay archivo; lanza si el archivo está mal.
+function Read-ConfigPaquete {
+    param([Parameter(Mandatory)] [string] $Carpeta)
+
+    $ruta = Join-Path $Carpeta 'instalador.json'
+    if (-not (Test-Path -LiteralPath $ruta -PathType Leaf)) { return $null }
+    $obj = [System.IO.File]::ReadAllText($ruta) | ConvertFrom-Json
+    $url = Get-CampoTexto $obj 'apiUrl'
+    $problema = Test-ApiUrl $url
+    if ($problema) { throw "instalador.json trae una dirección del panel inválida: $problema" }
+    return $url.Trim().TrimEnd('/')
+}
+
+# Lee un config.json existente (el que escribió un instalador anterior). $null si no existe o no
+# se entiende. El instalador de un clic lo usa para conservar lo que no pregunta.
+function Read-ConfigExistente {
+    param([Parameter(Mandatory)] [string] $Ruta)
+
+    if (-not (Test-Path -LiteralPath $Ruta -PathType Leaf)) { return $null }
+    try {
+        return ([System.IO.File]::ReadAllText($Ruta) | ConvertFrom-Json)
+    }
+    catch {
+        return $null
+    }
+}
+
+# Un campo de texto de un objeto (de JSON) o $null, sin tronar con StrictMode si no existe.
+function Get-CampoTexto {
+    param($Objeto, [Parameter(Mandatory)] [string] $Nombre)
+
+    if ($null -eq $Objeto) { return $null }
+    $prop = $Objeto.PSObject.Properties[$Nombre]
+    if ($null -eq $prop -or $null -eq $prop.Value) { return $null }
+    return [string] $prop.Value
+}
+
+# --- sqlcmd -----------------------------------------------------------------------------
+
+# Los argumentos COMPLETOS de sqlcmd como arreglo, uno por elemento. Nada de splatting de un valor
+# suelto ni de elementos vacíos: con autenticación de Windows, crear-usuario-lector.ps1 armaba el
+# acceso aparte (`@acceso`) y sqlcmd recibía un argumento en blanco ("Unknown Option"). Un
+# argumento vacío aquí es un error de programación y truena ANTES de llamar a sqlcmd.
+function Get-ArgumentosSqlcmd {
+    param(
+        [Parameter(Mandatory)] [string] $Servidor,
+        [AllowEmptyString()] [AllowNull()] [string] $UsuarioAdmin,
+        [AllowEmptyCollection()] [string[]] $Extra = @()
+    )
+
+    $lista = New-Object System.Collections.Generic.List[string]
+    $lista.Add('-S')
+    $lista.Add($Servidor.Trim())
+    if ([string]::IsNullOrWhiteSpace($UsuarioAdmin)) {
+        $lista.Add('-E')
+    }
+    else {
+        # La contraseña NO va aquí: sqlcmd la toma de SQLCMDPASSWORD (no queda en la línea de comando).
+        $lista.Add('-U')
+        $lista.Add($UsuarioAdmin.Trim())
+    }
+    foreach ($a in $Extra) {
+        if ([string]::IsNullOrWhiteSpace($a)) {
+            throw "Argumento vacío para sqlcmd después de '$($lista[$lista.Count - 1])'."
+        }
+        $lista.Add($a)
+    }
+    return , $lista.ToArray()
+}
+
+# Corre sqlcmd con un arreglo de argumentos (cada elemento, un argumento) y devuelve el código y
+# la salida (stdout + stderr).
+function Invoke-ProgramaSqlcmd {
+    param(
+        [Parameter(Mandatory)] [string] $Sqlcmd,
+        [Parameter(Mandatory)] [string[]] $Argumentos
+    )
+
+    # En 5.1, con 'Stop', una línea de stderr de un exe con 2>&1 corta el script.
+    $ErrorActionPreference = 'Continue'
+    $salida = & $Sqlcmd $Argumentos 2>&1
+    $codigo = $LASTEXITCODE
+    return [pscustomobject]@{
+        Codigo = $codigo
+        Salida = @($salida | ForEach-Object { "$_" })
+    }
+}
+
+# Sólo LEE la lista de bases (sys.databases), para no tener que adivinar el nombre.
+function Get-BasesSql {
+    param(
+        [Parameter(Mandatory)] [string] $Sqlcmd,
+        [Parameter(Mandatory)] [string] $Servidor,
+        [AllowEmptyString()] [AllowNull()] [string] $UsuarioAdmin
+    )
+
+    $consulta = 'SET NOCOUNT ON; SELECT name FROM sys.databases WHERE database_id > 4 AND state = 0 ORDER BY name;'
+    $argumentos = Get-ArgumentosSqlcmd -Servidor $Servidor -UsuarioAdmin $UsuarioAdmin `
+        -Extra @('-b', '-l', '10', '-t', '10', '-h', '-1', '-W', '-Q', $consulta)
+    $r = Invoke-ProgramaSqlcmd -Sqlcmd $Sqlcmd -Argumentos $argumentos
+    if ($r.Codigo -ne 0) {
+        throw ("No se pudo entrar al SQL Server '$Servidor': " + (($r.Salida -join ' ').Trim()))
+    }
+    return , @($r.Salida | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
+# Sólo LEE (funciones de sistema, ninguna tabla de SoftRestaurant): ¿quien entra puede crear el
+# login y el usuario en esa base? ¿el servidor sólo acepta usuarios de Windows? Así el instalador
+# de un clic sabe ANTES de gastar el código si va a poder crear el lector (o si tiene que pedir sa).
+function Get-PermisosLector {
+    param(
+        [Parameter(Mandatory)] [string] $Sqlcmd,
+        [Parameter(Mandatory)] [string] $Servidor,
+        [Parameter(Mandatory)] [string] $Base,
+        [AllowEmptyString()] [AllowNull()] [string] $UsuarioAdmin
+    )
+
+    $problema = Test-NombreBase $Base
+    if ($problema) { throw $problema }
+    # $Base ya pasó la lista cerrada de Test-NombreBase: no puede cerrar la comilla.
+    $consulta = "SET NOCOUNT ON; SELECT CAST(ISNULL(HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY LOGIN'), 0) AS int) * CAST(ISNULL(HAS_PERMS_BY_NAME(N'$Base', 'DATABASE', 'ALTER ANY USER'), 0) AS int), CAST(SERVERPROPERTY('IsIntegratedSecurityOnly') AS int);"
+    $argumentos = Get-ArgumentosSqlcmd -Servidor $Servidor -UsuarioAdmin $UsuarioAdmin `
+        -Extra @('-b', '-l', '10', '-t', '10', '-h', '-1', '-W', '-s', '|', '-Q', $consulta)
+    $r = Invoke-ProgramaSqlcmd -Sqlcmd $Sqlcmd -Argumentos $argumentos
+    if ($r.Codigo -ne 0) {
+        throw ("No se pudo consultar los permisos en '$Servidor': " + (($r.Salida -join ' ').Trim()))
+    }
+    $fila = @($r.Salida | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+\|\d+$' }) | Select-Object -First 1
+    if (-not $fila) {
+        throw ('Respuesta inesperada de sqlcmd al consultar permisos: ' + (($r.Salida -join ' ').Trim()))
+    }
+    $partes = $fila.Split('|')
+    return [pscustomobject]@{
+        PuedeCrear  = ($partes[0] -eq '1')
+        SoloWindows = ($partes[1] -eq '1')
+    }
+}
+
+# Corre crear-usuario-lector.sql. La contraseña nueva y la base van por variable de entorno (no
+# quedan en la línea de comando); la de sa, si se usa, ya viene en SQLCMDPASSWORD.
+function Invoke-CrearLectorSql {
+    param(
+        [Parameter(Mandatory)] [string] $Sqlcmd,
+        [Parameter(Mandatory)] [string] $ArchivoSql,
+        [Parameter(Mandatory)] [string] $Servidor,
+        [Parameter(Mandatory)] [string] $Base,
+        [Parameter(Mandatory)] [string] $Password,
+        [AllowEmptyString()] [AllowNull()] [string] $UsuarioAdmin
+    )
+
+    $env:BASE_SR = $Base
+    $env:PASSWORD_LECTOR = $Password
+    try {
+        # -t 30: CREATE USER y sp_addrolemember toman bloqueos de metadatos en la base del POS; si
+        # algo los hace esperar, mejor fallar que quedarse colgado.
+        $argumentos = Get-ArgumentosSqlcmd -Servidor $Servidor -UsuarioAdmin $UsuarioAdmin `
+            -Extra @('-b', '-l', '10', '-t', '30', '-i', $ArchivoSql)
+        return (Invoke-ProgramaSqlcmd -Sqlcmd $Sqlcmd -Argumentos $argumentos)
+    }
+    finally {
+        Remove-Item Env:\PASSWORD_LECTOR -ErrorAction SilentlyContinue
+        Remove-Item Env:\BASE_SR -ErrorAction SilentlyContinue
+    }
+}
+
+# Sólo LEE: ¿el login monitor_lector ya entra con ESTA contraseña? (SELECT 1 en master). Sirve
+# para saber, tras un crear-usuario-lector.sql que falló a medias (ALTER LOGIN sí, CREATE USER o
+# sp_addrolemember no), cuál contraseña vale: no dejar en config.json una que el SQL ya no acepta.
+# La contraseña va por SQLCMDPASSWORD (nunca en la línea de comando) y se restaura la anterior.
+function Test-LoginLector {
+    param(
+        [Parameter(Mandatory)] [string] $Sqlcmd,
+        [Parameter(Mandatory)] [string] $Servidor,
+        [Parameter(Mandatory)] [string] $Password
+    )
+
+    $previa = $env:SQLCMDPASSWORD
+    $env:SQLCMDPASSWORD = $Password
+    try {
+        $argumentos = Get-ArgumentosSqlcmd -Servidor $Servidor -UsuarioAdmin $script:UsuarioLectorPorDefecto `
+            -Extra @('-b', '-l', '10', '-t', '10', '-d', 'master', '-Q', 'SET NOCOUNT ON; SELECT 1;')
+        return ((Invoke-ProgramaSqlcmd -Sqlcmd $Sqlcmd -Argumentos $argumentos).Codigo -eq 0)
+    }
+    catch {
+        return $false
+    }
+    finally {
+        if ($null -ne $previa) { $env:SQLCMDPASSWORD = $previa }
+        else { Remove-Item Env:\SQLCMDPASSWORD -ErrorAction SilentlyContinue }
+    }
+}
+
+# DECISION PROVISIONAL (nocturno): ¿el servicio no arrancó porque su cuenta no pudo INICIAR
+# SESIÓN? Errores de Windows 1069 (ERROR_SERVICE_LOGON_FAILED) y 1079 (la cuenta difiere de la de
+# otros servicios del mismo proceso), en la excepción o en cualquiera de sus internas (Start-Service
+# envuelve la Win32Exception). Es el ÚNICO caso en que el instalador de un clic reintenta con
+# LocalSystem: más privilegios no arreglan ninguna otra caída. Sin verificar en Windows (F1-020b).
+function Test-FallaInicioSesionServicio {
+    param([AllowNull()] $Excepcion)
+
+    $e = $Excepcion
+    while ($null -ne $e) {
+        if ($e -is [System.ComponentModel.Win32Exception] -and
+            ($e.NativeErrorCode -eq 1069 -or $e.NativeErrorCode -eq 1079)) {
+            return $true
+        }
+        $e = $e.InnerException
+    }
+    return $false
+}
+
+# sqlcmd viene con SQL Server (también con el Express de SoftRestaurant) pero no siempre
+# está en el PATH.
+# ⚠️ SUPUESTO (docs/esquema-sr.md §11): el SQL Express de SoftRestaurant trae sqlcmd.
+function Find-Sqlcmd {
+    $comando = Get-Command 'sqlcmd.exe' -ErrorAction SilentlyContinue
+    if ($comando) { return $comando.Source }
+
+    $raices = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }
+    foreach ($raiz in $raices) {
+        $candidatos = @(
+            Get-ChildItem -Path (Join-Path $raiz 'Microsoft SQL Server') -Filter 'sqlcmd.exe' -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match '\\Tools\\Binn\\' } |
+                Sort-Object FullName -Descending
+        )
+        if ($candidatos.Count -gt 0) { return $candidatos[0].FullName }
+    }
+    return $null
+}
+
+# --- API del panel: canje del código de enlace ---------------------------------------------
+
+# Cambia el código por la API key de la sucursal (POST {ApiUrl}/agente/enlace). Nunca lanza:
+# devuelve @{ Ok; ApiKey; ApiUrl; Sucursal; Estado; Mensaje }. Con Ok = $false, Mensaje dice qué
+# pasó y qué hacer. La key nunca se escribe en pantalla.
+function Invoke-CanjeCodigoEnlace {
+    param(
+        [Parameter(Mandatory)] [string] $ApiUrl,
+        [Parameter(Mandatory)] [string] $Codigo,
+        [int] $TimeoutSegundos = 30
+    )
+
+    # PowerShell 5.1 en un Windows viejo ofrece TLS 1.0 por defecto y el panel exige 1.2.
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    }
+    catch {
+        Write-Verbose 'No se pudo activar TLS 1.2 (PowerShell 7 ya lo trae).'
+    }
+
+    $base = $ApiUrl.Trim().TrimEnd('/')
+    $url = $base + '/agente/enlace'
+    $cuerpo = '{"codigo":' + (ConvertTo-TextoJson (ConvertTo-CodigoEnlace $Codigo)) + '}'
+
+    try {
+        $r = Invoke-RestMethod -Uri $url -Method Post -ContentType 'application/json; charset=utf-8' `
+            -Body ([System.Text.Encoding]::UTF8.GetBytes($cuerpo)) -TimeoutSec $TimeoutSegundos -UseBasicParsing
+    }
+    catch {
+        $estado = $null
+        $respuesta = $_.Exception.PSObject.Properties['Response']
+        if ($respuesta -and $respuesta.Value) {
+            try { $estado = [int] $respuesta.Value.StatusCode } catch { $estado = $null }
+        }
+        $mensaje = if ($null -eq $estado) {
+            "No pude llegar al panel en $base. Revisa que esta PC tenga internet. Detalle: $($_.Exception.Message)"
+        }
+        elseif ($estado -eq 404) {
+            'El código no sirve: está mal escrito, ya se usó o ya venció (dura 30 minutos). Genera uno nuevo en el panel: Administración > Sucursales > Conectar sucursal.'
+        }
+        elseif ($estado -eq 400) {
+            'El panel dice que el código no tiene el formato correcto. Cópialo otra vez del panel (8 letras y números, como K7P4-42XQ).'
+        }
+        elseif ($estado -eq 429) {
+            'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentar; si sigue, llama a soporte.'
+        }
+        else {
+            "El panel respondió un error ($estado). Intenta en unos minutos; si sigue, llama a soporte."
+        }
+        return [pscustomobject]@{ Ok = $false; ApiKey = $null; ApiUrl = $null; Sucursal = $null; Estado = $estado; Mensaje = $mensaje }
+    }
+
+    $apiKey = Get-CampoTexto $r 'apiKey'
+    if (-not $apiKey -or (Test-ApiKey $apiKey)) {
+        return [pscustomobject]@{ Ok = $false; ApiKey = $null; ApiUrl = $null; Sucursal = $null; Estado = 200; Mensaje = 'El panel respondió algo que no entiendo (sin API key). Llama a soporte.' }
+    }
+    # La URL que dice el panel (API_URL_PUBLICA) manda; si no la dice o es inválida, la del paquete.
+    $urlRespuesta = Get-CampoTexto $r 'apiUrl'
+    $urlFinal = if ($urlRespuesta -and -not (Test-ApiUrl $urlRespuesta)) { $urlRespuesta.Trim().TrimEnd('/') } else { $base }
+    return [pscustomobject]@{
+        Ok       = $true
+        ApiKey   = $apiKey
+        ApiUrl   = $urlFinal
+        Sucursal = (Get-CampoTexto $r 'sucursal')
+        Estado   = 200
+        Mensaje  = $null
+    }
 }
 
 # --- Interacción y sistema (no puras: no las corren los tests) ------------------------

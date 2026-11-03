@@ -101,6 +101,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'clienteCatalogo',
       // F2-101: códigos de facturación; los crea la ingesta (`deSucursal(agente)`) y la consulta
       // pública va por `codigoFacturacionPublico`, no por aquí.
+      // Instalador de un clic: sólo lectura con scope; lo escribe `enlaces(scope)` / `canjeEnlace()`.
+      'codigoEnlace',
       'codigoFacturacion',
       // F2-126: compras; se escriben por `comprasDeSucursal(agente)`.
       'compra',
@@ -171,6 +173,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'suscripcion',
       'suscripcionReporte',
       'traspaso',
+      // MVP de cortes: turnos de SR; se escriben por `deSucursal(agente).guardarTurno`.
+      'turno',
       'unidadCatalogo',
       'usuario',
       // F2-143: el canal de versiones del agente, de PLATAFORMA como los folios: con scope de

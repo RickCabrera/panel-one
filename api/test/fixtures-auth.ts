@@ -129,12 +129,16 @@ export async function limpiarFixtures(
   await prisma.chequePago.deleteMany(deEstas);
   await prisma.cheque.deleteMany(deEstas);
   await prisma.mesaSnapshot.deleteMany(deEstas);
+  // Los turnos de SR (MVP de cortes) cuelgan de la sucursal.
+  await prisma.turno.deleteMany(deEstas);
   // El estado del agente (F1-031: lo escribe el heartbeat de la ingesta).
   await prisma.agenteEstado.deleteMany(deEstas);
   // El último contacto del agente (F1-061: lo escribe todo lote aceptado).
   await prisma.agenteContacto.deleteMany(deEstas);
   // El último reporte de auto-actualización del agente (F2-143).
   await prisma.agenteActualizacion.deleteMany(deEstas);
+  // Los códigos de enlace del instalador de un clic cuelgan de la sucursal.
+  await prisma.codigoEnlace.deleteMany(deEstas);
   // El catálogo de formas de pago (F1-032) cuelga de la empresa.
   await prisma.formaPagoCatalogo.deleteMany(deEstas);
   // El centro de alertas (F2-224) cuelga de la empresa y de la sucursal.

@@ -1,0 +1,25 @@
+﻿YO CONTROLO - INSTALAR EL AGENTE EN ESTA SUCURSAL (unos 5 minutos)
+====================================================================
+
+Se instala en la PC donde está el SQL Server de SoftRestaurant (casi siempre la
+caja principal). El agente sólo LEE SoftRestaurant: nunca escribe ni cambia nada
+en el punto de venta.
+
+1. En el panel: Administración > Sucursales > "Conectar sucursal" en la fila de
+   esta sucursal > "Generar código". Te da un código como K7P4-42XQ. Sirve una sola
+   vez y vence en 30 minutos.
+
+2. En esta PC: si todavía no lo hiciste, extrae el .zip (clic derecho > Extraer
+   todo). Luego doble clic en Instalar-YoControlo. Cuando Windows pregunte si
+   permites cambios, contesta "Sí".
+
+3. Escribe el código cuando lo pida. Al final dice LISTO (en verde). En el panel,
+   Administración > Agentes, la sucursal dice "Conectado" en menos de un minuto.
+
+Si dice que algo falló (en rojo), el mismo mensaje dice qué hacer. Si no queda
+claro, toma una foto de la ventana y mándala a soporte.
+
+No borres la carpeta "archivos": el instalador la necesita. Ya instalado, puedes
+borrar esta carpeta completa; el agente vive en C:\Program Files\ArkonAgente.
+
+Guía completa (y la instalación avanzada, para soporte): docs/instalacion-agente.md

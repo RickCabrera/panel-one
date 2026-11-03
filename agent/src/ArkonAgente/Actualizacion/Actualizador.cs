@@ -1,3 +1,5 @@
+using ArkonAgente.Cola;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
 namespace ArkonAgente.Actualizacion;
@@ -89,6 +91,7 @@ internal sealed class Actualizador
     private readonly TimeProvider _reloj;
     private readonly ILogger _logger;
     private readonly TiemposActualizador _tiempos;
+    private readonly string? _archivoCola;
 
     public Actualizador(
         CarpetaActualizacion carpeta,
@@ -98,7 +101,8 @@ internal sealed class Actualizador
         Func<TimeSpan, CancellationToken, Task> esperar,
         TimeProvider reloj,
         ILogger logger,
-        TiemposActualizador? tiempos = null)
+        TiemposActualizador? tiempos = null,
+        string? archivoCola = null)
     {
         _carpeta = carpeta;
         _exeAgente = Path.GetFullPath(exeAgente);
@@ -108,6 +112,7 @@ internal sealed class Actualizador
         _reloj = reloj;
         _logger = logger;
         _tiempos = tiempos ?? TiemposActualizador.PorDefecto;
+        _archivoCola = archivoCola;
     }
 
     public string ExeNuevo => _exeAgente + ".nuevo";
@@ -219,7 +224,9 @@ internal sealed class Actualizador
                 $"No se pudo reemplazar el exe ({ex.GetType().Name}); se restauró el anterior.");
         }
 
-        // 4. Arrancar y exigir que se quede corriendo; si no, rollback.
+        // 4. Arrancar y exigir que se quede corriendo; si no, rollback. Antes, la cola queda con sólo
+        //    lo que entiende cualquier versión (puede ser un regreso a una versión retirada).
+        ApartarEventosNuevos();
         _servicio.Arrancar();
         if (await QuedaCorriendoAsync(cancelacion))
         {
@@ -247,6 +254,8 @@ internal sealed class Actualizador
                 "Revisa el servicio en la PC.");
         }
 
+        // La versión nueva alcanzó a correr: pudo dejar en la cola eventos que la anterior no conoce.
+        ApartarEventosNuevos();
         await ArrancarSiSePuedeAsync(cancelacion);
         return ResultadoActualizacion.Falla(s, MotivoFalla.Arranque,
             "La versión nueva no se quedó corriendo; se regresó a la anterior.");
@@ -297,6 +306,38 @@ internal sealed class Actualizador
         {
             _servicio.Arrancar();
             await EsperarAsync(() => _servicio.Estado() == EstadoServicio.Corriendo, _tiempos.EsperaArranque, cancelacion);
+        }
+    }
+
+    /// <summary>
+    /// Con el agente DETENIDO, aparta de <c>cola.db</c> los eventos de tipos que una versión anterior no
+    /// conoce (<see cref="ColaLocal.ApartarTiposNuevos"/>): un agente viejo truena al leer un
+    /// <c>turno</c>. La versión que sí los conoce los recupera sola al abrir la cola. Si no se puede
+    /// (archivo bloqueado, dañado), queda en el log y se arranca igual: el agente nuevo no lo necesita,
+    /// y uno viejo que truene lo levanta <c>sc failure</c>, como cualquier falla de su cola.
+    /// </summary>
+    private void ApartarEventosNuevos()
+    {
+        if (_archivoCola is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var movidos = ColaLocal.ApartarTiposNuevos(_archivoCola, _reloj);
+            if (movidos > 0)
+            {
+                _logger.LogInformation(
+                    "Actualizador: {Movidos} evento(s) de tipos que una versión anterior no conoce quedaron en " +
+                    "eventos_apartados de cola.db; la versión que los conoce los recupera al arrancar.", movidos);
+            }
+        }
+        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(
+                "Actualizador: no se pudieron apartar los eventos nuevos de cola.db ({Tipo}); se arranca igual.",
+                ex.GetType().Name);
         }
     }
 

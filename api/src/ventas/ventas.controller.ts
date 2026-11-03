@@ -50,6 +50,8 @@ import {
   VentaPorProductoDto,
   VentaSucursalDto,
 } from './dto/ventas.dto';
+import { MeserosEnVivoDto, MeserosEnVivoQueryDto } from './dto/meseros-en-vivo.dto';
+import { MeserosEnVivoService, type MeserosEnVivo } from './meseros-en-vivo.service';
 import type { VentaPorArea } from './por-area';
 import { TicketsService, type PaginaTickets } from './tickets.service';
 
@@ -93,6 +95,7 @@ export class VentasController {
     private readonly areas: AreasVentaService,
     private readonly tickets: TicketsService,
     private readonly cache: CacheAgregados,
+    private readonly enVivo: MeserosEnVivoService,
   ) {}
 
   @Get('resumen')
@@ -212,6 +215,29 @@ export class VentasController {
     return this.cache.obtener(scope, 'por-mesero', parametros(q), () =>
       this.analisis.porMesero(scope, filtroDe(q)),
     );
+  }
+
+  @Get('meseros-en-vivo')
+  @ApiOperation({
+    summary:
+      'Meseros en tiempo real: por (sucursal, mesero), lo cobrado del día, lo que tiene en curso ' +
+      'en mesas abiertas, y el ranking.',
+    description:
+      'Cobrado = /ventas/por-mesero con desde = hasta = `dia` (cuentas cerradas no canceladas). ' +
+      'En curso = las mesas abiertas del ÚLTIMO snapshot de cada sucursal (/mesas/abiertas), con ' +
+      'su edad: el panel decide si una sucursal está desconectada. Σ cobrado = /ventas/resumen ' +
+      'del día. Sin cache; el socket avisa con cada ingesta (docs/tiempo-real.md).',
+  })
+  @ApiOkResponse({ type: MeserosEnVivoDto })
+  meserosEnVivo(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: MeserosEnVivoQueryDto,
+  ): Promise<MeserosEnVivo> {
+    return this.enVivo.meseros(scope, {
+      empresaId: q.empresaId,
+      sucursalId: q.sucursalId,
+      dia: q.dia,
+    });
   }
 
   @Get('por-producto')

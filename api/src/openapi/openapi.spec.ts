@@ -1072,6 +1072,8 @@ describe('Contrato OpenAPI', () => {
       [
         '/agente/actualizacion',
         '/agente/binario/{version}',
+        // Instalador de un clic: el canje público del código de enlace.
+        '/agente/enlace',
         '/agente/version',
         '/agente/versiones',
         '/agente/versiones/{version}/retirar',
@@ -1169,6 +1171,8 @@ describe('Contrato OpenAPI', () => {
         '/facturacion/folios/reporte',
         // F2-110b: conciliación con el PAC a pedido.
         '/facturacion/conciliacion',
+        // F1-002: la señal de vida (API + base) del healthcheck y de UptimeRobot.
+        '/health',
         '/ingesta/catalogos',
         '/ingesta/catalogos/cierre',
         '/ingesta/catalogos/solicitud',
@@ -1211,6 +1215,10 @@ describe('Contrato OpenAPI', () => {
         // F2-127: proyección de demanda y sugerido de compra.
         '/inventario/proyecciones',
         '/mesas/abiertas',
+        // MVP de cortes: turnos de SR y lo cobrado en cada uno.
+        '/cortes',
+        '/cortes/en-curso',
+        '/cortes/{id}',
         // Membresías: el panel de plataforma (sólo admin_global; otro rol = 404).
         '/plataforma/administradores',
         '/plataforma/administradores/buscar-cuenta',
@@ -1232,10 +1240,13 @@ describe('Contrato OpenAPI', () => {
         '/sucursales/{id}',
         '/sucursales/{id}/actualizacion-automatica',
         '/sucursales/{id}/api-key',
+        '/sucursales/{id}/codigo-enlace',
         '/sistema',
         '/ventas/comparativo-sucursales',
         '/ventas/formas-pago',
         '/ventas/hora-dia',
+        // MVP: meseros en tiempo real.
+        '/ventas/meseros-en-vivo',
         '/ventas/por-area',
         '/ventas/por-dia',
         '/ventas/por-hora',
@@ -1258,6 +1269,27 @@ describe('Contrato OpenAPI', () => {
       '429',
     ]);
     expect(paths['/auth/logout']?.post?.security).toEqual([{ monitor_refresh: [] }]);
+  });
+
+  it('cortes y meseros en vivo (MVP): Bearer, 400/401/404 y el evento turno sin tenant', async () => {
+    const { paths, components } = await generarDocumento();
+    const codigos = (op?: { responses?: object }) => Object.keys(op?.responses ?? {}).sort();
+    for (const ruta of ['/cortes', '/cortes/en-curso', '/cortes/{id}', '/ventas/meseros-en-vivo']) {
+      expect(paths[ruta]?.get?.security).toEqual([{ bearer: [] }]);
+      expect(codigos(paths[ruta]?.get)).toEqual(['200', '400', '401', '404']);
+    }
+    const nombres = (ruta: string) =>
+      (paths[ruta]?.get?.parameters ?? []).map((p) => ('name' in p ? p.name : '')).sort();
+    expect(nombres('/cortes')).toEqual(['desde', 'empresaId', 'hasta', 'sucursalId']);
+    expect(nombres('/cortes/en-curso')).toEqual(['empresaId', 'sucursalId']);
+    expect(nombres('/ventas/meseros-en-vivo')).toEqual(['dia', 'empresaId', 'sucursalId']);
+    const esquemas = components?.schemas ?? {};
+    expect(esquemas).toHaveProperty('EventoTurnoDto');
+    const turno = JSON.stringify(esquemas.DatosTurnoDto);
+    expect(turno).not.toContain('sucursalId');
+    expect(turno).not.toContain('empresaId');
+    expect(JSON.stringify(esquemas.DatosChequeDto)).toContain('turnoSr');
+    expect(JSON.stringify(esquemas.DetalleCorteDto)).toContain('cuadre');
   });
 
   it('documenta la administración (F1-060): 404 por alcance, 403 sólo por rol, y el cambio propio', async () => {
@@ -1302,6 +1334,28 @@ describe('Contrato OpenAPI', () => {
       in: 'header',
       name: 'X-Api-Key',
     });
+  });
+
+  it('documenta el instalador de un clic: emitir con bearer y el canje público sin seguridad', async () => {
+    const { paths, components } = await generarDocumento();
+    const emitir = paths['/sucursales/{id}/codigo-enlace']?.post;
+    expect(emitir?.security).toEqual([{ bearer: [] }]);
+    expect(Object.keys(emitir?.responses ?? {}).sort()).toEqual([
+      '201',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+    ]);
+    const canje = paths['/agente/enlace']?.post;
+    expect(canje?.security ?? []).toEqual([]);
+    expect(Object.keys(canje?.responses ?? {}).sort()).toEqual(['200', '400', '404', '429']);
+    const esquemas = components?.schemas ?? {};
+    expect(Object.keys(esquemas)).toEqual(
+      expect.arrayContaining(['CodigoEnlaceEmitidoDto', 'CanjeEnlaceDto', 'EnlaceCanjeadoDto']),
+    );
+    expect(JSON.stringify(esquemas.EnlaceCanjeadoDto)).toContain('API_URL_PUBLICA');
   });
 
   it('documenta el estado de agentes (F1-061): bearer, 403 del visor, 404 y el reloj de cada edad', async () => {
@@ -1455,5 +1509,15 @@ describe('Contrato OpenAPI', () => {
     expect(JSON.stringify(esquemas.VentaSucursalDto)).toMatch(
       /"ticketPromedio":\{[^}]*"nullable":true/,
     );
+  });
+
+  it('salud (F1-002): pública, 200 y 503 con el mismo cuerpo de dos campos', async () => {
+    const { paths, components } = await generarDocumento();
+    const salud = paths['/health']?.get;
+    expect(Object.keys(salud?.responses ?? {}).sort()).toEqual(['200', '503']);
+    expect(salud?.security).toBeUndefined();
+    expect(
+      Object.keys((components?.schemas?.SaludDto as { properties: object }).properties).sort(),
+    ).toEqual(['db', 'status']);
   });
 });
