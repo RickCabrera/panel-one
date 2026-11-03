@@ -8,6 +8,7 @@ import { ConsultaVentas, type FiltroVentas } from './consulta-ventas';
 import { EscrituraAdmin } from './escritura-admin';
 import { EscrituraAlertas } from './escritura-alertas';
 import { EscrituraCatalogos, IngestaCatalogos } from './escritura-catalogos';
+import { CanjeEnlace, EscrituraEnlaces } from './escritura-enlaces';
 import { EscrituraConteos } from './escritura-conteos';
 import { EscrituraExistencias, IngestaExistencias } from './escritura-existencias';
 import { IngestaCompras } from './escritura-compras';
@@ -444,6 +445,23 @@ export class ScopedPrismaService {
    */
   traspasos(scope: EmpresaScope): EscrituraTraspasos {
     return new EscrituraTraspasos(this.#prisma, scope);
+  }
+
+  /**
+   * Los códigos de enlace del instalador de un clic, con el scope del usuario: emitir el de una
+   * sucursal del alcance (fuera de él, 404). Ver `escritura-enlaces.ts`.
+   */
+  enlaces(scope: EmpresaScope): EscrituraEnlaces {
+    return new EscrituraEnlaces(this.#prisma, scope);
+  }
+
+  /**
+   * El canje PÚBLICO de un código de enlace: sin usuario ni tenant, porque el código ES la
+   * credencial (como la API key en `AgentesAuthService`). Sólo quema el código y rota la key de
+   * SU sucursal; no lee ni devuelve nada más que el nombre de esa sucursal.
+   */
+  canjeEnlace(): CanjeEnlace {
+    return new CanjeEnlace(this.#prisma);
   }
 
   /**

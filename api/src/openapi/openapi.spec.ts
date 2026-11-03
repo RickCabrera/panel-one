@@ -1045,6 +1045,8 @@ describe('Contrato OpenAPI', () => {
       [
         '/agente/actualizacion',
         '/agente/binario/{version}',
+        // Instalador de un clic: el canje público del código de enlace.
+        '/agente/enlace',
         '/agente/version',
         '/agente/versiones',
         '/agente/versiones/{version}/retirar',
@@ -1192,6 +1194,7 @@ describe('Contrato OpenAPI', () => {
         '/sucursales/{id}',
         '/sucursales/{id}/actualizacion-automatica',
         '/sucursales/{id}/api-key',
+        '/sucursales/{id}/codigo-enlace',
         '/sistema',
         '/ventas/comparativo-sucursales',
         '/ventas/formas-pago',
@@ -1284,6 +1287,28 @@ describe('Contrato OpenAPI', () => {
       in: 'header',
       name: 'X-Api-Key',
     });
+  });
+
+  it('documenta el instalador de un clic: emitir con bearer y el canje público sin seguridad', async () => {
+    const { paths, components } = await generarDocumento();
+    const emitir = paths['/sucursales/{id}/codigo-enlace']?.post;
+    expect(emitir?.security).toEqual([{ bearer: [] }]);
+    expect(Object.keys(emitir?.responses ?? {}).sort()).toEqual([
+      '201',
+      '400',
+      '401',
+      '403',
+      '404',
+      '409',
+    ]);
+    const canje = paths['/agente/enlace']?.post;
+    expect(canje?.security ?? []).toEqual([]);
+    expect(Object.keys(canje?.responses ?? {}).sort()).toEqual(['200', '400', '404', '429']);
+    const esquemas = components?.schemas ?? {};
+    expect(Object.keys(esquemas)).toEqual(
+      expect.arrayContaining(['CodigoEnlaceEmitidoDto', 'CanjeEnlaceDto', 'EnlaceCanjeadoDto']),
+    );
+    expect(JSON.stringify(esquemas.EnlaceCanjeadoDto)).toContain('API_URL_PUBLICA');
   });
 
   it('documenta el estado de agentes (F1-061): bearer, 403 del visor, 404 y el reloj de cada edad', async () => {

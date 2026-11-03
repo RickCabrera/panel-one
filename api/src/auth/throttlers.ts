@@ -1,6 +1,9 @@
+import { createHash } from 'node:crypto';
+
 import { SkipThrottle, type ThrottlerOptions } from '@nestjs/throttler';
 
 import { THROTTLER_AGENTE } from '../agentes/throttle-agente';
+import { claveIp, normalizarCodigoEnlace } from '../agentes/codigo-enlace';
 
 /**
  * Throttlers por IP de las rutas de usuario. Todos se registran en el mismo
@@ -21,6 +24,8 @@ export const THROTTLER_PRUEBA_PUSH = 'prueba-push';
 export const THROTTLER_CONTACTO = 'contacto';
 export const THROTTLER_CONTACTO_HORA = 'contacto-hora';
 export const THROTTLER_BINARIO_AGENTE = 'binario-agente';
+export const THROTTLER_ENLACE = 'enlace';
+export const THROTTLER_ENLACE_CODIGO = 'enlace-codigo';
 
 /** `POST /auth/login` y `POST /cuenta/password`: 5 intentos por minuto por IP. */
 export const OPCIONES_THROTTLER_LOGIN: ThrottlerOptions = {
@@ -145,6 +150,39 @@ export const OPCIONES_THROTTLER_BINARIO_AGENTE: ThrottlerOptions = {
   limit: 10,
 };
 
+/**
+ * `POST /agente/enlace` (instalador de un clic): 20 por minuto por IP. Es pública y cambia un
+ * código corto por la API key de una sucursal. Este cubo sólo corta ráfagas; los que de verdad
+ * acotan adivinar son `enlace-codigo` y el límite de FALLOS por IP (`LimiteFallosEnlace`: 10 por
+ * hora), que sólo cuenta los códigos que no sirvieron.
+ */
+export const OPCIONES_THROTTLER_ENLACE: ThrottlerOptions = {
+  name: THROTTLER_ENLACE,
+  ttl: 60_000,
+  limit: 20,
+  // IPv6 agrupada por /64 (`claveIp`): un cliente tiene el /64 entero.
+  getTracker: (req) => claveIp((req as { ip?: string }).ip ?? ''),
+  generateKey: (_ctx, ip, nombre) => createHash('sha256').update(`${nombre}-${ip}`).digest('hex'),
+};
+
+/**
+ * `POST /agente/enlace`, ADEMÁS del de IP: 5 intentos por CÓDIGO cada 15 minutos, vengan de la
+ * IP que vengan. La llave es el hash del código normalizado (`K7P4-42XQ` y `k7p442xq` cuentan
+ * juntos), nunca el código en claro. Un cuerpo sin código cuenta en un mismo cubo.
+ */
+export const OPCIONES_THROTTLER_ENLACE_CODIGO: ThrottlerOptions = {
+  name: THROTTLER_ENLACE_CODIGO,
+  ttl: 15 * 60_000,
+  limit: 5,
+  getTracker: (req) => {
+    const cuerpo = (req as { body?: { codigo?: unknown } }).body;
+    const codigo = typeof cuerpo?.codigo === 'string' ? cuerpo.codigo : '';
+    return normalizarCodigoEnlace(codigo.slice(0, 64));
+  },
+  generateKey: (_ctx, codigo, nombre) =>
+    createHash('sha256').update(`${nombre}-${codigo}`).digest('hex'),
+};
+
 /** Todos los throttlers registrados en `AuthModule`. Uno nuevo va aquí. */
 export const THROTTLERS = [
   THROTTLER_LOGIN,
@@ -159,6 +197,8 @@ export const THROTTLERS = [
   THROTTLER_CONTACTO,
   THROTTLER_CONTACTO_HORA,
   THROTTLER_BINARIO_AGENTE,
+  THROTTLER_ENLACE,
+  THROTTLER_ENLACE_CODIGO,
   THROTTLER_AGENTE,
 ] as const;
 export type NombreThrottler = (typeof THROTTLERS)[number];

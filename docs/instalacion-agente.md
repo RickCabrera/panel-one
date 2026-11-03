@@ -1,147 +1,232 @@
 # Instalar el agente en un restaurante
 
-Esta guía deja el agente de ArkonAgente leyendo SoftRestaurant y reportando al panel.
-Está escrita para alguien que **no** es técnico: sigue los pasos en orden y copia los
-comandos tal cual.
+Esta guía deja el agente de Yo Controlo (el servicio de Windows **ArkonAgente**) leyendo
+SoftRestaurant y reportando al panel. Está escrita para alguien que **no** es técnico.
 
-**Tiempo:** unos 15 minutos.
+**Qué hace el agente:** es un servicio de Windows que, cada 30 segundos, **lee** la base de
+SoftRestaurant y manda los datos al panel por internet. **Nunca escribe en SoftRestaurant**: entra
+con un usuario que sólo puede leer (`monitor_lector`, lo crea el instalador). Si el internet se
+cae, guarda lo pendiente y lo manda cuando vuelve.
 
-> ⚠️ Los 15 minutos todavía no se han medido con una persona real en un restaurante. Esa
-> prueba es la tarea F1-091. Si algo de esta guía no se entiende o tarda más, anótalo:
-> sirve para corregirla.
+Hay dos caminos:
 
-**Qué hace el agente:** es un servicio de Windows que, cada 30 segundos, **lee** la base
-de SoftRestaurant y manda los datos al panel por internet. **Nunca escribe en
-SoftRestaurant**: entra con un usuario que sólo puede leer (lo creas en el paso 3). Si el
-internet se cae, guarda lo pendiente y lo manda cuando vuelve.
+- **[Instalación de un clic](#instalación-de-un-clic-unos-5-minutos)** (lo normal): un solo dato,
+  el código que da el panel. Unos 5 minutos.
+- **[Instalación avanzada](#instalación-avanzada-manual-para-soporte)** (manual, para soporte):
+  los scripts de siempre, paso por paso, cuando hace falta controlar cada dato.
+
+> ⚠️ Los tiempos todavía no se han medido con una persona real en un restaurante (tarea F1-091),
+> ni el instalador de un clic se ha corrido en una PC de restaurante: sólo en las pruebas
+> automáticas. Si algo de esta guía no se entiende o tarda más, anótalo.
 
 ---
 
-## Antes de empezar (2 min)
+## Instalación de un clic (unos 5 minutos)
+
+**Necesitas:**
+
+- **La PC donde está el SQL Server de SoftRestaurant** (casi siempre la caja principal o la PC
+  "servidor"). El agente se instala **en esa misma PC**, con un usuario de Windows que pueda
+  "Ejecutar como administrador".
+- **El paquete `Instalar-YoControlo.zip`** (se descarga del enlace del panel, o te lo da soporte).
+- **Alguien con el panel abierto como administrador** (puedes ser tú, desde el celular).
+
+### Paso 1 · El código, en el panel (1 min)
+
+1. En el panel: **Administración** › **Sucursales**.
+2. En la fila de la sucursal, **Conectar sucursal** › **Generar código**.
+3. Sale un código como **`K7P4-42XQ`**, con lo que le queda de vida. **Sirve una sola vez y vence
+   en 30 minutos.** Si vence o se pierde, genera otro (el anterior deja de servir).
+
+Generar el código **no** corta al agente si la sucursal ya lo tenía instalado: sigue reportando
+hasta que el instalador usa el código.
+
+### Paso 2 · Doble clic en la PC del restaurante (1 min)
+
+1. Extrae el `.zip`: clic derecho › **Extraer todo** › Extraer.
+2. Abre la carpeta extraída y da **doble clic en `Instalar-YoControlo`**.
+3. Windows pregunta si permites que haga cambios: **Sí**. (Si sale "Windows protegió su PC", es
+   porque el archivo vino de internet: **Más información** › **Ejecutar de todas formas**.)
+
+### Paso 3 · Escribir el código (3 min)
+
+Cuando diga **`Código de enlace:`**, escribe el del paso 1 (da igual con o sin guión, en
+mayúsculas o minúsculas) y Enter. El instalador hace el resto solo:
+
+1. encuentra el SQL Server y la base de SoftRestaurant;
+2. revisa (sólo leyendo) que pueda crear el usuario de solo lectura;
+3. cambia el código por la "llave" de la sucursal (la API key: nunca la ves ni la copias);
+4. crea `monitor_lector` con una contraseña aleatoria que nadie tiene que saber;
+5. instala los dos servicios (**ArkonAgente** y su **ArkonAgenteActualizador**) y los arranca;
+6. prueba las dos conexiones.
+
+Al final sale un recuadro **verde** con **`LISTO: la sucursal quedó conectada`**. En el panel,
+**Administración** › **Agentes**, la sucursal dice **Conectado** en menos de un minuto.
+
+**Sólo te pregunta algo más si:**
+
+| Pregunta | Por qué | Qué hacer |
+|---|---|---|
+| "¿Cuál es el de SoftRestaurant?" / "¿Cuál es la de esta sucursal?" | Hay más de un SQL Server o más de una base de SoftRestaurant en la PC | Escribe el número de la que usa SoftRestaurant en esta sucursal. Si no sabes, llama a soporte. |
+| "Contraseña de 'sa'" | Tu usuario de Windows no es administrador de ese SQL Server | La tiene el soporte de SoftRestaurant. **Sólo se usa para crear el usuario de solo lectura y no se guarda en ningún lado.** El agente nunca usa `sa`. |
+| "Dirección del panel" | El paquete no trae la dirección | La del panel, con `https://`. Pide a soporte un paquete que ya la traiga. |
+
+### Si sale un recuadro rojo
+
+El recuadro dice qué pasó y qué hacer. Los casos más comunes:
+
+| Mensaje | Qué cambió | Qué hacer |
+|---|---|---|
+| "El código no sirve: está mal escrito, ya se usó o ya venció" | Nada | Te deja escribir otro (hasta 3 veces). Genera uno nuevo en el panel. |
+| "No pude llegar al panel" | Nada | La PC no tiene internet o un firewall bloquea el panel. Ver el [checklist de red](#checklist-de-firewall-y-red). |
+| "Demasiados intentos" / "Demasiados códigos equivocados desde esta red" | Nada | Espera unos minutos (o una hora). El panel limita los intentos para que nadie adivine códigos. |
+| "El panel … pausó la conexión de sucursales por seguridad" | Nada | Alguien está probando códigos al azar contra el panel y se pausó para todos (hasta una hora). Intenta más tarde o llama a soporte. |
+| "No encontré un SQL Server funcionando en esta PC" | Nada | No es la PC del SQL Server de SoftRestaurant. |
+| "Este SQL Server sólo acepta usuarios de Windows" | Nada (ni se usó el código) | **No lo cambies tú**: cambiarlo reinicia el SQL de SoftRestaurant y la caja deja de cobrar. Llama a soporte. |
+| "… no puede crear usuarios en ese SQL Server" | Nada (ni se usó el código) | Hace falta la contraseña de `sa` o de otro administrador del SQL. Llama a soporte. |
+| "No se pudo crear el usuario de solo lectura" (con un mensaje `ALTO`) | El código sí se usó | Alguien ya creó `monitor_lector` con más permisos de los debidos. Llama a soporte. |
+| "El agente quedó instalado, pero falla una conexión" | Quedó instalado | La línea `[FALLA]` de arriba dice cuál y qué revisar. El agente reintenta solo cada minuto. |
+| "El servicio de Windows del agente no pudo iniciar sesión" / "No se pudo instalar el agente" | El código sí se usó | Llama a soporte con una foto de la ventana. |
+
+**Cuando el código ya se usó y algo falla después**, la llave anterior de la sucursal ya no
+sirve. El recuadro rojo dice en qué quedó el agente que ya estaba en la PC:
+
+- "*se quedó con la llave nueva … y se reinició: sigue reportando*": no hay que hacer nada urgente.
+- "*quedó DESCONECTADO*" o "*no quedó ningún agente con la llave nueva*": **genera un código nuevo**
+  en el panel y vuelve a correr `Instalar-YoControlo`.
+
+Cada corrida deja su resultado en `C:\ProgramData\ArkonAgente\logs\instalacion-AAAAMMDD.log`
+(sin llaves ni contraseñas), junto al log del agente, para soporte.
+
+**Volver a correrlo siempre es seguro**, también sobre una instalación que ya funcionaba: genera
+otro código y repite los pasos 2 y 3. Conserva lo que el agente no había mandado (`cola.db`) y sus
+logs; pone una API key y una contraseña nuevas.
+
+### Para soporte: qué hace por dentro
+
+- `Instalar-YoControlo.cmd` se eleva (UAC) y corre `archivos\instalar-un-clic.ps1` con
+  `-ExecutionPolicy Bypass`. Acepta el código como argumento:
+  `Instalar-YoControlo.cmd K7P4-42XQ`. El `.ps1` también acepta `-ApiUrl`, `-Servidor`, `-Base`,
+  `-UsuarioAdmin` y `-CuentaServicio` (ver su cabecera).
+- **El orden importa**: todo lo que se puede revisar sin cambiar nada (SQL Server, base, permisos
+  con `HAS_PERMS_BY_NAME`, modo mixto) se revisa **antes** de gastar el código. Un código
+  equivocado no cambia nada.
+- Canjea el código en `POST {apiUrl}/agente/enlace` y recibe una API key **nueva** (la anterior
+  de la sucursal deja de servir en ese momento) y, si el despliegue la define
+  (`API_URL_PUBLICA`), la URL de la API para el `config.json`.
+- Crea o actualiza `monitor_lector` con el mismo `crear-usuario-lector.sql` del modo manual
+  (**sólo `db_datareader`**), con una contraseña aleatoria de 32 caracteres (letras, números y
+  `- _ . ! @ # * + = ?`; cumple la política de Windows). Va a `sqlcmd` por variable de entorno,
+  nunca en la línea de comando. La de `sa`, si se pidió, va en `SQLCMDPASSWORD` de ese proceso y
+  se borra en cuanto se crea el lector.
+- Escribe `config.json` y llama a `instalar.ps1` (el del modo manual) con la config ya armada:
+  protege `C:\ProgramData\ArkonAgente` **antes** de escribirla, registra los servicios y corre
+  `agente test`. Sólo si el servicio no puede **iniciar sesión** con la cuenta virtual (errores
+  de Windows 1069/1079; ninguna otra falla) reintenta con `LocalSystem`, y lo dice en el
+  resultado y en el registro.
+- **Cualquier** falla después de usar el código (el lector, `instalar.ps1` o una excepción) pasa
+  por el respaldo: si en la PC ya había un agente, se le escribe la API key nueva (con la
+  contraseña nueva si el SQL ya la acepta; si no, con la de antes) y se reinicia. Si no se puede,
+  el resultado dice que quedó desconectado y que hace falta un código nuevo.
+- El resultado queda en `logs\instalacion-AAAAMMDD.log` (la carpeta del agente). No llega al
+  panel: el único canal agente → panel es el heartbeat del propio agente.
+- Códigos de salida: 0 listo; 1 instalado pero falla una conexión; 2 `config.json` inválido;
+  3 no se pudo.
+
+---
+
+## Instalación avanzada (manual, para soporte)
+
+El camino de siempre, con cada dato a mano. Sirve para depurar, para instalar el agente en otra PC
+de la red, o si el de un clic no aplica. Usa los mismos archivos del paquete, que están en la
+carpeta **`archivos`** del `.zip`.
+
+**Tiempo:** unos 15 minutos.
+
+### Antes de empezar (2 min)
 
 Necesitas:
 
-- [ ] **La PC donde está el SQL Server de SoftRestaurant.** Casi siempre es la caja
-      principal, o la PC "servidor" del restaurante. Instala el agente **en esa misma PC**.
-- [ ] **Un usuario de Windows administrador** en esa PC.
-- [ ] **La carpeta del agente** (te la da soporte, normalmente como un `.zip`). Adentro
-      vienen:
-      - `agente.exe`
-      - `instalar.ps1`
-      - `crear-usuario-lector.ps1`
-      - `crear-usuario-lector.sql`
-      - `funciones-instalador.ps1`
+- [ ] **La PC donde está el SQL Server de SoftRestaurant** y un usuario de Windows administrador.
+- [ ] **La carpeta `archivos` del paquete** (`agente.exe`, `instalar.ps1`,
+      `crear-usuario-lector.ps1`, `crear-usuario-lector.sql`, `funciones-instalador.ps1`).
 - [ ] **La dirección del panel**, por ejemplo `https://monitor.ejemplo.com`.
 - [ ] **Alguien que pueda entrar al panel como administrador**, para generar la API key de
-      la sucursal (paso 1). Puedes ser tú.
+      la sucursal (paso 1).
 
 **Si te dieron un `.zip`:** clic derecho > **Propiedades** > marca **Desbloquear** >
-Aceptar. Después clic derecho > **Extraer todo**, por ejemplo en
-`C:\ArkonAgente-instalador`. (Sin desbloquearlo, Windows puede negarse a correr los
-scripts.)
+Aceptar. Después clic derecho > **Extraer todo**, por ejemplo en `C:\Instalar-YoControlo`.
 
-## Paso 1 · La API key de la sucursal (2 min)
+### Paso 1 · La API key de la sucursal (2 min)
 
-La API key es la "llave" con la que el agente se identifica ante el panel. Cada sucursal
-tiene la suya.
-
-1. Entra al panel con un usuario administrador.
-2. Ve a **Administración** > pestaña **Sucursales**.
-3. En la fila de la sucursal, clic en **API key del agente** > **Generar key nueva**.
-4. **Cópiala** (empieza con `msr_`) y tenla a la mano. **Se muestra una sola vez.** Si la
-   pierdes, generas otra; la anterior deja de servir en ese momento.
+1. En el panel: **Administración** > pestaña **Sucursales**.
+2. En la fila de la sucursal, **API key del agente** > **Generar key nueva**.
+3. **Cópiala** (empieza con `msr_`). **Se muestra una sola vez.** Si la pierdes, generas otra; la
+   anterior deja de servir en ese momento.
 
 > No la mandes por WhatsApp ni por correo. Si la tienes que pasar a otra persona, díctala o
 > pégala directo en la PC del restaurante.
 
-## Paso 2 · Abrir PowerShell como administrador (1 min)
-
-Todos los comandos de esta guía se escriben aquí.
+### Paso 2 · Abrir PowerShell como administrador (1 min)
 
 1. Menú **Inicio** > escribe `PowerShell`.
 2. Clic derecho en **Windows PowerShell** > **Ejecutar como administrador** > **Sí**.
-3. Ve a la carpeta del agente (cambia la ruta si la extrajiste en otro lado):
+3. Ve a la carpeta `archivos` del paquete:
 
    ```powershell
-   cd C:\ArkonAgente-instalador
+   cd C:\Instalar-YoControlo\archivos
    ```
 
-## Paso 3 · Crear el usuario de solo lectura (4 min)
+### Paso 3 · Crear el usuario de solo lectura (4 min)
 
-El agente entra al SQL Server de SoftRestaurant con un usuario propio, `monitor_lector`,
-que **sólo puede leer**. Este paso lo crea.
-
-**Primero, elige una contraseña para ese usuario:**
-
-- de **12 a 64** caracteres;
-- con al menos una letra y un número;
-- sólo **letras sin acento**, **números** y estos símbolos: `- _ . ! @ # * + = ?`
-  (sin espacios, sin comillas, sin ñ).
-
-**Anótala en papel**: la vas a escribir otra vez en el paso 4.
-
-Luego corre:
+**Primero, elige una contraseña para `monitor_lector`:** de **12 a 64** caracteres, con al menos
+una letra y un número, y sólo **letras sin acento**, **números** y `- _ . ! @ # * + = ?` (sin
+espacios, sin comillas, sin ñ). **Anótala en papel**: la vas a escribir otra vez en el paso 4.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\crear-usuario-lector.ps1
 ```
 
-El script te pregunta:
-
-1. **Servidor SQL.** Si en la PC hay uno solo, ya lo propone (por ejemplo
-   `.\NATIONALSOFT`): presiona Enter.
-2. **Base de SoftRestaurant.** Te muestra las bases que hay. Si hay una sola que se llama
-   `softrestaurant...` la propone: presiona Enter. Si no, escribe el nombre de la base de
-   SoftRestaurant.
-3. **La contraseña**, dos veces. No se ve al escribir: es normal.
-
-Tiene que terminar con **`LISTO: monitor_lector sólo puede leer la base de
-SoftRestaurant.`**
-
-Si en cambio sale:
+Te pregunta el servidor SQL (si hay uno solo lo propone: Enter), la base de SoftRestaurant (si hay
+una sola `softrestaurant...` la propone: Enter) y la contraseña, dos veces (no se ve al escribir).
+Tiene que terminar con **`LISTO: monitor_lector sólo puede leer la base de SoftRestaurant.`**
 
 | Mensaje | Qué hacer |
 |---|---|
-| `Login failed`, `permission denied` o `No se pudo entrar al SQL Server` | Tu usuario de Windows no es administrador de ese SQL Server. Si sabes la contraseña de `sa` (suele tenerla el soporte de SoftRestaurant), corre otra vez con `-UsuarioAdmin sa` al final del comando. El script te pide la contraseña de `sa` sin mostrarla. **`sa` sólo se usa aquí, nunca en el agente.** |
-| `ALTO: este SQL Server solo acepta usuarios de Windows` | No se cambió nada. Para cambiar eso hay que reiniciar el SQL Server de SoftRestaurant, y la caja deja de funcionar mientras tanto. **No lo hagas tú:** llama a soporte. |
-| `ALTO: el login monitor_lector ya existe y tiene permisos de servidor`, `ALTO: ... con mas permisos que leer` o `... es el DUENO de esta base` | Alguien ya creó ese usuario con más permisos de los debidos. No se cambió nada. Llama a soporte: hay que quitárselos antes de seguir. |
-| `No encontré sqlcmd.exe` | El mensaje trae la alternativa con SQL Server Management Studio. Si no la tienes, llama a soporte. |
-| `The password does not meet the operating system policy requirements` | Windows pide una contraseña más fuerte. Corre otra vez con una más larga y con mayúsculas, minúsculas, números y un símbolo. |
+| `Login failed`, `permission denied` o `No se pudo entrar al SQL Server` | Tu usuario de Windows no es administrador de ese SQL Server. Corre otra vez con `-UsuarioAdmin sa` al final: pide la contraseña de `sa` sin mostrarla. **`sa` sólo se usa aquí, nunca en el agente.** |
+| `ALTO: este SQL Server solo acepta usuarios de Windows` | No se cambió nada. Cambiarlo reinicia el SQL de SoftRestaurant: **llama a soporte.** |
+| `ALTO: el login monitor_lector ya existe y tiene permisos de servidor`, `... con mas permisos que leer` o `... es el DUENO de esta base` | No se cambió nada. Hay que quitarle permisos antes de seguir: llama a soporte. |
+| `No encontré sqlcmd.exe` | El mensaje trae la alternativa con SQL Server Management Studio. |
+| `The password does not meet the operating system policy requirements` | Corre otra vez con una más larga y con mayúsculas, minúsculas, números y un símbolo. |
 
-**Si ya existía** (`se le CAMBIO la contrasena`): el usuario sólo podía leer y se le puso
-la contraseña nueva. Si el agente ya estaba instalado, en el paso 4 agrega
-`-ReemplazarConfig` para escribirla también en el agente.
+**Si ya existía** (`se le CAMBIO la contrasena`): en el paso 4 agrega `-ReemplazarConfig` para
+escribirla también en el agente.
 
-## Paso 4 · Instalar el agente (4 min)
+### Paso 4 · Instalar el agente (4 min)
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar.ps1
 ```
 
-Te pregunta, uno por uno:
-
 | Pregunta | Qué escribir |
 |---|---|
 | Dirección del panel | La del panel, con `https://` |
 | API key de la sucursal | La del paso 1. Pégala con clic derecho: no se ve, es normal. |
-| Servidor SQL de SoftRestaurant | El mismo del paso 3 (Enter si ya lo propone) |
+| Servidor SQL de SoftRestaurant | El mismo del paso 3 |
 | Base de SoftRestaurant | La misma del paso 3 |
 | Usuario SQL de solo lectura | Enter (`monitor_lector`) |
 | Contraseña de monitor_lector | La del paso 3 |
 
-**No escribas la API key ni la contraseña en la línea del comando.** El script las pide
-sin mostrarlas, para que no queden guardadas en el historial de PowerShell.
+**No escribas la API key ni la contraseña en la línea del comando**: el script las pide sin
+mostrarlas, para que no queden en el historial de PowerShell.
 
-El script copia el agente a `C:\Program Files\ArkonAgente`, guarda la configuración en
-`C:\ProgramData\ArkonAgente` (una carpeta que sólo pueden abrir los administradores),
-registra el servicio **ArkonAgente**, lo arranca y al final prueba las dos conexiones.
-También registra un segundo servicio pequeño, **ArkonAgenteActualizador**: es el que instala
-solo las versiones nuevas del agente, pero sólo si en el panel se encendió la actualización
-automática de esa sucursal (ver `docs/actualizacion-agente.md`).
+Copia el agente a `C:\Program Files\ArkonAgente`, guarda la configuración en
+`C:\ProgramData\ArkonAgente` (sólo la abren los administradores), registra y arranca los servicios
+**ArkonAgente** y **ArkonAgenteActualizador** (éste sólo instala versiones nuevas si en el panel se
+encendió la actualización automática de la sucursal: `docs/actualizacion-agente.md`) y prueba las
+dos conexiones.
 
-## Paso 5 · Leer el resultado (1 min)
-
-Al final sale un diagnóstico como éste:
+### Paso 5 · Leer el resultado (1 min)
 
 ```text
 [OK]    Configuración: C:\ProgramData\ArkonAgente\config.json
@@ -153,40 +238,25 @@ Resultado: OK. Las dos conexiones funcionan.
 LISTO: el agente quedó instalado y reportando.
 ```
 
-**Si dice `Resultado: OK` y termina en `LISTO`**, sigue al paso 6.
-
-Si algo dice **`[FALLA]`**, la línea de abajo (`Qué hacer:`) dice qué revisar. Los casos
-más comunes:
+Si algo dice **`[FALLA]`**, la línea de abajo (`Qué hacer:`) dice qué revisar:
 
 | Falla | Causa probable | Qué hacer |
 |---|---|---|
 | SQL: `Login failed` / error 18456 | La contraseña de `monitor_lector` no es la del paso 3 | `.\instalar.ps1 -ReemplazarConfig` y escríbela bien |
 | SQL: `No se pudo llegar al servidor SQL` / error 53 o 258 | El nombre del servidor está mal escrito | `-ReemplazarConfig` con el servidor del paso 3 |
-| SQL: `el usuario tiene permisos de escritura` | El usuario tiene más permisos que leer (no es el del paso 3, o alguien se los dio) | **No lo dejes así.** Llama a soporte |
+| SQL: `el usuario tiene permisos de escritura` | El usuario tiene más permisos que leer | **No lo dejes así.** Llama a soporte |
 | SQL: `no existe la base` / error 4060 | El nombre de la base está mal | `-ReemplazarConfig` con la base del paso 3 |
 | API: `401` / key incorrecta | La key está mal pegada, o se generó otra después | Genera una key nueva (paso 1) y `-ReemplazarConfig` |
 | API: DNS, red, timeout o TLS | La PC no llega al panel por internet | Revisa el [checklist de firewall](#checklist-de-firewall-y-red) |
 | `config.json tiene errores` | Algún dato con formato inválido | `-ReemplazarConfig` |
 
-Para volver a escribir los datos:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar.ps1 -ReemplazarConfig
-```
-
 **Aunque el diagnóstico falle, el servicio queda instalado** y vuelve a intentar solo cada
-minuto: en cuanto corriges el dato, empieza a reportar sin reiniciar nada.
+minuto. Si el script dice **`El servicio no arrancó`** o **`se detuvo después de arrancar`**, corre
+otra vez agregando `-CuentaServicio LocalSystem` y avisa a soporte.
 
-Si el script dice **`El servicio no arrancó`** o **`se detuvo después de arrancar`**,
-corre otra vez agregando `-CuentaServicio LocalSystem` y avisa a soporte que hizo falta.
+### Paso 6 · Confirmar en el panel (1 min)
 
-## Paso 6 · Confirmar en el panel (1 min)
-
-En el panel: **Administración** > pestaña **Agentes**. En menos de un minuto la sucursal
-tiene que decir **Conectado**, con la versión de SoftRestaurant y "última lectura" hace unos
-segundos.
-
-**Listo.** El agente arranca solo con Windows y se levanta solo si se cae.
+**Administración** > pestaña **Agentes**: en menos de un minuto la sucursal dice **Conectado**.
 
 ---
 
@@ -194,28 +264,20 @@ segundos.
 
 El agente sólo necesita **salir** a internet por HTTPS. No abre ningún puerto de entrada.
 
-- [ ] **Salida HTTPS (puerto 443) al dominio del panel** (el de la dirección del paso 4).
-      Si el restaurante tiene un firewall, un proxy o un filtro web, pide que lo permitan.
-- [ ] **El antivirus no bloquea** `C:\Program Files\ArkonAgente\agente.exe`. Si lo pone en
-      cuarentena, agrégalo como excepción.
+- [ ] **Salida HTTPS (puerto 443) al dominio del panel.** Si el restaurante tiene un firewall,
+      un proxy o un filtro web, pide que lo permitan.
+- [ ] **El antivirus no bloquea** `C:\Program Files\ArkonAgente\agente.exe` (ni
+      `Instalar-YoControlo.cmd` mientras instalas). Si lo pone en cuarentena, agrégalo como
+      excepción.
 - [ ] **Nada de puertos de entrada.** No hay que abrir nada hacia la PC del restaurante.
-- [ ] **SQL Server:** con el agente en la misma PC que el SQL Server (lo recomendado) no
-      hay que abrir ningún puerto. Sólo si el agente va en **otra** PC de la red: TCP 1433
-      (o el puerto de la instancia) y UDP 1434 (SQL Browser) **dentro de la red local**,
+- [ ] **SQL Server:** con el agente en la misma PC que el SQL Server (lo recomendado) no hay que
+      abrir ningún puerto. Sólo si el agente va en **otra** PC de la red (instalación avanzada):
+      TCP 1433 (o el puerto de la instancia) y UDP 1434 (SQL Browser) **dentro de la red local**,
       nunca hacia internet.
-- [ ] **La hora de la PC es correcta** (zona horaria y sincronización automática). Con la
-      hora muy desfasada, HTTPS falla.
+- [ ] **La hora de la PC es correcta** (zona horaria y sincronización automática). Con la hora
+      muy desfasada, HTTPS falla.
 
 ## Actualizar el agente
-
-Con la carpeta de la versión nueva, en PowerShell como administrador:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar.ps1
-```
-
-Detiene el servicio, cambia el `agente.exe` y lo vuelve a arrancar. **Conserva** la
-configuración y la cola: lo que no se había mandado se manda después.
 
 > **Primero la API, después el agente.** Antes de instalar (o publicar para la actualización
 > automática) una versión nueva del agente, confirma que la API ya está en la versión que la
@@ -224,8 +286,12 @@ configuración y la cola: lo que no se había mandado se manda después.
 > **no llegan al panel**, sin reintento. El revés (API nueva con agente viejo) sí funciona.
 
 Si la sucursal tiene la **actualización automática** encendida (Administración ›
-Actualizaciones, en el panel), no hace falta: el agente toma solo la versión que se publique.
-El script sigue sirviendo para actualizar el propio actualizador.
+Actualizaciones), no hace falta nada: el agente toma solo la versión que se publique.
+
+A mano: con la carpeta `archivos` de la versión nueva, en PowerShell como administrador,
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar.ps1`. Detiene el servicio, cambia
+el `agente.exe` y lo vuelve a arrancar; **conserva** la configuración y la cola. (También sirve
+volver a correr el de un clic con un código nuevo: además rota la key y la contraseña.)
 
 ## Desinstalar
 
@@ -241,28 +307,30 @@ sc.exe delete ArkonAgente
 (Escribe `sc.exe`, no `sc`: en PowerShell `sc` es otro comando.)
 
 Después puedes borrar `C:\Program Files\ArkonAgente`. **No borres
-`C:\ProgramData\ArkonAgente\cola.db`** si el agente estuvo sin internet: ahí puede haber
-ventas que todavía no llegaron al panel. Pregunta a soporte antes.
+`C:\ProgramData\ArkonAgente\cola.db`** si el agente estuvo sin internet: ahí puede haber ventas
+que todavía no llegaron al panel. Pregunta a soporte antes.
 
-El usuario `monitor_lector` se queda en el SQL Server. Sólo puede leer, así que no estorba;
-si quieres quitarlo, pídelo a soporte.
+El usuario `monitor_lector` se queda en el SQL Server. Sólo puede leer, así que no estorba; si
+quieres quitarlo, pídelo a soporte.
 
 ## Qué NO hacer
 
-- **No le des al agente el usuario `sa`** ni ningún usuario administrador del SQL Server.
-  Sólo `monitor_lector`.
-- **No le des más permisos a `monitor_lector`.** Si el diagnóstico dice que "puede
-  escribir", es un problema, no una ventaja.
-- **No cambies el modo de autenticación ni reinicies el SQL Server** de SoftRestaurant
-  durante el servicio: la caja deja de cobrar.
+- **No le des al agente el usuario `sa`** ni ningún usuario administrador del SQL Server. Sólo
+  `monitor_lector`. (El de un clic puede pedir la contraseña de `sa` para **crear** el lector, pero
+  no la guarda ni el agente la usa.)
+- **No le des más permisos a `monitor_lector`.** Si el diagnóstico dice que "puede escribir", es
+  un problema, no una ventaja.
+- **No cambies el modo de autenticación ni reinicies el SQL Server** de SoftRestaurant durante el
+  servicio: la caja deja de cobrar.
 - **No borres `cola.db`** (ver "Desinstalar").
-- **No copies `config.json` a otra PC ni lo mandes por correo:** trae la API key y la
-  contraseña.
+- **No copies `config.json` a otra PC ni lo mandes por correo:** trae la API key y la contraseña.
+- **No mandes el código de enlace por un grupo de WhatsApp.** Dura 30 minutos y sirve una vez,
+  pero mientras tanto vale lo mismo que la API key.
 
 ## Si algo sale mal
 
-- **El log del agente:** `C:\ProgramData\ArkonAgente\logs\agente-AAAAMMDD.log` (uno por
-  día). Para abrirlo hace falta ser administrador.
+- **El log del agente:** `C:\ProgramData\ArkonAgente\logs\agente-AAAAMMDD.log` (uno por día).
+  Para abrirlo hace falta ser administrador.
 - **Volver a probar las conexiones** sin reinstalar:
 
   ```powershell
@@ -270,4 +338,5 @@ si quieres quitarlo, pídelo a soporte.
   ```
 
 - **Estado del servicio:** `sc.exe query ArkonAgente` (tiene que decir `RUNNING`).
-- Detalle técnico (qué revisa cada cosa, la cola, el heartbeat): `agent/README.md`.
+- Detalle técnico (qué revisa cada cosa, la cola, el heartbeat, cómo se arma el paquete):
+  `agent/README.md`.

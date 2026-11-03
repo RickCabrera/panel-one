@@ -14,6 +14,9 @@ internal static class Instalador
 
     public static string LeerTexto(string archivo) => File.ReadAllText(Ruta(archivo), Encoding.UTF8);
 
+    /// <summary><c>agent/empaquetar-instalador.ps1</c>: arma el .zip; no va dentro de él.</summary>
+    public static string RutaEmpaquetador => Path.Combine(Path.GetDirectoryName(Carpeta)!, "empaquetar-instalador.ps1");
+
     private static string Encontrar()
     {
         var carpeta = new DirectoryInfo(AppContext.BaseDirectory);
@@ -39,12 +42,14 @@ internal static class Instalador
 /// </remarks>
 public class InstaladorPs1Tests
 {
-    private static readonly string[] Scripts = ["instalar.ps1", "crear-usuario-lector.ps1", "funciones-instalador.ps1"];
+    private static readonly string[] Scripts = ["instalar.ps1", "crear-usuario-lector.ps1", "funciones-instalador.ps1", "instalar-un-clic.ps1"];
 
     [Fact]
     public void Los_scripts_del_instalador_parsean_y_no_usan_alias_peligrosos()
     {
-        var lista = string.Join(",", Scripts.Select(s => $"'{Instalador.Ruta(s)}'"));
+        // El empaquetador vive un nivel arriba (agent/), no va en el paquete.
+        var rutas = Scripts.Select(Instalador.Ruta).Append(Instalador.RutaEmpaquetador).ToList();
+        var lista = string.Join(",", rutas.Select(s => $"'{s}'"));
         var salida = CorrerPowerShell($$"""
             foreach ($f in @({{lista}})) {
                 $tokens = $null; $errores = $null
@@ -61,7 +66,7 @@ public class InstaladorPs1Tests
             """);
 
         Assert.DoesNotContain(salida, l => l.StartsWith("ERROR|", StringComparison.Ordinal) || l.StartsWith("PROHIBIDO|", StringComparison.Ordinal));
-        Assert.Equal(Scripts.Length, salida.Count(l => l.StartsWith("OK|", StringComparison.Ordinal)));
+        Assert.Equal(rutas.Count, salida.Count(l => l.StartsWith("OK|", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -80,6 +85,8 @@ public class InstaladorPs1Tests
     [InlineData("crear-usuario-lector.ps1")]
     [InlineData("funciones-instalador.ps1")]
     [InlineData("crear-usuario-lector.sql")]
+    [InlineData("instalar-un-clic.ps1")]
+    [InlineData("LEEME.txt")]
     public void Los_archivos_del_instalador_van_en_UTF8_con_BOM(string archivo)
     {
         // PowerShell 5.1 lee un .ps1 sin BOM como ANSI, y sqlcmd igual con el .sql: los
@@ -248,7 +255,7 @@ public class InstaladorPs1Tests
 
     // --- Correr PowerShell --------------------------------------------------------------
 
-    private static bool EsValida(string funcion, string valor)
+    internal static bool EsValida(string funcion, string valor)
     {
         var literal = valor.Replace("'", "''", StringComparison.Ordinal);
         var salida = CorrerPowerShell($"if ({funcion} '{literal}') {{ 'MAL' }} else {{ 'BIEN' }}");
@@ -259,7 +266,7 @@ public class InstaladorPs1Tests
     /// Corre <paramref name="cuerpo"/> después de cargar funciones-instalador.ps1 y devuelve
     /// las líneas de salida. Falla si PowerShell termina con error o escribe en stderr.
     /// </summary>
-    private static List<string> CorrerPowerShell(string cuerpo)
+    internal static List<string> CorrerPowerShell(string cuerpo)
     {
         using var carpeta = new CarpetaTemporal();
         var script = Path.Combine(carpeta.Ruta, "prueba.ps1");
@@ -296,7 +303,7 @@ public class InstaladorPs1Tests
         return salida.Result.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0).ToList();
     }
 
-    private static string Shell()
+    internal static string Shell()
     {
         if (OperatingSystem.IsWindows())
         {

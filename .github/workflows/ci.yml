@@ -143,6 +143,20 @@ jobs:
       - run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
+      # El schema y las migraciones dicen lo mismo: una migración escrita a mano (o un cambio al
+      # schema sin migración) que no cuadre truena aquí, no en el `migrate dev` de la siguiente
+      # persona. La base sombra es temporal y sólo vive en este job. Los CHECK escritos a mano
+      # no cuentan como desvío (Prisma no los modela).
+      - name: Sin desvío entre schema.prisma y las migraciones
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE prisma_sombra;'
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url postgresql://postgres:postgres@localhost:5432/prisma_sombra \
+            --exit-code
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
       - run: npm test
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_test
@@ -248,3 +262,26 @@ jobs:
       # compila en Linux de sobra para el gate del PR.
       - run: dotnet build --no-restore --configuration Release
       - run: dotnet test --no-build --configuration Release --verbosity normal
+
+  # ---------------------------------------------------------------------------
+  # INSTALADOR DEL AGENTE en Windows (instalador de un clic). Los mismos tests del
+  # instalador que el carril de arriba, pero con `powershell.exe` 5.1, el de las
+  # PCs de los restaurantes: el paso de argumentos a programas nativos (sqlcmd),
+  # la codificación y Invoke-RestMethod se portan distinto que en pwsh 7, y ahí
+  # fue donde vivió el bug de sqlcmd. Sólo el filtro `Instalador`: el resto del
+  # agente ya lo cubre el carril de Linux.
+  # ---------------------------------------------------------------------------
+  agent-instalador-windows:
+    name: Instalador del agente (Windows PowerShell 5.1)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet restore
+      - run: dotnet build --no-restore --configuration Release
+      - run: dotnet test --no-build --configuration Release --verbosity normal --filter "FullyQualifiedName~ArkonAgente.Tests.Instalador"

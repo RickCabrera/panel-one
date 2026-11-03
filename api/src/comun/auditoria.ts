@@ -10,6 +10,8 @@ export type AccionAuditada =
   | 'sucursal.crear'
   | 'sucursal.editar'
   | 'sucursal.rotar_api_key'
+  // Instalador de un clic: el código de enlace de una sucursal (la key se rota al canjearlo).
+  | 'sucursal.codigo_enlace'
   | 'usuario.crear'
   | 'usuario.editar'
   | 'usuario.reset_password'

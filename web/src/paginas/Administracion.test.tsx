@@ -252,6 +252,102 @@ describe('Sucursales', () => {
     expect(api.contar('POST', `/sucursales/${SUCURSAL_A1.id}/api-key`)).toBe(1);
   });
 
+  it('Conectar sucursal: genera el código al confirmar, lo muestra con su vigencia y los 3 pasos, y no queda en ningún lado', async () => {
+    const CODIGO = 'K7P4-42XQ';
+    const api = apiAdmin('admin_empresa', {
+      'GET /sucursales': () => json(200, [SUCURSAL_A1, { ...SUCURSAL_A2, activo: false }]),
+      [`POST /sucursales/${SUCURSAL_A1.id}/codigo-enlace`]: () =>
+        json(201, {
+          sucursalId: SUCURSAL_A1.id,
+          codigo: CODIGO,
+          expiraAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+          vigenciaSegundos: 1800,
+        }),
+    });
+    const queryClient = montar(`/admin?empresa=${A}`);
+
+    // Una sucursal dada de baja no se puede conectar.
+    const inactiva = await screen.findByRole('row', { name: 'Tijuana' });
+    expect(
+      within(inactiva).queryByRole('button', { name: 'Conectar sucursal' }),
+    ).not.toBeInTheDocument();
+
+    const fila = screen.getByRole('row', { name: 'Centro' });
+    await userEvent.click(within(fila).getByRole('button', { name: 'Conectar sucursal' }));
+    const dialogo = screen.getByRole('dialog', { name: 'Conectar Centro' });
+    expect(dialogo).toHaveTextContent('vence en 30 minutos');
+    expect(api.contar('POST', `/sucursales/${SUCURSAL_A1.id}/codigo-enlace`)).toBe(0);
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Generar código' }));
+
+    expect(await screen.findByTestId('codigo-enlace')).toHaveTextContent(CODIGO);
+    expect(screen.getByRole('timer')).toHaveTextContent(/Vence en (30:00|29:5\d)/);
+    const pasos = within(screen.getByRole('list', { name: 'Pasos en la PC del restaurante' }));
+    expect(pasos.getAllByRole('listitem')).toHaveLength(3);
+    expect(pasos.getAllByRole('listitem')[1]).toHaveTextContent(
+      'Doble clic en Instalar-YoControlo',
+    );
+    // Con el código a la vista, Escape no lo cierra.
+    await userEvent.keyboard('{Escape}');
+    expect(screen.getByTestId('codigo-enlace')).toBeInTheDocument();
+
+    const enCache = JSON.stringify([
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .map((q) => q.state.data),
+      queryClient
+        .getMutationCache()
+        .getAll()
+        .map((m) => m.state),
+    ]);
+    expect(enCache).not.toContain(CODIGO);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(CODIGO);
+    expect(api.contar('POST', `/sucursales/${SUCURSAL_A1.id}/codigo-enlace`)).toBe(1);
+  });
+
+  it('Conectar sucursal: un código vencido lo dice y ofrece generar otro', async () => {
+    let n = 0;
+    const api = apiAdmin('admin_empresa', {
+      [`POST /sucursales/${SUCURSAL_A1.id}/codigo-enlace`]: () =>
+        json(201, {
+          sucursalId: SUCURSAL_A1.id,
+          codigo: n++ === 0 ? 'AAAA-AAAA' : 'BBBB-BBBB',
+          expiraAt:
+            n === 1
+              ? new Date(Date.now() - 1000).toISOString()
+              : new Date(Date.now() + 1_800_000).toISOString(),
+          vigenciaSegundos: 1800,
+        }),
+    });
+    montar(`/admin?empresa=${A}`);
+
+    const fila = await screen.findByRole('row', { name: 'Centro' });
+    await userEvent.click(within(fila).getByRole('button', { name: 'Conectar sucursal' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Generar código' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Venció');
+    await userEvent.click(screen.getByRole('button', { name: 'Generar otro' }));
+    await waitFor(() => expect(screen.getByTestId('codigo-enlace')).toHaveTextContent('BBBB-BBBB'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(api.contar('POST', `/sucursales/${SUCURSAL_A1.id}/codigo-enlace`)).toBe(2);
+  });
+
+  it('Conectar sucursal: un error de la API se muestra y no hay código', async () => {
+    apiAdmin('admin_empresa', {
+      [`POST /sucursales/${SUCURSAL_A1.id}/codigo-enlace`]: () =>
+        json(404, { statusCode: 404, message: 'Recurso no encontrado', error: 'Not Found' }),
+    });
+    montar(`/admin?empresa=${A}`);
+    const fila = await screen.findByRole('row', { name: 'Centro' });
+    await userEvent.click(within(fila).getByRole('button', { name: 'Conectar sucursal' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Generar código' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByTestId('codigo-enlace')).not.toBeInTheDocument();
+  });
+
   it('dar de baja manda activo=false', async () => {
     const api = apiAdmin('admin_empresa', {
       [`PATCH /sucursales/${SUCURSAL_A2.id}`]: () => json(200, { ...SUCURSAL_A2, activo: false }),

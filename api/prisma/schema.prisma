@@ -138,6 +138,8 @@ model Sucursal {
   portalFacturacion     PortalFacturacion?
   // F2-104: los CFDI de los cheques de la sucursal.
   cfdis                 Cfdi[]
+  // Instalador de un clic: códigos de enlace (de un solo uso) que el instalador cambia por la API key.
+  codigosEnlace         CodigoEnlace[]
 
   // Destino de las FK compuestas (`agente_estado`, `agente_contacto`, `cheques`,
   // `mesa_snapshots`): garantiza que la empresa que guarda una tabla hija sea
@@ -270,6 +272,29 @@ model AgenteActualizacion {
   @@unique([sucursalId, empresaId], map: "agente_actualizacion_sucursal_id_empresa_id_key")
   @@index([empresaId])
   @@map("agente_actualizacion")
+}
+
+// Instalador de un clic: el código corto (`K7P-42X`) que el admin genera en Sucursales y el
+// instalador cambia por la API key de la sucursal (`POST /agente/enlace`). Sólo el hash; de un
+// solo uso (`usado_at`), vive 30 min (`expira_at`) y a lo más hay UNO pendiente por sucursal
+// (emitir otro borra el anterior sin usar). Los escribe SÓLO `src/scope/escritura-enlaces.ts`.
+// CHECK a mano en la migración: el hash es SHA-256 en hex.
+model CodigoEnlace {
+  id         String    @id @default(uuid()) @db.Uuid
+  empresaId  String    @map("empresa_id") @db.Uuid
+  sucursalId String    @map("sucursal_id") @db.Uuid
+  codigoHash String    @unique @map("codigo_hash") @db.Char(64)
+  expiraAt   DateTime  @map("expira_at") @db.Timestamptz(3)
+  usadoAt    DateTime? @map("usado_at") @db.Timestamptz(3)
+  // Quién lo generó (auditoría). Sin FK: un usuario dado de baja no borra el rastro.
+  creadoPor  String    @map("creado_por") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "codigos_enlace_sucursal_empresa_fkey")
+
+  @@index([empresaId])
+  @@index([sucursalId])
+  @@map("codigos_enlace")
 }
 
 enum ResultadoActualizacion {

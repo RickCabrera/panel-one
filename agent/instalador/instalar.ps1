@@ -53,6 +53,17 @@
 .PARAMETER ReemplazarConfig
     Vuelve a preguntar los datos y reescribe config.json aunque ya exista (por ejemplo,
     tras generar una API key nueva o cambiar la contraseña del lector).
+
+.PARAMETER ContenidoConfig
+    INTERNO: lo pasa instalar-un-clic.ps1 (que lo llama en el mismo proceso, así el secreto no
+    queda en ninguna línea de comando). El config.json ya armado; se escribe tal cual, en el
+    paso 5, DESPUÉS de proteger la carpeta, y sin preguntar nada. No lo uses a mano.
+
+.PARAMETER DesdeUnClic
+    INTERNO: lo pasa instalar-un-clic.ps1. No imprime los consejos finales de este script (el de
+    un clic imprime los suyos) y, SÓLO si el servicio no arranca porque su cuenta no pudo iniciar
+    sesión (errores 1069/1079), sale con 4 en vez de 3 para que el de un clic reintente con
+    LocalSystem.
 #>
 [CmdletBinding()]
 param(
@@ -63,7 +74,9 @@ param(
     [string] $Exe,
     [ValidateSet('Virtual', 'LocalSystem')]
     [string] $CuentaServicio = 'Virtual',
-    [switch] $ReemplazarConfig
+    [switch] $ReemplazarConfig,
+    [string] $ContenidoConfig,
+    [switch] $DesdeUnClic
 )
 
 Set-StrictMode -Version 2
@@ -207,7 +220,12 @@ function Invoke-Instalacion {
 
     # ---------------------------------------------------------------- 5
     Write-Paso '[5/8] Configuración (config.json)'
-    if ((Test-Path -LiteralPath $archivoConfig) -and -not $ReemplazarConfig) {
+    if ($ContenidoConfig) {
+        # Instalador de un clic: ya trae la key canjeada y la contraseña aleatoria del lector.
+        Write-ArchivoSinBom -Ruta $archivoConfig -Contenido $ContenidoConfig
+        Write-Bien "Escrito $archivoConfig (con los datos del código de enlace)."
+    }
+    elseif ((Test-Path -LiteralPath $archivoConfig) -and -not $ReemplazarConfig) {
         Write-Bien "Ya existe $archivoConfig y se conserva tal cual."
         Write-Bien 'Para cambiar los datos: vuelve a correr con -ReemplazarConfig.'
     }
@@ -276,6 +294,12 @@ function Invoke-Instalacion {
     catch {
         Write-Problema "El servicio no arrancó: $($_.Exception.Message)"
         Write-UltimoLog
+        # DECISION PROVISIONAL (nocturno): 4 sólo si fue una falla de INICIO DE SESIÓN del servicio
+        # (1069/1079): es lo único que el de un clic reintenta con LocalSystem.
+        if ($DesdeUnClic) {
+            if (Test-FallaInicioSesionServicio $_.Exception) { return 4 }
+            return 3
+        }
         if ($CuentaServicio -eq 'Virtual') {
             Write-Problema 'Prueba con la otra cuenta:  .\instalar.ps1 -CuentaServicio LocalSystem'
         }
@@ -294,10 +318,18 @@ function Invoke-Instalacion {
     if ($estado -ne 'Running') {
         Write-Problema "El servicio se detuvo después de arrancar (estado: $estado)."
         Write-UltimoLog
+        # Arrancó, así que la cuenta sí inició sesión: no es caso de reintentar con LocalSystem.
+        if ($DesdeUnClic) { return 3 }
         if ($CuentaServicio -eq 'Virtual') {
             Write-Problema 'Prueba con la otra cuenta:  .\instalar.ps1 -CuentaServicio LocalSystem'
         }
         return 3
+    }
+
+    # El de un clic imprime su propio resultado final (con lo que sabe del código y de SQL).
+    if ($DesdeUnClic) {
+        if ($codigo -ne 0 -and $codigo -ne 2) { $codigo = 1 }
+        return $codigo
     }
 
     Write-Host ''

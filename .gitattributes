@@ -30,3 +30,9 @@ api/openapi.json text eol=lf
 # salen rotos; InstaladorPs1Tests lo vigila). CRLF en el checkout, como pide .editorconfig.
 agent/instalador/*.ps1 text eol=crlf
 agent/instalador/*.sql text eol=crlf
+
+# Instalador de un clic: el .cmd lo lee cmd.exe (ASCII, CRLF, sin BOM; con LF las etiquetas y
+# los goto fallan) y el LEEME.txt lo abre el Bloc de notas. El empaquetador va en UTF-8 con BOM.
+agent/instalador/*.cmd text eol=crlf
+agent/instalador/*.txt text eol=crlf
+agent/*.ps1 text eol=crlf

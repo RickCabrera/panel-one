@@ -95,6 +95,19 @@ export interface ApiKeyEmitida {
   apiKey: string;
 }
 
+/**
+ * `CodigoEnlaceEmitidoDto` de `POST /sucursales/:id/codigo-enlace` (instalador de un clic): el
+ * código en claro, UNA sola vez. Sirve una vez y vence en `expiraAt` (30 min).
+ */
+export interface CodigoEnlaceEmitido {
+  sucursalId: string;
+  /** Con guión: `K7P4-42XQ`. */
+  codigo: string;
+  /** ISO-8601 UTC. */
+  expiraAt: string;
+  vigenciaSegundos: number;
+}
+
 /** `CambiarPasswordDto` de `POST /cuenta/password`; responde un `Sesion`. */
 export interface CambiarPassword {
   actual: string;

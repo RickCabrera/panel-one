@@ -263,7 +263,9 @@ dotnet build --configuration Release
 ```
 
 Las pruebas: `dotnet test` (desde `agent`). La configuración (`config.json`), el comando de
-diagnóstico `agente test`, el instalador (`agent/instalador/instalar.ps1`, que registra el
+diagnóstico `agente test`, el instalador de un clic (`Instalar-YoControlo.cmd` +
+`instalar-un-clic.ps1`, que sólo pide el código de enlace del panel; el paquete lo arma
+`agent/empaquetar-instalador.ps1`), el instalador manual (`agent/instalador/instalar.ps1`, que registra el
 servicio y su actualizador), el script del usuario SQL de solo lectura
 (`crear-usuario-lector.ps1`) y lo que lee de SoftRestaurant están en
 [`agent/README.md`](agent/README.md) y en la guía
