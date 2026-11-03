@@ -477,7 +477,11 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
           c.turnoSr,
           c.posiblementeIncompleto,
         ]),
-      ).toEqual([['9', false]]);
+      ).toEqual([
+        ['9', false],
+        // El 8 sigue abierto (entra en cualquier rango posterior) y abierto nunca es incompleto.
+        ['8', false],
+      ]);
       const t9 = (await turnoDe(FX.sucursalA1, '9')).id;
       expect((await get(`/cortes/${t9}`)).body.posiblementeIncompleto).toBe(false);
       expect((await get(`/cortes/${t7}`)).body.posiblementeIncompleto).toBe(true);
