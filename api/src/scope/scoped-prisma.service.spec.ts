@@ -84,6 +84,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // `catalogos(scope)`, no por aquí. F2-233: el mapeo área → canal, por `catalogos(scope)`.
       'areaCanal',
       'areaCatalogo',
+      // Membresías: la bitácora del panel de plataforma; se escribe SÓLO por `plataforma(scope)`.
+      'bitacoraPlataforma',
       'canalVentaCatalogo',
       // F2-126: categorías de gasto y gastos; se escriben por `gastos(scope)`.
       'categoriaGasto',
@@ -107,6 +109,9 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       // F2-110: modelos de PLATAFORMA; con scope de empresa no casan con nada. Se leen y escriben
       // por `folios(scope)` / `escrituraFolios(scope)`.
       'configuracionFolios',
+      // Membresías: los ajustes globales (PLATAFORMA); se escriben por `plataforma(scope)` y el
+      // color público se lee por `aparienciaPlataforma()`.
+      'configuracionPlataforma',
       // F2-123: conteos físicos; se escriben por `conteos(scope)`, no por aquí.
       'conteoFisico',
       // F2-202: bandeja del correo falso, filtrada por empresa_id como las demás.
@@ -132,6 +137,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'meseroCatalogo',
       // F2-122: pólizas y movimientos; se escriben por `movimientosDeSucursal(agente)`.
       'movimientoInventario',
+      // Membresías: los pagos de la suscripción; se escriben por `plataforma(scope)`.
+      'pagoSuscripcion',
       'paqueteFolios',
       'partidaCompra',
       'partidaConteo',
@@ -139,6 +146,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'partidaTraspaso',
       // F2-100: datos fiscales; se escriben por `facturacion(scope)`, no por aquí.
       'perfilFiscal',
+      // Membresías: los planes (PLATAFORMA); se escriben por `plataforma(scope)`.
+      'plan',
       'polizaInventario',
       // F2-103: el portal de autofactura; se escribe por `facturacion(scope)` y lo público va por
       // `portalPublico`/`logoPortal`, no por aquí.
@@ -158,6 +167,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'sincronizacionCatalogo',
       'solicitudSincronizacion',
       'sucursal',
+      // Membresías: la suscripción de cada empresa; se escribe por `plataforma(scope)`.
+      'suscripcion',
       'suscripcionReporte',
       'traspaso',
       'unidadCatalogo',

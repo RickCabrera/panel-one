@@ -105,11 +105,18 @@ export class AdministracionService {
 
   // --- Sucursales ---------------------------------------------------------------------
 
+  /**
+   * Alta de sucursal respetando el límite del plan (membresías): por encima, 409; un admin_global
+   * lo puede pasar con `forzarLimite` (queda en la bitácora de plataforma).
+   */
   async crearSucursal({ actor, scope }: Quien, dto: CrearSucursalDto): Promise<SucursalCreada> {
-    const sucursal = await this.datos.admin(scope).crearSucursal(dto.empresaId, {
-      nombre: dto.nombre,
-      zonaHoraria: dto.zonaHoraria,
-    });
+    const sucursal = await this.datos
+      .cupoSucursales(scope, actor.id)
+      .crearSucursal(
+        dto.empresaId,
+        { nombre: dto.nombre, zonaHoraria: dto.zonaHoraria },
+        dto.forzarLimite === true,
+      );
     this.auditoria.registrar(actor, {
       accion: 'sucursal.crear',
       recurso: 'sucursal',
@@ -124,7 +131,14 @@ export class AdministracionService {
     id: string,
     dto: EditarSucursalDto,
   ): Promise<SucursalCreada> {
-    const campos = camposPresentes(dto);
+    const { forzarLimite, ...cambios } = dto;
+    const campos = camposPresentes(cambios);
+    // Reactivar cuenta contra el límite de sucursales del plan (membresías).
+    if (cambios.activo === true) {
+      await this.datos
+        .cupoSucursales(scope, actor.id)
+        .verificarReactivacion(id, forzarLimite === true);
+    }
     const datos = this.datos.para(scope);
     const { count } = await datos.sucursal.updateMany({
       where: { id },
@@ -259,6 +273,17 @@ export class AdministracionService {
       throw new BadRequestException('Tu propia contraseña se cambia en /cuenta/password');
     }
     const datos = this.datos.para(scope);
+    // Membresías: la contraseña de un administrador interno (admin_global) sólo la cambia ÉL
+    // MISMO en /cuenta/password. Ningún admin restablece la de otro admin. Para un
+    // admin_empresa un admin_global ni existe en su alcance (404, como siempre).
+    const destino = encontradoOr404(
+      await datos.usuario.findFirst({ where: { id }, select: { rol: true } }),
+    );
+    if (destino.rol === RolUsuario.admin_global) {
+      throw new BadRequestException(
+        'La contraseña de un administrador sólo la cambia él mismo, en Mi cuenta',
+      );
+    }
     const passwordHash = await hash(password, ARGON2_OPCIONES);
     const { count } = await datos.usuario.updateMany({
       where: { id },

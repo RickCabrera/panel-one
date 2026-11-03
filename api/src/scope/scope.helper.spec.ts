@@ -106,17 +106,29 @@ describe('whereEmpresa / whereScoped', () => {
       ConfiguracionFolios: null,
       // F2-143: el canal de versiones del agente (plataforma).
       VersionAgente: null,
+      // Plataforma (membresías): suscripción, pagos y bitácora por empresa; planes y ajustes, no.
+      Suscripcion: 'empresaId',
+      PagoSuscripcion: 'empresaId',
+      BitacoraPlataforma: 'empresaId',
+      Plan: null,
+      ConfiguracionPlataforma: null,
     });
     expect(whereEmpresa(EMPRESA_A, 'Empresa')).toEqual({ id: A });
     expect(whereEmpresa(EMPRESA_A, 'Sucursal')).toEqual({ empresaId: A });
   });
 
-  it('F2-110/F2-143: los ÚNICOS modelos de plataforma (llave null) son folios y versiones del agente', () => {
+  it('F2-110/F2-143/membresías: los ÚNICOS modelos de plataforma (llave null) son folios, versiones del agente, planes y ajustes', () => {
     const dePlataforma = Object.entries(LLAVE_EMPRESA)
       .filter(([, llave]) => llave === null)
       .map(([modelo]) => modelo)
       .sort();
-    expect(dePlataforma).toEqual(['ConfiguracionFolios', 'PaqueteFolios', 'VersionAgente']);
+    expect(dePlataforma).toEqual([
+      'ConfiguracionFolios',
+      'ConfiguracionPlataforma',
+      'PaqueteFolios',
+      'Plan',
+      'VersionAgente',
+    ]);
   });
 
   it('F2-110: con scope de empresa, un modelo de plataforma no casa con ninguna fila', () => {

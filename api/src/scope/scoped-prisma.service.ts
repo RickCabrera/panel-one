@@ -17,6 +17,7 @@ import { EscrituraFolios, LecturaFoliosPlataforma } from './folios-plataforma';
 import { IngestaMovimientos } from './escritura-movimientos';
 import { IngestaRecetas } from './escritura-recetas';
 import { EscrituraPush } from './escritura-push';
+import { CupoSucursales, EscrituraPlataforma, LecturaAparienciaPlataforma } from './plataforma';
 import { EscrituraReportes } from './escritura-reportes';
 import { EscrituraTraspasos } from './escritura-traspasos';
 import { EscrituraSucursal } from './escritura-sucursal';
@@ -423,6 +424,28 @@ export class ScopedPrismaService {
    */
   versionesAgente(): LecturaVersionesAgente {
     return new LecturaVersionesAgente(this.#prisma);
+  }
+
+  /**
+   * Las escrituras del panel de plataforma (membresías): planes, clientes, suscripciones, pagos,
+   * administradores internos y ajustes globales, cada una con su línea de bitácora en la misma
+   * transacción. Lanza con un scope que no sea global. Ver `plataforma.ts`.
+   */
+  plataforma(scope: EmpresaScope, actorId: string, hoy: Date): EscrituraPlataforma {
+    return new EscrituraPlataforma(this.#prisma, scope, actorId, hoy);
+  }
+
+  /** El color de interfaz global (público, sin tenant: lo lee el login). */
+  aparienciaPlataforma(): LecturaAparienciaPlataforma {
+    return new LecturaAparienciaPlataforma(this.#prisma);
+  }
+
+  /**
+   * Altas y reactivaciones de sucursal respetando el límite del plan, bajo el candado de la
+   * suscripción. Con el scope del usuario: una empresa fuera de alcance es 404.
+   */
+  cupoSucursales(scope: EmpresaScope, actorId: string): CupoSucursales {
+    return new CupoSucursales(this.#prisma, scope, actorId);
   }
 
   /** Listar, publicar y retirar versiones del agente (F2-143). Lanza con un scope que no sea global. */

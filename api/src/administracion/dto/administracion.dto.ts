@@ -82,6 +82,15 @@ export class CrearSucursalDto {
   @ApiProperty({ example: 'America/Mexico_City', description: DESC_ZONA })
   @EsZonaIana()
   zonaHoraria!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Membresías: confirma pasar el límite de sucursales del plan. Sólo vale para admin_global; ' +
+      'un admin_empresa recibe el 409 igual.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  forzarLimite?: boolean;
 }
 
 export class EditarSucursalDto {
@@ -104,11 +113,22 @@ export class EditarSucursalDto {
   zonaHoraria?: string;
 
   @ApiPropertyOptional({
-    description: '`false` da de baja la sucursal: su agente recibe 401 desde el siguiente envío.',
+    description:
+      '`false` da de baja la sucursal: su agente recibe 401 desde el siguiente envío. `true` ' +
+      'reactiva, respetando el límite de sucursales del plan (409 por encima).',
   })
   @SiViene()
   @IsBoolean()
   activo?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Membresías: confirma pasar el límite de sucursales del plan. Sólo vale para admin_global; ' +
+      'un admin_empresa recibe el 409 igual.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  forzarLimite?: boolean;
 }
 
 // --- Usuarios -----------------------------------------------------------------------

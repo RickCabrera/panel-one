@@ -78,6 +78,25 @@ export async function limpiarFixtures(
   extras: readonly string[] = [],
 ): Promise<void> {
   const empresas = [FX.empresaA, FX.empresaB, FX.empresaC, ...extras];
+  // Membresías (panel de plataforma): los pagos cuelgan de la suscripción y de quien los
+  // registró o anuló (Restrict), así que van antes que las dos. La bitácora no tiene FK, pero
+  // se limpia igual (por empresa y por actor de prueba).
+  const deDominio = (
+    await prisma.usuario.findMany({ where: { email: { endsWith: DOMINIO } }, select: { id: true } })
+  ).map((u) => u.id);
+  await prisma.pagoSuscripcion.deleteMany({
+    where: {
+      OR: [
+        { empresaId: { in: empresas } },
+        { registradoPorId: { in: deDominio } },
+        { anuladoPorId: { in: deDominio } },
+      ],
+    },
+  });
+  await prisma.suscripcion.deleteMany({ where: { empresaId: { in: empresas } } });
+  await prisma.bitacoraPlataforma.deleteMany({
+    where: { OR: [{ empresaId: { in: empresas } }, { actorId: { in: deDominio } }] },
+  });
   // Reportes programados (F2-141): cuelgan del usuario y de la empresa, así que van antes
   // que los dos. Envíos primero (FK a la suscripción).
   const suscripciones = {

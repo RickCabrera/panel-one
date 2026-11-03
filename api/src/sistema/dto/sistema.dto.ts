@@ -12,4 +12,21 @@ export class SistemaDto {
     example: false,
   })
   modoDemo!: boolean;
+
+  @ApiProperty({
+    enum: [
+      'naranja',
+      'morado',
+      'azul_electrico',
+      'verde_azulado',
+      'ambar_dorado',
+      'magenta',
+      'rojo',
+    ],
+    nullable: true,
+    description:
+      'Membresías: el color de interfaz que eligió la plataforma para TODOS los clientes ' +
+      '(Plataforma › Ajustes). Nulo = el del build (`VITE_COLOR_ACENTO`).',
+  })
+  colorAcento!: string | null;
 }
