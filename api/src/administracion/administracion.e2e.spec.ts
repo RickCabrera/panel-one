@@ -366,24 +366,21 @@ describe('Administración (e2e, F1-060)', () => {
       expect(u.body.empresaId).toBe(FX.empresaB);
     });
 
-    it('crea un admin_global sin empresa; con empresa es 400; otro rol sin empresa es 400', async () => {
-      const ok = await global.post('/usuarios', {
-        email: emailNuevo('global'),
-        nombre: 'Global nuevo',
-        rol: RolUsuario.admin_global,
-        password: PASSWORD_NUEVA,
-      });
-      expect(ok.status).toBe(201);
-      expect(ok.body).toMatchObject({ rol: RolUsuario.admin_global, empresaId: null });
-
-      const conEmpresa = await global.post('/usuarios', {
-        email: emailNuevo('global-emp'),
-        nombre: 'x',
-        rol: RolUsuario.admin_global,
-        empresaId: FX.empresaA,
-        password: PASSWORD_NUEVA,
-      });
-      expect(conEmpresa.status).toBe(400);
+    it('membresías: un admin_global NO se crea por /usuarios (400, con o sin empresa); otro rol sin empresa es 400', async () => {
+      // Los administradores internos se manejan SÓLO en /plataforma/administradores (candado
+      // y bitácora). Antes este POST los creaba; el comportamiento cambió a propósito.
+      for (const extra of [{}, { empresaId: FX.empresaA }]) {
+        const email = emailNuevo('global');
+        const r = await global.post('/usuarios', {
+          email,
+          nombre: 'Global nuevo',
+          rol: RolUsuario.admin_global,
+          password: PASSWORD_NUEVA,
+          ...extra,
+        });
+        expect(r.status).toBe(400);
+        expect(await prisma.usuario.count({ where: { email } })).toBe(0);
+      }
       const sinEmpresa = await global.post('/usuarios', {
         email: emailNuevo('visor-sin'),
         nombre: 'x',
@@ -391,6 +388,25 @@ describe('Administración (e2e, F1-060)', () => {
         password: PASSWORD_NUEVA,
       });
       expect(sinEmpresa.status).toBe(400);
+    });
+
+    it('membresías: sobre un admin_global, /usuarios no cambia `activo` ni `rol` (400); el nombre sí', async () => {
+      const g = await usuarioDePrueba('global-intocable', RolUsuario.admin_global, null);
+      for (const cambio of [
+        { activo: false },
+        { activo: true },
+        { rol: RolUsuario.admin_global },
+      ]) {
+        const r = await global.patch(`/usuarios/${g.id}`, cambio);
+        expect([cambio, r.status]).toEqual([cambio, 400]);
+        expect(r.body.message).toBe(
+          'Los administradores internos se manejan en Plataforma › Administradores',
+        );
+      }
+      await expect(fila(g.id)).resolves.toMatchObject({ activo: true, versionSesion: 0 });
+      expect((await global.patch(`/usuarios/${g.id}`, { nombre: 'Nuevo nombre' })).status).toBe(
+        200,
+      );
     });
 
     it('cambios de rol hacia o desde admin_global: 400, y el usuario no cambia (nunca 500 por el CHECK)', async () => {
@@ -410,10 +426,10 @@ describe('Administración (e2e, F1-060)', () => {
         rol: RolUsuario.visor,
         empresaId: FX.empresaA,
       });
-      // Mismo rol que ya tiene: no es un cambio, pasa.
+      // Membresías: sobre un admin_global, ni siquiera "su mismo rol" pasa por aquí.
       expect(
         (await global.patch(`/usuarios/${g.id}`, { rol: RolUsuario.admin_global })).status,
-      ).toBe(200);
+      ).toBe(400);
     });
 
     it('lista usuarios de todas las empresas, o de una', async () => {

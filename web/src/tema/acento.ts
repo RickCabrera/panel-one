@@ -11,8 +11,10 @@
  * dé sobre el relleno).
  */
 import { ajustarContraste, contraste, normalizarHex } from './contraste';
+import type { ColorAcento } from '../api/tipos';
 import {
   ACENTO_POR_DEFECTO,
+  ACENTOS_PLATAFORMA,
   BLANCO,
   NEGRO,
   PALETA,
@@ -49,4 +51,44 @@ export function derivarAcento(acento: string, tema: Tema): Record<TokenAcento, s
     'sobre-acento': contraste(BLANCO, base) >= contraste(NEGRO, base) ? BLANCO : NEGRO,
     'serie-1': borde,
   };
+}
+
+/** Las claves de color que acepta la plataforma, en el orden de la pantalla de Ajustes. */
+export const CLAVES_ACENTO = Object.keys(ACENTOS_PLATAFORMA) as ColorAcento[];
+
+export function esColorAcento(valor: unknown): valor is ColorAcento {
+  return typeof valor === 'string' && (CLAVES_ACENTO as readonly string[]).includes(valor);
+}
+
+/**
+ * Membresías: el acento que se ve. El color GLOBAL de la plataforma (la clave que manda
+ * `GET /sistema`) si hay uno válido; si no, el del build (`VITE_COLOR_ACENTO`).
+ */
+export function acentoEfectivo(clave: unknown, respaldo: string = ACENTO_DESPLIEGUE): string {
+  return esColorAcento(clave) ? ACENTOS_PLATAFORMA[clave].hex : respaldo;
+}
+
+/**
+ * La última clave global vista en ESTE navegador: con ella `main.tsx` pinta el color correcto
+ * antes de que conteste `/sistema` (sin destello del color del build). Comodidad por
+ * navegador: sin storage, o con basura, vale el del build.
+ */
+const CLAVE_ACENTO_GLOBAL = 'monitor.acento.global';
+
+export function leerAcentoGuardado(): ColorAcento | null {
+  try {
+    const valor = window.localStorage.getItem(CLAVE_ACENTO_GLOBAL);
+    return esColorAcento(valor) ? valor : null;
+  } catch {
+    return null;
+  }
+}
+
+export function guardarAcentoVisto(clave: ColorAcento | null): void {
+  try {
+    if (clave === null) window.localStorage.removeItem(CLAVE_ACENTO_GLOBAL);
+    else window.localStorage.setItem(CLAVE_ACENTO_GLOBAL, clave);
+  } catch {
+    // Sin storage: el color llega con /sistema, sólo sin la memoria del arranque.
+  }
 }

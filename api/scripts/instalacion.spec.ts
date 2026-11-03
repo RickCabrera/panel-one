@@ -22,7 +22,7 @@ describe('contrato de instalación de /api', () => {
     expect(scripts.postinstall).toMatch(/(^|&&\s*)prisma generate(\s|$)/);
   });
 
-  it('`npm run seed` corre los seeds en orden: base, ventas, mesas, alertas (F2-224), reportes (F2-141)', () => {
+  it('`npm run seed` corre los seeds en orden: base, ventas, mesas, alertas (F2-224), reportes (F2-141), plataforma (membresías)', () => {
     const pasos = (scripts.seed ?? '').split('&&').map((paso) => paso.trim());
     expect(pasos).toEqual([
       'prisma db seed',
@@ -30,15 +30,18 @@ describe('contrato de instalación de /api', () => {
       'npm run seed:mesas',
       'npm run seed:alertas',
       'npm run seed:reportes',
+      'npm run seed:plataforma',
     ]);
     expect(scripts['seed:ventas']).toBe('ts-node prisma/seed-ventas.ts');
     expect(scripts['seed:mesas']).toBe('ts-node prisma/seed-mesas.ts');
     expect(scripts['seed:alertas']).toBe('ts-node prisma/seed-alertas.ts');
     expect(scripts['seed:reportes']).toBe('ts-node prisma/seed-reportes.ts');
+    expect(scripts['seed:plataforma']).toBe('ts-node prisma/seed-plataforma.ts');
     expect(existsSync(join(API, 'prisma', 'seed-ventas.ts'))).toBe(true);
     expect(existsSync(join(API, 'prisma', 'seed-mesas.ts'))).toBe(true);
     expect(existsSync(join(API, 'prisma', 'seed-alertas.ts'))).toBe(true);
     expect(existsSync(join(API, 'prisma', 'seed-reportes.ts'))).toBe(true);
+    expect(existsSync(join(API, 'prisma', 'seed-plataforma.ts'))).toBe(true);
   });
 
   it('`npm run setup:env` existe y apunta al script que copia .env.example', () => {

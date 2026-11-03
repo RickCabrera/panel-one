@@ -18,6 +18,7 @@ import { IngestaModule } from './ingesta/ingesta.module';
 import { MesasModule } from './mesas/mesas.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { OrganizacionModule } from './organizacion/organizacion.module';
+import { PlataformaModule } from './plataforma/plataforma.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { ReportesModule } from './reportes/reportes.module';
@@ -48,6 +49,7 @@ import { VentasModule } from './ventas/ventas.module';
     InventarioModule,
     FinanzasModule,
     FacturacionModule,
+    PlataformaModule,
     // MVP de cortes (al final: sus rutas se agregan al final del contrato).
     CortesModule,
   ],

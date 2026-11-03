@@ -40,6 +40,14 @@ model Empresa {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  // Plataforma (membresías): datos de contacto del CLIENTE (el negocio que nos paga). Los lee
+  // y escribe SÓLO el panel de plataforma (admin_global); nunca salen en `SELECT_EMPRESA`.
+  contactoNombre   String? @map("contacto_nombre") @db.VarChar(120)
+  contactoTelefono String? @map("contacto_telefono") @db.VarChar(30)
+  contactoEmail    String? @map("contacto_email") @db.VarChar(254)
+  rfc              String? @db.VarChar(13)
+  notasPlataforma  String? @map("notas_plataforma") @db.VarChar(2000)
+
   sucursales               Sucursal[]
   usuarios                 Usuario[]
   formasPagoCatalogo       FormaPagoCatalogo[]
@@ -62,6 +70,9 @@ model Empresa {
   // F2-108: qué tickets entraron a qué factura global.
   cfdiGlobalCodigos        CfdiGlobalCodigo[]
   cfdiCancelaciones        CfdiCancelacion[]
+  // Plataforma (membresías): la suscripción vigente (una por empresa) y sus pagos.
+  suscripcion              Suscripcion?
+  pagosSuscripcion         PagoSuscripcion[]
 
   @@map("empresas")
 }
@@ -150,23 +161,25 @@ model Sucursal {
 }
 
 model Usuario {
-  id            String     @id @default(uuid()) @db.Uuid
+  id             String     @id @default(uuid()) @db.Uuid
   // Siempre en minúsculas: lo normaliza quien escribe (seed, y login en F1-011).
-  email         String     @unique
-  passwordHash  String     @map("password_hash")
-  nombre        String
-  rol           RolUsuario
+  email          String     @unique
+  passwordHash   String     @map("password_hash")
+  nombre         String
+  rol            RolUsuario
   // Nulo sólo para admin_global, obligatorio para los demás roles. Lo garantiza
   // el CHECK `usuarios_rol_empresa_chk` de la migración, no este schema.
-  empresaId     String?    @map("empresa_id") @db.Uuid
-  activo        Boolean    @default(true)
+  empresaId      String?    @map("empresa_id") @db.Uuid
+  activo         Boolean    @default(true)
   // Versión de las sesiones del usuario (F1-060). Va en el refresh token (claim
   // `ver`) y el refresh la compara con la base: cambiar o restablecer la
   // contraseña, o desactivar al usuario, la incrementa y deja sin efecto todo
   // refresh emitido antes. El access token (15 min) NO se revoca con esto.
-  versionSesion Int        @default(0) @map("version_sesion")
-  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  versionSesion  Int        @default(0) @map("version_sesion")
+  // Plataforma: el último login exitoso (lo escribe SÓLO `AuthService.login`). Nulo = nunca.
+  ultimoAccesoAt DateTime?  @map("ultimo_acceso_at") @db.Timestamptz(3)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   empresa Empresa? @relation(fields: [empresaId], references: [id], onDelete: Restrict)
 
@@ -182,6 +195,9 @@ model Usuario {
   preferenciaPush         PreferenciaPush?
   preferenciasPushEmpresa PreferenciaPush[]    @relation("PreferenciaPushEmpresa")
   enviosPushResumen       EnvioPushResumen[]
+  // Plataforma: los pagos de membresía que registró o anuló (admin_global).
+  pagosRegistrados        PagoSuscripcion[]    @relation("PagoRegistradoPor")
+  pagosAnulados           PagoSuscripcion[]    @relation("PagoAnuladoPor")
 
   // Redundante con el PK, pero Prisma lo exige para la FK compuesta de
   // `sesiones_usuario` (usuario_id, empresa_id).
@@ -2202,4 +2218,158 @@ model ConfiguracionFolios {
   updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
 
   @@map("configuracion_folios")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Plataforma: planes, membresías y su bitácora (panel de plataforma, sólo admin_global).
+//
+// Es lo que NOSOTROS cobramos a cada cliente; no es dato de SoftRestaurant ni del negocio del
+// restaurante. Lo lee y escribe SÓLO `src/scope/plataforma.ts` (parte del helper de scope), con
+// scope global; la lectura de la membresía propia (`/cuenta/membresia`) va por `para(scope)`.
+//
+// Fechas de CALENDARIO (`@db.Date`): inicio, vencimiento, fecha de pago y periodo cubierto son
+// días, no instantes. "Hoy" para compararlas es el día en America/Mexico_City (la zona de la
+// plataforma, no la de una sucursal). Los instantes (`created_at`, `anulado_at`...) van en UTC.
+// ---------------------------------------------------------------------------------------------
+
+enum PeriodicidadPlan {
+  mensual
+  anual
+
+  @@map("periodicidad_plan")
+}
+
+/// El estado GUARDADO de una suscripción. `vencida` NO se guarda: se calcula al leer (ver
+/// `src/plataforma/membresia.ts`). `suspendida` y `cancelada` sólo las pone un admin_global.
+enum EstadoSuscripcion {
+  prueba
+  activa
+  suspendida
+  cancelada
+
+  @@map("estado_suscripcion")
+}
+
+enum MetodoPago {
+  transferencia
+  efectivo
+  tarjeta
+  otro
+
+  @@map("metodo_pago")
+}
+
+/// Un plan que vendemos. Modelo de PLATAFORMA (`LLAVE_EMPRESA.Plan = null`): no es de ninguna
+/// empresa. CHECKs a mano: precio >= 0, límite de sucursales >= 1 (o NULL = ilimitado).
+model Plan {
+  id               String           @id @default(uuid()) @db.Uuid
+  nombre           String           @unique @db.VarChar(80)
+  descripcion      String?          @db.VarChar(500)
+  // Precio MENSUAL en MXN. Un plan anual cobra 12 × este precio por periodo.
+  precioMensual    Decimal          @map("precio_mensual") @db.Decimal(12, 2)
+  periodicidad     PeriodicidadPlan @default(mensual)
+  // NULL = sucursales ilimitadas.
+  limiteSucursales Int?             @map("limite_sucursales")
+  activo           Boolean          @default(true)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  suscripciones Suscripcion[]
+
+  @@map("planes")
+}
+
+/// La membresía VIGENTE de una empresa: una por empresa (unique). CHECKs a mano: día de corte
+/// 1..28, días de gracia 0..60.
+model Suscripcion {
+  id          String            @id @default(uuid()) @db.Uuid
+  empresaId   String            @unique @map("empresa_id") @db.Uuid
+  planId      String            @map("plan_id") @db.Uuid
+  estado      EstadoSuscripcion
+  inicio      DateTime          @db.Date
+  // El próximo pago: el día hasta el que está cubierto el servicio.
+  vencimiento DateTime          @db.Date
+  diasGracia  Int               @default(5) @map("dias_gracia")
+  // El día del mes en que se cobra (1..28, para que exista en todos los meses).
+  diaCorte    Int               @map("dia_corte")
+  notas       String?           @db.VarChar(2000)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  empresa Empresa           @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  plan    Plan              @relation(fields: [planId], references: [id], onDelete: Restrict)
+  pagos   PagoSuscripcion[]
+
+  @@unique([id, empresaId], map: "suscripciones_id_empresa_id_key")
+  @@index([planId])
+  @@map("suscripciones")
+}
+
+/// Un pago de membresía. Nunca se borra: se ANULA (con motivo). CHECKs a mano: monto > 0,
+/// periodo_hasta > periodo_desde, moneda = 'MXN' (sólo pesos), y anulado_at/por/motivo todos o
+/// ninguno.
+model PagoSuscripcion {
+  id              String            @id @default(uuid()) @db.Uuid
+  empresaId       String            @map("empresa_id") @db.Uuid
+  suscripcionId   String            @map("suscripcion_id") @db.Uuid
+  monto           Decimal           @db.Decimal(12, 2)
+  moneda          String            @default("MXN") @db.Char(3)
+  fechaPago       DateTime          @map("fecha_pago") @db.Date
+  metodo          MetodoPago
+  referencia      String?           @db.VarChar(120)
+  periodoDesde    DateTime          @map("periodo_desde") @db.Date
+  periodoHasta    DateTime          @map("periodo_hasta") @db.Date
+  notas           String?           @db.VarChar(1000)
+  registradoPorId String            @map("registrado_por_id") @db.Uuid
+  // El estado guardado de la suscripción ANTES de este pago: anularlo lo regresa (un pago que
+  // sacó a alguien de `suspendida` o `prueba` y se anula, lo deja como estaba).
+  estadoAnterior  EstadoSuscripcion @map("estado_anterior")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  anuladoAt       DateTime?         @map("anulado_at") @db.Timestamptz(3)
+  anuladoPorId    String?           @map("anulado_por_id") @db.Uuid
+  motivoAnulacion String?           @map("motivo_anulacion") @db.VarChar(500)
+
+  empresa       Empresa     @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  // FK compuesta: el pago es de la empresa de su suscripción, nunca de otra.
+  suscripcion   Suscripcion @relation(fields: [suscripcionId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "pagos_suscripcion_suscripcion_empresa_fkey")
+  registradoPor Usuario     @relation("PagoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: Restrict)
+  anuladoPor    Usuario?    @relation("PagoAnuladoPor", fields: [anuladoPorId], references: [id], onDelete: Restrict)
+
+  @@index([empresaId])
+  @@index([suscripcionId])
+  @@index([fechaPago])
+  @@map("pagos_suscripcion")
+}
+
+/// La bitácora del panel de plataforma: quién hizo qué, cuándo, sobre qué empresa, con el
+/// antes y el después (JSON, SIN contraseñas ni hashes). Sólo INSERT. Sin FK a propósito: un
+/// registro de auditoría no se pierde ni se bloquea por lo que pase con la fila que nombra.
+model BitacoraPlataforma {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  actorEmail String   @map("actor_email") @db.VarChar(254)
+  accion     String   @db.VarChar(60)
+  empresaId  String?  @map("empresa_id") @db.Uuid
+  // Lo que se tocó (un plan, un pago, un usuario) cuando no es la empresa misma.
+  recurso    String?  @db.VarChar(40)
+  recursoId  String?  @map("recurso_id") @db.Uuid
+  antes      Json?
+  despues    Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([empresaId])
+  @@map("bitacora_plataforma")
+}
+
+/// Ajustes de la plataforma que valen para TODOS los clientes: UNA fila (`id = 1`, CHECK a
+/// mano), creada por la migración. Modelo de PLATAFORMA (`LLAVE_EMPRESA = null`).
+model ConfiguracionPlataforma {
+  id          Int      @id @db.SmallInt
+  // Clave del color de interfaz (`naranja`, `morado`...; CHECK a mano). NULL = el del build
+  // (`VITE_COLOR_ACENTO`).
+  colorAcento String?  @map("color_acento") @db.VarChar(20)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@map("configuracion_plataforma")
 }

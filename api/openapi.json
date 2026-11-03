@@ -46,6 +46,16 @@
               }
             }
           },
+          "403": {
+            "description": "Membresías: contraseña correcta, pero la empresa del usuario está suspendida o cancelada (`codigo: cuenta_bloqueada`). Sólo con la contraseña correcta.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaBloqueadaDto"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Más de 5 intentos por minuto, o de 30 por hora, desde la misma IP."
           }
@@ -72,7 +82,7 @@
             }
           },
           "401": {
-            "description": "Sin cookie, cookie inválida o vencida, o usuario/empresa ya inactivos.",
+            "description": "Sin cookie, cookie inválida o vencida, o usuario/empresa ya inactivos. Con la empresa suspendida o cancelada, el `message` lo dice (\"Tu cuenta está suspendida. Contacta a soporte.\").",
             "content": {
               "application/json": {
                 "schema": {
@@ -3558,6 +3568,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Membresías: la empresa ya tiene las sucursales activas que permite su plan (`codigo: limite_sucursales`). Un admin_empresa no lo puede pasar; un admin_global sí, con `forzarLimite: true` (queda en la bitácora de plataforma).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimiteSucursalesDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3728,6 +3748,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Al reactivar (`activo: true`): Membresías: la empresa ya tiene las sucursales activas que permite su plan (`codigo: limite_sucursales`). Un admin_empresa no lo puede pasar; un admin_global sí, con `forzarLimite: true` (queda en la bitácora de plataforma).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimiteSucursalesDto"
                 }
               }
             }
@@ -4292,7 +4322,7 @@
     },
     "/sistema": {
       "get": {
-        "description": "Pública (sin token): la marca de \"Datos de ejemplo\" tiene que verse también en el login. No expone nada de ninguna empresa.",
+        "description": "Pública (sin token): la marca de \"Datos de ejemplo\" tiene que verse también en el login. No expone nada de ninguna empresa. El color de interfaz es el GLOBAL de la plataforma.",
         "operationId": "SistemaController_sistema",
         "parameters": [],
         "responses": {
@@ -13640,6 +13670,1627 @@
         ]
       }
     },
+    "/plataforma/metricas": {
+      "get": {
+        "operationId": "PlataformaController_metricas",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Métricas de la plataforma: MRR, clientes por estado, ingresos del mes, por vencer.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/planes": {
+      "get": {
+        "operationId": "PlataformaController_planes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Planes (activos e inactivos) con cuántos clientes los usan.",
+        "tags": [
+          "plataforma"
+        ]
+      },
+      "post": {
+        "operationId": "PlataformaController_crearPlan",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearPlanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, fecha inexistente o PATCH vacío.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya hay un plan con ese nombre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Crea un plan.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/planes/{id}": {
+      "patch": {
+        "description": "Cambiar el precio cambia el MRR de quien ya lo tiene; no toca pagos pasados.",
+        "operationId": "PlataformaController_editarPlan",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditarPlanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, fecha inexistente o PATCH vacío.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya hay un plan con ese nombre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edita un plan.",
+        "tags": [
+          "plataforma"
+        ]
+      },
+      "delete": {
+        "operationId": "PlataformaController_borrarPlan",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Borrado."
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Algún cliente lo usa.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Borra un plan que ningún cliente usa (si alguno lo usa: desactívalo).",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/clientes": {
+      "get": {
+        "operationId": "PlataformaController_clientes",
+        "parameters": [
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "description": "Filtra por estado EFECTIVO.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "prueba",
+                "activa",
+                "vencida",
+                "suspendida",
+                "cancelada",
+                "sin_suscripcion"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Busca en el nombre (sin mayúsculas).",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClienteResumenDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Filtro inválido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clientes (empresas) con plan, estado, vencimiento, último pago y actividad.",
+        "tags": [
+          "plataforma"
+        ]
+      },
+      "post": {
+        "description": "Todo en una transacción: si el email ya existe (409) no queda nada. Las sucursales (con su API key) se agregan después en Administración o con el alta guiada.",
+        "operationId": "PlataformaController_altaCliente",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AltaClienteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, fecha inexistente o PATCH vacío. Plan inactivo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El email ya está en uso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Alta de cliente: empresa con contacto + suscripción + su primer admin_empresa.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/clientes/{id}": {
+      "get": {
+        "operationId": "PlataformaController_cliente",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteDetalleDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Detalle: suscripción, contacto, sucursales, agentes, usuarios y pagos.",
+        "tags": [
+          "plataforma"
+        ]
+      },
+      "patch": {
+        "operationId": "PlataformaController_editarCliente",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditarClienteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteDetalleDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, fecha inexistente o PATCH vacío.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edita el nombre y los datos de contacto del cliente.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/clientes/{id}/suscripcion": {
+      "put": {
+        "description": "Si la empresa no tiene suscripción, la crea `activa` (planId obligatorio).",
+        "operationId": "PlataformaController_guardarSuscripcion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardarMembresiaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuscripcionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, fecha inexistente o PATCH vacío. Plan inactivo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cambia plan, vencimiento, día de corte, gracia o notas (o crea la suscripción).",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/clientes/{id}/estado": {
+      "post": {
+        "description": "`suspendida`/`cancelada`: sus usuarios no entran ni refrescan (\"Tu cuenta está suspendida. Contacta a soporte.\") y sus refresh tokens dejan de servir en el acto. La ingesta de sus agentes NO se detiene.",
+        "operationId": "PlataformaController_cambiarEstado",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambiarEstadoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuscripcionDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La empresa no tiene suscripción.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Suspende, cancela o reactiva al cliente (a mano; nunca es automático).",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/pagos": {
+      "get": {
+        "operationId": "PlataformaController_pagosDelMes",
+        "parameters": [
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pagado",
+                "pendiente",
+                "vencido"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagosMesDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Las mensualidades del mes en curso: pagadas, pendientes y vencidas, y lo cobrado.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/clientes/{id}/pagos": {
+      "get": {
+        "operationId": "PlataformaController_pagosDeCliente",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PagoSuscripcionDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Historial de pagos del cliente (anulados incluidos).",
+        "tags": [
+          "plataforma"
+        ]
+      },
+      "post": {
+        "description": "Cubre `periodos` periodos del plan DESDE el vencimiento actual. Una suscripción cancelada no recibe pagos (409).",
+        "operationId": "PlataformaController_registrarPago",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrarPagoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagoRegistradoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, fecha inexistente o PATCH vacío. Fecha futura o monto 0.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sin suscripción, o cancelada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Registra un pago: corre el vencimiento y reactiva si estaba suspendida o en prueba.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/pagos/{id}/anular": {
+      "post": {
+        "description": "Sólo el más reciente que corrió el vencimiento; si hay uno posterior, 409.",
+        "operationId": "PlataformaController_anularPago",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnularPagoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagoSuscripcionDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya anulado, o hay un pago posterior.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Anula un pago (no se borra) y regresa el vencimiento a donde estaba.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/administradores": {
+      "get": {
+        "operationId": "PlataformaController_administradores",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdminDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Administradores internos (admin_global) con su último acceso.",
+        "tags": [
+          "plataforma"
+        ]
+      },
+      "post": {
+        "description": "Después, su contraseña sólo la cambia él mismo (Mi cuenta).",
+        "operationId": "PlataformaController_crearAdmin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, fecha inexistente o PATCH vacío.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "El email ya está en uso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Agrega un administrador interno con su contraseña INICIAL.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/administradores/buscar-cuenta": {
+      "get": {
+        "operationId": "PlataformaController_buscarCuenta",
+        "parameters": [
+          {
+            "name": "email",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "maxLength": 254,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaClienteDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Busca por correo una cuenta de cliente (dueño o gerente) a convertir.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/administradores/convertir": {
+      "post": {
+        "description": "Pasa a admin_global y deja de pertenecer a su empresa (la empresa sigue igual con sus demás usuarios). Su sesión de cliente se corta. Queda en la bitácora.",
+        "operationId": "PlataformaController_convertirCuenta",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConvertirCuentaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaConvertidaDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "La cuenta está desactivada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Convierte una cuenta de cliente en administrador, sin cambiarle correo ni contraseña.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/administradores/{id}": {
+      "patch": {
+        "description": "Nunca su contraseña (no hay ruta para eso) y nunca se borra. No te puedes desactivar a ti mismo (400) y siempre queda al menos uno activo (409).",
+        "operationId": "PlataformaController_editarAdmin",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditarAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Cuerpo inválido, `id` que no es UUID, fecha inexistente o PATCH vacío. Desactivarte a ti mismo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Sería el último activo, o email en uso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edita nombre/correo de un admin interno, o lo desactiva / reactiva.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/bitacora": {
+      "get": {
+        "operationId": "PlataformaController_bitacora",
+        "parameters": [
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "porPagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25,
+              "type": "number"
+            }
+          },
+          {
+            "name": "empresaId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BitacoraDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bitácora de plataforma, de la más reciente a la más vieja, paginada.",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/plataforma/ajustes": {
+      "get": {
+        "operationId": "PlataformaController_ajustes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ajustes que valen para todos los clientes (color de interfaz).",
+        "tags": [
+          "plataforma"
+        ]
+      },
+      "put": {
+        "operationId": "PlataformaController_guardarAjustes",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardarAjustesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AjustesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Color que no está en la lista.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No existe. Cualquier rol que no sea admin_global recibe 404 en TODA la ruta (igual que una ruta que no existe: no se revela que exista).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Guarda el color de interfaz global (lo toman las páginas al cargar).",
+        "tags": [
+          "plataforma"
+        ]
+      }
+    },
+    "/cuenta/membresia": {
+      "get": {
+        "description": "Sólo la de la empresa del token: nunca recibe un id. Con `vencida` el panel muestra el aviso de pago pendiente; el acceso sigue.",
+        "operationId": "MembresiaController_membresia",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RespuestaMembresiaDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "El estado de la membresía de TU empresa (nulo para admin_global o sin suscripción).",
+        "tags": [
+          "cuenta"
+        ]
+      }
+    },
     "/cortes": {
       "get": {
         "description": "Un turno entra si se abrió antes del fin del rango y no se cerró antes de su inicio (días locales de SU sucursal); un turno abierto que empezó antes también sale. Venta = Σ total de las cuentas no canceladas cuyo `idturno` (el del COBRO en SR) es el del turno. Orden: apertura más reciente primero; máximo 500.",
@@ -14031,6 +15682,35 @@
         "required": [
           "statusCode",
           "message"
+        ]
+      },
+      "CuentaBloqueadaDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 403
+          },
+          "message": {
+            "type": "string",
+            "example": "Tu cuenta está suspendida. Contacta a soporte."
+          },
+          "error": {
+            "type": "string",
+            "example": "Forbidden"
+          },
+          "codigo": {
+            "type": "string",
+            "enum": [
+              "cuenta_bloqueada"
+            ]
+          }
+        },
+        "required": [
+          "statusCode",
+          "message",
+          "error",
+          "codigo"
         ]
       },
       "CambiarPasswordDto": {
@@ -17102,6 +18782,23 @@
           "catalogo"
         ]
       },
+      "ModificadorTicketDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "precio": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Incluidos los de $0.00."
+          }
+        },
+        "required": [
+          "nombre",
+          "precio"
+        ]
+      },
       "PartidaTicketDto": {
         "type": "object",
         "properties": {
@@ -17131,7 +18828,7 @@
             "description": "Tal como los guardó la ingesta (esquema-sr.md §13: `{ nombre, precio }`).",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ModificadorDto"
+              "$ref": "#/components/schemas/ModificadorTicketDto"
             }
           }
         },
@@ -17520,12 +19217,60 @@
             "type": "string",
             "example": "America/Mexico_City",
             "description": "Zona IANA de la lista de Node (p. ej. `America/Mexico_City`). Un offset como `-06:00` es 400."
+          },
+          "forzarLimite": {
+            "type": "boolean",
+            "description": "Membresías: confirma pasar el límite de sucursales del plan. Sólo vale para admin_global; un admin_empresa recibe el 409 igual."
           }
         },
         "required": [
           "empresaId",
           "nombre",
           "zonaHoraria"
+        ]
+      },
+      "LimiteSucursalesDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 409
+          },
+          "message": {
+            "type": "string",
+            "example": "Tu plan (Esencial) permite 1 sucursal activa. Para agregar más, contacta a soporte."
+          },
+          "error": {
+            "type": "string",
+            "example": "Conflict"
+          },
+          "codigo": {
+            "type": "string",
+            "enum": [
+              "limite_sucursales"
+            ]
+          },
+          "limite": {
+            "type": "number",
+            "description": "Sucursales activas que permite el plan."
+          },
+          "activas": {
+            "type": "number",
+            "description": "Sucursales activas que ya tiene la empresa."
+          },
+          "plan": {
+            "type": "string",
+            "description": "Nombre del plan."
+          }
+        },
+        "required": [
+          "statusCode",
+          "message",
+          "error",
+          "codigo",
+          "limite",
+          "activas",
+          "plan"
         ]
       },
       "EditarSucursalDto": {
@@ -17543,7 +19288,11 @@
           },
           "activo": {
             "type": "boolean",
-            "description": "`false` da de baja la sucursal: su agente recibe 401 desde el siguiente envío."
+            "description": "`false` da de baja la sucursal: su agente recibe 401 desde el siguiente envío. `true` reactiva, respetando el límite de sucursales del plan (409 por encima)."
+          },
+          "forzarLimite": {
+            "type": "boolean",
+            "description": "Membresías: confirma pasar el límite de sucursales del plan. Sólo vale para admin_global; un admin_empresa recibe el 409 igual."
           }
         }
       },
@@ -17960,10 +19709,25 @@
             "type": "boolean",
             "description": "`true` con `MODO_DEMO=1`: los datos son de ejemplo y la interfaz lo marca en todas las vistas y en el título de la pestaña.",
             "example": false
+          },
+          "colorAcento": {
+            "type": "string",
+            "enum": [
+              "naranja",
+              "morado",
+              "azul_electrico",
+              "verde_azulado",
+              "ambar_dorado",
+              "magenta",
+              "rojo"
+            ],
+            "nullable": true,
+            "description": "Membresías: el color de interfaz que eligió la plataforma para TODOS los clientes (Plataforma › Ajustes). Nulo = el del build (`VITE_COLOR_ACENTO`)."
           }
         },
         "required": [
-          "modoDemo"
+          "modoDemo",
+          "colorAcento"
         ]
       },
       "SaludDto": {
@@ -26641,6 +28405,1405 @@
           "archivos",
           "fallidas",
           "requierenRevision"
+        ]
+      },
+      "MetricasDto": {
+        "type": "object",
+        "properties": {
+          "mrr": {
+            "type": "string",
+            "example": "2495.00",
+            "description": "Σ precio mensual de los planes de las suscripciones activas o vencidas."
+          },
+          "activos": {
+            "type": "number"
+          },
+          "prueba": {
+            "type": "number"
+          },
+          "vencidos": {
+            "type": "number"
+          },
+          "suspendidos": {
+            "type": "number"
+          },
+          "cancelados": {
+            "type": "number"
+          },
+          "sinSuscripcion": {
+            "type": "number",
+            "description": "Empresas sin suscripción (nacieron fuera del panel)."
+          },
+          "ingresosMes": {
+            "type": "string",
+            "example": "2495.00",
+            "description": "Pagos no anulados con fecha en el mes en curso."
+          },
+          "vencenProximos7Dias": {
+            "type": "number",
+            "description": "Prueba/activa (no vencidas) que vencen hoy o en los próximos 7 días."
+          },
+          "hoy": {
+            "type": "string",
+            "example": "2026-11-03",
+            "description": "El \"hoy\" de las cifras (CDMX)."
+          }
+        },
+        "required": [
+          "mrr",
+          "activos",
+          "prueba",
+          "vencidos",
+          "suspendidos",
+          "cancelados",
+          "sinSuscripcion",
+          "ingresosMes",
+          "vencenProximos7Dias",
+          "hoy"
+        ]
+      },
+      "PeriodicidadPlan": {
+        "type": "string",
+        "enum": [
+          "mensual",
+          "anual"
+        ]
+      },
+      "PlanDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string",
+            "nullable": true
+          },
+          "precioMensual": {
+            "type": "string",
+            "example": "499.00",
+            "description": "MXN al mes, en texto con 2 decimales."
+          },
+          "periodicidad": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PeriodicidadPlan"
+              }
+            ]
+          },
+          "limiteSucursales": {
+            "type": "number",
+            "nullable": true,
+            "description": "Nulo = sucursales ilimitadas."
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "clientes": {
+            "type": "number",
+            "description": "Clientes con este plan (cualquier estado)."
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "descripcion",
+          "precioMensual",
+          "periodicidad",
+          "limiteSucursales",
+          "activo",
+          "clientes"
+        ]
+      },
+      "CrearPlanDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "descripcion": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "precioMensual": {
+            "type": "string",
+            "example": "499.00",
+            "description": "Precio MENSUAL en MXN (texto, 2 decimales)."
+          },
+          "periodicidad": {
+            "description": "Cada cuánto se cobra. Anual = 12 × precio mensual por periodo.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PeriodicidadPlan"
+              }
+            ]
+          },
+          "limiteSucursales": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "activo": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "nombre",
+          "precioMensual"
+        ]
+      },
+      "EditarPlanDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "descripcion": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "precioMensual": {
+            "type": "string",
+            "example": "499.00"
+          },
+          "periodicidad": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PeriodicidadPlan"
+              }
+            ]
+          },
+          "limiteSucursales": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "`false` lo esconde de las altas; quien ya lo tiene, sigue."
+          }
+        }
+      },
+      "EstadoSuscripcion": {
+        "type": "string",
+        "enum": [
+          "prueba",
+          "activa",
+          "suspendida",
+          "cancelada"
+        ],
+        "description": "El estado GUARDADO (nunca `vencida`)."
+      },
+      "EstadoMembresia": {
+        "type": "string",
+        "enum": [
+          "prueba",
+          "activa",
+          "vencida",
+          "suspendida",
+          "cancelada"
+        ],
+        "description": "El que cuenta: el guardado, salvo `prueba`/`activa` con hoy > vencimiento + gracia, que es `vencida` (se calcula al leer)."
+      },
+      "SuscripcionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanDto"
+          },
+          "estado": {
+            "description": "El estado GUARDADO (nunca `vencida`).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoSuscripcion"
+              }
+            ]
+          },
+          "estadoEfectivo": {
+            "description": "El que cuenta: el guardado, salvo `prueba`/`activa` con hoy > vencimiento + gracia, que es `vencida` (se calcula al leer).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoMembresia"
+              }
+            ]
+          },
+          "inicio": {
+            "type": "string",
+            "example": "2026-11-03",
+            "description": "Día de calendario."
+          },
+          "vencimiento": {
+            "type": "string",
+            "example": "2026-12-05",
+            "description": "Próximo pago (día de calendario)."
+          },
+          "fechaLimite": {
+            "type": "string",
+            "example": "2026-12-10",
+            "description": "Vencimiento + días de gracia."
+          },
+          "diasGracia": {
+            "type": "number"
+          },
+          "diaCorte": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "notas": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "plan",
+          "estado",
+          "estadoEfectivo",
+          "inicio",
+          "vencimiento",
+          "fechaLimite",
+          "diasGracia",
+          "diaCorte",
+          "notas"
+        ]
+      },
+      "UltimoPagoDto": {
+        "type": "object",
+        "properties": {
+          "fechaPago": {
+            "type": "string",
+            "example": "2026-11-02"
+          },
+          "monto": {
+            "type": "string",
+            "example": "499.00"
+          },
+          "moneda": {
+            "type": "string",
+            "example": "MXN"
+          }
+        },
+        "required": [
+          "fechaPago",
+          "monto",
+          "moneda"
+        ]
+      },
+      "ClienteResumenDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "`false`: dada de baja en Administración (nadie entra)."
+          },
+          "suscripcion": {
+            "nullable": true,
+            "description": "Nula = sin suscripción.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SuscripcionDto"
+              }
+            ]
+          },
+          "ultimoPago": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UltimoPagoDto"
+              }
+            ]
+          },
+          "sucursales": {
+            "type": "number",
+            "description": "Sucursales activas."
+          },
+          "agentesConectados": {
+            "type": "number",
+            "description": "Sucursales cuyo agente se reportó en los últimos 10 minutos."
+          },
+          "usuarios": {
+            "type": "number",
+            "description": "Usuarios activos."
+          },
+          "ultimaVentaRecibidaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cuándo llegó a la API la última venta (cheque) de cualquiera de sus sucursales."
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "activo",
+          "suscripcion",
+          "ultimoPago",
+          "sucursales",
+          "agentesConectados",
+          "usuarios",
+          "ultimaVentaRecibidaAt"
+        ]
+      },
+      "AdministradorClienteDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "description": "Se guarda en minúsculas. Duplicado = 409."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "format": "password"
+          }
+        },
+        "required": [
+          "nombre",
+          "email",
+          "password"
+        ]
+      },
+      "AltaClienteDto": {
+        "type": "object",
+        "properties": {
+          "contactoNombre": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "contactoTelefono": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 30
+          },
+          "contactoEmail": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 254
+          },
+          "rfc": {
+            "type": "string",
+            "nullable": true,
+            "description": "RFC (12 o 13), mayúsculas."
+          },
+          "notasPlataforma": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "Nombre del negocio."
+          },
+          "planId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Un plan ACTIVO (inactivo o inexistente = 400)."
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "prueba",
+              "activa"
+            ],
+            "default": "activa"
+          },
+          "diaCorte": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 28,
+            "description": "Día del mes en que se cobra."
+          },
+          "diasGracia": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60,
+            "default": 5
+          },
+          "vencimiento": {
+            "type": "string",
+            "example": "2026-12-05",
+            "description": "Primer vencimiento. Si no viene: el siguiente día de corte después de hoy."
+          },
+          "notasSuscripcion": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "administrador": {
+            "description": "Su primer admin_empresa.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AdministradorClienteDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "nombre",
+          "planId",
+          "diaCorte",
+          "administrador"
+        ]
+      },
+      "ContactoClienteDto": {
+        "type": "object",
+        "properties": {
+          "contactoNombre": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactoTelefono": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactoEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "rfc": {
+            "type": "string",
+            "nullable": true
+          },
+          "notasPlataforma": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "contactoNombre",
+          "contactoTelefono",
+          "contactoEmail",
+          "rfc",
+          "notasPlataforma"
+        ]
+      },
+      "SucursalClienteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "ultimoContactoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "versionAgente": {
+            "type": "string",
+            "nullable": true
+          },
+          "tieneApiKey": {
+            "type": "boolean",
+            "description": "Tiene API key (el agente se puede instalar)."
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "activo",
+          "ultimoContactoAt",
+          "versionAgente",
+          "tieneApiKey"
+        ]
+      },
+      "UsuarioClienteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "rol": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RolUsuario"
+              }
+            ]
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "ultimoAccesoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "rol",
+          "activo",
+          "ultimoAccesoAt"
+        ]
+      },
+      "MetodoPago": {
+        "type": "string",
+        "enum": [
+          "transferencia",
+          "efectivo",
+          "tarjeta",
+          "otro"
+        ]
+      },
+      "PagoSuscripcionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "monto": {
+            "type": "string",
+            "example": "499.00"
+          },
+          "moneda": {
+            "type": "string",
+            "example": "MXN"
+          },
+          "fechaPago": {
+            "type": "string",
+            "example": "2026-11-02"
+          },
+          "metodo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MetodoPago"
+              }
+            ]
+          },
+          "referencia": {
+            "type": "string",
+            "nullable": true
+          },
+          "periodoDesde": {
+            "type": "string",
+            "example": "2026-11-05"
+          },
+          "periodoHasta": {
+            "type": "string",
+            "example": "2026-12-05",
+            "description": "Exclusivo: el nuevo vencimiento."
+          },
+          "notas": {
+            "type": "string",
+            "nullable": true
+          },
+          "registradoPor": {
+            "type": "string",
+            "description": "Quién lo registró (nombre y correo)."
+          },
+          "registradoAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "anuladoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "anuladoPor": {
+            "type": "string",
+            "nullable": true
+          },
+          "motivoAnulacion": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "empresaId",
+          "monto",
+          "moneda",
+          "fechaPago",
+          "metodo",
+          "referencia",
+          "periodoDesde",
+          "periodoHasta",
+          "notas",
+          "registradoPor",
+          "registradoAt",
+          "anuladoAt",
+          "anuladoPor",
+          "motivoAnulacion"
+        ]
+      },
+      "ClienteDetalleDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "`false`: dada de baja en Administración (nadie entra)."
+          },
+          "suscripcion": {
+            "nullable": true,
+            "description": "Nula = sin suscripción.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SuscripcionDto"
+              }
+            ]
+          },
+          "ultimoPago": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UltimoPagoDto"
+              }
+            ]
+          },
+          "sucursales": {
+            "type": "number",
+            "description": "Sucursales activas."
+          },
+          "agentesConectados": {
+            "type": "number",
+            "description": "Sucursales cuyo agente se reportó en los últimos 10 minutos."
+          },
+          "usuarios": {
+            "type": "number",
+            "description": "Usuarios activos."
+          },
+          "ultimaVentaRecibidaAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Cuándo llegó a la API la última venta (cheque) de cualquiera de sus sucursales."
+          },
+          "contacto": {
+            "$ref": "#/components/schemas/ContactoClienteDto"
+          },
+          "creadaAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "listaSucursales": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SucursalClienteDto"
+            }
+          },
+          "listaUsuarios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsuarioClienteDto"
+            }
+          },
+          "pagos": {
+            "description": "Del más reciente al más viejo, anulados incluidos.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PagoSuscripcionDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "activo",
+          "suscripcion",
+          "ultimoPago",
+          "sucursales",
+          "agentesConectados",
+          "usuarios",
+          "ultimaVentaRecibidaAt",
+          "contacto",
+          "creadaAt",
+          "listaSucursales",
+          "listaUsuarios",
+          "pagos"
+        ]
+      },
+      "EditarClienteDto": {
+        "type": "object",
+        "properties": {
+          "contactoNombre": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "contactoTelefono": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 30
+          },
+          "contactoEmail": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 254
+          },
+          "rfc": {
+            "type": "string",
+            "nullable": true,
+            "description": "RFC (12 o 13), mayúsculas."
+          },
+          "notasPlataforma": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          },
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        }
+      },
+      "GuardarMembresiaDto": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Cambia el plan (activo). Obligatorio si la empresa aún no tiene suscripción."
+          },
+          "vencimiento": {
+            "type": "string",
+            "example": "2026-12-05",
+            "description": "Corrige el próximo pago a mano."
+          },
+          "diaCorte": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "diasGracia": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60
+          },
+          "notas": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
+          }
+        }
+      },
+      "CambiarEstadoDto": {
+        "type": "object",
+        "properties": {
+          "estado": {
+            "description": "`suspendida`/`cancelada` dejan fuera a los usuarios de la empresa (no entran ni refrescan). `activa`/`prueba` los dejan entrar otra vez. `vencida` no se pone a mano: se calcula.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoSuscripcion"
+              }
+            ]
+          },
+          "motivo": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Queda en la bitácora."
+          }
+        },
+        "required": [
+          "estado"
+        ]
+      },
+      "ConteoPagosDto": {
+        "type": "object",
+        "properties": {
+          "todos": {
+            "type": "number"
+          },
+          "pagados": {
+            "type": "number"
+          },
+          "pendientes": {
+            "type": "number"
+          },
+          "vencidos": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "todos",
+          "pagados",
+          "pendientes",
+          "vencidos"
+        ]
+      },
+      "MensualidadDto": {
+        "type": "object",
+        "properties": {
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "empresa": {
+            "type": "string"
+          },
+          "empresaActiva": {
+            "type": "boolean"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "precioMensual": {
+            "type": "string",
+            "example": "499.00"
+          },
+          "periodicidad": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PeriodicidadPlan"
+              }
+            ]
+          },
+          "diaCorte": {
+            "type": "number"
+          },
+          "vencimiento": {
+            "type": "string",
+            "example": "2026-12-05"
+          },
+          "estadoEfectivo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoMembresia"
+              }
+            ]
+          },
+          "estadoPago": {
+            "type": "string",
+            "enum": [
+              "pagado",
+              "pendiente",
+              "vencido"
+            ]
+          },
+          "ultimoPago": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UltimoPagoDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "empresaId",
+          "empresa",
+          "empresaActiva",
+          "plan",
+          "precioMensual",
+          "periodicidad",
+          "diaCorte",
+          "vencimiento",
+          "estadoEfectivo",
+          "estadoPago",
+          "ultimoPago"
+        ]
+      },
+      "PagosMesDto": {
+        "type": "object",
+        "properties": {
+          "mes": {
+            "type": "string",
+            "example": "2026-11",
+            "description": "El mes en curso (hora de CDMX)."
+          },
+          "conteos": {
+            "description": "Conteos SIN el filtro de estado.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConteoPagosDto"
+              }
+            ]
+          },
+          "cobradoMes": {
+            "type": "string",
+            "example": "2495.00",
+            "description": "Pagos no anulados con fecha en el mes."
+          },
+          "mensualidades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MensualidadDto"
+            }
+          }
+        },
+        "required": [
+          "mes",
+          "conteos",
+          "cobradoMes",
+          "mensualidades"
+        ]
+      },
+      "RegistrarPagoDto": {
+        "type": "object",
+        "properties": {
+          "monto": {
+            "type": "string",
+            "example": "499.00",
+            "description": "Importe (> 0, 2 decimales), en texto."
+          },
+          "moneda": {
+            "type": "string",
+            "enum": [
+              "MXN"
+            ],
+            "default": "MXN",
+            "description": "Sólo pesos: la plataforma cobra en MXN."
+          },
+          "fechaPago": {
+            "type": "string",
+            "example": "2026-11-02",
+            "description": "Día en que llegó el dinero. No futuro."
+          },
+          "metodo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MetodoPago"
+              }
+            ]
+          },
+          "referencia": {
+            "type": "object",
+            "maxLength": 120
+          },
+          "notas": {
+            "type": "object",
+            "maxLength": 1000
+          },
+          "periodos": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 1,
+            "description": "Periodos del plan que cubre (meses si es mensual, años si es anual)."
+          }
+        },
+        "required": [
+          "monto",
+          "fechaPago",
+          "metodo"
+        ]
+      },
+      "PagoRegistradoDto": {
+        "type": "object",
+        "properties": {
+          "pago": {
+            "$ref": "#/components/schemas/PagoSuscripcionDto"
+          },
+          "suscripcion": {
+            "$ref": "#/components/schemas/SuscripcionDto"
+          }
+        },
+        "required": [
+          "pago",
+          "suscripcion"
+        ]
+      },
+      "AnularPagoDto": {
+        "type": "object",
+        "properties": {
+          "motivo": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "motivo"
+        ]
+      },
+      "AdminDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "ultimoAccesoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "activo",
+          "ultimoAccesoAt"
+        ]
+      },
+      "CrearAdminDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "description": "Se guarda en minúsculas. Duplicado = 409."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128,
+            "format": "password",
+            "description": "Contraseña INICIAL. Después sólo la cambia él mismo (Mi cuenta)."
+          }
+        },
+        "required": [
+          "nombre",
+          "email",
+          "password"
+        ]
+      },
+      "CuentaClienteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "rol": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RolUsuario"
+              }
+            ]
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "empresa": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "rol",
+          "activo",
+          "empresaId",
+          "empresa"
+        ]
+      },
+      "ConvertirCuentaDto": {
+        "type": "object",
+        "properties": {
+          "usuarioId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "El usuario que devolvió la búsqueda."
+          }
+        },
+        "required": [
+          "usuarioId"
+        ]
+      },
+      "CuentaConvertidaDto": {
+        "type": "object",
+        "properties": {
+          "admin": {
+            "$ref": "#/components/schemas/AdminDto"
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La empresa de la que salió."
+          },
+          "empresaSinAdmin": {
+            "type": "boolean",
+            "description": "La empresa se quedó sin ningún admin_empresa activo."
+          }
+        },
+        "required": [
+          "admin",
+          "empresaId",
+          "empresaSinAdmin"
+        ]
+      },
+      "EditarAdminDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "`false` desactiva (nunca a ti mismo; siempre queda uno activo). No hay borrado."
+          }
+        }
+      },
+      "EntradaBitacoraDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actorEmail": {
+            "type": "string"
+          },
+          "accion": {
+            "type": "string",
+            "example": "pago.registrar"
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "empresa": {
+            "type": "string",
+            "nullable": true
+          },
+          "recurso": {
+            "type": "string",
+            "nullable": true
+          },
+          "recursoId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "antes": {
+            "type": "object",
+            "nullable": true,
+            "description": "JSON. Nunca contraseñas ni hashes."
+          },
+          "despues": {
+            "type": "object",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "actorId",
+          "actorEmail",
+          "accion",
+          "empresaId",
+          "empresa",
+          "recurso",
+          "recursoId",
+          "antes",
+          "despues"
+        ]
+      },
+      "BitacoraDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "pagina": {
+            "type": "number"
+          },
+          "porPagina": {
+            "type": "number"
+          },
+          "entradas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntradaBitacoraDto"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "pagina",
+          "porPagina",
+          "entradas"
+        ]
+      },
+      "AjustesDto": {
+        "type": "object",
+        "properties": {
+          "colorAcento": {
+            "type": "string",
+            "enum": [
+              "naranja",
+              "morado",
+              "azul_electrico",
+              "verde_azulado",
+              "ambar_dorado",
+              "magenta",
+              "rojo"
+            ],
+            "nullable": true,
+            "description": "Color de interfaz para TODOS los clientes. Nulo = el del build."
+          }
+        },
+        "required": [
+          "colorAcento"
+        ]
+      },
+      "GuardarAjustesDto": {
+        "type": "object",
+        "properties": {
+          "colorAcento": {
+            "type": "string",
+            "enum": [
+              "naranja",
+              "morado",
+              "azul_electrico",
+              "verde_azulado",
+              "ambar_dorado",
+              "magenta",
+              "rojo"
+            ],
+            "nullable": true,
+            "description": "Nulo = volver al del build."
+          }
+        },
+        "required": [
+          "colorAcento"
+        ]
+      },
+      "MembresiaPropiaDto": {
+        "type": "object",
+        "properties": {
+          "estado": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EstadoMembresia"
+              }
+            ]
+          },
+          "vencimiento": {
+            "type": "string",
+            "example": "2026-12-05"
+          },
+          "fechaLimite": {
+            "type": "string",
+            "example": "2026-12-10",
+            "description": "Vencimiento + gracia."
+          },
+          "plan": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "estado",
+          "vencimiento",
+          "fechaLimite",
+          "plan"
+        ]
+      },
+      "RespuestaMembresiaDto": {
+        "type": "object",
+        "properties": {
+          "membresia": {
+            "nullable": true,
+            "description": "Nula para admin_global o para una empresa sin suscripción.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MembresiaPropiaDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "membresia"
         ]
       },
       "ResumenCorteDto": {

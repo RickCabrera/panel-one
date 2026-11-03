@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { registrarServiceWorker } from './pwa/registrar';
-import { ACENTO_DESPLIEGUE } from './tema/acento';
+import { acentoEfectivo, leerAcentoGuardado } from './tema/acento';
 import { iniciarTema } from './tema/tema';
 
 const contenedor = document.getElementById('root');
@@ -13,8 +13,9 @@ if (!contenedor) {
   throw new Error('No existe #root en index.html');
 }
 
-// Antes del primer render (F2-211): la última preferencia de tema de este navegador.
-iniciarTema(ACENTO_DESPLIEGUE);
+// Antes del primer render (F2-211): la última preferencia de tema de este navegador, con el
+// último color global de la plataforma que vio (membresías), o el del build.
+iniciarTema(acentoEfectivo(leerAcentoGuardado()));
 
 createRoot(contenedor).render(
   <StrictMode>

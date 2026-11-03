@@ -10,6 +10,9 @@ import { PantallaCarga } from './PantallaCarga';
 function mensajeDeError(error: unknown): string {
   if (error instanceof ErrorApi) {
     if (error.status === 401) return 'Credenciales inválidas.';
+    // Membresías: la cuenta de la empresa está suspendida o cancelada. La API manda el mensaje
+    // ("Tu cuenta está suspendida. Contacta a soporte.") sólo con la contraseña correcta.
+    if (error.status === 403 && error.message) return error.message;
     if (error.status === 429) return 'Demasiados intentos. Espera un minuto y vuelve a intentar.';
     if (error.status === 400) return 'Revisa el correo y la contraseña.';
     if (error.status === 0) return 'No se pudo conectar con el servidor.';

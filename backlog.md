@@ -2961,6 +2961,20 @@ de desvío de migraciones); en la PC de Ricardo, reinstalar con un código deja 
 
 ---
 
+## PLAT-01 · Panel de plataforma y membresías
+
+- [ ] **PLAT-01 · Panel de plataforma y membresías** — pedida por Ricardo el 3-nov-2026 (fuera de
+  la cola; PR #86, rama `feat/plataforma-membresias`, migración `20261103030000`).
+  Back office sólo para admin_global (otro rol = 404): planes, clientes y su suscripción (día de
+  corte, gracia), pagos manuales con anulación, métricas (MRR, por estado, cobrado del mes),
+  administradores internos (sin reset de contraseña ajena ni borrado; convertir una cuenta de
+  cliente), bitácora y color de interfaz global. Estilo de Tocadiscos.
+  **Listo cuando:** `vencida` se calcula al leer (los planes de $0 nunca vencen) y sólo avisa;
+  suspender/cancelar es manual y corta login y refresh con "Tu cuenta está suspendida. Contacta a
+  soporte."; la ingesta del agente nunca se bloquea por membresía; el límite de sucursales del
+  plan da 409 (admin_global puede forzarlo, con bitácora); `/usuarios` ya no crea ni da de baja
+  admin_global; todo con e2e de rol y OpenAPI actualizado. Detalle en `docs/plataforma.md`.
+
 ## Decisiones abiertas para Ricardo
 
 No son código hasta que se decidan. Cada una dice dónde está documentada; al decidir, se

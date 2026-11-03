@@ -48,3 +48,21 @@ export class ErrorDto {
   @ApiProperty({ required: false, example: 'Unauthorized' })
   error?: string;
 }
+
+/**
+ * Membresías: el 403 del login cuando la contraseña es correcta pero la empresa del usuario
+ * está suspendida o cancelada (panel de plataforma). El web muestra `message` tal cual.
+ */
+export class CuentaBloqueadaDto {
+  @ApiProperty({ example: 403 })
+  statusCode!: number;
+
+  @ApiProperty({ example: 'Tu cuenta está suspendida. Contacta a soporte.' })
+  message!: string;
+
+  @ApiProperty({ example: 'Forbidden' })
+  error!: string;
+
+  @ApiProperty({ enum: ['cuenta_bloqueada'] })
+  codigo!: 'cuenta_bloqueada';
+}

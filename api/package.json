@@ -16,9 +16,10 @@
     "seed:mesas": "ts-node prisma/seed-mesas.ts",
     "seed:alertas": "ts-node prisma/seed-alertas.ts",
     "seed:reportes": "ts-node prisma/seed-reportes.ts",
+    "seed:plataforma": "ts-node prisma/seed-plataforma.ts",
     "postinstall": "prisma generate",
     "setup:env": "ts-node scripts/setup-env.ts",
-    "seed": "prisma db seed && npm run seed:ventas && npm run seed:mesas && npm run seed:alertas && npm run seed:reportes",
+    "seed": "prisma db seed && npm run seed:ventas && npm run seed:mesas && npm run seed:alertas && npm run seed:reportes && npm run seed:plataforma",
     "admin:inicial": "node dist/prisma/admin-inicial.js"
   },
   "dependencies": {

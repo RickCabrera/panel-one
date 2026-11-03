@@ -122,6 +122,15 @@ export const LLAVE_EMPRESA = {
   // F2-143: el canal de versiones del agente, también de PLATAFORMA (el binario es el mismo para
   // todas las empresas). Lo lee y escribe SÓLO `src/scope/versiones-agente.ts`.
   VersionAgente: null,
+  // Plataforma (membresías). La suscripción, sus pagos y la bitácora son DE una empresa (la
+  // bitácora puede no tener empresa: altas de admins internos). Las escribe SÓLO
+  // `src/scope/plataforma.ts` con scope global; la membresía propia se lee con `para(scope)`.
+  Suscripcion: 'empresaId',
+  PagoSuscripcion: 'empresaId',
+  BitacoraPlataforma: 'empresaId',
+  // Los planes y los ajustes globales son de PLATAFORMA, como los folios: sin empresa.
+  Plan: null,
+  ConfiguracionPlataforma: null,
 } as const satisfies Record<Prisma.ModelName, 'id' | 'empresaId' | null>;
 
 export type WhereGenerico = Record<string, unknown>;

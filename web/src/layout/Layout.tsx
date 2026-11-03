@@ -3,6 +3,7 @@ import { Outlet } from 'react-router';
 
 import { useNormalizarAlcance } from '../filtros/alcance';
 import { renovarEsteDispositivo } from '../pwa/push';
+import { AvisoMembresia } from './AvisoMembresia';
 import { Sidebar } from './Sidebar';
 import { SinConexion } from './SinConexion';
 import { Topbar } from './Topbar';
@@ -39,6 +40,7 @@ export function Layout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar menuAbierto={menuAbierto} onMenu={() => setMenuAbierto((v) => !v)} />
         <SinConexion />
+        <AvisoMembresia />
         <main className="min-w-0 flex-1">
           <Outlet />
         </main>

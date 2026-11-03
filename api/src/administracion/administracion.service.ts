@@ -13,7 +13,6 @@ import { verificarAlcance } from '../scope/alcance';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import {
   SELECT_EMPRESA,
-  SELECT_SUCURSAL,
   SELECT_USUARIO,
   type EmpresaCreada,
   type SucursalCreada,
@@ -28,6 +27,10 @@ import type {
   EditarSucursalDto,
   EditarUsuarioDto,
 } from './dto/administracion.dto';
+
+/** Los admins internos sólo se dan de alta / baja en el panel de plataforma. */
+export const MENSAJE_ADMINS_EN_PLATAFORMA =
+  'Los administradores internos se manejan en Plataforma › Administradores';
 
 /** Quien hace el cambio, con su scope: los dos salen del access token. */
 export interface Quien {
@@ -105,11 +108,18 @@ export class AdministracionService {
 
   // --- Sucursales ---------------------------------------------------------------------
 
+  /**
+   * Alta de sucursal respetando el límite del plan (membresías): por encima, 409; un admin_global
+   * lo puede pasar con `forzarLimite` (queda en la bitácora de plataforma).
+   */
   async crearSucursal({ actor, scope }: Quien, dto: CrearSucursalDto): Promise<SucursalCreada> {
-    const sucursal = await this.datos.admin(scope).crearSucursal(dto.empresaId, {
-      nombre: dto.nombre,
-      zonaHoraria: dto.zonaHoraria,
-    });
+    const sucursal = await this.datos
+      .cupoSucursales(scope, actor.id)
+      .crearSucursal(
+        dto.empresaId,
+        { nombre: dto.nombre, zonaHoraria: dto.zonaHoraria },
+        dto.forzarLimite === true,
+      );
     this.auditoria.registrar(actor, {
       accion: 'sucursal.crear',
       recurso: 'sucursal',
@@ -124,16 +134,17 @@ export class AdministracionService {
     id: string,
     dto: EditarSucursalDto,
   ): Promise<SucursalCreada> {
-    const campos = camposPresentes(dto);
-    const datos = this.datos.para(scope);
-    const { count } = await datos.sucursal.updateMany({
-      where: { id },
-      data: { nombre: dto.nombre, zonaHoraria: dto.zonaHoraria, activo: dto.activo },
-    });
-    encontradoOr404(count === 1 ? count : null);
-    const sucursal = encontradoOr404(
-      await datos.sucursal.findFirst({ where: { id }, select: SELECT_SUCURSAL }),
-    );
+    const { forzarLimite, ...cambios } = dto;
+    const campos = camposPresentes(cambios);
+    // Membresías: todo el PATCH en una transacción con el candado de la suscripción; reactivar
+    // cuenta contra el límite de sucursales del plan (ver `CupoSucursales.editarSucursal`).
+    const sucursal = await this.datos
+      .cupoSucursales(scope, actor.id)
+      .editarSucursal(
+        id,
+        { nombre: cambios.nombre, zonaHoraria: cambios.zonaHoraria, activo: cambios.activo },
+        forzarLimite === true,
+      );
     this.auditoria.registrar(actor, {
       accion: 'sucursal.editar',
       recurso: 'sucursal',
@@ -165,9 +176,9 @@ export class AdministracionService {
       if (scope.tipo !== 'global') {
         throw new ForbiddenException('Sólo un administrador global crea administradores globales');
       }
-      if (empresaId !== null) {
-        throw new BadRequestException('Un admin_global no lleva empresaId');
-      }
+      // Membresías: los administradores internos se manejan SÓLO en Plataforma ›
+      // Administradores (`/plataforma/administradores`), con su candado y su bitácora.
+      throw new BadRequestException(MENSAJE_ADMINS_EN_PLATAFORMA);
     } else if (empresaId === null) {
       throw new BadRequestException('empresaId es obligatorio para este rol');
     }
@@ -209,6 +220,15 @@ export class AdministracionService {
       await datos.usuario.findFirst({ where: { id }, select: { rol: true } }),
     );
     const cambiaRol = dto.rol !== undefined && dto.rol !== destino.rol;
+
+    // Membresías: un admin_global sólo se desactiva/reactiva (y nunca cambia de rol ni de
+    // contraseña) desde Plataforma › Administradores, con candado y bitácora. Aquí, sólo nombre.
+    if (
+      destino.rol === RolUsuario.admin_global &&
+      (dto.activo !== undefined || dto.rol !== undefined)
+    ) {
+      throw new BadRequestException(MENSAJE_ADMINS_EN_PLATAFORMA);
+    }
 
     if (id === actor.id && (cambiaRol || dto.activo === false)) {
       throw new BadRequestException('No puedes cambiarte el rol ni darte de baja a ti mismo');
@@ -259,6 +279,17 @@ export class AdministracionService {
       throw new BadRequestException('Tu propia contraseña se cambia en /cuenta/password');
     }
     const datos = this.datos.para(scope);
+    // Membresías: la contraseña de un administrador interno (admin_global) sólo la cambia ÉL
+    // MISMO en /cuenta/password. Ningún admin restablece la de otro admin. Para un
+    // admin_empresa un admin_global ni existe en su alcance (404, como siempre).
+    const destino = encontradoOr404(
+      await datos.usuario.findFirst({ where: { id }, select: { rol: true } }),
+    );
+    if (destino.rol === RolUsuario.admin_global) {
+      throw new BadRequestException(
+        'La contraseña de un administrador sólo la cambia él mismo, en Mi cuenta',
+      );
+    }
     const passwordHash = await hash(password, ARGON2_OPCIONES);
     const { count } = await datos.usuario.updateMany({
       where: { id },

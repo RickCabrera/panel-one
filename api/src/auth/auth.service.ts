@@ -1,8 +1,19 @@
 import { randomUUID } from 'node:crypto';
 
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
-import { Prisma, RolUsuario, type Empresa, type Usuario } from '@prisma/client';
+import {
+  Prisma,
+  RolUsuario,
+  type Empresa,
+  type EstadoSuscripcion,
+  type Usuario,
+} from '@prisma/client';
 
 import { ACCESS_TTL_SEGUNDOS, REFRESH_TTL_SEGUNDOS } from '../config/auth.config';
 // Único servicio de auth en la allowlist de PrismaService: el login busca por
@@ -11,7 +22,10 @@ import { ACCESS_TTL_SEGUNDOS, REFRESH_TTL_SEGUNDOS } from '../config/auth.config
 // del usuario del token, por su id. Las sesiones (F1-093, `sesiones_usuario`) se
 // leen y escriben sólo por `sid` + `usuario_id` sacados de un JWT firmado por
 // nosotros, o del usuario recién autenticado. Nada de datos de negocio pasa por aquí.
+// Membresías (panel de plataforma): el login y el refresh leen además el estado GUARDADO de la
+// suscripción de la empresa del usuario (la misma fila de `empresas` que ya leían, por su id).
 import { PrismaService } from '../prisma/prisma.service';
+import { bloqueaAcceso, mensajeBloqueo } from '../plataforma/membresia';
 import { ARGON2_OPCIONES } from './argon2';
 import type { SesionDto, UsuarioActualDto } from './dto/sesion.dto';
 import { TokensService } from './tokens.service';
@@ -21,7 +35,24 @@ export interface SesionEmitida {
   refreshToken: string;
 }
 
-type UsuarioConEmpresa = Usuario & { empresa: Empresa | null };
+type UsuarioConEmpresa = Usuario & {
+  empresa: (Empresa & { suscripcion: { estado: EstadoSuscripcion } | null }) | null;
+};
+
+/** La empresa con el estado guardado de su suscripción (para el bloqueo por membresía). */
+const CON_EMPRESA = {
+  empresa: { include: { suscripcion: { select: { estado: true } } } },
+} as const satisfies Prisma.UsuarioInclude;
+
+/**
+ * Una empresa `suspendida` o `cancelada` deja fuera a sus usuarios, con un mensaje claro. Se
+ * revisa DESPUÉS de verificar la contraseña: a quien no la sabe no se le dice nada de la cuenta.
+ * `vencida` no bloquea (se calcula al leer y sólo pinta un aviso en el panel).
+ */
+function estadoBloqueante(usuario: UsuarioConEmpresa): EstadoSuscripcion | null {
+  const estado = usuario.empresa?.suscripcion?.estado;
+  return estado !== undefined && bloqueaAcceso(estado) ? estado : null;
+}
 
 /** El mismo mensaje para toda falla de login: no se distingue qué falló. */
 function credencialesInvalidas(): UnauthorizedException {
@@ -49,14 +80,24 @@ export class AuthService {
   async login(email: string, password: string): Promise<SesionEmitida> {
     const usuario = await this.prisma.usuario.findUnique({
       where: { email: normalizarEmail(email) },
-      include: { empresa: true },
+      include: CON_EMPRESA,
     });
     const hashGuardado = usuario?.passwordHash ?? (await this.obtenerHashRelleno());
     const coincide = await verify(hashGuardado, password).catch(() => false);
     if (!usuario || !coincide || !puedeEntrar(usuario)) {
       throw credencialesInvalidas();
     }
-    return this.abrirSesion(usuario);
+    const bloqueo = estadoBloqueante(usuario);
+    if (bloqueo !== null) {
+      // 403 y no 401: la contraseña SÍ es correcta; el web muestra este mensaje tal cual.
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: mensajeBloqueo(bloqueo),
+        codigo: 'cuenta_bloqueada',
+      });
+    }
+    return this.abrirSesion(usuario, true);
   }
 
   /**
@@ -139,7 +180,7 @@ export class AuthService {
           passwordHash: await hash(nueva, ARGON2_OPCIONES),
           versionSesion: { increment: 1 },
         },
-        include: { empresa: true },
+        include: CON_EMPRESA,
       })
       .catch((error: unknown) => {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
@@ -157,10 +198,16 @@ export class AuthService {
   private async usuarioVigente(usuarioId: string): Promise<UsuarioConEmpresa> {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: usuarioId },
-      include: { empresa: true },
+      include: CON_EMPRESA,
     });
     if (!usuario || !puedeEntrar(usuario)) {
       throw new UnauthorizedException('No autenticado');
+    }
+    // Membresías: el refresh (y /auth/me y el cambio de contraseña) de una empresa suspendida o
+    // cancelada es 401 —el web lo trata como "sin sesión"— con el mensaje claro.
+    const bloqueo = estadoBloqueante(usuario);
+    if (bloqueo !== null) {
+      throw new UnauthorizedException(mensajeBloqueo(bloqueo));
     }
     return usuario;
   }
@@ -171,10 +218,20 @@ export class AuthService {
    * ESTE usuario (revocadas o no): la tabla no crece sin fin y la limpieza nunca
    * toca a otro usuario.
    */
-  private async abrirSesion(usuario: UsuarioConEmpresa): Promise<SesionEmitida> {
+  private async abrirSesion(usuario: UsuarioConEmpresa, esLogin = false): Promise<SesionEmitida> {
     const ahora = new Date();
     const sesionId = randomUUID();
     await this.prisma.$transaction([
+      // Plataforma: "último acceso" = el último LOGIN (no el cambio de contraseña ni el refresh).
+      ...(esLogin
+        ? [
+            this.prisma.usuario.update({
+              where: { id: usuario.id },
+              data: { ultimoAccesoAt: ahora },
+              select: { id: true },
+            }),
+          ]
+        : []),
       this.prisma.sesionUsuario.deleteMany({
         where: { usuarioId: usuario.id, expiraEn: { lte: ahora } },
       }),

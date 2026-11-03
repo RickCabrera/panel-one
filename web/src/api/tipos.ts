@@ -273,7 +273,7 @@ export interface VersionAgente {
   vigente: boolean;
 }
 
-/** `ModificadorDto`: como los guardó la ingesta (esquema-sr.md §13). */
+/** `ModificadorTicketDto`: como los guardó la ingesta (esquema-sr.md §13). */
 export interface Modificador {
   nombre: string;
   precio: Importe;
@@ -362,6 +362,11 @@ export interface PaginaTickets {
 export interface Sistema {
   /** `MODO_DEMO=1` en la API: los datos son de ejemplo. */
   modoDemo: boolean;
+  /**
+   * Membresías: el color de interfaz GLOBAL que eligió la plataforma (Plataforma › Ajustes).
+   * `null` (o ausente, con una API vieja) = el del build (`VITE_COLOR_ACENTO`).
+   */
+  colorAcento?: ColorAcento | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -2141,6 +2146,229 @@ export interface Arranque {
   completo: boolean;
   pasos: PasoArranque[];
   descargaAgente: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Panel de plataforma (membresías). Sólo admin_global; `/cuenta/membresia`, cualquiera.
+// ---------------------------------------------------------------------------
+
+/** Las claves de color de interfaz que acepta `PUT /plataforma/ajustes`. */
+export type ColorAcento =
+  'naranja' | 'morado' | 'azul_electrico' | 'verde_azulado' | 'ambar_dorado' | 'magenta' | 'rojo';
+
+export type PeriodicidadPlan = 'mensual' | 'anual';
+/** El estado GUARDADO (`EstadoSuscripcion`). */
+export type EstadoSuscripcion = 'prueba' | 'activa' | 'suspendida' | 'cancelada';
+/** El estado que cuenta (`EstadoMembresia`): `vencida` se calcula en la API. */
+export type EstadoMembresia = EstadoSuscripcion | 'vencida';
+export type EstadoPagoMes = 'pagado' | 'pendiente' | 'vencido';
+export type MetodoPago = 'transferencia' | 'efectivo' | 'tarjeta' | 'otro';
+
+/** `PlanDto`. Dinero en texto con 2 decimales. */
+export interface Plan {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  precioMensual: string;
+  periodicidad: PeriodicidadPlan;
+  limiteSucursales: number | null;
+  activo: boolean;
+  clientes: number;
+}
+
+/** `SuscripcionDto`. Fechas `AAAA-MM-DD` (días de calendario). */
+export interface Suscripcion {
+  id: string;
+  plan: Omit<Plan, 'clientes'>;
+  estado: EstadoSuscripcion;
+  estadoEfectivo: EstadoMembresia;
+  inicio: string;
+  vencimiento: string;
+  fechaLimite: string;
+  diasGracia: number;
+  diaCorte: number;
+  notas: string | null;
+}
+
+export interface UltimoPago {
+  fechaPago: string;
+  monto: string;
+  moneda: string;
+}
+
+/** `ClienteResumenDto`. */
+export interface ClienteResumen {
+  id: string;
+  nombre: string;
+  activo: boolean;
+  suscripcion: Suscripcion | null;
+  ultimoPago: UltimoPago | null;
+  sucursales: number;
+  agentesConectados: number;
+  usuarios: number;
+  /** ISO con zona. */
+  ultimaVentaRecibidaAt: string | null;
+}
+
+export interface ContactoCliente {
+  contactoNombre: string | null;
+  contactoTelefono: string | null;
+  contactoEmail: string | null;
+  rfc: string | null;
+  notasPlataforma: string | null;
+}
+
+/** `PagoDto`. */
+export interface PagoSuscripcion {
+  id: string;
+  empresaId: string;
+  monto: string;
+  moneda: string;
+  fechaPago: string;
+  metodo: MetodoPago;
+  referencia: string | null;
+  periodoDesde: string;
+  periodoHasta: string;
+  notas: string | null;
+  registradoPor: string;
+  registradoAt: string;
+  anuladoAt: string | null;
+  anuladoPor: string | null;
+  motivoAnulacion: string | null;
+}
+
+/** `ClienteDetalleDto`. */
+export interface ClienteDetalle extends ClienteResumen {
+  contacto: ContactoCliente;
+  creadaAt: string;
+  listaSucursales: {
+    id: string;
+    nombre: string;
+    activo: boolean;
+    tieneApiKey: boolean;
+    ultimoContactoAt: string | null;
+    versionAgente: string | null;
+  }[];
+  listaUsuarios: {
+    id: string;
+    nombre: string;
+    email: string;
+    rol: Rol;
+    activo: boolean;
+    ultimoAccesoAt: string | null;
+  }[];
+  pagos: PagoSuscripcion[];
+}
+
+/** `AltaClienteDto`. */
+export interface AltaCliente extends Partial<ContactoCliente> {
+  nombre: string;
+  planId: string;
+  estado?: 'prueba' | 'activa';
+  diaCorte: number;
+  diasGracia?: number;
+  vencimiento?: string;
+  notasSuscripcion?: string | null;
+  administrador: { nombre: string; email: string; password: string };
+}
+
+/** `RegistrarPagoDto`. */
+export interface RegistrarPago {
+  monto: string;
+  moneda?: string;
+  fechaPago: string;
+  metodo: MetodoPago;
+  referencia?: string | null;
+  notas?: string | null;
+  periodos?: number;
+}
+
+/** `MensualidadDto`: una fila de la pantalla de Pagos. */
+export interface Mensualidad {
+  empresaId: string;
+  empresa: string;
+  empresaActiva: boolean;
+  plan: string;
+  precioMensual: string;
+  periodicidad: PeriodicidadPlan;
+  diaCorte: number;
+  vencimiento: string;
+  estadoEfectivo: EstadoMembresia;
+  estadoPago: EstadoPagoMes;
+  ultimoPago: UltimoPago | null;
+}
+
+/** `PagosMesDto`. */
+export interface PagosMes {
+  mes: string;
+  conteos: { todos: number; pagados: number; pendientes: number; vencidos: number };
+  cobradoMes: string;
+  mensualidades: Mensualidad[];
+}
+
+/** `MetricasDto`. */
+export interface MetricasPlataforma {
+  mrr: string;
+  activos: number;
+  prueba: number;
+  vencidos: number;
+  suspendidos: number;
+  cancelados: number;
+  sinSuscripcion: number;
+  ingresosMes: string;
+  vencenProximos7Dias: number;
+  hoy: string;
+}
+
+/** `AdminDto`. */
+export interface AdminInterno {
+  id: string;
+  nombre: string;
+  email: string;
+  activo: boolean;
+  ultimoAccesoAt: string | null;
+}
+
+/** `CuentaClienteDto`. */
+export interface CuentaCliente {
+  id: string;
+  nombre: string;
+  email: string;
+  rol: Rol;
+  activo: boolean;
+  empresaId: string;
+  empresa: string;
+}
+
+/** `EntradaBitacoraDto`. */
+export interface EntradaBitacora {
+  id: string;
+  createdAt: string;
+  actorId: string;
+  actorEmail: string;
+  accion: string;
+  empresaId: string | null;
+  empresa: string | null;
+  recurso: string | null;
+  recursoId: string | null;
+  antes: unknown;
+  despues: unknown;
+}
+
+/** `BitacoraDto`. */
+export interface Bitacora {
+  total: number;
+  pagina: number;
+  porPagina: number;
+  entradas: EntradaBitacora[];
+}
+
+/** `MembresiaPropiaDto` dentro de `RespuestaMembresiaDto`. */
+export interface MembresiaPropia {
+  estado: EstadoMembresia;
+  vencimiento: string;
+  fechaLimite: string;
+  plan: string;
 }
 
 // --- MVP: cortes (turnos de SR) y meseros en vivo --------------------------------------
