@@ -357,6 +357,25 @@ public class ColaTurnosTests : IDisposable
         Assert.Equal(4L, Escalar(ruta, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND tbl_name = 'eventos';"));
     }
 
+    [Fact]
+    public void Apartar_y_recuperar_un_pendiente_mas_nuevo_del_mismo_turno_gana_y_el_viejo_se_descarta()
+    {
+        var ruta = _carpeta.Rutas.ArchivoCola;
+        Assert.Equal(0, ColaLocal.ApartarTiposNuevos(ruta, _reloj)); // sin archivo, nada
+        var cola = ColaLocal.Abrir(ruta, _reloj);
+        cola.Encolar(TipoEvento.Turno, Turno("8", "100"));
+        cola.Encolar(TipoEvento.Snapshot, ColaLocalTests.Snapshot);
+
+        Assert.Equal(1, ColaLocal.ApartarTiposNuevos(ruta, _reloj));
+        Assert.Equal([TipoEvento.Snapshot], cola.TomarPendientes(10).Select(e => e.Tipo));
+
+        // Mientras estuvo apartado, la versión que los conoce ya encoló uno más nuevo del mismo turno.
+        cola.Encolar(TipoEvento.Turno, Turno("8", "950"));
+        var reabierta = ColaLocal.Abrir(ruta, _reloj);
+        var turnos = reabierta.TomarPendientes(10).Where(e => e.Tipo == TipoEvento.Turno).ToList();
+        Assert.Contains("950", Assert.Single(turnos).Payload);
+    }
+
     /// <summary>
     /// Sin internet (o sin luz: el proceso muere y vuelve a abrir el mismo <c>cola.db</c>) los turnos
     /// y los cheques se quedan en la cola; al volver la red salen en orden y una sola vez.

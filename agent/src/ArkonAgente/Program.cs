@@ -98,7 +98,8 @@ static async Task<int> CorrerActualizadorAsync(RutasAgente rutas)
             new ProcesosSistema(),
             (espera, cancelacion) => Task.Delay(espera, cancelacion),
             TimeProvider.System,
-            sp.GetRequiredService<ILoggerFactory>().CreateLogger<Actualizador>()));
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<Actualizador>(),
+            archivoCola: rutas.ArchivoCola));
         builder.Services.AddHostedService<ServicioActualizador>();
         Log.Information("Actualizador: agente en {Exe}, intercambio en {Carpeta}.", exeAgente, CarpetaActualizacion.De(rutas).Ruta);
 

@@ -291,9 +291,17 @@ sqlite3 -readonly "C:\ProgramData\ArkonAgente\cola.db" "SELECT id, tipo, clave, 
   No hay DLL que copiar.
 - **Un `cola.db` de una versión anterior** (sin el tipo `turno`) se migra solo al arrancar:
   la tabla `eventos` se reconstruye en una transacción, con todos sus eventos y sus ids, y
-  `PRAGMA user_version` pasa a 2. ⚠️ Si se regresa a un agente anterior con turnos todavía
-  pendientes en la cola, ese agente no los reconoce y truena al leerlos: antes de regresar de
-  versión, espera a que la cola se vacíe (consulta de arriba).
+  `PRAGMA user_version` pasa a 2.
+- **Regresar a una versión anterior** (rollback del watchdog o una versión retirada): antes de
+  arrancar el exe que acaba de poner, el watchdog mueve a la tabla `eventos_apartados` de
+  `cola.db`, en una transacción, todos los eventos de tipos que un agente anterior no conoce
+  (hoy, `turno`). Así el agente viejo no truena al leerlos. Cuando vuelve a correr una versión
+  que sí los conoce, los pendientes regresan solos a la cola (si ya hay uno más nuevo del mismo
+  turno, gana ése). ⚠️ Esto lo hace el watchdog de ESTA versión en adelante, y el watchdog no se
+  auto-actualiza: tras actualizar el agente por primera vez a esta versión, corre otra vez
+  `instalar.ps1` para que el actualizador también quede al día. Con un watchdog anterior, o al
+  bajar de versión a mano con `instalar.ps1`, espera a que la cola se vacíe antes (consulta de
+  arriba).
 
 ### Sin internet o sin luz
 

@@ -87,6 +87,32 @@ internal sealed class ColaLocal
 
     private const string Pendiente = "enviado_at IS NULL AND rechazado_at IS NULL";
 
+    /// <summary>Los tipos que entiende CUALQUIER agente desde F1-024 (los del CHECK de la versión 1).</summary>
+    internal const string TiposOriginales = "'cheque', 'snapshot', 'heartbeat'";
+
+    /// <summary>Los tipos que entiende ESTA versión (los del CHECK de <see cref="Columnas"/>).</summary>
+    internal const string TiposConocidos = "'cheque', 'snapshot', 'heartbeat', 'turno'";
+
+    /// <summary>
+    /// Donde el watchdog aparta los eventos de tipos que un agente ANTERIOR no conoce, antes de
+    /// arrancarlo (<see cref="ApartarTiposNuevos"/>). Sin CHECK de tipo, a propósito.
+    /// </summary>
+    private const string EsquemaApartados = """
+        CREATE TABLE IF NOT EXISTS eventos_apartados (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_original    INTEGER NOT NULL,
+            tipo           TEXT    NOT NULL,
+            clave          TEXT    NULL,
+            payload        TEXT    NOT NULL,
+            creado_at      TEXT    NOT NULL,
+            intentos       INTEGER NOT NULL DEFAULT 0,
+            enviado_at     TEXT    NULL,
+            rechazado_at   TEXT    NULL,
+            motivo_rechazo TEXT    NULL,
+            apartado_at    TEXT    NOT NULL
+        );
+        """;
+
     private readonly string _cadena;
     private readonly TimeProvider _reloj;
 
@@ -118,7 +144,86 @@ internal sealed class ColaLocal
         using var conexion = cola.Conectar();
         Ejecutar(conexion, null, Esquema);
         Migrar(conexion);
+        Recuperar(conexion);
         return cola;
+    }
+
+    /// <summary>
+    /// Lo que hace el WATCHDOG antes de arrancar un exe recién puesto (actualización o rollback):
+    /// mueve a <c>eventos_apartados</c>, en UNA transacción, TODOS los eventos (pendientes, enviados o
+    /// rechazados) cuyo tipo no está en <see cref="TiposOriginales"/>. Un agente anterior al tipo
+    /// <c>turno</c> truena al leer uno (en <c>TomarPendientes</c> y en <c>ResumenRechazados</c>); así
+    /// arranca con sólo lo que entiende. Un agente que sí los conoce los recupera al abrir la cola
+    /// (<see cref="Recuperar"/>). Con el agente detenido: el watchdog lo garantiza. Sin archivo, no
+    /// hace nada. Devuelve cuántos movió.
+    /// </summary>
+    public static int ApartarTiposNuevos(string ruta, TimeProvider reloj)
+    {
+        if (!File.Exists(ruta))
+        {
+            return 0;
+        }
+
+        var cadena = new SqliteConnectionStringBuilder
+        {
+            DataSource = ruta,
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false,
+            DefaultTimeout = 10,
+        }.ToString();
+        using var conexion = new SqliteConnection(cadena);
+        conexion.Open();
+        Ejecutar(conexion, null, "PRAGMA synchronous = FULL;");
+        if (!ExisteTabla(conexion, "eventos"))
+        {
+            return 0;
+        }
+
+        using var tx = conexion.BeginTransaction();
+        Ejecutar(conexion, tx, EsquemaApartados);
+        Ejecutar(
+            conexion, tx,
+            "INSERT INTO eventos_apartados (id_original, tipo, clave, payload, creado_at, intentos, enviado_at, " +
+            "rechazado_at, motivo_rechazo, apartado_at) " +
+            "SELECT id, tipo, clave, payload, creado_at, intentos, enviado_at, rechazado_at, motivo_rechazo, $ahora " +
+            $"FROM eventos WHERE tipo NOT IN ({TiposOriginales}) ORDER BY id;",
+            ("$ahora", Formatear(reloj.GetUtcNow())));
+        var movidos = Ejecutar(conexion, tx, $"DELETE FROM eventos WHERE tipo NOT IN ({TiposOriginales});");
+        tx.Commit();
+        return movidos;
+    }
+
+    /// <summary>
+    /// Regresa a la cola los PENDIENTES que el watchdog apartó y que esta versión entiende (con id
+    /// nuevo, al final). Si ya hay un pendiente más nuevo del mismo tipo y clave, gana ése (el
+    /// apartado es una versión vieja). Los enviados o rechazados apartados ya no sirven y se borran.
+    /// Lo que esta versión tampoco entiende se queda apartado.
+    /// </summary>
+    private static void Recuperar(SqliteConnection conexion)
+    {
+        if (!ExisteTabla(conexion, "eventos_apartados"))
+        {
+            return;
+        }
+
+        using var tx = conexion.BeginTransaction();
+        Ejecutar(
+            conexion, tx,
+            "INSERT INTO eventos (tipo, clave, payload, creado_at, intentos) " +
+            "SELECT a.tipo, a.clave, a.payload, a.creado_at, a.intentos FROM eventos_apartados AS a " +
+            $"WHERE a.enviado_at IS NULL AND a.rechazado_at IS NULL AND a.tipo IN ({TiposConocidos}) " +
+            "AND NOT EXISTS (SELECT 1 FROM eventos AS e WHERE e.tipo = a.tipo AND e.clave IS a.clave " +
+            "AND e.enviado_at IS NULL AND e.rechazado_at IS NULL) ORDER BY a.id_original;");
+        Ejecutar(conexion, tx, $"DELETE FROM eventos_apartados WHERE tipo IN ({TiposConocidos});");
+        tx.Commit();
+    }
+
+    private static bool ExisteTabla(SqliteConnection conexion, string nombre)
+    {
+        using var comando = conexion.CreateCommand();
+        comando.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $n;";
+        comando.Parameters.AddWithValue("$n", nombre);
+        return Convert.ToInt64(comando.ExecuteScalar(), CultureInfo.InvariantCulture) > 0;
     }
 
     /// <summary>
