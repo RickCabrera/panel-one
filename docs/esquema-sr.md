@@ -305,6 +305,45 @@ cerrar**, no lo vendido: se declararon en $0.00 y así quedaron, con $3,065.50 v
 `idmesero` vacíos. Al cerrar, SR avisa si hay propinas sin pagar al mesero y deja seguir. Un turno
 puede durar días (el visto duró del 19 al 22-oct; SR avisa "más de 24 horas" al imprimir, y deja).
 
+**Lectura de turnos y cortes en el panel (MVP de cortes).** `sr_turnos.sql` (`WITH (NOLOCK)`,
+timeout corto, reader `ConsultaTurnos`) lee de `dbo.turnos` `idturno`, `apertura`, `cierre`,
+`idestacion`, `fondo` y los cuatro declarados, de los turnos **abiertos** (`cierre IS NULL`) y de
+los abiertos o cerrados en los últimos 7 días (hora local de la PC). Cada turno viaja como evento
+`turno` (§13) por la misma cola que los cheques; fechas con el offset de la zona de Windows, igual
+que los cheques. La venta de un corte **no la lee el agente de SR**: el panel la calcula con los
+cheques de la sucursal cuyo `idturno` (que el agente ahora manda como `turnoSr`, §13) es el del
+turno, que es como arma SR su Corte X (`tempcheques` con `idturno = N`, abajo). Lo que esto supone:
+
+- ✅ `idturno` del cheque = el turno donde se COBRÓ (validado arriba); en `tempcheques` vale 0
+  mientras no se cobra. El agente manda 0 o NULL como "sin turno".
+- ⚠️ **SUPUESTO — el corte copia `idturno` igual a `cheques`** (las dos tablas tienen las mismas
+  columnas; no se comparó el valor antes y después del corte en F1-090). Si lo cambiara, las cuentas
+  de un turno ya cortado se moverían de corte en el panel. Se valida con una cuenta cobrada antes del
+  corte: mismo `idturno` en `tempcheques` y en `cheques`.
+- ⚠️ **SUPUESTO — `idturno` no se repite dentro de una base** (`DECISION PROVISIONAL (nocturno)`:
+  sólo se vieron 1 y 2). La llave del panel es `(sucursal, turnoSr)`; si SR reiniciara la numeración,
+  un turno nuevo pisaría al viejo. El agente no manda un `idturno` que ya mandó con OTRA apertura
+  (Error en el log) mientras no se reinicie el servicio, y no manda ninguno si viene repetido en una
+  lectura.
+- ⚠️ **SUPUESTO — tipos de columna de `turnos`** (se leen con conversión, sin fijar el tipo) y que
+  varias estaciones pueden tener turnos abiertos a la vez (el panel lo admite: una fila por turno).
+- ⚠️ **DECISIÓN ABIERTA para Ricardo — "declarado vs cobrado".** El detalle del corte compara cada
+  declarado con lo cobrado por esa forma (pagos sin propina ni cambio, §4): efectivo↔efectivo,
+  tarjeta↔tarjeta y total↔total; vales y crédito no tienen forma equivalente en el panel. No se ha
+  visto si el efectivo que declara el cajero incluye el **fondo** o las **propinas** (F1-090 declaró
+  todo en 0.00), ni qué hace SR con `movtoscaja` (depósitos, retiros, propinas pagadas), que el agente
+  NO lee. Por eso la diferencia es `DECISION PROVISIONAL (nocturno)` y con el turno abierto no se
+  calcula.
+- **Cuentas anteriores al agente nuevo:** un cheque mandado antes de este campo no tiene `turnoSr`
+  hasta que se vuelve a leer (relectura de 2 h y `tempcheques` completo); un corte viejo puede salir
+  con venta menor a la real. Lo nuevo cuadra desde el primer turno con el agente actualizado.
+- **Cómo probarlo contra la captura de F1-090:** el turno 1 debe salir con venta $3,065.50 (las 20
+  cuentas de `cheques`) y el 2 con $108.00 (la VISA de `tempcheques`) = el Corte X del turno en
+  curso de la tabla de abajo. Ojo: la ventana del agente es de 7 días (cheques y turnos cerrados),
+  así que con la captura del 19–22-oct sólo entra el turno 2 (sigue abierto) y su cuenta de
+  `tempcheques`; para el turno 1 hay que operar un turno nuevo en el POS (abrir, cobrar 2–3
+  cuentas, imprimir el Corte X y cerrar) y comparar.
+
 **Cómo cuadra con los reportes de SR** (F1-090, 2026-10-22 14:05–14:08, capturas fuera del repo):
 
 | Reporte nativo | Lo que mostró | Contra la base (`monitor_lector`) |
@@ -2820,6 +2859,33 @@ IVA en texto con la regla de dinero; (4) proveedor y almacén por su `origenSrId
 misma sucursal, o nulos; (5) `leidoAt` = cuándo leyó; (6) a lo más 200 compras y 5000 partidas por
 lote (partir por partidas); (7) documentar en §10 si SR guarda la compra sólo como póliza.
 
+### Evento nuevo del contrato (MVP de cortes): `tipo: 'turno'`
+
+- `datos`: `turnoSr` (texto 1..64, `turnos.idturno`; llave del upsert por sucursal), `aperturaAt`
+  (ISO con zona, obligatorio), `cierreAt` (ISO con zona o nulo = turno abierto), `estacion` (texto
+  ≤ 100 o nulo; sólo espacios = nulo), `fondo`, `declaradoEfectivo`, `declaradoTarjeta`,
+  `declaradoVales`, `declaradoCredito` (importes en texto, como los del cheque). Sin tenant: la
+  sucursal sale de la API key; un campo de más rechaza el evento.
+- El API hace upsert por `(sucursal_id, turno_sr)` (constraint único `turnos_sucursal_id_turno_sr_key`)
+  y un reenvío idéntico no escribe nada (ni `updated_at`). Un turno que cambió (se cerró, se declaró)
+  se reescribe completo.
+- En `cola.db` el turno se colapsa como un cheque (sólo el último pendiente por `turnoSr`). Un API
+  anterior a este cambio rechaza el evento como inválido (`reintentable: false`): **el API se
+  despliega antes que el agente**.
+- Lo lee el panel en `GET /cortes`, `GET /cortes/en-curso` y `GET /cortes/{id}` (venta = Σ `total`
+  de los cheques no cancelados de la sucursal con ese `turnoSr`).
+
+### Campo nuevo del contrato de eventos (MVP de cortes): `datos.turnoSr` del cheque
+
+- Opcional, texto de hasta 64: el `idturno` donde se COBRÓ la cuenta (✅ validado, §2); 0 o NULL
+  en SR = el agente manda nulo. Mismas reglas que `clienteOrigenSrId`: tal cual; nulo, ausente o
+  sólo espacios = sin turno; **omitirlo lo guarda nulo**; entra en la forma canónica (`canonico.ts`):
+  que llegue o cambie reescribe el cheque, reenviar lo mismo no toca nada; uno de más de 64 rechaza
+  sólo ese evento. Columna `cheques.turno_sr` con índice `(sucursal_id, turno_sr)` y CHECK de largo.
+- Un API anterior a este campo rechaza el cheque entero (`forbidNonWhitelisted`): **el API se
+  despliega antes que el agente.** Al actualizar el agente, la huella de cada cheque cambia (trae un
+  campo más) y los de su ventana de lectura se reenvían una vez; el API los reescribe con su turno.
+
 ### Campo nuevo del contrato de eventos (F2-233): `datos.areaOrigenSrId` del cheque
 
 - Opcional, texto de hasta 64. ⚠️ **SUPUESTO NO VALIDADO** (§2): es el mismo `origenSrId` que el
@@ -3021,7 +3087,9 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | `agent/src/ArkonAgente/Ventas/MapeoCheques.cs#2` | 162 | F1-022 | `folioSr` = `folio` = `numcheque` (con `serie-` si hay serie): el folio del ticket, estable tras el corte; su reinicio por año/serie no se ha visto. | SR | §2 |
 | `agent/src/ArkonAgente/Ventas/MapeoCheques.cs#3` | 201 | F1-022 | Las cortesías (`totalcortesias`) se suman en `descuentos`: el contrato no tiene campo propio. | SR | §2 |
 | `agent/src/ArkonAgente/Ventas/MapeoCheques.cs#4` | 252 | F1-022 | Una fila de `cheqdet` con `modificador = 1` es modificador de la partida anterior; nunca visto vendido. | SR | §3 |
+| `agent/src/ArkonAgente/Ventas/MapeoTurnos.cs#1` | 55 | MVP cortes | Un `idturno` repetido en una lectura de `dbo.turnos`: no se manda ninguno. | SR | §2 |
 | `agent/src/ArkonAgente/Ventas/SincronizadorCheques.cs#1` | 53 | F1-022 | La primera lectura trae sólo las cuentas de `cheques` cerradas en los últimos 7 días, no toda la historia. | SR | §2 |
+| `agent/src/ArkonAgente/Ventas/SincronizadorTurnos.cs#1` | 30 | MVP cortes | La huella de cada turno vive en memoria: tras reiniciar se reenvían los de la ventana de 7 días (el API los deja iguales); un `idturno` reusado con otra apertura no se manda. | SR | §2 |
 | `agent/src/ArkonAgente/Worker.cs#1` | 200 | F1-020 | Conexión que falla al arrancar (incl. usuario con escritura) = Warning y el servicio sigue; negarse a leer es decisión abierta. | SR | §11, §14 «Agente: cuenta del servicio» |
 | `agent/tests/ArkonAgente.Tests/ArkonAgente.Tests.csproj#1` | 15 | F1-020 | `InvariantGlobalization=false`: SR guarda varchar CP1252 (Modern_Spanish_CI_AS). | SR | §11 |
 | `api/prisma/schema.prisma#1` | 221 | F1-010 | `agente_estado` lleva `empresa_id` denormalizado con FK compuesta, aunque el backlog sólo pedía `sucursal_id`. | panel | §14 «Panel, landing, correo» |
@@ -3033,20 +3101,21 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | `api/prisma/schema.prisma#7` | 374 | F2-232 | El cheque referencia al cliente por el mismo `origenSrId` del catálogo. | panel | §2, §13 |
 | `api/prisma/schema.prisma#8` | 381 | F2-233 | El cheque referencia el área por el mismo `origenSrId` del catálogo. | panel | §2, §13 |
 | `api/prisma/schema.prisma#9` | 421 | F1-030 | `cantidad` de partida NUMERIC(12,3) (venta fraccionada). | panel | §3 |
-| `api/prisma/schema.prisma#10` | 478 | F1-032 | Catálogo de formas de pago por EMPRESA, match exacto, sin CRUD. | panel | §4 |
-| `api/prisma/schema.prisma#11` | 846 | F2-230 | Grupo del producto por texto (`origen_sr_id`), sin FK. | panel | §6 |
-| `api/prisma/schema.prisma#12` | 852 | F2-145 | Un precio por producto y sucursal, sin saber si trae IVA. | panel | §6 |
-| `api/prisma/schema.prisma#13` | 954 | F2-230 | Se supone un catálogo de canal/tipo de servicio en SR (`canales_venta_catalogo`). | panel | §8 |
-| `api/prisma/schema.prisma#14` | 981 | F2-233 | `canal_negocio` enum fijo; agregar canal = migración. | panel | §8 |
-| `api/prisma/schema.prisma#15` | 1139 | F2-120 | Insumo con UN grupo y UNA unidad por texto, sin FK; sin costo porque "el costo es el promedio POR ALMACÉN". | panel | §9, §10 |
-| `api/prisma/schema.prisma#16` | 1163 | F2-120 | Almacenes por sucursal. | panel | §9 |
-| `api/prisma/schema.prisma#17` | 1188 | F2-120 | Proveedores = catálogo del POS por sucursal, sin RFC ni contacto. | panel | §9 |
-| `api/prisma/schema.prisma#18` | 1299 | F2-122 | Un almacén por póliza; póliza que desaparece no se borra (viaja `cancelada`). | panel | §10 |
-| `api/prisma/schema.prisma#19` | 1517 | F2-125 | Receta que deja de llegar no se borra; producto/insumo por texto sin FK. | panel | §10 |
-| `api/prisma/schema.prisma#20` | 1542 | F2-125 | Renglón de receta NUMERIC(12,4); más decimales se rechazan. | panel | §10 |
-| `api/prisma/schema.prisma#21` | 1566 | F2-126 | Compra = documento aparte de su póliza; no se concilian ni suman a la utilidad. | panel | §10 |
-| `api/prisma/schema.prisma#22` | 1641 | F2-126 | Gasto `monto` SIN IVA acreditable. | panel | §10 |
-| `api/prisma/schema.prisma#23` | 1669 | F2-100 | Un emisor (perfil fiscal) por empresa. | panel | §8 |
+| `api/prisma/schema.prisma#10` | 491 | MVP cortes | `idturno` de SR no se repite dentro de una sucursal (se vieron 1 y 2): llave `(sucursal_id, turno_sr)`. | SR | §2, §13 |
+| `api/prisma/schema.prisma#11` | 478 | F1-032 | Catálogo de formas de pago por EMPRESA, match exacto, sin CRUD. | panel | §4 |
+| `api/prisma/schema.prisma#12` | 846 | F2-230 | Grupo del producto por texto (`origen_sr_id`), sin FK. | panel | §6 |
+| `api/prisma/schema.prisma#13` | 852 | F2-145 | Un precio por producto y sucursal, sin saber si trae IVA. | panel | §6 |
+| `api/prisma/schema.prisma#14` | 954 | F2-230 | Se supone un catálogo de canal/tipo de servicio en SR (`canales_venta_catalogo`). | panel | §8 |
+| `api/prisma/schema.prisma#15` | 981 | F2-233 | `canal_negocio` enum fijo; agregar canal = migración. | panel | §8 |
+| `api/prisma/schema.prisma#16` | 1139 | F2-120 | Insumo con UN grupo y UNA unidad por texto, sin FK; sin costo porque "el costo es el promedio POR ALMACÉN". | panel | §9, §10 |
+| `api/prisma/schema.prisma#17` | 1163 | F2-120 | Almacenes por sucursal. | panel | §9 |
+| `api/prisma/schema.prisma#18` | 1188 | F2-120 | Proveedores = catálogo del POS por sucursal, sin RFC ni contacto. | panel | §9 |
+| `api/prisma/schema.prisma#19` | 1299 | F2-122 | Un almacén por póliza; póliza que desaparece no se borra (viaja `cancelada`). | panel | §10 |
+| `api/prisma/schema.prisma#20` | 1517 | F2-125 | Receta que deja de llegar no se borra; producto/insumo por texto sin FK. | panel | §10 |
+| `api/prisma/schema.prisma#21` | 1542 | F2-125 | Renglón de receta NUMERIC(12,4); más decimales se rechazan. | panel | §10 |
+| `api/prisma/schema.prisma#22` | 1566 | F2-126 | Compra = documento aparte de su póliza; no se concilian ni suman a la utilidad. | panel | §10 |
+| `api/prisma/schema.prisma#23` | 1641 | F2-126 | Gasto `monto` SIN IVA acreditable. | panel | §10 |
+| `api/prisma/schema.prisma#24` | 1669 | F2-100 | Un emisor (perfil fiscal) por empresa. | panel | §8 |
 | `api/prisma/seed-mesas.ts#1` | 49 | F2-223 | `comandaImpresa` es forma nuestra; regla del seed para generarla. | panel | §5 |
 | `api/prisma/seed-ventas.ts#1` | 428 | F1-031 (ref.) | El seed guarda `forma = otro` imitando la ingesta. | panel | §13 |
 | `api/src/adaptadores/timbrado/timbrado-facturama.ts#1` | 36 | F2-202/F2-104 | `TaxStamp.Date` sin zona = hora LOCAL de la sucursal; con zona se respeta; ilegible → reloj. | panel | §2, §14 «Facturación» |
@@ -3065,6 +3134,8 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | `api/src/catalogos/menu.ts#1` | 32 | F2-145 | "Mismo producto" entre sucursales = clave visible normalizada; sin clave, nombre. | panel | §6 |
 | `api/src/catalogos/menu.ts#2` | 235 | F2-145 | Vendidos sin catálogo: cruce por NOMBRE. | panel | §6 |
 | `api/src/catalogos/meseros.ts#1` | 188 | F2-231 | Mesero del cheque ↔ espejo por (sucursal, nombre normalizado); consolidación. | panel | §7 |
+| `api/src/cortes/cortes.service.ts#1` | 282 | MVP cortes | Diferencia del cuadre = declarado − cobrado (pagos sin propina ni fondo); no se sabe si el efectivo declarado en SR incluye fondo o propinas. | SR | §2, §13 |
+| `api/src/cortes/cortes.service.ts#2` | 299 | MVP cortes | El monto de una cuenta cancelada del turno es su `total` tal como llegó (igual que Análisis). | panel | §2 |
 | `api/src/facturacion/cancelacion.ts#1` | 26 | F2-109/F2-110b | Solicitud ambigua vista vigente a los 10 min → no registrada; desde F2-110b queda `sin_confirmar` hasta 7 días. | panel | §2 |
 | `api/src/facturacion/cancelacion.ts#2` | 142 | F2-109 | Cancelación 02 y 03 sueltan el ticket por igual. | panel | §2 |
 | `api/src/facturacion/cfdi.service.ts#1` | 42 | F2-104 | `PAC_SIN_RESPUESTA` no se reintenta. | panel | §2 |
