@@ -2963,7 +2963,7 @@ de desvío de migraciones); en la PC de Ricardo, reinstalar con un código deja 
 
 ## PLAT-01 · Panel de plataforma y membresías
 
-- [ ] **PLAT-01 · Panel de plataforma y membresías** — pedida por Ricardo el 3-nov-2026 (fuera de
+- [x] **PLAT-01 · Panel de plataforma y membresías** — pedida por Ricardo el 3-nov-2026 (fuera de
   la cola; PR #86, rama `feat/plataforma-membresias`, migración `20261103030000`).
   Back office sólo para admin_global (otro rol = 404): planes, clientes y su suscripción (día de
   corte, gracia), pagos manuales con anulación, métricas (MRR, por estado, cobrado del mes),
