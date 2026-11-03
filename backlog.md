@@ -2878,6 +2878,24 @@ propósito: F2-250 no agregaba gates.
 alguno falla; un PR que agrega una `DECISION PROVISIONAL` sin su renglón sale rojo (probado en
 una rama de prueba y anotado en el log); el README lo menciona en "El CI".
 
+### INST-01 · Instalador del agente en un clic
+`[ ]` /api · /web · /agent · /infra (CI) — pedida por Ricardo el 31-oct-2026 · PR #85
+
+Que una persona NO técnica conecte una sucursal en menos de 5 minutos capturando UN solo dato.
+En Administración › Sucursales, "Conectar sucursal" genera un código de enlace (`K7P4-42XQ`, 8
+símbolos sin ambiguos, de un solo uso, 30 min, guardado como hash). `Instalar-YoControlo.cmd`
+(doble clic, se eleva solo) detecta el SQL y la base de SR, revisa permisos sólo leyendo, canjea
+el código por la API key (`POST /agente/enlace`, con límites por IP —IPv6 por /64—, por código, de
+fallos y un cortacircuito global), crea `monitor_lector` con contraseña aleatoria, instala los
+servicios, corre `agente test` y dice LISTO o qué hacer. Arregla el bug de sqlcmd de
+`crear-usuario-lector.ps1` con autenticación de Windows. El modo manual queda como "Instalación
+avanzada" en `docs/instalacion-agente.md`.
+
+**Listo cuando:** CI verde (incluido el job del instalador en Windows PowerShell 5.1 y el chequeo
+de desvío de migraciones); en la PC de Ricardo, reinstalar con un código deja la sucursal
+"Conectado" sin escribir nada más que el código; reusar el código no cambia nada; un
+`crear-usuario-lector.ps1` sin `-UsuarioAdmin` ya no da "Unknown Option".
+
 ---
 
 ## Decisiones abiertas para Ricardo
