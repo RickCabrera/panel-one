@@ -88,6 +88,14 @@ export class ResumenCorteDto implements ResumenCorte {
     description: 'venta / cuentas; null sin cuentas.',
   })
   ticketPromedio!: string | null;
+
+  @ApiProperty({
+    description:
+      'El turno se CERRÓ antes de que llegara a la API el primer turno de su sucursal (antes de que ' +
+      'el agente mandara turnos y el turno de cada cuenta): sus cuentas pueden no estar ligadas y la ' +
+      'venta puede salir incompleta. Un turno abierto nunca lo es.',
+  })
+  posiblementeIncompleto!: boolean;
 }
 
 export class ListaCortesDto implements ListaCortes {

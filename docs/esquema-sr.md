@@ -316,6 +316,10 @@ turno, que es como arma SR su Corte X (`tempcheques` con `idturno = N`, abajo). 
 
 - ✅ `idturno` del cheque = el turno donde se COBRÓ (validado arriba); en `tempcheques` vale 0
   mientras no se cobra. El agente manda 0 o NULL como "sin turno".
+- ⚠️ **SUPUESTO — que una cuenta CANCELADA lleve `idturno` ≠ 0 no está visto** (ninguna cuenta
+  cancelada se vio en F1-090, §2 "Cómo se marca una cancelación"). Si SR la deja en 0, sus
+  canceladas no salen en el corte (el panel las cuenta como "sin turno") aunque el Corte X sí las
+  liste. Se valida cancelando una cuenta cobrada y otra sin cobrar dentro de un turno.
 - ⚠️ **SUPUESTO — el corte copia `idturno` igual a `cheques`** (las dos tablas tienen las mismas
   columnas; no se comparó el valor antes y después del corte en F1-090). Si lo cambiara, las cuentas
   de un turno ya cortado se moverían de corte en el panel. Se valida con una cuenta cobrada antes del
@@ -337,6 +341,11 @@ turno, que es como arma SR su Corte X (`tempcheques` con `idturno = N`, abajo). 
 - **Cuentas anteriores al agente nuevo:** un cheque mandado antes de este campo no tiene `turnoSr`
   hasta que se vuelve a leer (relectura de 2 h y `tempcheques` completo); un corte viejo puede salir
   con venta menor a la real. Lo nuevo cuadra desde el primer turno con el agente actualizado.
+  **Regla del panel (`posiblementeIncompleto`):** un corte se marca "anterior a la actualización:
+  la venta puede estar incompleta" si se CERRÓ antes de que llegara a la API el primer turno de su
+  sucursal (`min(turnos.created_at)`, reloj del servidor). Un turno abierto en ese momento no se
+  marca: todas sus cuentas cobradas siguen en `tempcheques`, que el agente relee completo cada
+  ciclo. Va en `GET /cortes`, `/cortes/{id}` y en la página Cortes.
 - **Cómo probarlo contra la captura de F1-090:** el turno 1 debe salir con venta $3,065.50 (las 20
   cuentas de `cheques`) y el 2 con $108.00 (la VISA de `tempcheques`) = el Corte X del turno en
   curso de la tabla de abajo. Ojo: la ventana del agente es de 7 días (cheques y turnos cerrados),

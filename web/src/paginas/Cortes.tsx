@@ -10,6 +10,7 @@ import {
   momento,
   nombreCorte,
   PARAM_CORTE,
+  TEXTO_INCOMPLETO,
   sentidoDiferencia,
   TEXTO_CONCEPTO,
 } from './cortes/reglas';
@@ -152,6 +153,15 @@ function ListaDeCortes({
                 <td className={NUM}>{pesos(c.fondo)}</td>
                 <td className={NUM} data-testid="corte-venta">
                   {pesos(c.venta)}
+                  {c.posiblementeIncompleto && (
+                    <span
+                      className="ml-1 text-aviso"
+                      title={TEXTO_INCOMPLETO}
+                      data-testid="corte-incompleto"
+                    >
+                      *
+                    </span>
+                  )}
                 </td>
                 <td className={NUM}>{c.cuentas}</td>
                 <td className={NUM}>{importe(c.ticketPromedio)}</td>
@@ -160,6 +170,11 @@ function ListaDeCortes({
           </tbody>
         </table>
       </div>
+      {cortes.some((c) => c.posiblementeIncompleto) && (
+        <p className="mt-2 text-xs text-aviso" data-testid="cortes-incompletos">
+          * {TEXTO_INCOMPLETO} Se cerró antes de que el agente empezara a mandar los turnos.
+        </p>
+      )}
       {truncado && (
         <p className="mt-2 text-sm text-aviso" role="status">
           Hay más turnos en el periodo de los que se muestran: acorta el rango para verlos todos.
@@ -207,6 +222,12 @@ function ContenidoDetalle({ d, onCerrar }: { d: DetalleCorte; onCerrar: () => vo
           Cerrar
         </button>
       </div>
+      {d.posiblementeIncompleto && (
+        <p className="mt-2 text-sm text-aviso" role="status" data-testid="detalle-incompleto">
+          {TEXTO_INCOMPLETO} El turno se cerró antes de que el agente empezara a mandar los turnos,
+          así que algunas de sus cuentas pueden no estar ligadas a él.
+        </p>
+      )}
       {d.abierto && (
         <p className="mt-2 text-sm text-info" role="status" data-testid="corte-en-curso">
           Turno abierto: las cifras son el acumulado en curso (lo cobrado hasta ahora) y se

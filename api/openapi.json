@@ -26429,6 +26429,10 @@
             "type": "string",
             "nullable": true,
             "description": "venta / cuentas; null sin cuentas."
+          },
+          "posiblementeIncompleto": {
+            "type": "boolean",
+            "description": "El turno se CERRÓ antes de que llegara a la API el primer turno de su sucursal (antes de que el agente mandara turnos y el turno de cada cuenta): sus cuentas pueden no estar ligadas y la venta puede salir incompleta. Un turno abierto nunca lo es."
           }
         },
         "required": [
@@ -26444,7 +26448,8 @@
           "fondo",
           "venta",
           "cuentas",
-          "ticketPromedio"
+          "ticketPromedio",
+          "posiblementeIncompleto"
         ]
       },
       "ListaCortesDto": {
@@ -26618,6 +26623,10 @@
             "nullable": true,
             "description": "venta / cuentas; null sin cuentas."
           },
+          "posiblementeIncompleto": {
+            "type": "boolean",
+            "description": "El turno se CERRÓ antes de que llegara a la API el primer turno de su sucursal (antes de que el agente mandara turnos y el turno de cada cuenta): sus cuentas pueden no estar ligadas y la venta puede salir incompleta. Un turno abierto nunca lo es."
+          },
           "comensales": {
             "$ref": "#/components/schemas/ComensalesCorteDto"
           },
@@ -26674,6 +26683,7 @@
           "venta",
           "cuentas",
           "ticketPromedio",
+          "posiblementeIncompleto",
           "comensales",
           "propina",
           "descuentos",

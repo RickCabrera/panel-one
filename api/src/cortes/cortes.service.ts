@@ -47,6 +47,12 @@ export interface ResumenCorte {
   venta: string;
   cuentas: number;
   ticketPromedio: string | null;
+  /**
+   * El turno se CERRÓ antes de que llegara a la API el primer turno de su sucursal (antes de que el
+   * agente mandara turnos y el `turnoSr` de cada cheque): sus cuentas pueden no estar ligadas y la
+   * venta puede salir incompleta. Ver `posiblementeIncompleto()`.
+   */
+  posiblementeIncompleto: boolean;
 }
 
 export interface ListaCortes {
@@ -113,11 +119,27 @@ interface SucursalLeida {
   zonaHoraria: string;
 }
 
+/**
+ * La regla de "corte anterior a la actualización" (MVP de cortes). El agente empieza a mandar
+ * turnos y el `turnoSr` de los cheques a la vez; al arrancar relee los turnos de 7 días, pero de
+ * los cheques sólo relee `tempcheques` (el turno en curso, completo) y la ventana corta de
+ * `cheques`. Así que un turno que ya estaba CERRADO cuando llegó el primer turno de su sucursal
+ * (`min(turnos.created_at)`, reloj del servidor) puede tener cuentas sin `turnoSr`. Uno abierto en
+ * ese momento, o abierto después, está completo. Sin turnos de la sucursal no hay nada que marcar.
+ */
+export function posiblementeIncompleto(
+  cierreAt: Date | null,
+  primeraLlegada: Date | undefined,
+): boolean {
+  return cierreAt !== null && primeraLlegada !== undefined && cierreAt < primeraLlegada;
+}
+
 function resumen(
   t: TurnoLeido,
   s: SucursalLeida,
   venta: Prisma.Decimal,
   cuentas: number,
+  primeraLlegada: Date | undefined,
 ): ResumenCorte {
   return {
     id: t.id,
@@ -133,6 +155,7 @@ function resumen(
     venta: pesos(venta),
     cuentas,
     ticketPromedio: promedio(venta, cuentas),
+    posiblementeIncompleto: posiblementeIncompleto(t.cierreAt, primeraLlegada),
   };
 }
 
@@ -175,11 +198,18 @@ export class CortesService {
     const truncado = turnos.length > MAX_CORTES;
     const vistos = truncado ? turnos.slice(0, MAX_CORTES) : turnos;
     const ventas = await this.ventasPorTurno(datos, filtro.empresaId, vistos);
+    const llegadas = await this.primerasLlegadas(datos, filtro.empresaId, vistos);
     const porId = new Map(sucursales.map((s) => [s.id, s]));
     return {
       cortes: vistos.map((t) => {
         const v = ventas.get(llave(t.sucursalId, t.turnoSr));
-        return resumen(t, porId.get(t.sucursalId)!, dec(v?.venta), v?.cuentas ?? 0);
+        return resumen(
+          t,
+          porId.get(t.sucursalId)!,
+          dec(v?.venta),
+          v?.cuentas ?? 0,
+          llegadas.get(t.sucursalId),
+        );
       }),
       truncado,
     };
@@ -203,9 +233,10 @@ export class CortesService {
     });
     const ventas = await this.ventasPorTurno(datos, empresaId, turnos);
     const porId = new Map(sucursales.map((s) => [s.id, s]));
+    // Abiertos: nunca "incompletos" (sus cuentas cobradas están todas en `tempcheques`).
     return turnos.map((t) => {
       const v = ventas.get(llave(t.sucursalId, t.turnoSr));
-      return resumen(t, porId.get(t.sucursalId)!, dec(v?.venta), v?.cuentas ?? 0);
+      return resumen(t, porId.get(t.sucursalId)!, dec(v?.venta), v?.cuentas ?? 0, undefined);
     });
   }
 
@@ -287,7 +318,13 @@ export class CortesService {
     });
 
     return {
-      ...resumen(t, s, venta, cuentas),
+      ...resumen(
+        t,
+        s,
+        venta,
+        cuentas,
+        (await this.primerasLlegadas(datos, t.empresaId, [t])).get(t.sucursalId),
+      ),
       comensales: {
         total: ventas._sum.comensales ?? 0,
         cuentasConDato: ventas._count.comensales,
@@ -327,6 +364,24 @@ export class CortesService {
       select: { id: true, nombre: true, zonaHoraria: true },
       orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
     });
+  }
+
+  /** Por sucursal, cuándo llegó a la API su primer turno (`min(created_at)`), con scope. */
+  private async primerasLlegadas(
+    datos: DatosScoped,
+    empresaId: string,
+    turnos: readonly TurnoLeido[],
+  ): Promise<Map<string, Date>> {
+    const sucursales = [...new Set(turnos.map((t) => t.sucursalId))];
+    if (sucursales.length === 0) return new Map();
+    const filas = await datos.turno.groupBy({
+      by: ['sucursalId'],
+      where: { empresaId, sucursalId: { in: sucursales } },
+      _min: { createdAt: true },
+    });
+    return new Map(
+      filas.flatMap((f) => (f._min.createdAt ? [[f.sucursalId, f._min.createdAt] as const] : [])),
+    );
   }
 
   /** Venta y cuentas cobradas de cada turno de la lista, en UNA consulta agrupada. */

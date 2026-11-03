@@ -2151,6 +2151,8 @@ export interface ResumenCorte {
   venta: Importe;
   cuentas: number;
   ticketPromedio: Importe | null;
+  /** Cerrado antes de que el agente mandara turnos: la venta puede estar incompleta. */
+  posiblementeIncompleto: boolean;
 }
 
 /** `ListaCortesDto` de `GET /cortes`. */

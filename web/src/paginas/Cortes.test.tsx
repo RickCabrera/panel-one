@@ -39,6 +39,7 @@ const T8: ResumenCorte = {
   venta: '108.00',
   cuentas: 1,
   ticketPromedio: '108.00',
+  posiblementeIncompleto: false,
 };
 
 const T7: ResumenCorte = {
@@ -52,6 +53,7 @@ const T7: ResumenCorte = {
   venta: '415.50',
   cuentas: 2,
   ticketPromedio: '207.75',
+  posiblementeIncompleto: true,
 };
 
 const DETALLE_T7: DetalleCorte = {
@@ -161,6 +163,12 @@ describe('Cortes (MVP)', () => {
     expect(cerrado).toHaveTextContent('22/10/2026 14:05');
     expect(cerrado).toHaveTextContent('3 d 5 h');
     expect(within(cerrado).getByTestId('corte-venta')).toHaveTextContent('$415.50');
+    // El 7 se cerró antes de que el agente mandara turnos: se avisa; el 8 (abierto) no.
+    expect(within(cerrado).getByTestId('corte-incompleto')).toBeInTheDocument();
+    expect(within(abierto).queryByTestId('corte-incompleto')).not.toBeInTheDocument();
+    expect(screen.getByTestId('cortes-incompletos')).toHaveTextContent(
+      'Corte anterior a la actualización: la venta puede estar incompleta.',
+    );
     expect(cerrado).toHaveTextContent('$207.75');
   });
 
@@ -185,6 +193,9 @@ describe('Cortes (MVP)', () => {
     expect(within(detalle).getByTestId('cuadre-vales')).toHaveTextContent('$0.00——');
     expect(within(detalle).getByTestId('detalle-top')).toHaveTextContent('Taco sintético');
     expect(screen.queryByTestId('corte-en-curso')).not.toBeInTheDocument();
+    expect(within(detalle).getByTestId('detalle-incompleto')).toHaveTextContent(
+      'Corte anterior a la actualización',
+    );
   });
 
   it('el detalle se abre desde la URL (?corte=) y un turno abierto dice que es acumulado', async () => {

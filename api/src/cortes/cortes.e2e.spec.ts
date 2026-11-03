@@ -259,6 +259,17 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
       await prisma.cheque.deleteMany({ where: { folioSr: 'KX' } });
     });
 
+    it('reenviar el MISMO cheque con turnoSr no lo reescribe (ni updated_at)', async () => {
+      const antes = await prisma.cheque.findFirstOrThrow({ where: { folioSr: 'K1' } });
+      expect(antes.turnoSr).toBe('7');
+      for (const id of ['k1r1', 'k1r2', 'k1r3']) {
+        await lote(KEYS.a1, [cheque(id, 'K1', '7', { total: '315.50' })]);
+      }
+      const despues = await prisma.cheque.findFirstOrThrow({ where: { folioSr: 'K1' } });
+      expect(despues.updatedAt.getTime()).toBe(antes.updatedAt.getTime());
+      expect(despues).toEqual(antes);
+    });
+
     it('la base: (sucursal_id, turno_sr) es ÚNICO y hay índice por empresa', async () => {
       const filas = await prisma.$queryRaw<{ indexdef: string }[]>`
         SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'turnos'`;
@@ -341,6 +352,7 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
             venta: '108.00',
             cuentas: 1,
             ticketPromedio: '108.00',
+            posiblementeIncompleto: false,
           },
           {
             id: t7,
@@ -357,6 +369,7 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
             venta: '415.50',
             cuentas: 2,
             ticketPromedio: '207.75',
+            posiblementeIncompleto: true,
           },
         ],
       });
@@ -396,6 +409,8 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
         venta: '415.50',
         cuentas: 2,
         ticketPromedio: '207.75',
+        // Cerrado el 22-oct, antes de que llegara a la API el primer turno de A1.
+        posiblementeIncompleto: true,
         comensales: { total: 3, cuentasConDato: 1 },
         propina: '25.50',
         descuentos: { monto: '10.00', cuentas: 1 },
@@ -444,6 +459,28 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
         null,
         null,
       ]);
+    });
+
+    it('un turno cerrado DESPUÉS de que llegó el primer turno de la sucursal no es incompleto', async () => {
+      // Abre y cierra en 2030: después de la primera llegada (hoy). Su venta está completa.
+      await lote(KEYS.a1, [
+        turno('n1', '9', {
+          aperturaAt: '2030-01-01T09:00:00.000-06:00',
+          cierreAt: '2030-01-01T18:00:00.000-06:00',
+        }),
+      ]);
+      const r = await get(
+        `/cortes?${Q({ empresaId: FX.empresaA, desde: '2030-01-01', hasta: '2030-01-01' })}`,
+      );
+      expect(
+        r.body.cortes.map((c: { turnoSr: string; posiblementeIncompleto: boolean }) => [
+          c.turnoSr,
+          c.posiblementeIncompleto,
+        ]),
+      ).toEqual([['9', false]]);
+      const t9 = (await turnoDe(FX.sucursalA1, '9')).id;
+      expect((await get(`/cortes/${t9}`)).body.posiblementeIncompleto).toBe(false);
+      expect((await get(`/cortes/${t7}`)).body.posiblementeIncompleto).toBe(true);
     });
 
     it('en curso: sólo los turnos sin cierre, con lo cobrado hasta ahora', async () => {

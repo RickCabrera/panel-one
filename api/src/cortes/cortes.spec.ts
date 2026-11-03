@@ -1,6 +1,7 @@
 import { FormaPago, Prisma } from '@prisma/client';
 
 import { desglosarFormas, diaSiguiente, limitesLocales, promedio } from './cortes';
+import { posiblementeIncompleto } from './cortes.service';
 
 const D = (v: string) => new Prisma.Decimal(v);
 
@@ -62,5 +63,15 @@ describe('cortes: lo puro (MVP de cortes)', () => {
     const r = desglosarFormas([], new Map());
     expect(r.formas.map((f) => f.monto)).toEqual(['0.00', '0.00', '0.00', '0.00']);
     expect(r.sinCatalogo).toEqual([]);
+  });
+
+  it('posiblementeIncompleto: sólo un turno CERRADO antes de la primera llegada de su sucursal', () => {
+    const llegada = new Date('2026-11-03T08:00:00Z');
+    expect(posiblementeIncompleto(new Date('2026-10-22T20:05:00Z'), llegada)).toBe(true);
+    // Cerrado después (o abierto): sus cuentas ya vinieron con turnoSr.
+    expect(posiblementeIncompleto(new Date('2026-11-03T09:00:00Z'), llegada)).toBe(false);
+    expect(posiblementeIncompleto(null, llegada)).toBe(false);
+    // Sin turnos de la sucursal no hay con qué comparar.
+    expect(posiblementeIncompleto(new Date('2026-10-22T20:05:00Z'), undefined)).toBe(false);
   });
 });

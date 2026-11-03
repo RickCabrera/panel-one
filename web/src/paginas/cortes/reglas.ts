@@ -19,6 +19,10 @@ export function momento(zona: string, instante: string): string {
   return `${fechaParaTabla(f.fecha)} ${f.hora}`;
 }
 
+/** Lo que se dice de un corte de antes de que el agente mandara turnos (`posiblementeIncompleto`). */
+export const TEXTO_INCOMPLETO =
+  'Corte anterior a la actualización: la venta puede estar incompleta.';
+
 /** "Turno 7 · CAJA1": cómo se nombra un corte en la lista y en el detalle. */
 export function nombreCorte(c: Pick<ResumenCorte, 'turnoSr' | 'estacion'>): string {
   return c.estacion ? `Turno ${c.turnoSr} · ${c.estacion}` : `Turno ${c.turnoSr}`;
