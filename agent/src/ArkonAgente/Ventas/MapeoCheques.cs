@@ -194,6 +194,10 @@ internal static class MapeoCheques
 
             EscribirTextoONulo(json, "clienteOrigenSrId", Limpio(cuenta.Cliente));
             EscribirTextoONulo(json, "areaOrigenSrId", Limpio(cuenta.Area));
+            // MVP de cortes: el turno del COBRO (idturno; 0 mientras no se cobra = sin turno). Es lo que
+            // liga la cuenta con su corte en el panel, como el Corte X de SR (esquema-sr §2).
+            EscribirTextoONulo(
+                json, "turnoSr", cuenta.IdTurno is { } turno && turno > 0 ? turno.ToString(CultureInfo.InvariantCulture) : null);
             // SR guarda subtotal SIN IVA pero ANTES del descuento general; la venta neta es la resta (§2).
             json.WriteString("subtotal", Importe(subtotal - (cuenta.DescuentoImporte ?? 0m)));
             // Un NULL de SR en estos tres es "no hubo": no se distingue de 0 en ninguna cuenta vista.

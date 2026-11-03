@@ -91,6 +91,8 @@ model Sucursal {
   agenteActualizacion AgenteActualizacion?
   cheques             Cheque[]
   mesaSnapshots       MesaSnapshot[]
+  // Turnos (cortes) de SR, espejo por sucursal.
+  turnos              Turno[]
   alertas             Alerta[]
 
   // Catálogos espejo (F2-230).
@@ -407,6 +409,12 @@ model Cheque {
   // visto en una instalación real (docs/esquema-sr.md §2, §8 y §13). CHECK "no vacío" a mano en
   // la migración `..._areas_canal`.
   areaOrigenSrId    String?   @map("area_origen_sr_id")
+  // El turno de SR donde se COBRÓ la cuenta (`tempcheques`/`cheques.idturno`, MVP de cortes):
+  // el MISMO `turnoSr` que manda el evento `turno` (tabla `turnos`). Sin FK: cheques y turnos
+  // llegan en cualquier orden. Nulo = la cuenta no lo trae (SR pone 0 mientras no se cobra, o
+  // el agente es anterior a este campo). ✅ VALIDADO F1-090 que `idturno` es el del cobro
+  // (docs/esquema-sr.md §2). CHECK "no vacío" a mano en la migración `..._turnos`.
+  turnoSr           String?   @map("turno_sr")
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -429,6 +437,8 @@ model Cheque {
   @@index([sucursalId, cerradoAt], map: "cheques_sucursal_id_cerrado_at_idx")
   // Las cuentas de UN cliente (F2-232: ficha y filtro de Tickets).
   @@index([sucursalId, clienteOrigenSrId], map: "cheques_sucursal_id_cliente_origen_sr_id_idx")
+  // Las cuentas cobradas en UN turno de SR (el detalle del corte).
+  @@index([sucursalId, turnoSr], map: "cheques_sucursal_id_turno_sr_idx")
   @@map("cheques")
 }
 
@@ -493,6 +503,43 @@ model MesaSnapshot {
   @@unique([sucursalId, capturadoAt], map: "mesa_snapshots_sucursal_id_capturado_at_key")
   @@index([empresaId])
   @@map("mesa_snapshots")
+}
+
+// Un turno (corte de caja) de SR, espejo de `dbo.turnos` (MVP de cortes). Lo escribe SÓLO la
+// ingesta (`EscrituraSucursal.guardarTurno`, evento `turno`). Lo vendido en el turno NO vive
+// aquí: se calcula al leer, con los cheques de la sucursal cuyo `turno_sr` es éste.
+model Turno {
+  id                String    @id @default(uuid()) @db.Uuid
+  sucursalId        String    @map("sucursal_id") @db.Uuid
+  empresaId         String    @map("empresa_id") @db.Uuid
+  // `turnos.idturno` de SR, como texto (igual que `folio_sr`).
+  // DECISION PROVISIONAL (nocturno): se supone que `idturno` no se repite dentro de una sucursal
+  // (F1-090 vio 1 y 2, consecutivos); un reinicio de la numeración pisaría el turno viejo
+  // (docs/esquema-sr.md §2, "Turnos").
+  turnoSr           String    @map("turno_sr")
+  aperturaAt        DateTime  @map("apertura_at") @db.Timestamptz(3)
+  // Nulo = turno abierto (SR deja `cierre` en NULL hasta el corte).
+  cierreAt          DateTime? @map("cierre_at") @db.Timestamptz(3)
+  // `turnos.idestacion` tal cual; nulo si SR no lo trae.
+  estacion          String?
+  fondo             Decimal   @db.Decimal(12, 2)
+  // Lo que el cajero DECLARA al cerrar (no lo vendido): en F1-090 se declararon en 0.00 con
+  // $3,065.50 vendidos. Mientras el turno está abierto, SR los deja en 0.
+  declaradoEfectivo Decimal   @map("declarado_efectivo") @db.Decimal(12, 2)
+  declaradoTarjeta  Decimal   @map("declarado_tarjeta") @db.Decimal(12, 2)
+  declaradoVales    Decimal   @map("declarado_vales") @db.Decimal(12, 2)
+  declaradoCredito  Decimal   @map("declarado_credito") @db.Decimal(12, 2)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sucursal Sucursal @relation(fields: [sucursalId, empresaId], references: [id, empresaId], onDelete: Restrict, map: "turnos_sucursal_empresa_fkey")
+
+  // La llave de idempotencia de la ingesta de turnos: upsert por aquí.
+  @@unique([sucursalId, turnoSr], map: "turnos_sucursal_id_turno_sr_key")
+  @@index([empresaId])
+  // La lista de cortes de una sucursal por rango de apertura.
+  @@index([sucursalId, aperturaAt], map: "turnos_sucursal_id_apertura_at_idx")
+  @@map("turnos")
 }
 
 // Catálogo de formas de pago (F1-032): traduce el texto crudo que SR guarda en

@@ -288,7 +288,7 @@ Formato: `npm run format` (prettier). Sólo toca `/api` y `/web`; `scripts/`, `.
 
 ## El CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) tiene cuatro jobs:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) tiene cinco jobs:
 
 - **`guardia`** — corre desde el commit inicial. Falla si se cuela un centinela del
   orquestador nocturno, un secreto versionado (`.env`, `.pem`, `.key`, `config.json`) o
@@ -296,6 +296,12 @@ Formato: `npm run format` (prettier). Sólo toca `/api` y `/web`; `scripts/`, `.
 - **`api`**, **`web`**, **`agent`** — activos desde F1-001: lint, typecheck y build, y sus
   tests: `api` con un Postgres 16 de servicio y las migraciones aplicadas (F1-011), `web`
   (F1-040) y `agent` (`dotnet test`, F1-020). Ya no queda ningún paso comentado.
+- **`docker`** — construye las imágenes de Railway (`api/Dockerfile`, `web/Dockerfile`) sin
+  publicarlas y les corre la prueba de humo `infra/humo-railway.sh` (producción simulada:
+  migraciones, admin inicial, login, socket.io y rate limit por IP a través de Caddy).
+
+**Producción** (Railway): guía en [`docs/deploy-railway.md`](docs/deploy-railway.md) y
+variables por servicio en [`infra/railway.env.example`](infra/railway.env.example).
 
 Encender un carril es parte del entregable de la tarea que lo habilita.
 

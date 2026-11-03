@@ -33,6 +33,7 @@ import {
   ResultadoCancelacionDto,
 } from './dto/cancelacion.dto';
 import { ErrorFacturaAdminDto } from './dto/emision-admin.dto';
+import { RequierePacConectado } from './pac-conectado.guard';
 
 /**
  * Cancelación de CFDI (F2-109). Sólo administradores; todo lo que no está en el alcance es 404
@@ -61,6 +62,7 @@ export class CancelacionController {
   constructor(private readonly cancelacion: CancelacionCfdiService) {}
 
   @Post('cfdis/:id/cancelar')
+  @RequierePacConectado()
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({
     summary: 'Solicita la cancelación de un CFDI vigente ante el SAT (F2-109).',
@@ -97,6 +99,7 @@ export class CancelacionController {
   }
 
   @Post('cfdis/:id/cancelacion/consultar')
+  @RequierePacConectado()
   @HttpCode(200)
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({

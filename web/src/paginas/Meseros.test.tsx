@@ -169,6 +169,21 @@ function api(extra: Record<string, Manejador> = {}) {
     'GET /agentes/estado': () => json(200, []),
     'GET /alertas/abiertas': () => json(200, []),
     'GET /catalogos/meseros/rendimiento': () => json(200, DATOS),
+    // MVP: la sección "En vivo" de la misma vista (sus pruebas, en MeserosEnVivo.test.tsx).
+    'GET /ventas/meseros-en-vivo': () =>
+      json(200, {
+        dia: '2026-09-22',
+        sucursales: [],
+        meseros: [],
+        totales: {
+          cobrado: '0.00',
+          cuentas: 0,
+          enCurso: '0.00',
+          mesasAbiertas: 0,
+          mesasSinTotal: 0,
+          total: '0.00',
+        },
+      }),
     ...extra,
   });
 }

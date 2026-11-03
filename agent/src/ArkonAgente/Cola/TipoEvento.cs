@@ -6,6 +6,9 @@ internal enum TipoEvento
     Cheque,
     Snapshot,
     Heartbeat,
+
+    /// <summary>Un turno (corte de caja) de SR, MVP de cortes.</summary>
+    Turno,
 }
 
 internal static class TiposEvento
@@ -16,6 +19,7 @@ internal static class TiposEvento
         TipoEvento.Cheque => "cheque",
         TipoEvento.Snapshot => "snapshot",
         TipoEvento.Heartbeat => "heartbeat",
+        TipoEvento.Turno => "turno",
         _ => throw new ArgumentOutOfRangeException(nameof(tipo), tipo, null),
     };
 }

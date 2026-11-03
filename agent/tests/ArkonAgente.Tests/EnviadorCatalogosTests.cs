@@ -225,7 +225,8 @@ public class ColaCatalogosTests
         conexion.Open();
         using var comando = conexion.CreateCommand();
         comando.CommandText = "PRAGMA user_version;";
-        Assert.Equal(1L, comando.ExecuteScalar());
+        // La versión es la de ColaLocal (2 desde el MVP de cortes); los catálogos no la mueven.
+        Assert.Equal((long)ColaLocal.VersionEsquema, comando.ExecuteScalar());
     }
 
     [Fact]

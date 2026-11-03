@@ -13,6 +13,7 @@ import { Alertas } from './paginas/Alertas';
 import { Analisis } from './paginas/Analisis';
 import { BajaReportes } from './paginas/BajaReportes';
 import { Comparativos } from './paginas/Comparativos';
+import { Cortes } from './paginas/Cortes';
 import { Cuenta } from './paginas/Cuenta';
 import { AyudaAgente } from './paginas/AyudaAgente';
 import { AyudaConteos } from './paginas/AyudaConteos';
@@ -96,6 +97,7 @@ export function Rutas() {
         <Route path="analisis" element={<Analisis />} />
         <Route path="mesas" element={<Mesas />} />
         <Route path="tickets" element={<Tickets />} />
+        <Route path="cortes" element={<Cortes />} />
         <Route path="reportes" element={<Reportes />} />
         <Route path="alertas" element={<Alertas />} />
         <Route path="productos" element={<Productos />} />

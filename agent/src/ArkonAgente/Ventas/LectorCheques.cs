@@ -19,6 +19,7 @@ internal enum OrigenCuenta
 }
 
 /// <summary>Una cuenta cerrada tal como sale de <c>sr_cheques.sql</c>. Fechas en hora local de SR, sin zona.</summary>
+/// <param name="IdTurno">El turno donde se cobró (MVP de cortes); 0 o null = sin turno.</param>
 internal sealed record FilaCuenta(
     OrigenCuenta Origen,
     long Folio,
@@ -38,7 +39,8 @@ internal sealed record FilaCuenta(
     decimal? TotalCortesias,
     decimal? Propina,
     decimal? Total,
-    bool Cancelado);
+    bool Cancelado,
+    long? IdTurno = null);
 
 /// <summary>Una partida (o un modificador, si <see cref="Modificador"/>) de una cuenta cerrada.</summary>
 internal sealed record FilaPartida(
@@ -116,7 +118,7 @@ internal sealed class LectorChequesSr(ConexionSoftRestaurant conexion, ISoftRest
                     (int?)Entero(lector, "nopersonas"), Texto(lector, "mesero"), Texto(lector, "area"), Texto(lector, "cliente"),
                     Dinero(lector, "subtotal"), Dinero(lector, "descuentoimporte"), Dinero(lector, "impuestos"),
                     Dinero(lector, "totaldescuentos"), Dinero(lector, "totalcortesias"), Dinero(lector, "propina"),
-                    Dinero(lector, "total"), Bit(lector, "cancelado")));
+                    Dinero(lector, "total"), Bit(lector, "cancelado"), Entero(lector, "idturno")));
             }
 
             var partidas = new List<FilaPartida>();

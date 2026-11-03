@@ -279,6 +279,12 @@ El agente sólo necesita **salir** a internet por HTTPS. No abre ningún puerto 
 
 ## Actualizar el agente
 
+> **Primero la API, después el agente.** Antes de instalar (o publicar para la actualización
+> automática) una versión nueva del agente, confirma que la API ya está en la versión que la
+> acompaña. Un agente nuevo contra una API vieja puede mandar datos que ésta todavía no entiende
+> (por ejemplo los cortes de caja y el turno de cada cuenta): la API los rechaza y esas ventas
+> **no llegan al panel**, sin reintento. El revés (API nueva con agente viejo) sí funciona.
+
 Si la sucursal tiene la **actualización automática** encendida (Administración ›
 Actualizaciones), no hace falta nada: el agente toma solo la versión que se publique.
 

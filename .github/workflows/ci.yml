@@ -199,6 +199,45 @@ jobs:
       - run: npm test
 
   # ---------------------------------------------------------------------------
+  # IMÁGENES DE RAILWAY (api/Dockerfile y web/Dockerfile, docs/deploy-railway.md)
+  # Construye las dos imágenes SIN publicarlas en ningún registro (no hay login ni
+  # push) y les corre la prueba de humo de infra/humo-railway.sh contra un Postgres
+  # vacío: migraciones, admin inicial, /health, login con cookie Secure, socket.io y
+  # rate limit por IP a través del Caddy del web, todo con NODE_ENV=production.
+  # ---------------------------------------------------------------------------
+  docker:
+    name: Imágenes Docker (Railway)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: monitor_humo
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      # Node 22 para el WebSocket nativo de la prueba de humo (no para construir: eso
+      # pasa dentro de las imágenes).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Construir la imagen de la API
+        run: docker build -f api/Dockerfile -t monitor-api .
+      - name: Construir la imagen del web (SPA + landing + Caddy, con caddy validate)
+        run: docker build -f web/Dockerfile -t monitor-web .
+      - name: Prueba de humo (producción simulada)
+        run: infra/humo-railway.sh
+        env:
+          HUMO_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/monitor_humo
+
+  # ---------------------------------------------------------------------------
   # CARRIL /agent (.NET 8 Worker Service)
   # ACTIVO desde F1-001: corre restore + build. El paso `test` lo encendió F1-020
   # (el backlog se lo asignaba a F1-021): la config, la redacción de secretos y

@@ -263,8 +263,8 @@ Tabla `eventos`:
 | Columna | Qué es |
 |---|---|
 | `id` | Autoincremental. Es el orden FIFO y el `id` del evento en el lote. |
-| `tipo` | `cheque`, `snapshot` o `heartbeat`. |
-| `clave` | El `folioSr` en los cheques; nulo en los demás. |
+| `tipo` | `cheque`, `snapshot`, `heartbeat` o `turno` (los cortes de caja, MVP de cortes). |
+| `clave` | El `folioSr` en los cheques, el `turnoSr` en los turnos; nulo en los demás. |
 | `payload` | El `datos` del contrato de `POST /ingesta/eventos`, en JSON. |
 | `creado_at`, `enviado_at`, `rechazado_at` | UTC, texto de ancho fijo. |
 | `intentos` | Envíos fallidos. |
@@ -283,8 +283,8 @@ Qué garantiza:
 - **Nada sale de la cola sin que el API lo confirme.** Es "al menos una vez": si el API
   guardó un lote y la respuesta se perdió, se reenvía, y el API lo deja igual (upsert por
   folio).
-- **Sólo el último pendiente cuenta** para el snapshot de mesas, para el heartbeat y para
-  cada `folioSr`. Encolar uno nuevo borra el pendiente anterior en la misma transacción.
+- **Sólo el último pendiente cuenta** para el snapshot de mesas, para el heartbeat, para
+  cada `folioSr` y para cada `turnoSr`. Encolar uno nuevo borra el pendiente anterior en la misma transacción.
   Así la cola no crece por snapshots durante un corte, y un reintento de una versión vieja
   de un cheque no puede pisar a la nueva.
 - **Red caída, timeout, 5xx, 401, 429, 400 o respuesta ilegible:** no se descarta nada.
@@ -312,6 +312,57 @@ sqlite3 -readonly "C:\ProgramData\ArkonAgente\cola.db" "SELECT id, tipo, clave, 
   Se crea una cola nueva y vacía.
 - El SQLite nativo (`e_sqlite3`) va dentro de `agente.exe` al publicar en un solo archivo.
   No hay DLL que copiar.
+- **Un `cola.db` de una versión anterior** (sin el tipo `turno`) se migra solo al arrancar:
+  la tabla `eventos` se reconstruye en una transacción, con todos sus eventos y sus ids, y
+  `PRAGMA user_version` pasa a 2.
+- **Regresar a una versión anterior** (rollback del watchdog o una versión retirada): antes de
+  arrancar el exe que acaba de poner, el watchdog mueve a la tabla `eventos_apartados` de
+  `cola.db`, en una transacción, todos los eventos de tipos que un agente anterior no conoce
+  (hoy, `turno`). Así el agente viejo no truena al leerlos. Cuando vuelve a correr una versión
+  que sí los conoce, los pendientes regresan solos a la cola (si ya hay uno más nuevo del mismo
+  turno, gana ése). ⚠️ Esto lo hace el watchdog de ESTA versión en adelante, y el watchdog no se
+  auto-actualiza: tras actualizar el agente por primera vez a esta versión, corre otra vez
+  `instalar.ps1` para que el actualizador también quede al día. Con un watchdog anterior, o al
+  bajar de versión a mano con `instalar.ps1`, espera a que la cola se vacíe antes (consulta de
+  arriba).
+
+### Sin internet o sin luz
+
+Qué pasa con las ventas, los cortes y los catálogos cuando se va la red o la luz de la PC del
+POS:
+
+- **Sin internet.** El agente sigue leyendo SoftRestaurant en cada ciclo y lo deja en
+  `cola.db`: cheques (cuentas cobradas o canceladas), turnos (cortes de caja), el último
+  snapshot de mesas y el heartbeat. Los catálogos e inventario usan su propia cola en el
+  mismo archivo (`catalogo_envios` y las de existencias/inventario). Nada se descarta: se
+  reintenta con espera creciente (hasta cada 10 min) y, en cuanto el API contesta, sale todo
+  en orden de llegada, hasta 20 lotes de 100 por ciclo.
+- **Sin luz (o el servicio se reinicia).** `cola.db` se escribe con `synchronous=FULL`: lo
+  que ya se encoló sobrevive al apagón. Al volver, el servicio arranca, intenta enviar de
+  inmediato y vuelve a leer SoftRestaurant. Los cheques se releen por su cursor (en
+  `cola.db`); los turnos abiertos y los de los últimos 7 días se releen siempre.
+- **Sin duplicar.** El envío es "al menos una vez": si un lote llegó y la respuesta se
+  perdió, se reenvía. El API hace upsert por `(sucursal, folioSr)` en cheques y por
+  `(sucursal, turnoSr)` en turnos, y un reenvío idéntico no escribe nada: reenviar el mismo
+  lote tres veces deja exactamente los mismos datos. Si una cuenta o un turno cambió durante
+  el corte de red (se cobró, se cerró el turno), en la cola sólo queda su última versión.
+- **Qué ve el panel mientras tanto.** Las mesas en vivo pasan a "desconectada" (el snapshot
+  envejece) y no se suman a la venta en curso; lo cobrado aparece en cuanto llegan los
+  cheques, con su hora real de cierre (no la de llegada).
+- **Límite.** La primera lectura y la que sigue a un cursor perdido traen 7 días de cheques
+  (`cheques.ultimo_folio`); una caída del agente más larga que eso deja fuera lo anterior
+  (ver docs/esquema-sr.md §2).
+
+## Turnos / cortes de caja (MVP de cortes)
+
+Cada ciclo, tras las mesas y antes del heartbeat, el agente lee `dbo.turnos`
+(`sr_turnos.sql`, `WITH (NOLOCK)`, timeout corto): los turnos abiertos y los abiertos o
+cerrados en los últimos 7 días. Cada turno viaja como evento `turno` (fondo, apertura,
+cierre y lo que el cajero declaró) por la misma cola. Sólo se encola lo que cambió desde la
+última vez (la huella vive en memoria: tras reiniciar se reenvían los de la ventana, y el
+API los deja iguales). Como cheques y mesas, sólo con un usuario SQL de solo lectura
+confirmado. Cada cheque lleva además el `idturno` donde se cobró (`turnoSr`), que es lo que
+el panel usa para la venta de cada corte. Detalle en docs/esquema-sr.md §2, "Turnos".
 
 ## Heartbeat y auto-diagnóstico (F1-025)
 

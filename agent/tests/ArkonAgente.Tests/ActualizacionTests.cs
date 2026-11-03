@@ -1,5 +1,7 @@
 using System.Text.Json;
 using ArkonAgente.Actualizacion;
+using ArkonAgente.Cola;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
 namespace ArkonAgente.Tests;
@@ -255,7 +257,7 @@ public class ActualizacionTests
 
     private sealed class Instalacion : IDisposable
     {
-        public Instalacion(byte[]? binarioViejo = null)
+        public Instalacion(byte[]? binarioViejo = null, bool conCola = false)
         {
             Carpeta = new CarpetaTemporal();
             Intercambio = CarpetaActualizacion.De(Carpeta.Rutas);
@@ -268,7 +270,7 @@ public class ActualizacionTests
             Actualizador = new Actualizador(
                 Intercambio, Exe, Servicio, Servicio,
                 (espera, _) => { Reloj.Avanzar(espera); return Task.CompletedTask; },
-                Reloj, Log);
+                Reloj, Log, archivoCola: conCola ? Carpeta.Rutas.ArchivoCola : null);
         }
 
         public CarpetaTemporal Carpeta { get; }
@@ -485,6 +487,60 @@ public class ActualizacionTests
         Assert.Equal(nuevo, File.ReadAllBytes(i.Actualizador.ExeFallido));
         Assert.Equal(1, i.Servicio.MaxInstancias);
         Assert.Empty(i.Servicio.Violaciones);
+    }
+
+    /// <summary>
+    /// MVP de cortes: la versión nueva alcanzó a encolar turnos y se cayó. Antes de arrancar la
+    /// anterior (que no conoce el tipo <c>turno</c> y truena al leerlo), el watchdog los aparta en una
+    /// transacción; la cola que ve la anterior sólo trae lo que entiende, y la versión que sí los
+    /// conoce los recupera al abrirla.
+    /// </summary>
+    [Fact]
+    public async Task En_el_rollback_aparta_de_la_cola_los_tipos_que_la_version_anterior_no_conoce()
+    {
+        using var i = new Instalacion(conCola: true);
+        var cola = ColaLocal.Abrir(i.Carpeta.Rutas.ArchivoCola, i.Reloj);
+        cola.Encolar(TipoEvento.Cheque, ColaLocalTests.Cheque("21"));
+        cola.Encolar(TipoEvento.Turno, ColaTurnosTests.Turno("8"));
+        var enviado = cola.Encolar(TipoEvento.Turno, ColaTurnosTests.Turno("7"));
+        cola.MarcarEnviados([enviado]);
+        i.Servicio.VersionQueSeCae = VersionNueva;
+        i.Preparar(VersionNueva);
+
+        var r = await i.Vuelta();
+
+        Assert.Equal(MotivoFalla.Arranque, r!.Motivo);
+        long Contar(string sql)
+        {
+            using var conexion = new SqliteConnection($"Data Source={i.Carpeta.Rutas.ArchivoCola};Pooling=False");
+            conexion.Open();
+            using var comando = conexion.CreateCommand();
+            comando.CommandText = sql;
+            return (long)comando.ExecuteScalar()!;
+        }
+
+        // Lo que lee el agente anterior: nada de 'turno' (ni pendiente ni enviado); el cheque sigue.
+        Assert.Equal(0L, Contar("SELECT COUNT(*) FROM eventos WHERE tipo NOT IN ('cheque', 'snapshot', 'heartbeat');"));
+        Assert.Equal(1L, Contar("SELECT COUNT(*) FROM eventos WHERE tipo = 'cheque';"));
+        Assert.Equal(2L, Contar("SELECT COUNT(*) FROM eventos_apartados;"));
+        Assert.Contains(i.Log.De(LogLevel.Information), e => e.Contains("eventos_apartados"));
+
+        // La versión que conoce los turnos recupera el pendiente (el enviado ya no hace falta).
+        var reabierta = ColaLocal.Abrir(i.Carpeta.Rutas.ArchivoCola, i.Reloj);
+        Assert.Equal([TipoEvento.Cheque, TipoEvento.Turno], reabierta.TomarPendientes(10).Select(e => e.Tipo));
+        Assert.Equal(0L, Contar("SELECT COUNT(*) FROM eventos_apartados;"));
+    }
+
+    [Fact]
+    public async Task Sin_cola_db_la_actualizacion_sigue_igual_y_no_la_crea()
+    {
+        using var i = new Instalacion(conCola: true); // cola.db no existe todavía
+        i.Preparar(VersionNueva);
+
+        var r = await i.Vuelta();
+
+        Assert.Equal(ResultadoActualizacion.Aplicada, r!.Resultado);
+        Assert.False(File.Exists(i.Carpeta.Rutas.ArchivoCola));
     }
 
     // ------------------------------------------------------------------ de punta a punta

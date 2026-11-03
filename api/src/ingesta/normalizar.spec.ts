@@ -92,6 +92,7 @@ describe('normalizar (F1-031)', () => {
       comensales: null,
       clienteOrigenSrId: null,
       areaOrigenSrId: null,
+      turnoSr: null,
       subtotal: D('10.5'),
       impuestos: D('0'),
       descuentos: D('0'),

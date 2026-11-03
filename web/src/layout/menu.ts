@@ -2,6 +2,7 @@ import {
   ArrowLeftRight,
   Boxes,
   Building2,
+  Calculator,
   ChartColumn,
   ChefHat,
   ClipboardList,
@@ -138,6 +139,8 @@ export const SECCIONES: readonly SeccionMenu[] = [
         destino: { ruta: '/resumen' },
       },
       { id: 'ventas.tickets', texto: 'Tickets', icono: Receipt, destino: { ruta: '/tickets' } },
+      // MVP: los turnos de SR (cortes de caja) y lo cobrado en cada uno.
+      { id: 'ventas.cortes', texto: 'Cortes', icono: Calculator, destino: { ruta: '/cortes' } },
       {
         id: 'ventas.mesas',
         texto: 'Monitor de mesas',

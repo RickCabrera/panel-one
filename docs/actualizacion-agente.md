@@ -34,8 +34,13 @@ no la base del POS.
       (30 s). Si no → `detener`, no reemplaza nada, y no arranca otro encima de un proceso colgado;
    3. `agente.exe` → `agente.exe.anterior`, `agente.exe.nuevo` → `agente.exe`. Error de disco →
       restaura y `reemplazo`;
-   4. arranca y exige que se quede corriendo 60 s. Si se cae → lo detiene, deja la versión rota
-      como `agente.exe.fallido`, restaura la anterior, la arranca → `arranque` (rollback);
+   4. antes de arrancar, aparta de `cola.db` los eventos de tipos que una versión anterior no
+      conoce (hoy `turno`, MVP de cortes) a `eventos_apartados`, en una transacción
+      (`ColaLocal.ApartarTiposNuevos`); la versión que sí los conoce los recupera al abrir la cola.
+      Arranca y exige que se quede corriendo 60 s. Si se cae → lo detiene, deja la versión rota
+      como `agente.exe.fallido`, restaura la anterior, vuelve a apartar (la nueva alcanzó a correr y
+      pudo encolar turnos) y la arranca → `arranque` (rollback). Si `cola.db` no se puede abrir, lo
+      deja en su log y arranca igual;
    5. escribe `actualizacion\resultado.json` y borra la solicitud y el preparado.
 5. El agente (ya el nuevo, o el viejo si hubo rollback) reporta el resultado
    (`POST /agente/actualizacion`) y lo borra sólo si el api lo guardó. Su heartbeat ya trae la versión
@@ -116,7 +121,14 @@ points: symlinks, junctions) en la carpeta, la solicitud y el preparado, y valid
   código se recupera, pero **no está probado** con un corte real: es parte de F1-020b.
 - El almacenamiento real del binario es el de `ARCHIVOS_IMPL=disco` (F2-191): la misma carpeta y el
   mismo secreto de firma que los CFDI.
-- El watchdog no se auto-actualiza: se actualiza al correr otra vez `instalar.ps1`.
+- El watchdog no se auto-actualiza: se actualiza al correr otra vez `instalar.ps1`. Por eso la
+  protección de la cola en un regreso de versión (paso 4.4) sólo existe con un watchdog de esta
+  versión o posterior: tras la primera actualización a ella, correr `instalar.ps1` otra vez.
+- **Orden de despliegue**: la API se actualiza ANTES que los agentes. Un agente nuevo contra una API
+  vieja manda eventos o campos que ésta no conoce (p. ej. `turno` o `turnoSr` del cheque): la API los
+  rechaza como inválidos (`reintentable: false`) y el agente los saca de la cola como rechazados. Un
+  cheque rechazado es una venta que falta en el panel (el heartbeat lo reporta, pero no se reenvía
+  solo).
 
 ## Decisiones provisionales (nocturno)
 

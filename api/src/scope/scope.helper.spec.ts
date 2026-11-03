@@ -41,6 +41,8 @@ describe('whereEmpresa / whereScoped', () => {
       ChequePartida: 'empresaId',
       ChequePago: 'empresaId',
       MesaSnapshot: 'empresaId',
+      // MVP de cortes: turnos de SR.
+      Turno: 'empresaId',
       FormaPagoCatalogo: 'empresaId',
       SesionUsuario: 'empresaId',
       CorreoEnviado: 'empresaId',

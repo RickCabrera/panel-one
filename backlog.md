@@ -1340,6 +1340,21 @@ válido en ambos subdominios; `GET /health` responde `{status:'ok', db:'ok'}`.
 > (`api/src/reportes/config.ts`); (4) Caddy sin access log de query strings: la búsqueda de
 > Clientes viaja en `q`.
 
+> **Cambio de plataforma (3-nov-2026, decisión de Ricardo): se despliega en Railway, no en el
+> VPS.** El compose de producción y el Caddy con Let's Encrypt de arriba ya no se construyen;
+> el PR #84 (`feat/deploy-railway`) deja `api/Dockerfile`, `web/Dockerfile` (Caddy con
+> `infra/caddy/Caddyfile.railway`), `railway.json` por servicio, `GET /health` y la guía
+> `docs/deploy-railway.md`. Los "Y además" de arriba se cubren ahí (WebSocket, `sw.js`
+> `no-cache`, MIME del manifest, landing con sólo `/api/publico/*`, `prisma` en dependencies,
+> sin `api/.env` en la imagen, `PANEL_URL`, sin access log).
+>
+> **Listo cuando (nuevo AC):** en el Railway real, con el dominio del servicio web (o el
+> propio) en https, `GET https://DOMINIO/api/health` responde `{status:'ok', db:'ok'}`; el
+> login y el refresh funcionan en el navegador; el socket del monitor sale `101` en DevTools;
+> y las verificaciones del §6 de `docs/deploy-railway.md` pasan (6.º login fallido = 429 con
+> `X-Real-IP` distintos, y `DELETE /api/cuenta/notificaciones/dispositivos` con cuerpo).
+> **El `[x]` va tras ese deploy VERIFICADO por Ricardo, no con el merge del PR.**
+
 ## F1-003 · CI/CD con GitHub Actions
 `[ ]` **Epic 0** · 🔒 **Razón: necesita los secretos SSH del VPS en GitHub Actions.**
 Ricardo genera el par de llaves y pega el secreto; una sesión autónoma no toca llaves de
@@ -1355,6 +1370,18 @@ se reemplaza el contenedor viejo.
 > **Nota:** el Workflow 1 ya existe y vive en `.github/workflows/ci.yml` desde el commit
 > inicial del repo; las tareas de la cola lo van descomentando carril por carril. Lo que
 > esta tarea agrega de verdad es el **Workflow 2, el de deploy**.
+
+> **Cambio de plataforma (3-nov-2026, decisión de Ricardo): Railway en vez del VPS** (ver la
+> nota de F1-002). Ya no hay SSH, `docker save`/scp ni llaves del VPS: Railway construye y
+> despliega solo desde la integración con GitHub al hacer push a `main` (con "Wait for CI"
+> encendido en cada servicio, sólo tras el CI en verde). La migración corre en el arranque del
+> contenedor nuevo (`api/docker-entrypoint.sh`) y, si falla, el healthcheck no pasa y Railway
+> deja el deploy anterior. El CI del PR ya construye las dos imágenes y les corre la prueba de
+> humo (job `docker`, PR #84).
+>
+> **Listo cuando (nuevo AC):** un merge a `main` despliega solo en Railway tras el CI verde, y
+> un deploy con una migración rota (o un `/health` que no responde) NO reemplaza al que está
+> sirviendo. **El `[x]` va tras comprobarlo en el Railway real, no con el merge del PR.**
 
 ## F1-004 · Backups y monitoreo
 `[ ]` **Epic 0** · 🔒 **Razón: necesita el VPS (cron del host), una cuenta de
@@ -2485,6 +2512,42 @@ se registra sin tumbar el ciclo; y `SoloLecturaTests` sigue verde con las consul
 > la compra como documento propio o sólo como póliza de entrada (hoy se supone documento aparte y el
 > panel NO los concilia), y si el costo de SR trae IVA. Ver `docs/esquema-sr.md` §10 ("Compras,
 > gastos y utilidad") y §13.
+
+---
+
+# MVP — PEDIDAS POR RICARDO EN SESIÓN INTERACTIVA
+
+Tareas que Ricardo pidió directamente (no salen de la cola nocturna). Se cierran con el mismo
+gate: `[x]` sólo tras merge confirmado a main.
+
+## MVP-01 · Cortes y meseros en vivo
+`[ ]` **MVP** · /agent + /api + /web + /docs · pedida por Ricardo el 3-nov-2026 · PR #83
+
+Lo que pidió el dueño para el MVP: cuánto se ha vendido (día, turno, mes), qué se vendió más,
+**los cortes (turnos)** que se han hecho, monitor de ventas en tiempo real, entrar a cada mesa y
+ver lo pedido en vivo, cola offline en el agente (sin internet o sin luz guarda y sube al
+volver) y **cuánto vende cada mesero en tiempo real**. Mucho ya existía (resumen, top productos,
+por mesero, mesas abiertas con detalle, cola local); esta tarea construye lo que faltaba:
+
+- Agente: lectura de `dbo.turnos` (`sr_turnos.sql`, NOLOCK, timeout corto) como evento `turno`
+  por la cola local; `idturno` de cada cheque como `turnoSr`; migración de `cola.db` (tipo
+  `turno`) y, en un regreso de versión, el watchdog aparta los tipos que la versión anterior no
+  conoce.
+- API: modelo `Turno` con upsert idempotente por `(sucursal_id, turno_sr)`, `cheques.turno_sr`,
+  `GET /cortes`, `/cortes/en-curso`, `/cortes/{id}` y `GET /ventas/meseros-en-vivo`.
+- Web: página Cortes, sección "En vivo · hoy" en Meseros y tarjeta "Turno en curso" en el Panel.
+
+**Listo cuando:** el agente manda los turnos y el turno de cada cheque, y reenviar el mismo lote
+tres veces deja los mismos datos; Cortes muestra la lista del periodo y el detalle de un corte
+(venta, cuentas, comensales, ticket, propinas, descuentos, canceladas, formas de pago, declarado
+vs cobrado, top productos), con el turno abierto como acumulado en curso, y su venta cuadra peso
+a peso con el Corte X de SR en un turno operado a mano; un corte cerrado antes de que el agente
+mandara turnos se marca como posiblemente incompleto; Meseros "En vivo" muestra cobrado + en
+curso por mesero y se actualiza solo (socket o 20 s); el Panel muestra el turno en curso; un
+visor de otra empresa recibe 404 en todos los endpoints nuevos; tras un corte de red o de luz
+los turnos y cheques llegan una vez; un rollback del agente no deja en la cola eventos que la
+versión anterior no entiende; OpenAPI y `docs/esquema-sr.md` al día; CI en verde (API, web y
+agente sin warnings).
 
 ---
 

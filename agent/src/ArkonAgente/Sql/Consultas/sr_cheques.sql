@@ -21,6 +21,9 @@
 --   * La tabla cancela NO se une con cheques: sus filas de cuentas borradas traen foliocheque = 0,
 --     que choca con el folio 0 real de cheques.
 --   * meseros.idmesero no es unico (sin indice): se toma UN nombre con TOP (1).
+--   * idturno (MVP de cortes) = el turno donde se COBRO la cuenta; 0 mientras no se cobra (en
+--     tempcheques). El agente lo manda como turnoSr (0 o NULL = sin turno). Se supone que el corte
+--     lo copia igual a cheques (mismas columnas en las dos tablas, F1-090).
 -- SUPUESTO (NO visto en F1-090): cancelado = 1, fechacancelado y reabiertas. Cancelar o reabrir una
 --   cuenta YA COBRADA no se pudo provocar desde COMEDOR; se lee cancelado tal cual y la relectura de
 --   @desde sobre cheques.fecha supone que una cancelacion posterior al corte cae en esa ventana (es
@@ -53,7 +56,8 @@ SELECT
     t.totalcortesias                     AS totalcortesias,
     t.propina                            AS propina,
     t.total                              AS total,
-    CAST(ISNULL(t.cancelado, 0) AS bit)  AS cancelado
+    CAST(ISNULL(t.cancelado, 0) AS bit)  AS cancelado,
+    CAST(t.idturno AS bigint)            AS idturno
 FROM dbo.tempcheques AS t WITH (NOLOCK)
 WHERE t.pagado = 1 OR t.cancelado = 1
 UNION ALL
@@ -63,7 +67,8 @@ SELECT
     (SELECT TOP (1) m.nombre FROM dbo.meseros AS m WITH (NOLOCK)
      WHERE m.idmesero = c.idmesero ORDER BY m.idmeserointerno),
     c.idarearestaurant, c.idcliente, c.subtotal, c.descuentoimporte, c.totalimpuesto1,
-    c.totaldescuentos, c.totalcortesias, c.propina, c.total, CAST(ISNULL(c.cancelado, 0) AS bit)
+    c.totaldescuentos, c.totalcortesias, c.propina, c.total, CAST(ISNULL(c.cancelado, 0) AS bit),
+    CAST(c.idturno AS bigint)
 FROM dbo.cheques AS c WITH (NOLOCK)
 WHERE (c.folio > @ultimofolio AND ISNULL(c.cierre, c.fecha) >= @piso) OR c.fecha >= @desde;
 

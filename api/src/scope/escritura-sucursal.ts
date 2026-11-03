@@ -40,12 +40,26 @@ export interface DatosCheque {
   clienteOrigenSrId: string | null;
   /** F2-233: id del área en el POS (el `origenSrId` del catálogo); nulo = sin área. */
   areaOrigenSrId: string | null;
+  /** MVP de cortes: `idturno` de SR donde se cobró (el `turnoSr` del turno); nulo = sin turno. */
+  turnoSr: string | null;
   subtotal: Prisma.Decimal;
   impuestos: Prisma.Decimal;
   descuentos: Prisma.Decimal;
   propina: Prisma.Decimal;
   total: Prisma.Decimal;
   cancelado: boolean;
+}
+
+/** Columnas del turno de SR que manda la ingesta (MVP de cortes). Sin identidad ni pertenencia. */
+export interface DatosTurno {
+  aperturaAt: Date;
+  cierreAt: Date | null;
+  estacion: string | null;
+  fondo: Prisma.Decimal;
+  declaradoEfectivo: Prisma.Decimal;
+  declaradoTarjeta: Prisma.Decimal;
+  declaradoVales: Prisma.Decimal;
+  declaradoCredito: Prisma.Decimal;
 }
 
 /** Una partida. `orden` no va aquí: lo pone el helper con la posición en el arreglo. */
@@ -196,6 +210,28 @@ export class OperacionesSucursal {
       });
     }
     return chequeId;
+  }
+
+  /** El turno de ESTA sucursal con ese `turnoSr` (MVP de cortes). */
+  leerTurno(turnoSr: string) {
+    return this.#tx.turno.findFirst({
+      where: { ...this.#deLaSucursal, turnoSr: exigir('turnoSr', turnoSr) },
+    });
+  }
+
+  /**
+   * Upsert del turno por la unique `(sucursal_id, turno_sr)` (MVP de cortes): reenviar el mismo
+   * turno, o uno que cambió (se cerró, se declaró el efectivo), deja UNA fila con lo último.
+   * Misma forma que `guardarCheque`: `INSERT ... ON CONFLICT DO UPDATE` nativo.
+   */
+  async guardarTurno(turnoSr: string, datos: DatosTurno): Promise<void> {
+    const turno = exigir('turnoSr', turnoSr);
+    sinIntocables('Turno', datos);
+    await this.#tx.turno.upsert({
+      where: { sucursalId_turnoSr: { sucursalId: this.#sucursalId, turnoSr: turno } },
+      create: { ...datos, turnoSr: turno, ...this.#deLaSucursal },
+      update: { ...datos },
+    });
   }
 
   /** Upsert por `(sucursal_id, capturado_at)`: reenviar el mismo snapshot no lo duplica. */

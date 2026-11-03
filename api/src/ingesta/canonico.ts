@@ -18,6 +18,8 @@ export interface ChequeComparable {
   clienteOrigenSrId: string | null;
   /** F2-233. Cambiar el área de una cuenta es un cambio: el reenvío la reescribe. */
   areaOrigenSrId: string | null;
+  /** MVP de cortes. Que llegue (o cambie) el turno del cobro es un cambio: el reenvío lo reescribe. */
+  turnoSr: string | null;
   subtotal: Prisma.Decimal;
   impuestos: Prisma.Decimal;
   descuentos: Prisma.Decimal;
@@ -53,6 +55,7 @@ export function chequeCanonico(c: ChequeComparable): string {
     comensales: c.comensales,
     clienteOrigenSrId: c.clienteOrigenSrId,
     areaOrigenSrId: c.areaOrigenSrId,
+    turnoSr: c.turnoSr,
     subtotal: c.subtotal.toFixed(2),
     impuestos: c.impuestos.toFixed(2),
     descuentos: c.descuentos.toFixed(2),
