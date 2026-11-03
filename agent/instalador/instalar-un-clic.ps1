@@ -77,7 +77,10 @@ $ErrorActionPreference = 'Stop'
 $archivoSql = Join-Path $PSScriptRoot 'crear-usuario-lector.sql'
 $exePaquete = Join-Path $PSScriptRoot 'agente.exe'
 $scriptInstalar = Join-Path $PSScriptRoot 'instalar.ps1'
-$archivoConfig = Join-Path (Join-Path $env:ProgramData $script:NombreServicio) 'config.json'
+# En Windows es C:\ProgramData. GetFolderPath sólo cubre el dot-source de los tests en Linux, donde
+# $env:ProgramData no existe (ahí el test sustituye $archivoConfig).
+$programData = if ($env:ProgramData) { $env:ProgramData } else { [Environment]::GetFolderPath('CommonApplicationData') }
+$archivoConfig = Join-Path (Join-Path $programData $script:NombreServicio) 'config.json'
 $inicio = Get-Date
 
 # El recuadro final. Sin emojis: la consola de PowerShell 5.1 (conhost, fuente Consolas) los
