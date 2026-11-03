@@ -48,6 +48,15 @@ export function Topbar({ menuAbierto, onMenu }: { menuAbierto: boolean; onMenu: 
           <div className="truncate text-sm font-medium">{usuario.nombre}</div>
           <div className="truncate text-xs text-tinta-tenue">{NOMBRE_ROL[usuario.rol]}</div>
         </div>
+        {/* Membresías: el panel de plataforma, sólo para admin_global. */}
+        {usuario.rol === 'admin_global' && (
+          <Link
+            to="/plataforma"
+            className="shrink-0 rounded-md border border-linea-fuerte px-3 py-1.5 text-sm hover:bg-realce"
+          >
+            Plataforma
+          </Link>
+        )}
         {/* Para todos los roles (F1-060): cambio de contraseña propio. */}
         <Link
           to={{ pathname: '/cuenta', search: queryVista(parametros) }}

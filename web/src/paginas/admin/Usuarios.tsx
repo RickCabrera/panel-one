@@ -115,8 +115,9 @@ function TablaUsuarios({
                       {u.activo ? 'Dar de baja' : 'Reactivar'}
                     </button>
                   )}
-                  {/* La tuya se cambia en "Mi cuenta", con la actual (la API da 400 aquí). */}
-                  {u.id !== yo.id && (
+                  {/* La tuya se cambia en "Mi cuenta", con la actual (la API da 400 aquí). La de
+                      un administrador global tampoco: sólo la cambia él mismo (membresías). */}
+                  {u.id !== yo.id && u.rol !== 'admin_global' && (
                     <button
                       type="button"
                       className={CLASE_BOTON}

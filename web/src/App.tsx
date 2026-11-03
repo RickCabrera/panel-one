@@ -33,6 +33,15 @@ import { Productos } from './paginas/Productos';
 import { MesasPared } from './paginas/MesasPared';
 import { NoEncontrada } from './paginas/NoEncontrada';
 import { PortalFactura } from './paginas/PortalFactura';
+import { Administradores as PlataformaAdministradores } from './paginas/plataforma/Administradores';
+import { Ajustes as PlataformaAjustes } from './paginas/plataforma/Ajustes';
+import { Bitacora as PlataformaBitacora } from './paginas/plataforma/Bitacora';
+import { ClienteDetalle as PlataformaCliente } from './paginas/plataforma/ClienteDetalle';
+import { Clientes as PlataformaClientes } from './paginas/plataforma/Clientes';
+import { LayoutPlataforma } from './paginas/plataforma/LayoutPlataforma';
+import { Pagos as PlataformaPagos } from './paginas/plataforma/Pagos';
+import { Planes as PlataformaPlanes } from './paginas/plataforma/Planes';
+import { Tablero as PlataformaTablero } from './paginas/plataforma/Tablero';
 import { Reportes } from './paginas/Reportes';
 import { Resumen } from './paginas/Resumen';
 import { Tickets } from './paginas/Tickets';
@@ -44,7 +53,7 @@ import { Proyecciones } from './paginas/Proyecciones';
 import { Recetas } from './paginas/Recetas';
 import { Traspasos } from './paginas/Traspasos';
 import { MarcaDemo } from './sistema/MarcaDemo';
-import { ProveedorTema } from './tema/ProveedorTema';
+import { TemaConAcentoGlobal } from './tema/AcentoGlobal';
 
 /** Proveedores de la app, sin router: los tests los montan con un `MemoryRouter`. */
 export function Proveedores({
@@ -59,8 +68,9 @@ export function Proveedores({
       {/* F2-202: la marca del modo demo va sobre TODAS las vistas, login incluido. */}
       <MarcaDemo />
       <AuthProvider>
-        {/* F2-211: dentro de Auth, para cargar la preferencia del usuario que entra. */}
-        <ProveedorTema>{children}</ProveedorTema>
+        {/* F2-211: dentro de Auth, para cargar la preferencia del usuario que entra. Con el
+            color global de la plataforma (membresías), si eligió uno. */}
+        <TemaConAcentoGlobal>{children}</TemaConAcentoGlobal>
       </AuthProvider>
     </QueryClientProvider>
   );
@@ -83,6 +93,28 @@ export function Rutas() {
           </RutaProtegida>
         }
       />
+      {/* Membresías: el panel de plataforma, con su propia barra lateral (fuera de Layout).
+          Sólo admin_global: a cualquier otro rol, "No encontrada" (la API, además, da 404). */}
+      <Route
+        path="/plataforma"
+        element={
+          <RutaProtegida>
+            <RequiereRol roles={['admin_global']}>
+              <LayoutPlataforma />
+            </RequiereRol>
+          </RutaProtegida>
+        }
+      >
+        <Route index element={<PlataformaTablero />} />
+        <Route path="clientes" element={<PlataformaClientes />} />
+        <Route path="clientes/:id" element={<PlataformaCliente />} />
+        <Route path="pagos" element={<PlataformaPagos />} />
+        <Route path="planes" element={<PlataformaPlanes />} />
+        <Route path="ajustes" element={<PlataformaAjustes />} />
+        <Route path="administradores" element={<PlataformaAdministradores />} />
+        <Route path="bitacora" element={<PlataformaBitacora />} />
+        <Route path="*" element={<NoEncontrada />} />
+      </Route>
       <Route
         element={
           <RutaProtegida>

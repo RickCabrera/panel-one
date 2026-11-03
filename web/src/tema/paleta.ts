@@ -19,6 +19,22 @@
 /** Acento de fábrica (VITE_COLOR_ACENTO sin definir o no válido). */
 export const ACENTO_POR_DEFECTO = '#0f766e';
 
+/**
+ * Membresías: los colores de interfaz que la plataforma puede elegir para TODOS los clientes
+ * (Plataforma › Ajustes). La API guarda la CLAVE, nunca un hex: el valor sale sólo de aquí.
+ * Cada uno pasa por `derivarAcento` como cualquier acento (texto y bordes legibles en los dos
+ * temas).
+ */
+export const ACENTOS_PLATAFORMA = {
+  naranja: { nombre: 'Naranja', hex: '#ea580c' },
+  morado: { nombre: 'Morado', hex: '#7c3aed' },
+  azul_electrico: { nombre: 'Azul eléctrico', hex: '#2563eb' },
+  verde_azulado: { nombre: 'Verde azulado', hex: '#14b8a6' },
+  ambar_dorado: { nombre: 'Ámbar dorado', hex: '#f59e0b' },
+  magenta: { nombre: 'Magenta', hex: '#db2777' },
+  rojo: { nombre: 'Rojo', hex: '#dc2626' },
+} as const;
+
 /** Los extremos hacia los que se ajusta el acento, y el texto sobre él. */
 export const BLANCO = '#ffffff';
 export const NEGRO = '#000000';

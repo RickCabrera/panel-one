@@ -545,6 +545,7 @@ export class PlataformaService {
         empresaActiva: s.empresa.activo,
         plan: s.plan.nombre,
         precioMensual: s.plan.precioMensual.toFixed(2),
+        periodicidad: s.plan.periodicidad,
         diaCorte: s.diaCorte,
         vencimiento: textoDia(s.vencimiento),
         estadoEfectivo: estadoEfectivo(s, hoy),

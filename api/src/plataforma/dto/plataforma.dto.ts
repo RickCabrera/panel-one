@@ -685,6 +685,9 @@ export class MensualidadDto {
   @ApiProperty({ example: '499.00' })
   precioMensual!: string;
 
+  @ApiProperty({ enum: PeriodicidadPlan, enumName: 'PeriodicidadPlan' })
+  periodicidad!: PeriodicidadPlan;
+
   @ApiProperty()
   diaCorte!: number;
 

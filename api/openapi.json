@@ -28183,6 +28183,13 @@
             "type": "string",
             "example": "499.00"
           },
+          "periodicidad": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PeriodicidadPlan"
+              }
+            ]
+          },
           "diaCorte": {
             "type": "number"
           },
@@ -28221,6 +28228,7 @@
           "empresaActiva",
           "plan",
           "precioMensual",
+          "periodicidad",
           "diaCorte",
           "vencimiento",
           "estadoEfectivo",
