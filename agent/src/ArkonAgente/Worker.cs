@@ -30,7 +30,8 @@ internal sealed record DependenciasWorker(
     Func<ConfiguracionAgente, ILogger, ISincronizadorExistencias>? CrearExistencias = null,
     Func<ConfiguracionAgente, ILogger, ISincronizadorInventario>? CrearInventario = null,
     Func<ConfiguracionAgente, ILogger, ISincronizadorCheques>? CrearCheques = null,
-    Func<ConfiguracionAgente, ILogger, ISincronizadorMesas>? CrearMesas = null)
+    Func<ConfiguracionAgente, ILogger, ISincronizadorMesas>? CrearMesas = null,
+    Func<ConfiguracionAgente, ILogger, ISincronizadorTurnos>? CrearTurnos = null)
 {
     public static readonly TimeSpan ReintentoConfigPorDefecto = TimeSpan.FromSeconds(60);
 
@@ -43,7 +44,8 @@ internal sealed record DependenciasWorker(
             (config, logger) => SincronizadorExistencias.DeVerdad(rutas, config, logger),
             (config, logger) => SincronizadorInventario.DeVerdad(rutas, config, logger),
             (config, logger) => SincronizadorCheques.DeVerdad(rutas, config, logger),
-            (config, logger) => SincronizadorMesas.DeVerdad(config, logger, estadoSr));
+            (config, logger) => SincronizadorMesas.DeVerdad(config, logger, estadoSr),
+            (config, logger) => SincronizadorTurnos.DeVerdad(config, logger));
 
     /// <summary>La auto-actualización real (F2-143): el canal del api y el estado en <c>actualizacion\estado.db</c>.</summary>
     internal static RevisorActualizacion CrearRevisorDeVerdad(RutasAgente rutas, ConfiguracionAgente config, ILogger logger)
@@ -111,6 +113,7 @@ internal sealed class Worker : BackgroundService
     private string? _ultimaFallaExistencias;
     private string? _ultimaFallaInventario;
     private string? _ultimaFallaMesas;
+    private string? _ultimaFallaTurnos;
 
     public Worker(ILogger<Worker> logger, DependenciasWorker dependencias)
     {
@@ -227,14 +230,15 @@ internal sealed class Worker : BackgroundService
         using var inventario = _dep.CrearInventario?.Invoke(config, _logger);
         var cheques = _dep.CrearCheques?.Invoke(config, _logger);
         var mesas = _dep.CrearMesas?.Invoke(config, _logger);
+        var turnos = _dep.CrearTurnos?.Invoke(config, _logger);
         // El primer ciclo corre al arrancar: lo pendiente de antes de un reinicio sale
         // sin esperar al primer tick, y el panel ve al agente de inmediato.
-        await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, mesas, stoppingToken);
+        await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, mesas, turnos, stoppingToken);
 
         using var temporizador = new PeriodicTimer(TimeSpan.FromSeconds(config.IntervaloSegundos));
         while (await temporizador.WaitForNextTickAsync(stoppingToken))
         {
-            await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, mesas, stoppingToken);
+            await UnCicloAsync(config, envio, revisor, catalogos, existencias, inventario, cheques, mesas, turnos, stoppingToken);
         }
     }
 
@@ -250,7 +254,8 @@ internal sealed class Worker : BackgroundService
     private async Task UnCicloAsync(
         ConfiguracionAgente config, ICicloEnvio envio, IRevisorActualizacion? revisor,
         ISincronizadorCatalogos? catalogos, ISincronizadorExistencias? existencias, ISincronizadorInventario? inventario,
-        ISincronizadorCheques? cheques, ISincronizadorMesas? mesas, CancellationToken stoppingToken)
+        ISincronizadorCheques? cheques, ISincronizadorMesas? mesas, ISincronizadorTurnos? turnos,
+        CancellationToken stoppingToken)
     {
         var sondaRespondio = await ConsultarSrAsync(config, cheques, envio.Cola, stoppingToken);
         if (mesas is not null && _dep.EstadoSr.Reader is { } readerMesas)
@@ -268,6 +273,13 @@ internal sealed class Worker : BackgroundService
                 _dep.EstadoSr.RegistrarErrorMesas(
                     "Mesas abiertas: no se leyeron en este ciclo porque SoftRestaurant no respondió a la sonda.");
             }
+        }
+
+        // Los turnos (MVP de cortes) también antes del envío: el corte sale en el mismo lote que sus
+        // cheques. Con la sonda caída se saltan, como las mesas.
+        if (turnos is not null && sondaRespondio && _dep.EstadoSr.Reader is { } readerTurnos)
+        {
+            await LeerTurnosAsync(turnos, readerTurnos, envio.Cola, stoppingToken);
         }
 
         EncolarHeartbeat(envio);
@@ -318,6 +330,32 @@ internal sealed class Worker : BackgroundService
             {
                 _ultimaFallaMesas = ex.GetType().FullName;
                 _logger.LogError(ex, "Mesas abiertas: falla interna; se reintenta en el siguiente ciclo.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Los turnos (MVP de cortes). Una excepción no prevista (SQLite propio) queda en el log una vez por
+    /// tipo y el ciclo sigue. Una falla de LECTURA ni llega aquí: la maneja el sincronizador.
+    /// </summary>
+    private async Task LeerTurnosAsync(
+        ISincronizadorTurnos turnos, ISoftRestaurantReader reader, ColaLocal cola, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await turnos.CicloAsync(reader, cola, stoppingToken);
+            _ultimaFallaTurnos = null;
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (ex.GetType().FullName != _ultimaFallaTurnos)
+            {
+                _ultimaFallaTurnos = ex.GetType().FullName;
+                _logger.LogError(ex, "Turnos: falla interna; se reintenta en el siguiente ciclo.");
             }
         }
     }

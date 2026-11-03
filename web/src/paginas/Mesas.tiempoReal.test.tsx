@@ -1,4 +1,5 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -166,6 +167,58 @@ describe('Monitor de mesas en tiempo real (F2-142)', () => {
     });
     await waitFor(() => expect(vista.pedidas()).toBeGreaterThan(antes));
     expect(await screen.findByRole('listitem', { name: 'Mesa 7' })).toBeInTheDocument();
+  });
+
+  it('con el detalle de una mesa abierto, lo que se pide en el POS aparece al llegar el aviso', async () => {
+    // MVP ("entrar a cada mesa y ver lo pedido en vivo"): el modal no es una foto. Se vuelve a
+    // buscar la cuenta en cada respuesta, y con el socket vivo la respuesta llega con el aviso.
+    let partidas = [
+      {
+        producto: 'Taco sintético',
+        categoria: 'Tacos',
+        cantidad: '2',
+        precioUnit: '25.00',
+        total: '50.00',
+      },
+    ];
+    const conPartidas = (): MesasSucursal[] => {
+      const base = centro(['5']);
+      const mesa = {
+        ...base.snapshot!.mesas[0],
+        total: partidas.length === 1 ? '50.00' : '140.00',
+        partidas,
+      };
+      return [{ ...base, snapshot: { ...base.snapshot!, mesas: [mesa] } }];
+    };
+    montar(conPartidas);
+    const usuarioEvt = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await screen.findByRole('listitem', { name: 'Mesa 5' });
+    await conectarTodo();
+    await waitFor(() => expect(indicador()).toHaveAttribute('data-modo', 'en-vivo'));
+    await usuarioEvt.click(screen.getByRole('button', { name: 'Ver consumo de Mesa 5' }));
+    const dialogo = screen.getByRole('dialog', { name: 'Mesa 5' });
+    expect(dialogo).not.toHaveTextContent('Agua sintética');
+
+    // El mesero agrega algo en el POS mientras el modal sigue abierto.
+    partidas = [
+      ...partidas,
+      {
+        producto: 'Agua sintética',
+        categoria: 'Bebidas',
+        cantidad: '3',
+        precioUnit: '30.00',
+        total: '90.00',
+      },
+    ];
+    act(() => {
+      for (const s of vivos()) {
+        s.recibir('ingesta', { sucursalId: SUCURSAL_A1.id, mesas: true, cheques: false });
+      }
+    });
+    await waitFor(() => expect(dialogo).toHaveTextContent('Agua sintética'), { timeout: 5_000 });
+    expect(within(dialogo).getByTestId('detalle-total-cuenta')).toHaveTextContent('$140.00');
+    // Es el MISMO modal (no se cerró y reabrió).
+    expect(screen.getByRole('dialog', { name: 'Mesa 5' })).toBe(dialogo);
   });
 
   it('al volver el socket se relee de inmediato (lo que pasó mientras estuvo caído)', async () => {

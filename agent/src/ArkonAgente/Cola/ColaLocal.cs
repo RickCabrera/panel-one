@@ -8,7 +8,7 @@ namespace ArkonAgente.Cola;
 internal sealed record EventoPendiente(long Id, TipoEvento Tipo, string Payload);
 
 /// <summary>Un evento que el API rechazó sin reintento, como quedó en la cola.</summary>
-/// <param name="Clave">El <c>folioSr</c> si es cheque.</param>
+/// <param name="Clave">El <c>folioSr</c> si es cheque; el <c>turnoSr</c> si es turno.</param>
 internal sealed record RechazoGuardado(TipoEvento Tipo, string? Clave, string Motivo, DateTimeOffset RechazadoAt);
 
 /// <summary>Cuántos rechazos definitivos hay en la cola (7 días) y el más reciente.</summary>
@@ -35,13 +35,14 @@ internal sealed record ResumenRechazos(int Total, int Cheques, RechazoGuardado? 
 /// <c>Pooling=False</c>: el archivo no queda abierto entre operaciones.
 /// </para>
 /// <para>
-/// Sólo el último pendiente importa en tres casos, y encolar borra el anterior en la
+/// Sólo el último pendiente importa en cuatro casos, y encolar borra el anterior en la
 /// misma transacción:
 /// <list type="bullet">
 /// <item><b>snapshot</b>: son las mesas completas, no un delta (así lo pide el backlog).</item>
 /// <item><b>cheque con el mismo <c>folioSr</c></b>: SR reprocesa cheques (reaperturas,
 /// cancelaciones) y el API sobrescribe sin mirar versiones. Si la versión vieja siguiera
 /// pendiente, un reintento suyo pisaría a la nueva en el panel.</item>
+/// <item><b>turno con el mismo <c>turnoSr</c></b> (MVP de cortes): el mismo caso que el cheque.</item>
 /// <item><b>heartbeat</b>: ver la DECISION PROVISIONAL abajo.</item>
 /// </list>
 /// </para>
@@ -51,11 +52,16 @@ internal sealed class ColaLocal
     public const string NombreArchivo = "cola.db";
     public static readonly TimeSpan Retencion = TimeSpan.FromDays(7);
 
-    private const string Esquema = """
-        PRAGMA journal_mode = WAL;
-        CREATE TABLE IF NOT EXISTS eventos (
+    /// <summary>
+    /// La versión del esquema de <c>eventos</c>. 1 = F1-024; 2 = MVP de cortes (el tipo
+    /// <c>turno</c> en el CHECK). Un <c>cola.db</c> de antes se migra al abrirlo (<see cref="Migrar"/>)
+    /// sin perder un solo evento.
+    /// </summary>
+    public const int VersionEsquema = 2;
+
+    private const string Columnas = """
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo           TEXT    NOT NULL CHECK (tipo IN ('cheque', 'snapshot', 'heartbeat')),
+            tipo           TEXT    NOT NULL CHECK (tipo IN ('cheque', 'snapshot', 'heartbeat', 'turno')),
             clave          TEXT    NULL,
             payload        TEXT    NOT NULL,
             creado_at      TEXT    NOT NULL,
@@ -63,17 +69,49 @@ internal sealed class ColaLocal
             enviado_at     TEXT    NULL,
             rechazado_at   TEXT    NULL,
             motivo_rechazo TEXT    NULL
-        );
+        """;
+
+    private const string Indices = """
         CREATE INDEX IF NOT EXISTS ix_eventos_pendientes ON eventos (id)
             WHERE enviado_at IS NULL AND rechazado_at IS NULL;
         CREATE INDEX IF NOT EXISTS ix_eventos_pendientes_clave ON eventos (tipo, clave)
             WHERE enviado_at IS NULL AND rechazado_at IS NULL;
         CREATE INDEX IF NOT EXISTS ix_eventos_enviado ON eventos (enviado_at) WHERE enviado_at IS NOT NULL;
         CREATE INDEX IF NOT EXISTS ix_eventos_rechazado ON eventos (rechazado_at) WHERE rechazado_at IS NOT NULL;
-        PRAGMA user_version = 1;
         """;
 
+    private const string Esquema =
+        "PRAGMA journal_mode = WAL;\n" +
+        "CREATE TABLE IF NOT EXISTS eventos (\n" + Columnas + "\n);\n" +
+        Indices;
+
     private const string Pendiente = "enviado_at IS NULL AND rechazado_at IS NULL";
+
+    /// <summary>Los tipos que entiende CUALQUIER agente desde F1-024 (los del CHECK de la versión 1).</summary>
+    internal const string TiposOriginales = "'cheque', 'snapshot', 'heartbeat'";
+
+    /// <summary>Los tipos que entiende ESTA versión (los del CHECK de <see cref="Columnas"/>).</summary>
+    internal const string TiposConocidos = "'cheque', 'snapshot', 'heartbeat', 'turno'";
+
+    /// <summary>
+    /// Donde el watchdog aparta los eventos de tipos que un agente ANTERIOR no conoce, antes de
+    /// arrancarlo (<see cref="ApartarTiposNuevos"/>). Sin CHECK de tipo, a propósito.
+    /// </summary>
+    private const string EsquemaApartados = """
+        CREATE TABLE IF NOT EXISTS eventos_apartados (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_original    INTEGER NOT NULL,
+            tipo           TEXT    NOT NULL,
+            clave          TEXT    NULL,
+            payload        TEXT    NOT NULL,
+            creado_at      TEXT    NOT NULL,
+            intentos       INTEGER NOT NULL DEFAULT 0,
+            enviado_at     TEXT    NULL,
+            rechazado_at   TEXT    NULL,
+            motivo_rechazo TEXT    NULL,
+            apartado_at    TEXT    NOT NULL
+        );
+        """;
 
     private readonly string _cadena;
     private readonly TimeProvider _reloj;
@@ -105,7 +143,140 @@ internal sealed class ColaLocal
         var cola = new ColaLocal(ruta, reloj);
         using var conexion = cola.Conectar();
         Ejecutar(conexion, null, Esquema);
+        Migrar(conexion);
+        Recuperar(conexion);
         return cola;
+    }
+
+    /// <summary>
+    /// Lo que hace el WATCHDOG antes de arrancar un exe recién puesto (actualización o rollback):
+    /// mueve a <c>eventos_apartados</c>, en UNA transacción, TODOS los eventos (pendientes, enviados o
+    /// rechazados) cuyo tipo no está en <see cref="TiposOriginales"/>. Un agente anterior al tipo
+    /// <c>turno</c> truena al leer uno (en <c>TomarPendientes</c> y en <c>ResumenRechazados</c>); así
+    /// arranca con sólo lo que entiende. Un agente que sí los conoce los recupera al abrir la cola
+    /// (<see cref="Recuperar"/>). Con el agente detenido: el watchdog lo garantiza. Sin archivo, no
+    /// hace nada. Devuelve cuántos movió.
+    /// </summary>
+    public static int ApartarTiposNuevos(string ruta, TimeProvider reloj)
+    {
+        if (!File.Exists(ruta))
+        {
+            return 0;
+        }
+
+        var cadena = new SqliteConnectionStringBuilder
+        {
+            DataSource = ruta,
+            Mode = SqliteOpenMode.ReadWrite,
+            Pooling = false,
+            DefaultTimeout = 10,
+        }.ToString();
+        using var conexion = new SqliteConnection(cadena);
+        conexion.Open();
+        Ejecutar(conexion, null, "PRAGMA synchronous = FULL;");
+        if (!ExisteTabla(conexion, "eventos"))
+        {
+            return 0;
+        }
+
+        using var tx = conexion.BeginTransaction();
+        Ejecutar(conexion, tx, EsquemaApartados);
+        Ejecutar(
+            conexion, tx,
+            "INSERT INTO eventos_apartados (id_original, tipo, clave, payload, creado_at, intentos, enviado_at, " +
+            "rechazado_at, motivo_rechazo, apartado_at) " +
+            "SELECT id, tipo, clave, payload, creado_at, intentos, enviado_at, rechazado_at, motivo_rechazo, $ahora " +
+            $"FROM eventos WHERE tipo NOT IN ({TiposOriginales}) ORDER BY id;",
+            ("$ahora", Formatear(reloj.GetUtcNow())));
+        var movidos = Ejecutar(conexion, tx, $"DELETE FROM eventos WHERE tipo NOT IN ({TiposOriginales});");
+        tx.Commit();
+        return movidos;
+    }
+
+    /// <summary>
+    /// Regresa a la cola los PENDIENTES que el watchdog apartó y que esta versión entiende (con id
+    /// nuevo, al final). Si ya hay un pendiente más nuevo del mismo tipo y clave, gana ése (el
+    /// apartado es una versión vieja). Los enviados o rechazados apartados ya no sirven y se borran.
+    /// Lo que esta versión tampoco entiende se queda apartado.
+    /// </summary>
+    private static void Recuperar(SqliteConnection conexion)
+    {
+        if (!ExisteTabla(conexion, "eventos_apartados"))
+        {
+            return;
+        }
+
+        using var tx = conexion.BeginTransaction();
+        Ejecutar(
+            conexion, tx,
+            "INSERT INTO eventos (tipo, clave, payload, creado_at, intentos) " +
+            "SELECT a.tipo, a.clave, a.payload, a.creado_at, a.intentos FROM eventos_apartados AS a " +
+            $"WHERE a.enviado_at IS NULL AND a.rechazado_at IS NULL AND a.tipo IN ({TiposConocidos}) " +
+            "AND NOT EXISTS (SELECT 1 FROM eventos AS e WHERE e.tipo = a.tipo AND e.clave IS a.clave " +
+            "AND e.enviado_at IS NULL AND e.rechazado_at IS NULL) ORDER BY a.id_original;");
+        Ejecutar(conexion, tx, $"DELETE FROM eventos_apartados WHERE tipo IN ({TiposConocidos});");
+        tx.Commit();
+    }
+
+    private static bool ExisteTabla(SqliteConnection conexion, string nombre)
+    {
+        using var comando = conexion.CreateCommand();
+        comando.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $n;";
+        comando.Parameters.AddWithValue("$n", nombre);
+        return Convert.ToInt64(comando.ExecuteScalar(), CultureInfo.InvariantCulture) > 0;
+    }
+
+    /// <summary>
+    /// Lleva un <c>cola.db</c> de antes al esquema de ahora. SQLite no deja cambiar un CHECK: la
+    /// tabla <c>eventos</c> con el CHECK viejo (sin <c>turno</c>) se reconstruye en UNA transacción
+    /// (crear la nueva, copiar TODAS las filas con su id, borrar la vieja, renombrar y rehacer los
+    /// índices), y el contador de AUTOINCREMENT se conserva: un id ya usado no se repite. Si algo
+    /// falla, el rollback deja el archivo como estaba y la excepción sube (falla interna: el
+    /// servicio se reinicia). Idempotente: con el CHECK nuevo no hace nada más que fijar la versión.
+    /// </summary>
+    private static void Migrar(SqliteConnection conexion)
+    {
+        string? definicion;
+        using (var leer = conexion.CreateCommand())
+        {
+            leer.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'eventos';";
+            definicion = leer.ExecuteScalar() as string;
+        }
+
+        if (definicion is not null && !definicion.Contains("'turno'", StringComparison.Ordinal))
+        {
+            using var tx = conexion.BeginTransaction();
+            long? secuencia;
+            using (var leer = conexion.CreateCommand())
+            {
+                leer.Transaction = tx;
+                leer.CommandText = "SELECT seq FROM sqlite_sequence WHERE name = 'eventos';";
+                var valor = leer.ExecuteScalar();
+                secuencia = valor is null or DBNull ? null : Convert.ToInt64(valor, CultureInfo.InvariantCulture);
+            }
+
+            Ejecutar(conexion, tx, "CREATE TABLE eventos_nueva (\n" + Columnas + "\n);");
+            Ejecutar(
+                conexion, tx,
+                "INSERT INTO eventos_nueva (id, tipo, clave, payload, creado_at, intentos, enviado_at, rechazado_at, motivo_rechazo) " +
+                "SELECT id, tipo, clave, payload, creado_at, intentos, enviado_at, rechazado_at, motivo_rechazo FROM eventos;");
+            Ejecutar(conexion, tx, "DROP TABLE eventos;");
+            Ejecutar(conexion, tx, "ALTER TABLE eventos_nueva RENAME TO eventos;");
+            Ejecutar(conexion, tx, Indices);
+            if (secuencia is { } seq)
+            {
+                Ejecutar(
+                    conexion, tx,
+                    "INSERT INTO sqlite_sequence (name, seq) SELECT 'eventos', 0 " +
+                    "WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'eventos');");
+                Ejecutar(
+                    conexion, tx, "UPDATE sqlite_sequence SET seq = $s WHERE name = 'eventos' AND seq < $s;", ("$s", seq));
+            }
+
+            tx.Commit();
+        }
+
+        Ejecutar(conexion, null, $"PRAGMA user_version = {VersionEsquema};");
     }
 
     /// <summary>
@@ -132,7 +303,10 @@ internal sealed class ColaLocal
             case TipoEvento.Heartbeat:
                 Ejecutar(conexion, tx, $"DELETE FROM eventos WHERE tipo = $tipo AND {Pendiente};", ("$tipo", tipo.Texto()));
                 break;
+            // MVP de cortes: un turno se reenvía cuando cambia (se cierra, se declara); sólo el último
+            // pendiente del mismo turnoSr importa, igual que con un cheque.
             case TipoEvento.Cheque:
+            case TipoEvento.Turno:
                 Ejecutar(
                     conexion, tx, $"DELETE FROM eventos WHERE tipo = $tipo AND clave = $clave AND {Pendiente};",
                     ("$tipo", tipo.Texto()), ("$clave", clave));
@@ -344,19 +518,26 @@ internal sealed class ColaLocal
                 throw new ArgumentException($"El payload de un evento {tipo.Texto()} tiene que ser un objeto JSON.", nameof(payloadJson));
             }
 
-            if (tipo != TipoEvento.Cheque)
+            var llave = tipo switch
+            {
+                TipoEvento.Cheque => "folioSr",
+                TipoEvento.Turno => "turnoSr",
+                _ => null,
+            };
+            if (llave is null)
             {
                 return null;
             }
 
-            if (documento.RootElement.TryGetProperty("folioSr", out var folio)
-                && folio.ValueKind == JsonValueKind.String
-                && folio.GetString() is { Length: > 0 } clave)
+            if (documento.RootElement.TryGetProperty(llave, out var valor)
+                && valor.ValueKind == JsonValueKind.String
+                && valor.GetString() is { Length: > 0 } clave)
             {
                 return clave;
             }
 
-            throw new ArgumentException("Un evento cheque tiene que traer 'folioSr' (texto no vacío).", nameof(payloadJson));
+            throw new ArgumentException(
+                $"Un evento {tipo.Texto()} tiene que traer '{llave}' (texto no vacío).", nameof(payloadJson));
         }
     }
 
@@ -365,6 +546,7 @@ internal sealed class ColaLocal
         "cheque" => TipoEvento.Cheque,
         "snapshot" => TipoEvento.Snapshot,
         "heartbeat" => TipoEvento.Heartbeat,
+        "turno" => TipoEvento.Turno,
         _ => throw new InvalidDataException($"Tipo de evento desconocido en la cola: '{texto}'."),
     };
 }

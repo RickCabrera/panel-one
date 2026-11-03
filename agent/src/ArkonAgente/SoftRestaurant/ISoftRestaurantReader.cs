@@ -47,6 +47,9 @@ internal interface ISoftRestaurantReader
 
     /// <summary>La consulta embebida de cuentas abiertas (mesas en vivo) en ESTA versión (F1-023).</summary>
     string ConsultaMesasAbiertas { get; }
+
+    /// <summary>La consulta embebida de turnos (cortes de caja) en ESTA versión (MVP de cortes).</summary>
+    string ConsultaTurnos { get; }
 }
 
 /// <summary>
@@ -100,4 +103,10 @@ internal sealed class SrV11Reader(VersionSr version) : ISoftRestaurantReader
     /// ⚠️ en la 11, SUPUESTO. docs/esquema-sr.md §5.
     /// </summary>
     public string ConsultaMesasAbiertas => "sr_mesas_abiertas";
+
+    /// <summary>
+    /// ✅ <c>turnos</c> VALIDADA en SR 10 con datos (F1-090: columnas y significado de los
+    /// declarados); ⚠️ los tipos exactos y en la 11, SUPUESTO. docs/esquema-sr.md §2, "Turnos".
+    /// </summary>
+    public string ConsultaTurnos => "sr_turnos";
 }

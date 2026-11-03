@@ -237,12 +237,7 @@ export interface EstadoAgenteSucursal {
 
 /** F2-143: los motivos de falla de una auto-actualización (enum del api). */
 export type MotivoFallaActualizacion =
-  | 'hash_invalido'
-  | 'descarga'
-  | 'detener'
-  | 'reemplazo'
-  | 'arranque'
-  | 'version_distinta';
+  'hash_invalido' | 'descarga' | 'detener' | 'reemplazo' | 'arranque' | 'version_distinta';
 
 /** `ReporteActualizacionVistoDto`: el último intento de auto-actualización de un agente. */
 export interface ReporteActualizacion {
@@ -2133,4 +2128,96 @@ export interface Arranque {
   completo: boolean;
   pasos: PasoArranque[];
   descargaAgente: string | null;
+}
+
+// --- MVP: cortes (turnos de SR) y meseros en vivo --------------------------------------
+
+/** `ResumenCorteDto`: una fila de `GET /cortes` y de `GET /cortes/en-curso`. */
+export interface ResumenCorte {
+  id: string;
+  sucursalId: string;
+  sucursal: string;
+  zonaHoraria: string;
+  /** `turnos.idturno` de SoftRestaurant. */
+  turnoSr: string;
+  /** UTC. */
+  aperturaAt: string;
+  /** UTC; null = turno abierto. */
+  cierreAt: string | null;
+  abierto: boolean;
+  estacion: string | null;
+  fondo: Importe;
+  /** Σ total de las cuentas no canceladas cobradas en el turno. */
+  venta: Importe;
+  cuentas: number;
+  ticketPromedio: Importe | null;
+  /** Cerrado antes de que el agente mandara turnos: la venta puede estar incompleta. */
+  posiblementeIncompleto: boolean;
+}
+
+/** `ListaCortesDto` de `GET /cortes`. */
+export interface ListaCortes {
+  cortes: ResumenCorte[];
+  truncado: boolean;
+}
+
+export type ConceptoCuadre = 'efectivo' | 'tarjeta' | 'vales' | 'credito' | 'total';
+
+/** `RenglonCuadreDto`: lo declarado por el cajero contra lo cobrado. */
+export interface RenglonCuadre {
+  concepto: ConceptoCuadre;
+  declarado: Importe;
+  cobrado: Importe | null;
+  diferencia: Importe | null;
+}
+
+/** `DetalleCorteDto` de `GET /cortes/{id}`. */
+export interface DetalleCorte extends ResumenCorte {
+  comensales: { total: number; cuentasConDato: number };
+  propina: Importe;
+  descuentos: { monto: Importe; cuentas: number };
+  cancelados: { cuentas: number; monto: Importe };
+  formasPago: FormasPago;
+  cobrado: Importe;
+  cuadre: RenglonCuadre[];
+  topProductos: ProductoTop[];
+}
+
+/** `MeseroEnVivoDto`: una fila de `GET /ventas/meseros-en-vivo`. */
+export interface MeseroEnVivo {
+  /** Lugar dentro de SU sucursal por total; null = sin mesero. */
+  posicion: number | null;
+  sucursalId: string;
+  sucursal: string;
+  mesero: string | null;
+  cobrado: Importe;
+  cuentas: number;
+  comensales: number;
+  ticketPromedio: Importe | null;
+  mesasAbiertas: number;
+  enCurso: Importe;
+  mesasSinTotal: number;
+  comensalesEnMesa: number;
+  /** cobrado + enCurso. */
+  total: Importe;
+}
+
+/** `MeserosEnVivoDto` de `GET /ventas/meseros-en-vivo`. */
+export interface MeserosEnVivo {
+  dia: string;
+  sucursales: {
+    sucursalId: string;
+    nombre: string;
+    zonaHoraria: string;
+    snapshot: { capturadoAt: string; recibidoAt: string; edadRecepcionSegundos: number } | null;
+  }[];
+  meseros: MeseroEnVivo[];
+  totales: {
+    cobrado: Importe;
+    cuentas: number;
+    enCurso: Importe;
+    mesasAbiertas: number;
+    mesasSinTotal: number;
+    total: Importe;
+  };
 }

@@ -102,6 +102,8 @@ function apiDashboard(extra: Record<string, Manejador> = {}) {
     'GET /ventas/por-hora': () => json(200, POR_HORA),
     'GET /ventas/formas-pago': () => json(200, FORMAS),
     'GET /mesas/abiertas': () => json(200, mesas()),
+    // MVP: la tarjeta "Turno en curso" (sin turno abierto, salvo que el test diga otra cosa).
+    'GET /cortes/en-curso': () => json(200, []),
     ...extra,
   });
 }
@@ -333,6 +335,49 @@ describe('cambiar sucursal o periodo actualiza todo sin recargar', () => {
         .filter((l) => l.ruta.startsWith('/ventas/') || l.ruta.startsWith('/mesas/'))
         .every((l) => l.query.get('sucursalId') === null),
     ).toBe(true);
+  });
+});
+
+describe('Turno en curso (MVP de cortes)', () => {
+  it('lo cobrado en el turno abierto de SR, con liga a su corte; sin turno, lo dice', async () => {
+    const api = apiDashboard({
+      'GET /cortes/en-curso': () =>
+        json(200, [
+          {
+            id: 'c0000000-0000-4000-8000-000000000008',
+            sucursalId: SUCURSAL_A1.id,
+            sucursal: 'Centro',
+            zonaHoraria: 'America/Mexico_City',
+            turnoSr: '8',
+            aperturaAt: '2026-09-20T20:00:00.000Z',
+            cierreAt: null,
+            abierto: true,
+            estacion: null,
+            fondo: '300.00',
+            venta: '1250.50',
+            cuentas: 7,
+            ticketPromedio: '178.64',
+          },
+        ]),
+    });
+    montar(`/?empresa=${A}`);
+    const turno = await screen.findByRole('region', { name: 'Turno en curso' });
+    expect(await within(turno).findByTestId('turno-venta')).toHaveTextContent('$1,250.50');
+    expect(turno).toHaveTextContent('7 cuentas cobradas · Turno 8 · Centro');
+    // 20:00 UTC = 14:00 en CDMX; ahora son las 21:30.
+    expect(turno).toHaveTextContent('Abrió 20/09/2026 14:00 (hace 7 h 30 min)');
+    expect(within(turno).getByRole('link', { name: 'Ver corte' }).getAttribute('href')).toBe(
+      `/cortes?empresa=${A}&corte=c0000000-0000-4000-8000-000000000008`,
+    );
+    expect(pedidas(api, '/cortes/en-curso')[0].query.get('empresaId')).toBe(A);
+  });
+
+  it('sin turno abierto lo dice, sin inventar un $0.00', async () => {
+    apiDashboard();
+    montar(`/?empresa=${A}`);
+    const turno = await screen.findByRole('region', { name: 'Turno en curso' });
+    expect(await within(turno).findByText(/No hay un turno abierto/)).toBeInTheDocument();
+    expect(turno).not.toHaveTextContent('$0.00');
   });
 });
 
