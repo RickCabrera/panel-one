@@ -12,11 +12,14 @@
 # api.railway.internal y el web escucha en 127.0.0.1:8080. El "borde de Railway" lo hace
 # curl mandando X-Real-IP.
 #
-# Comprueba: migraciones + admin inicial (y que el 2.º arranque no lo toca), /health por el
-# proxy, la SPA con su CSP y HSTS, login con la cookie Secure/HttpOnly/SameSite=Strict y
-# Path=/api/auth, refresh con esa cookie, el handshake de socket.io bajo /api (polling y
-# upgrade a WebSocket), y el rate limit del login POR IP DEL CLIENTE (y que un
-# X-Forwarded-For inventado no lo salta).
+# Comprueba: validación previa, migraciones + admin inicial (y que el 2.º arranque no lo
+# toca), /health por el proxy, la SPA con su CSP y HSTS, login con la cookie
+# Secure/HttpOnly/SameSite=Strict y Path=/api/auth, refresh con esa cookie, un DELETE con
+# cuerpo, que el portal sin PAC conectado contesta 503 sin simular, el handshake de
+# socket.io bajo /api (polling y upgrade a WebSocket), y el rate limit del login POR IP DEL
+# CLIENTE (y que un X-Forwarded-For inventado no lo salta). OJO: aquí X-Real-IP lo manda
+# curl; que el borde REAL de Railway lo pise es un SUPUESTO que se prueba en el §6 de
+# docs/deploy-railway.md.
 set -euo pipefail
 
 DB="${HUMO_DATABASE_URL:?Falta HUMO_DATABASE_URL (una base VACÍA y desechable)}"
@@ -119,6 +122,27 @@ echo "== 6. Refresh con esa cookie"
 codigo="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$WEB/api/auth/refresh" \
   -H "Cookie: $valor" -H 'X-Real-IP: 198.51.100.10')"
 [ "$codigo" = 200 ] || fallo "refresh respondió $codigo"
+
+echo "== 6b. DELETE con cuerpo por el proxy (baja de un navegador de push)"
+token="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).accessToken)' "$TMP/login.json")"
+codigo="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
+  "$WEB/api/cuenta/notificaciones/dispositivos" -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/json' -H 'X-Real-IP: 198.51.100.10' \
+  --data '{"endpoint":"https://fcm.googleapis.com/fcm/send/humo"}')"
+# 404 = el cuerpo llegó (ese navegador no está registrado); 400 = el proxy perdió el cuerpo.
+[ "$codigo" = 404 ] || fallo "DELETE con cuerpo respondió $codigo (se esperaba 404)"
+codigo="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
+  "$WEB/api/cuenta/notificaciones/dispositivos" -H "Authorization: Bearer $token" \
+  -H 'X-Real-IP: 198.51.100.10')"
+[ "$codigo" = 400 ] || fallo "DELETE sin cuerpo respondió $codigo (se esperaba 400)"
+
+echo "== 6c. Sin PAC conectado, el portal NO simula: 503 con el mensaje claro"
+codigo="$(curl -sS -o "$TMP/portal.json" -w '%{http_code}' -X POST \
+  "$WEB/api/facturacion/portal/humo/facturas" -H 'Content-Type: application/json' \
+  -H 'X-Real-IP: 198.51.100.30' --data '{}')"
+[ "$codigo" = 503 ] || fallo "el portal respondió $codigo (se esperaba 503)"
+grep -q 'La facturación no está conectada todavía' "$TMP/portal.json" \
+  || fallo "el 503 del portal no trae el mensaje: $(cat "$TMP/portal.json")"
 
 echo "== 7. socket.io bajo /api: handshake (polling) y upgrade a WebSocket"
 curl -fsS -o "$TMP/sio.txt" "$WEB/api/socket.io/?EIO=4&transport=polling" && grep -q '^0{"sid"' "$TMP/sio.txt" \

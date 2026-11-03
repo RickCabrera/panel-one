@@ -89,7 +89,7 @@ describe('crearAdminInicial (contra la base, revertido)', () => {
   it('sin admin activo lo crea (admin_global, sin empresa, argon2), y la 2.ª vez no toca nada', async () => {
     await enInstalacionNueva(async (tx) => {
       const email = 'admin-inicial-1@monitor.test';
-      expect(await crearAdminInicial(tx, datos(email))).toBe('creado');
+      expect(await crearAdminInicial(tx, datos(email))).toEqual({ resultado: 'creado' });
       const fila = await tx.usuario.findUniqueOrThrow({ where: { email } });
       expect(fila).toMatchObject({ rol: 'admin_global', empresaId: null, activo: true });
       expect(fila.passwordHash).not.toContain(PASSWORD);
@@ -98,7 +98,7 @@ describe('crearAdminInicial (contra la base, revertido)', () => {
       // Redeploy con las variables todavía puestas, y hasta con OTRA contraseña: nada cambia.
       expect(
         await crearAdminInicial(tx, { ...datos(email), password: 'Otra-Contrasena-9876' }),
-      ).toBe('ya-hay-admin');
+      ).toEqual({ resultado: 'ya-hay-admin' });
       const despues = await tx.usuario.findUniqueOrThrow({ where: { email } });
       expect(despues.passwordHash).toBe(fila.passwordHash);
       expect(despues.updatedAt).toEqual(fila.updatedAt);
@@ -109,16 +109,16 @@ describe('crearAdminInicial (contra la base, revertido)', () => {
   it('con un admin_global activo ya existente no crea otro', async () => {
     await enInstalacionNueva(async (tx) => {
       await crearAdminInicial(tx, datos('admin-inicial-2@monitor.test'));
-      expect(await crearAdminInicial(tx, datos('admin-inicial-3@monitor.test'))).toBe(
-        'ya-hay-admin',
-      );
+      expect(await crearAdminInicial(tx, datos('admin-inicial-3@monitor.test'))).toEqual({
+        resultado: 'ya-hay-admin',
+      });
       expect(
         await tx.usuario.findUnique({ where: { email: 'admin-inicial-3@monitor.test' } }),
       ).toBeNull();
     });
   });
 
-  it('si el email ya es de otro usuario, truena y NO lo asciende ni le cambia la contraseña', async () => {
+  it('si el email ya es de otro usuario: error claro SIN tronar, y NO lo asciende ni crea nada', async () => {
     await enInstalacionNueva(async (tx) => {
       const empresa = await tx.empresa.create({ data: { nombre: 'Empresa admin-inicial' } });
       const email = 'visor-admin-inicial@monitor.test';
@@ -131,10 +131,39 @@ describe('crearAdminInicial (contra la base, revertido)', () => {
           empresaId: empresa.id,
         },
       });
-      await expect(crearAdminInicial(tx, datos(email))).rejects.toThrow(/ya pertenece/);
+      const r = await crearAdminInicial(tx, datos(email));
+      expect(r.resultado).toBe('email-ocupado');
+      expect(r.resultado === 'email-ocupado' && r.mensaje).toMatch(/ya pertenece.*visor/);
+      expect(
+        await tx.usuario.count({ where: { rol: RolUsuario.admin_global, activo: true } }),
+      ).toBe(0);
       expect(await tx.usuario.findUniqueOrThrow({ where: { id: visor.id } })).toMatchObject({
         rol: 'visor',
         passwordHash: 'hash-sintetico',
+      });
+    });
+  });
+
+  it('último admin DESACTIVADO + variables con su mismo email: no lo reactiva ni le cambia nada', async () => {
+    await enInstalacionNueva(async (tx) => {
+      // `enInstalacionNueva` desactivó a todos los admin_global: el que tenga ese email es justo
+      // el caso de "el último admin se desactivó y las variables siguen puestas".
+      const email = 'admin-desactivado@monitor.test';
+      await tx.usuario.create({
+        data: {
+          email,
+          passwordHash: 'hash-viejo',
+          nombre: 'Admin viejo',
+          rol: RolUsuario.admin_global,
+          activo: false,
+        },
+      });
+      const r = await crearAdminInicial(tx, datos(email));
+      expect(r).toMatchObject({ resultado: 'email-ocupado' });
+      expect(r.resultado === 'email-ocupado' && r.mensaje).toMatch(/desactivado/);
+      expect(await tx.usuario.findUniqueOrThrow({ where: { email } })).toMatchObject({
+        activo: false,
+        passwordHash: 'hash-viejo',
       });
     });
   });

@@ -13,9 +13,11 @@
 set -eu
 
 cd /app/api
-# 0. Antes de tocar la base: el entorno de producción completo y sin rellenos (el mismo
-#    chequeo que repite main.ts). Un secreto olvidado no llega a migrar nada.
-node -e "require('./dist/config/produccion.config').validarEntornoProduccion()"
+# 0. Antes de tocar la base: el entorno de producción completo y sin rellenos, y TODAS las
+#    lecturas de configuración que harían los módulos al arrancar (adaptadores, JWT, el
+#    formato de PANEL_URL, trust proxy, /docs, onboarding, admin inicial), juntas en un
+#    solo mensaje (src/config/validar-arranque.ts). Un error aquí no llega a migrar nada.
+node dist/config/validar-arranque.js
 ../node_modules/.bin/prisma migrate deploy
 node dist/prisma/admin-inicial.js
 exec node dist/main.js

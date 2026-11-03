@@ -18,8 +18,10 @@ import { esRelleno } from '../config/produccion.config';
  * - Si YA hay un admin_global activo → no hace nada. NUNCA cambia una contraseña ni el
  *   rol de nadie: las variables olvidadas en Railway no son una puerta trasera para
  *   restablecer accesos, y redeployar no pisa lo que el admin cambió desde el panel.
- * - Si el email ya existe (con otro rol, o un admin desactivado) → truena sin tocarlo:
- *   ascender a alguien a admin_global es decisión de una persona en el panel.
+ * - Si el email ya existe (con otro rol, o un admin desactivado) → NO lo toca ni crea
+ *   nada: ascender a alguien a admin_global es decisión de una persona en el panel. Se
+ *   registra el error claro en el log y el arranque SIGUE (la API ya servía sin esto, y
+ *   tumbar el deploy por una variable vieja dejaría a todos los restaurantes sin panel).
  * - Si no → crea el admin_global (sin empresa) con la contraseña hasheada con argon2.
  *
  * Vive en `src/prisma/` porque usa el cliente crudo (allowlist de `eslint.config.mjs`): no
@@ -34,7 +36,11 @@ export interface DatosAdminInicial {
   nombre: string;
 }
 
-export type ResultadoAdminInicial = 'creado' | 'ya-hay-admin';
+export type ResultadoAdminInicial =
+  | { resultado: 'creado' }
+  | { resultado: 'ya-hay-admin' }
+  /** El email es de un usuario que existe: no se tocó ni se creó nada. */
+  | { resultado: 'email-ocupado'; mensaje: string };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const NOMBRE_ADMIN_INICIAL = 'Administrador global';
@@ -74,18 +80,21 @@ export async function crearAdminInicial(
   const activos = await prisma.usuario.count({
     where: { rol: RolUsuario.admin_global, activo: true },
   });
-  if (activos > 0) return 'ya-hay-admin';
+  if (activos > 0) return { resultado: 'ya-hay-admin' };
 
   const existente = await prisma.usuario.findUnique({
     where: { email: datos.email },
     select: { rol: true, activo: true },
   });
   if (existente) {
-    throw new Error(
-      `ADMIN_INICIAL_EMAIL ya pertenece a un usuario (${existente.rol}` +
-        `${existente.activo ? '' : ', desactivado'}). No se modifica: usa otro email, o ` +
-        'reactívalo o cambia su rol a mano.',
-    );
+    return {
+      resultado: 'email-ocupado',
+      mensaje:
+        `ADMIN_INICIAL_EMAIL ya pertenece a un usuario (${existente.rol}` +
+        `${existente.activo ? ', activo' : ', desactivado'}) y no hay ningún admin_global ` +
+        'activo. No se modificó ni se creó nada: usa otro email en ADMIN_INICIAL_EMAIL, o ' +
+        'reactiva o cambia el rol de ese usuario a mano (docs/deploy-railway.md, §5).',
+    };
   }
 
   try {
@@ -102,11 +111,11 @@ export async function crearAdminInicial(
   } catch (err) {
     // Dos réplicas arrancando a la vez: la otra lo creó entre el count y el create.
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      return 'ya-hay-admin';
+      return { resultado: 'ya-hay-admin' };
     }
     throw err;
   }
-  return 'creado';
+  return { resultado: 'creado' };
 }
 
 async function main(): Promise<void> {
@@ -118,14 +127,19 @@ async function main(): Promise<void> {
   }
   const prisma = new PrismaClient();
   try {
-    const resultado = await crearAdminInicial(prisma, datos);
+    const r = await crearAdminInicial(prisma, datos);
     // El email sí (es quien entra); la contraseña, jamás.
-    console.log(
-      resultado === 'creado'
-        ? `admin-inicial: admin_global ${datos.email} creado. Quita ADMIN_INICIAL_PASSWORD ` +
-            'de las variables del servicio.'
-        : 'admin-inicial: ya hay un admin_global activo, no se toca nada.',
-    );
+    if (r.resultado === 'creado') {
+      console.log(
+        `admin-inicial: admin_global ${datos.email} creado. Quita ADMIN_INICIAL_PASSWORD ` +
+          'de las variables del servicio.',
+      );
+    } else if (r.resultado === 'ya-hay-admin') {
+      console.log('admin-inicial: ya hay un admin_global activo, no se toca nada.');
+    } else {
+      // Error claro en el log, pero el arranque sigue (salida 0): ver arriba.
+      console.error(`admin-inicial: ERROR: ${r.mensaje}`);
+    }
   } finally {
     await prisma.$disconnect();
   }

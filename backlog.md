@@ -1340,6 +1340,21 @@ válido en ambos subdominios; `GET /health` responde `{status:'ok', db:'ok'}`.
 > (`api/src/reportes/config.ts`); (4) Caddy sin access log de query strings: la búsqueda de
 > Clientes viaja en `q`.
 
+> **Cambio de plataforma (3-nov-2026, decisión de Ricardo): se despliega en Railway, no en el
+> VPS.** El compose de producción y el Caddy con Let's Encrypt de arriba ya no se construyen;
+> el PR #84 (`feat/deploy-railway`) deja `api/Dockerfile`, `web/Dockerfile` (Caddy con
+> `infra/caddy/Caddyfile.railway`), `railway.json` por servicio, `GET /health` y la guía
+> `docs/deploy-railway.md`. Los "Y además" de arriba se cubren ahí (WebSocket, `sw.js`
+> `no-cache`, MIME del manifest, landing con sólo `/api/publico/*`, `prisma` en dependencies,
+> sin `api/.env` en la imagen, `PANEL_URL`, sin access log).
+>
+> **Listo cuando (nuevo AC):** en el Railway real, con el dominio del servicio web (o el
+> propio) en https, `GET https://DOMINIO/api/health` responde `{status:'ok', db:'ok'}`; el
+> login y el refresh funcionan en el navegador; el socket del monitor sale `101` en DevTools;
+> y las verificaciones del §6 de `docs/deploy-railway.md` pasan (6.º login fallido = 429 con
+> `X-Real-IP` distintos, y `DELETE /api/cuenta/notificaciones/dispositivos` con cuerpo).
+> **El `[x]` va tras ese deploy VERIFICADO por Ricardo, no con el merge del PR.**
+
 ## F1-003 · CI/CD con GitHub Actions
 `[ ]` **Epic 0** · 🔒 **Razón: necesita los secretos SSH del VPS en GitHub Actions.**
 Ricardo genera el par de llaves y pega el secreto; una sesión autónoma no toca llaves de
@@ -1355,6 +1370,18 @@ se reemplaza el contenedor viejo.
 > **Nota:** el Workflow 1 ya existe y vive en `.github/workflows/ci.yml` desde el commit
 > inicial del repo; las tareas de la cola lo van descomentando carril por carril. Lo que
 > esta tarea agrega de verdad es el **Workflow 2, el de deploy**.
+
+> **Cambio de plataforma (3-nov-2026, decisión de Ricardo): Railway en vez del VPS** (ver la
+> nota de F1-002). Ya no hay SSH, `docker save`/scp ni llaves del VPS: Railway construye y
+> despliega solo desde la integración con GitHub al hacer push a `main` (con "Wait for CI"
+> encendido en cada servicio, sólo tras el CI en verde). La migración corre en el arranque del
+> contenedor nuevo (`api/docker-entrypoint.sh`) y, si falla, el healthcheck no pasa y Railway
+> deja el deploy anterior. El CI del PR ya construye las dos imágenes y les corre la prueba de
+> humo (job `docker`, PR #84).
+>
+> **Listo cuando (nuevo AC):** un merge a `main` despliega solo en Railway tras el CI verde, y
+> un deploy con una migración rota (o un `/health` que no responde) NO reemplaza al que está
+> sirviendo. **El `[x]` va tras comprobarlo en el Railway real, no con el merge del PR.**
 
 ## F1-004 · Backups y monitoreo
 `[ ]` **Epic 0** · 🔒 **Razón: necesita el VPS (cron del host), una cuenta de

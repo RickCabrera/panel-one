@@ -34,6 +34,7 @@ import {
   VistaPreviaGlobalQueryDto,
 } from './dto/global.dto';
 import { FacturaGlobalService } from './global.service';
+import { RequierePacConectado } from './pac-conectado.guard';
 
 const NO_ENCONTRADA =
   'La empresa o la sucursal no existen, están inactivas o no están en tu alcance (nunca 403).';
@@ -124,6 +125,7 @@ export class FacturaGlobalController {
   }
 
   @Post()
+  @RequierePacConectado()
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({
     summary: 'Emite la factura global de un periodo (F2-108).',

@@ -134,7 +134,8 @@ function leerModoDemo(entorno: NodeJS.ProcessEnv): boolean {
  * permitido se avisa en el log del arranque (`falsosEnProduccion`). Al conectar el servicio
  * real, se cambia su `*_IMPL` y se quita su nombre de aquí.
  *
- * Con el PAC falso el panel ya marca la facturación como simulada (`pacSimulado`).
+ * El PAC falso en producción NO simula: el puerto es `TimbradoNoConectado` y las rutas que
+ * timbran responden 503 "La facturación no está conectada todavía" (`PacConectadoGuard`).
  */
 export const VARIABLE_FALSOS_PERMITIDOS = 'PERMITIR_FALSOS_EN_PRODUCCION';
 

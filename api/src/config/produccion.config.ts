@@ -96,6 +96,13 @@ export function revisarEntornoProduccion(entorno: NodeJS.ProcessEnv): RevisionPr
 
   // Producción SIEMPRE va detrás de al menos un proxy (el Caddy del servicio web). Con 0,
   // todos los usuarios comparten la IP del proxy y el rate limit del login es global.
+  // EN RAILWAY EL ÚNICO VALOR VÁLIDO ES 1: el Caddy del web le manda a la API un solo
+  // X-Forwarded-For (el `{client_ip}` que sacó de X-Real-IP, infra/caddy/Caddyfile.railway):
+  // hay exactamente UN salto de confianza. Otro número no describe esa topología, y si un día
+  // el Caddy dejara pasar el X-Forwarded-For del cliente, con 2+ Express tomaría una entrada
+  // que el cliente escribe. Aquí sólo se rechaza el 0 porque el número correcto depende de la
+  // topología (fuera de Railway sería otro); la guía (docs/deploy-railway.md) y
+  // infra/railway.env.example fijan el 1.
   const saltos = entorno.TRUST_PROXY_SALTOS?.trim();
   if (saltos !== undefined && saltos !== '' && /^\d+$/.test(saltos) && Number(saltos) < 1) {
     errores.push(

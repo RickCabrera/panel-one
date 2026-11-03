@@ -20,9 +20,17 @@
 #
 # IP del cliente (rate limits del login/refresh). Lo que llega a este contenedor llega
 # SIEMPRE por el borde de Railway: el servicio no expone otro puerto y la red privada es
-# del proyecto. El borde de Railway pisa `X-Real-IP` con la IP real de quien se conectó
-# (respuesta oficial en station.railway.com; su rango interno no está documentado y puede
-# cambiar, por eso se confía en cualquier origen y no en un CIDR). Caddy toma de ahí
+# del proyecto.
+#
+# SUPUESTO / DECISION PROVISIONAL (deploy en Railway, 3-nov-2026): que el borde de Railway
+# PISA `X-Real-IP` con la IP real de quien se conectó, y que un cliente no puede colarla. Sale
+# de una respuesta de staff en station.railway.com; NO está en la documentación oficial, hay
+# respuestas de staff que la contradicen y un bug reportado con una CDN delante (con
+# Cloudflare en modo proxy la IP que ve el borde es la de Cloudflare). Se confirma contra el
+# Railway REAL con la prueba del §6 de docs/deploy-railway.md (6 logins con X-Real-IP
+# distintos: el 6.º tiene que dar 429). Si falla, el límite por IP no sirve detrás de este
+# Caddy: ver ahí qué hacer. El rango interno del borde tampoco está documentado (puede
+# cambiar), por eso se confía en cualquier origen y no en un CIDR. Caddy toma de ahí
 # `{client_ip}` y el snippet `api` se lo manda a la API como el ÚNICO X-Forwarded-For:
 # con TRUST_PROXY_SALTOS=1 la API ve al cliente, y un X-Forwarded-For o un X-Real-IP
 # inventados por el cliente no cuentan (el borde pisa uno y Caddy reemplaza el otro).
