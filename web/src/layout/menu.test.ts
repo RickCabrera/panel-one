@@ -14,7 +14,11 @@ import {
 // El mapa del producto de F2-210: nombres y orden EXACTOS de la ficha del backlog.
 const FICHA: [string, string[]][] = [
   ['Principal', ['Inicio', 'Empresas', 'Sucursales', 'Comparativos']],
-  ['Ventas y dirección', ['Resumen', 'Tickets', 'Monitor de mesas', 'Análisis', 'Reportes']],
+  // MVP: "Cortes" (turnos de SR) junto a Tickets.
+  [
+    'Ventas y dirección',
+    ['Resumen', 'Tickets', 'Cortes', 'Monitor de mesas', 'Análisis', 'Reportes'],
+  ],
   [
     'Catálogos',
     [

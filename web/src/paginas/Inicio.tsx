@@ -12,6 +12,7 @@ import {
   TarjetaVentaEnVivo,
   TarjetaVentaTotal,
 } from './inicio/Tarjetas';
+import { TarjetaTurnoEnCurso } from './inicio/TurnoEnCurso';
 import { ChecklistArranque } from './onboarding/ChecklistArranque';
 import { Vista } from './Vista';
 
@@ -93,6 +94,8 @@ export function Inicio() {
           />
           <TarjetaFormasPago consulta={formas} />
           <TarjetaVentaEnVivo consulta={mesas} />
+          {/* MVP: lo cobrado en el turno abierto de SR (el corte que todavía no se hace). */}
+          <TarjetaTurnoEnCurso filtro={filtro} />
           <TarjetaTicketPromedio consulta={resumen} />
           <TarjetaDescuentos consulta={resumen} />
         </div>
