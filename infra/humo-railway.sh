@@ -44,6 +44,13 @@ limpiar() {
 }
 trap limpiar EXIT
 
+# A archivo y luego grep: con `pipefail`, `docker logs | grep -q` falla en cuanto grep
+# encuentra y cierra el tubo (SIGPIPE a docker logs), aunque la línea SÍ esté.
+en_logs_api() {
+  docker logs humo-api >"$TMP/api.log" 2>&1
+  grep -q "$1" "$TMP/api.log"
+}
+
 arrancar_api() {
   docker rm -f humo-api >/dev/null 2>&1 || true
   docker run -d --name humo-api --network host \
@@ -73,8 +80,8 @@ grep -q "JWT_ACCESS_SECRET es obligatoria" "$TMP/sin-secretos.log" \
 
 echo "== 1. API: migraciones + admin inicial"
 arrancar_api "$PASSWORD"
-docker logs humo-api 2>&1 | grep -q "admin_global $EMAIL creado" || fallo "no creó el admin inicial"
-docker logs humo-api 2>&1 | grep -q "PAC_IMPL=falso en PRODUCCIÓN" || fallo "no avisó del PAC falso"
+en_logs_api "admin_global $EMAIL creado" || fallo "no creó el admin inicial"
+en_logs_api "PAC_IMPL=falso en PRODUCCIÓN" || fallo "no avisó del PAC falso"
 
 echo "== 2. Web (Caddy) hacia la API por la 'red privada'"
 docker rm -f humo-web >/dev/null 2>&1 || true
@@ -114,7 +121,7 @@ codigo="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$WEB/api/auth/refresh
 [ "$codigo" = 200 ] || fallo "refresh respondió $codigo"
 
 echo "== 7. socket.io bajo /api: handshake (polling) y upgrade a WebSocket"
-curl -fsS "$WEB/api/socket.io/?EIO=4&transport=polling" | grep -q '^0{"sid"' \
+curl -fsS -o "$TMP/sio.txt" "$WEB/api/socket.io/?EIO=4&transport=polling" && grep -q '^0{"sid"' "$TMP/sio.txt" \
   || fallo "el handshake de socket.io no llegó a la API"
 # El WebSocket nativo de Node 22: el paquete "open" de engine.io (`0{"sid"…`) sólo llega
 # si Caddy subió la conexión y la pasó a la API sin el prefijo.
@@ -144,7 +151,7 @@ c="$(intento -H 'X-Real-IP: 203.0.113.2')"
 
 echo "== 9. Segundo arranque: migrate deploy idempotente y el admin NO se toca"
 arrancar_api "otra-contrasena-$(openssl rand -hex 8)"
-docker logs humo-api 2>&1 | grep -q "ya hay un admin_global activo" || fallo "el 2.º arranque no reconoció al admin"
+en_logs_api "ya hay un admin_global activo" || fallo "el 2.º arranque no reconoció al admin"
 codigo="$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$WEB/api/auth/login" \
   -H 'Content-Type: application/json' -H 'X-Real-IP: 198.51.100.20' \
   --data "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")"

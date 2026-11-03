@@ -37,9 +37,12 @@ COPY --from=build /app/web/dist-landing /srv/landing
 # Sin root. Con `admin off` y `auto_https off` Caddy no escribe certificados ni config,
 # pero igual quiere sus carpetas XDG: van a /tmp, que es del contenedor.
 ENV XDG_CONFIG_HOME=/tmp/caddy/config XDG_DATA_HOME=/tmp/caddy/data
+# `caddy validate` en el build: un Caddyfile roto no llega a Railway. Lo que deja en /tmp
+# es de root y el usuario 1000 no podría escribirlo: se borra.
 RUN chmod 0755 /usr/local/bin/web-entrypoint \
   && API_INTERNAL_URL=http://api.invalid:3000 PORT=8080 \
-     caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+     caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile \
+  && rm -rf /tmp/caddy
 USER 1000:1000
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/web-entrypoint"]
