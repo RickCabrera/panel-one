@@ -94,7 +94,11 @@ class MeseroEnVivoDto implements MeseroEnVivo {
   @ApiProperty({ description: 'Comensales de sus cuentas cerradas del día.' })
   comensales!: number;
 
-  @ApiProperty({ type: String, nullable: true, description: 'cobrado / cuentas; null sin cuentas.' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'cobrado / cuentas; null sin cuentas.',
+  })
   ticketPromedio!: string | null;
 
   @ApiProperty({ description: 'Mesas abiertas que atiende en el último snapshot.' })

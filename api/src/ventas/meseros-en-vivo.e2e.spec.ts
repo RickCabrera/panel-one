@@ -75,13 +75,59 @@ describe('GET /ventas/meseros-en-vivo (e2e, MVP)', () => {
       comensales?: number;
       cancelado?: boolean;
     }> = [
-      { folio: 'V1', sucursalId: FX.sucursalA1, mesero: 'Ana', cerrado: '2026-10-22T15:00:00Z', total: '120.00', comensales: 2 },
-      { folio: 'V2', sucursalId: FX.sucursalA1, mesero: 'Ana', cerrado: '2026-10-22T18:00:00Z', total: '80.00', comensales: 1 },
-      { folio: 'V3', sucursalId: FX.sucursalA1, mesero: 'Luis', cerrado: '2026-10-22T19:00:00Z', total: '50.00' },
-      { folio: 'V4', sucursalId: FX.sucursalA1, mesero: null, cerrado: '2026-10-22T20:00:00Z', total: '30.00' },
-      { folio: 'V5', sucursalId: FX.sucursalA1, mesero: 'Ana', cerrado: '2026-10-22T20:30:00Z', total: '70.00', cancelado: true },
-      { folio: 'V6', sucursalId: FX.sucursalA1, mesero: 'Ana', cerrado: '2026-10-22T05:30:00Z', total: '500.00' },
-      { folio: 'V7', empresaId: FX.empresaB, sucursalId: FX.sucursalB1, mesero: 'Ana', cerrado: '2026-10-22T15:00:00Z', total: '555.00' },
+      {
+        folio: 'V1',
+        sucursalId: FX.sucursalA1,
+        mesero: 'Ana',
+        cerrado: '2026-10-22T15:00:00Z',
+        total: '120.00',
+        comensales: 2,
+      },
+      {
+        folio: 'V2',
+        sucursalId: FX.sucursalA1,
+        mesero: 'Ana',
+        cerrado: '2026-10-22T18:00:00Z',
+        total: '80.00',
+        comensales: 1,
+      },
+      {
+        folio: 'V3',
+        sucursalId: FX.sucursalA1,
+        mesero: 'Luis',
+        cerrado: '2026-10-22T19:00:00Z',
+        total: '50.00',
+      },
+      {
+        folio: 'V4',
+        sucursalId: FX.sucursalA1,
+        mesero: null,
+        cerrado: '2026-10-22T20:00:00Z',
+        total: '30.00',
+      },
+      {
+        folio: 'V5',
+        sucursalId: FX.sucursalA1,
+        mesero: 'Ana',
+        cerrado: '2026-10-22T20:30:00Z',
+        total: '70.00',
+        cancelado: true,
+      },
+      {
+        folio: 'V6',
+        sucursalId: FX.sucursalA1,
+        mesero: 'Ana',
+        cerrado: '2026-10-22T05:30:00Z',
+        total: '500.00',
+      },
+      {
+        folio: 'V7',
+        empresaId: FX.empresaB,
+        sucursalId: FX.sucursalB1,
+        mesero: 'Ana',
+        cerrado: '2026-10-22T15:00:00Z',
+        total: '555.00',
+      },
     ];
     for (const c of cuentas) {
       await prisma.cheque.create({
@@ -103,7 +149,12 @@ describe('GET /ventas/meseros-en-vivo (e2e, MVP)', () => {
         },
       });
     }
-    const snapshot = (empresaId: string, sucursalId: string, capturadoAt: string, mesas: object[]) =>
+    const snapshot = (
+      empresaId: string,
+      sucursalId: string,
+      capturadoAt: string,
+      mesas: object[],
+    ) =>
       prisma.mesaSnapshot.create({
         data: { empresaId, sucursalId, capturadoAt: new Date(capturadoAt), payload: { mesas } },
       });
@@ -208,10 +259,12 @@ describe('GET /ventas/meseros-en-vivo (e2e, MVP)', () => {
       mesasSinTotal: 1,
       total: '780.50',
     });
-    expect(r.body.sucursales.map((s: { sucursalId: string; snapshot: { capturadoAt: string } }) => [
-      s.sucursalId,
-      s.snapshot.capturadoAt,
-    ])).toEqual([
+    expect(
+      r.body.sucursales.map((s: { sucursalId: string; snapshot: { capturadoAt: string } }) => [
+        s.sucursalId,
+        s.snapshot.capturadoAt,
+      ]),
+    ).toEqual([
       [FX.sucursalA1, '2026-10-22T21:59:30.000Z'],
       [FX.sucursalA2, '2026-10-22T21:59:40.000Z'],
     ]);
@@ -220,9 +273,9 @@ describe('GET /ventas/meseros-en-vivo (e2e, MVP)', () => {
   it('con sucursalId sólo esa sucursal', async () => {
     const r = await get(`/ventas/meseros-en-vivo?${Q({ ...filtro, sucursalId: FX.sucursalA2 })}`);
     expect(r.status).toBe(200);
-    expect(r.body.meseros.map((m: { mesero: string; total: string }) => [m.mesero, m.total])).toEqual([
-      ['Ana', '300.00'],
-    ]);
+    expect(
+      r.body.meseros.map((m: { mesero: string; total: string }) => [m.mesero, m.total]),
+    ).toEqual([['Ana', '300.00']]);
     expect(r.body.totales.cobrado).toBe('0.00');
   });
 
@@ -235,8 +288,12 @@ describe('GET /ventas/meseros-en-vivo (e2e, MVP)', () => {
     expect(ajena.status).toBe(404);
     expect(ajena.body).toEqual(inexistente.body);
     expect(
-      (await get(`/ventas/meseros-en-vivo?${Q({ ...filtro, sucursalId: FX.sucursalB1 })}`, USUARIOS.adminGlobal))
-        .status,
+      (
+        await get(
+          `/ventas/meseros-en-vivo?${Q({ ...filtro, sucursalId: FX.sucursalB1 })}`,
+          USUARIOS.adminGlobal,
+        )
+      ).status,
     ).toBe(404);
     const b = await get(
       `/ventas/meseros-en-vivo?${Q({ empresaId: FX.empresaB, dia: DIA })}`,
@@ -246,12 +303,14 @@ describe('GET /ventas/meseros-en-vivo (e2e, MVP)', () => {
   });
 
   it('400 con un día inválido; 401 sin token', async () => {
-    expect((await get(`/ventas/meseros-en-vivo?${Q({ ...filtro, dia: '2026-02-30' })}`)).status).toBe(
+    expect(
+      (await get(`/ventas/meseros-en-vivo?${Q({ ...filtro, dia: '2026-02-30' })}`)).status,
+    ).toBe(400);
+    expect((await get(`/ventas/meseros-en-vivo?${Q({ empresaId: FX.empresaA })}`)).status).toBe(
       400,
     );
-    expect((await get(`/ventas/meseros-en-vivo?${Q({ empresaId: FX.empresaA })}`)).status).toBe(400);
-    expect((await request(app.getHttpServer()).get(`/ventas/meseros-en-vivo?${Q(filtro)}`)).status).toBe(
-      401,
-    );
+    expect(
+      (await request(app.getHttpServer()).get(`/ventas/meseros-en-vivo?${Q(filtro)}`)).status,
+    ).toBe(401);
   });
 });

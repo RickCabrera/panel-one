@@ -23,11 +23,39 @@ describe('meseros en vivo: lo puro', () => {
   it('une cobrado y en curso por (sucursal, mesero), ordena por total y rankea por sucursal', () => {
     const filas = unirMeseros(
       [
-        { sucursalId: 's1', sucursal: 'Centro', mesero: 'Ana', venta: D('200'), cuentas: 2, comensales: 3 },
-        { sucursalId: 's1', sucursal: 'Centro', mesero: 'Luis', venta: D('50'), cuentas: 1, comensales: 1 },
-        { sucursalId: 's1', sucursal: 'Centro', mesero: null, venta: D('30'), cuentas: 1, comensales: 0 },
+        {
+          sucursalId: 's1',
+          sucursal: 'Centro',
+          mesero: 'Ana',
+          venta: D('200'),
+          cuentas: 2,
+          comensales: 3,
+        },
+        {
+          sucursalId: 's1',
+          sucursal: 'Centro',
+          mesero: 'Luis',
+          venta: D('50'),
+          cuentas: 1,
+          comensales: 1,
+        },
+        {
+          sucursalId: 's1',
+          sucursal: 'Centro',
+          mesero: null,
+          venta: D('30'),
+          cuentas: 1,
+          comensales: 0,
+        },
         // Sólo canceladas: nada cobrado ni en curso, no sale.
-        { sucursalId: 's1', sucursal: 'Centro', mesero: 'Rosa', venta: D('0'), cuentas: 0, comensales: 0 },
+        {
+          sucursalId: 's1',
+          sucursal: 'Centro',
+          mesero: 'Rosa',
+          venta: D('0'),
+          cuentas: 0,
+          comensales: 0,
+        },
       ],
       [
         {
@@ -67,10 +95,33 @@ describe('meseros en vivo: lo puro', () => {
   it('empate en total: gana el que más cobró; después por nombre', () => {
     const filas = unirMeseros(
       [
-        { sucursalId: 's1', sucursal: 'C', mesero: 'Beto', venta: D('100'), cuentas: 1, comensales: 0 },
-        { sucursalId: 's1', sucursal: 'C', mesero: 'Ale', venta: D('60'), cuentas: 1, comensales: 0 },
+        {
+          sucursalId: 's1',
+          sucursal: 'C',
+          mesero: 'Beto',
+          venta: D('100'),
+          cuentas: 1,
+          comensales: 0,
+        },
+        {
+          sucursalId: 's1',
+          sucursal: 'C',
+          mesero: 'Ale',
+          venta: D('60'),
+          cuentas: 1,
+          comensales: 0,
+        },
       ],
-      [{ sucursalId: 's1', sucursal: 'C', mesas: [{ mesero: 'Ale', total: '40' }, { mesero: 'Zoe', total: '100' }] }],
+      [
+        {
+          sucursalId: 's1',
+          sucursal: 'C',
+          mesas: [
+            { mesero: 'Ale', total: '40' },
+            { mesero: 'Zoe', total: '100' },
+          ],
+        },
+      ],
     );
     expect(filas.map((f) => [f.mesero, f.posicion])).toEqual([
       ['Beto', 1],

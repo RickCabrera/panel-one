@@ -81,7 +81,8 @@ export class CortesController {
 
   @Get(':id')
   @ApiOperation({
-    summary: 'Detalle de un corte: venta, cuentas, comensales, formas de pago, declarado vs cobrado.',
+    summary:
+      'Detalle de un corte: venta, cuentas, comensales, formas de pago, declarado vs cobrado.',
     description:
       'Turno abierto = acumulado en curso (sin diferencias del cuadre). Un corte de otra empresa ' +
       'responde 404, igual que uno que no existe.',

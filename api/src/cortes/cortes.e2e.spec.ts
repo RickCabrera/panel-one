@@ -228,9 +228,7 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
         ['m4', false],
       ]);
       expect(r.rechazados[0].motivo).toContain('datos.fondo');
-      expect(
-        await prisma.turno.count({ where: { turnoSr: { in: ['99', '98', '97'] } } }),
-      ).toBe(0);
+      expect(await prisma.turno.count({ where: { turnoSr: { in: ['99', '98', '97'] } } })).toBe(0);
     });
 
     it('la sucursal sale de la API key: el mismo turnoSr en otra sucursal es OTRO turno', async () => {
@@ -284,7 +282,10 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
           subtotal: '271.98',
           propina: '25.50',
           comensales: 3,
-          partidas: [partida('Agua sintética', '1.5', '175.00'), partida('Taco sintético', '3', '75.00')],
+          partidas: [
+            partida('Agua sintética', '1.5', '175.00'),
+            partida('Taco sintético', '3', '75.00'),
+          ],
           pagos: [
             { formaRaw: 'EFECTIVO', monto: '200.00' },
             { formaRaw: 'TARJETA VISA', monto: '115.50' },
@@ -310,16 +311,18 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
         cheque('c5', 'K5', null, { total: '999.00' }),
       ]);
       expect(r.rechazados).toEqual([]);
-      expect((await lote(KEYS.a2, [cheque('x1', 'X1', '7', { total: '777.00' })])).rechazados).toEqual(
-        [],
-      );
+      expect(
+        (await lote(KEYS.a2, [cheque('x1', 'X1', '7', { total: '777.00' })])).rechazados,
+      ).toEqual([]);
       t7 = (await turnoDe(FX.sucursalA1, '7')).id;
       t8 = (await turnoDe(FX.sucursalA1, '8')).id;
       tB = (await turnoDe(FX.sucursalB1, '7')).id;
     });
 
     it('lista: los turnos abiertos en el rango, el más reciente primero, con su venta', async () => {
-      const r = await get(`/cortes?${Q({ empresaId: FX.empresaA, desde: '2026-10-22', hasta: '2026-10-22' })}`);
+      const r = await get(
+        `/cortes?${Q({ empresaId: FX.empresaA, desde: '2026-10-22', hasta: '2026-10-22' })}`,
+      );
       expect(r.status).toBe(200);
       expect(r.body).toEqual({
         truncado: false,
@@ -449,7 +452,9 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
       expect(r.body.map((c: { id: string; venta: string }) => [c.id, c.venta])).toEqual([
         [t8, '108.00'],
       ]);
-      const a2 = await get(`/cortes/en-curso?${Q({ empresaId: FX.empresaA, sucursalId: FX.sucursalA2 })}`);
+      const a2 = await get(
+        `/cortes/en-curso?${Q({ empresaId: FX.empresaA, sucursalId: FX.sucursalA2 })}`,
+      );
       expect(a2.body).toEqual([]);
     });
 
@@ -467,7 +472,9 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
 
       const filtroA = { empresaId: FX.empresaA, desde: '2026-10-01', hasta: '2026-10-31' };
       expect((await get(`/cortes?${Q(filtroA)}`, USUARIOS.visorB)).status).toBe(404);
-      expect((await get(`/cortes/en-curso?${Q({ empresaId: FX.empresaA })}`, USUARIOS.visorB)).status).toBe(404);
+      expect(
+        (await get(`/cortes/en-curso?${Q({ empresaId: FX.empresaA })}`, USUARIOS.visorB)).status,
+      ).toBe(404);
       // Una sucursal de B bajo la empresa A: 404, ni para admin_global.
       expect(
         (await get(`/cortes?${Q({ ...filtroA, sucursalId: FX.sucursalB1 })}`, USUARIOS.adminGlobal))
@@ -478,12 +485,18 @@ describe('Cortes (turnos de SR): ingesta y lectura (e2e, MVP)', () => {
     it('400: id que no es UUID, días inválidos, rango al revés; 401 sin token', async () => {
       expect((await get('/cortes/no-es-uuid')).status).toBe(400);
       expect(
-        (await get(`/cortes?${Q({ empresaId: FX.empresaA, desde: '2026-02-30', hasta: '2026-03-01' })}`))
-          .status,
+        (
+          await get(
+            `/cortes?${Q({ empresaId: FX.empresaA, desde: '2026-02-30', hasta: '2026-03-01' })}`,
+          )
+        ).status,
       ).toBe(400);
       expect(
-        (await get(`/cortes?${Q({ empresaId: FX.empresaA, desde: '2026-10-05', hasta: '2026-10-01' })}`))
-          .status,
+        (
+          await get(
+            `/cortes?${Q({ empresaId: FX.empresaA, desde: '2026-10-05', hasta: '2026-10-01' })}`,
+          )
+        ).status,
       ).toBe(400);
       expect((await request(app.getHttpServer()).get(`/cortes/${t7}`)).status).toBe(401);
     });

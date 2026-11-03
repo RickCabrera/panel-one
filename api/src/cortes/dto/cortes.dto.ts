@@ -175,7 +175,8 @@ export class DetalleCorteDto extends ResumenCorteDto implements DetalleCorte {
 
   @ApiProperty({
     type: [RenglonCuadreDto],
-    description: 'Declarado por el cajero contra lo cobrado: efectivo, tarjeta, vales, crédito, total.',
+    description:
+      'Declarado por el cajero contra lo cobrado: efectivo, tarjeta, vales, crédito, total.',
   })
   cuadre!: RenglonCuadreDto[];
 

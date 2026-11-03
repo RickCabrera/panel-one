@@ -283,9 +283,7 @@ export class CortesService {
       // ni fondo). No se ha visto en SR si el efectivo que declara el cajero incluye el fondo o
       // las propinas (F1-090 declaró todo en 0.00): con el turno abierto no se calcula.
       diferencia:
-        abierto || cobrado === null
-          ? null
-          : pesos(declarado.minus(new Prisma.Decimal(cobrado))),
+        abierto || cobrado === null ? null : pesos(declarado.minus(new Prisma.Decimal(cobrado))),
     });
 
     return {
