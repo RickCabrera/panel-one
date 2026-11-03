@@ -12,7 +12,8 @@ import type { LlavesVapid } from './push/push-webpush';
  * - Valor desconocido → el arranque TRUENA nombrando la variable. No se adivina.
  * - `NODE_ENV=production` con cualquier puerto en `falso` (puesto o por defecto) →
  *   el arranque TRUENA nombrando cada variable. Un PAC falso en producción son
- *   facturas que el cliente cree timbradas y no existen ante el SAT.
+ *   facturas que el cliente cree timbradas y no existen ante el SAT. Única salida:
+ *   nombrar el puerto en `PERMITIR_FALSOS_EN_PRODUCCION` (ver abajo), y el arranque lo avisa.
  * - Las credenciales de una implementación real se exigen sólo si se eligió esa
  *   implementación, y nunca se escriben en un log ni en un mensaje de error.
  */
@@ -125,6 +126,48 @@ function leerModoDemo(entorno: NodeJS.ProcessEnv): boolean {
   throw new Error(`MODO_DEMO="${valor}" no es válido. Usa 1 (encendido) o 0 (apagado).`);
 }
 
+/**
+ * Excepción EXPLÍCITA a "producción sin falsos" (deploy en Railway, docs/deploy-railway.md).
+ * El primer deploy sale antes de contratar Facturama, Brevo, el volumen y las VAPID: sin
+ * esto la API no arranca. No es un interruptor general: hay que NOMBRAR cada variable
+ * (`PAC_IMPL,CORREO_IMPL,...`); un nombre que no es de un puerto truena, y cada falso
+ * permitido se avisa en el log del arranque (`falsosEnProduccion`). Al conectar el servicio
+ * real, se cambia su `*_IMPL` y se quita su nombre de aquí.
+ *
+ * Con el PAC falso el panel ya marca la facturación como simulada (`pacSimulado`).
+ */
+export const VARIABLE_FALSOS_PERMITIDOS = 'PERMITIR_FALSOS_EN_PRODUCCION';
+
+function leerFalsosPermitidos(entorno: NodeJS.ProcessEnv): Set<string> {
+  const crudo = entorno[VARIABLE_FALSOS_PERMITIDOS]?.trim();
+  if (!crudo) return new Set();
+  const nombres = crudo
+    .split(',')
+    .map((n) => n.trim())
+    .filter((n) => n !== '');
+  const validos = Object.keys(IMPLEMENTACIONES);
+  const desconocidos = nombres.filter((n) => !validos.includes(n));
+  if (desconocidos.length > 0) {
+    throw new Error(
+      `${VARIABLE_FALSOS_PERMITIDOS} sólo acepta ${validos.join(', ')} (llegó ` +
+        `${desconocidos.map((n) => `"${n}"`).join(', ')}).`,
+    );
+  }
+  return new Set(nombres);
+}
+
+/**
+ * Los puertos que arrancan en `falso` en producción por la excepción de arriba, para el
+ * aviso del log. Vacío fuera de producción.
+ */
+export function falsosEnProduccion(entorno: NodeJS.ProcessEnv = process.env): string[] {
+  if (entorno.NODE_ENV !== 'production') return [];
+  const permitidos = leerFalsosPermitidos(entorno);
+  return (Object.keys(IMPLEMENTACIONES) as VariableImpl[]).filter(
+    (v) => impl(v, entorno) === 'falso' && permitidos.has(v),
+  );
+}
+
 export function leerAdaptadoresConfig(entorno: NodeJS.ProcessEnv = process.env): AdaptadoresConfig {
   const pac = impl('PAC_IMPL', entorno);
   const correo = impl('CORREO_IMPL', entorno);
@@ -142,10 +185,13 @@ export function leerAdaptadoresConfig(entorno: NodeJS.ProcessEnv = process.env):
     )
       .filter(([, valor]) => valor === 'falso')
       .map(([variable]) => variable);
-    if (enFalso.length > 0) {
+    const permitidos = leerFalsosPermitidos(entorno);
+    const prohibidos = enFalso.filter((v) => !permitidos.has(v));
+    if (prohibidos.length > 0) {
       throw new Error(
-        `${enFalso.map((v) => `${v}=falso`).join(', ')} no se permite con NODE_ENV=production. ` +
-          'Elige la implementación real en esa variable (sin ella, el valor por defecto es falso).',
+        `${prohibidos.map((v) => `${v}=falso`).join(', ')} no se permite con NODE_ENV=production. ` +
+          'Elige la implementación real en esa variable (sin ella, el valor por defecto es falso), ' +
+          `o nómbrala en ${VARIABLE_FALSOS_PERMITIDOS} si de verdad tiene que arrancar sin ella.`,
       );
     }
   }

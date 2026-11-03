@@ -1,0 +1,78 @@
+# Caddyfile del servicio "web" en Railway (docs/deploy-railway.md). Va dentro de la
+# imagen de `web/Dockerfile`. Los snippets (cabeceras, /api, SPA, landing) son los de
+# `seguridad.caddy`, probados en local con `Caddyfile.local`.
+#
+# Railway termina el TLS en su borde y le pasa HTTP plano a este contenedor en $PORT:
+# aquí no hay certificados ni puerto 443 (`auto_https off`). El HSTS lo sigue mandando
+# `cabeceras_seguridad`: el navegador lo ve sobre el https del borde.
+#
+# Variables (del servicio web en Railway, se leen al ARRANCAR Caddy):
+#   PORT              la pone Railway.
+#   API_INTERNAL_URL  la API por la red privada, p. ej. http://api.railway.internal:3000
+#                     (el nombre es el del servicio "api"; el puerto, su PORT). Obligatoria:
+#                     el entrypoint de la imagen no arranca sin ella.
+#   LANDING_HOST      opcional. El dominio donde se sirve la landing pública (p. ej.
+#                     midominio.mx). Sin ella, la landing no se sirve en ningún host.
+#
+# Mismo origen, sin CORS: el navegador ve el panel y `/api` en el MISMO dominio; la API
+# NO tiene dominio público (la cookie de refresh es SameSite=Strict, Path=/api/auth).
+# El agente de cada restaurante también entra por aquí: `apiUrl` = https://DOMINIO/api.
+#
+# IP del cliente (rate limits del login/refresh). Lo que llega a este contenedor llega
+# SIEMPRE por el borde de Railway: el servicio no expone otro puerto y la red privada es
+# del proyecto. El borde de Railway pisa `X-Real-IP` con la IP real de quien se conectó
+# (respuesta oficial en station.railway.com; su rango interno no está documentado y puede
+# cambiar, por eso se confía en cualquier origen y no en un CIDR). Caddy toma de ahí
+# `{client_ip}` y el snippet `api` se lo manda a la API como el ÚNICO X-Forwarded-For:
+# con TRUST_PROXY_SALTOS=1 la API ve al cliente, y un X-Forwarded-For o un X-Real-IP
+# inventados por el cliente no cuentan (el borde pisa uno y Caddy reemplaza el otro).
+#
+# Sin directiva `log` a propósito: la búsqueda de Clientes viaja en la query (`q`) y no
+# se queda en ningún log (F2-250). Los errores de Caddy sí salen por stderr.
+{
+	admin off
+	auto_https off
+	servers {
+		trusted_proxies static 0.0.0.0/0 ::/0
+		client_ip_headers X-Real-IP
+	}
+}
+
+import seguridad.caddy
+
+# `manifest.webmanifest` con su MIME de verdad (F2-146): no depende de la tabla de
+# tipos de la imagen. Sólo existe en la SPA.
+(manifest) {
+	@manifest path /manifest.webmanifest
+	header @manifest Content-Type "application/manifest+json"
+}
+
+# La landing, SÓLO en su dominio. Sólo necesita lo público de la API (el formulario de
+# contacto postea a /api/publico/contacto); el resto de /api —login, /docs, todo— no
+# se sirve aquí: vive en el dominio del panel. Sin LANDING_HOST el nombre es uno que
+# no existe (`.invalid`, RFC 2606) y el bloque nunca atiende nada.
+http://{$LANDING_HOST:landing.invalid}:{$PORT:8080} {
+	import cabeceras_seguridad
+	handle /api/publico/* {
+		uri strip_prefix /api
+		reverse_proxy {$API_INTERNAL_URL} {
+			header_up X-Forwarded-For {client_ip}
+			transport http {
+				keepalive 4s
+			}
+		}
+	}
+	handle /api/* {
+		respond 404
+	}
+	import landing /srv/landing
+}
+
+# El panel: cualquier otro host (el dominio propio, el *.up.railway.app y el healthcheck
+# de Railway, que llega con su propio Host).
+:{$PORT:8080} {
+	import cabeceras_seguridad
+	import manifest
+	import api {$API_INTERNAL_URL}
+	import spa /srv/web
+}

@@ -1,0 +1,26 @@
+# Contexto de `api/Dockerfile` y `web/Dockerfile` (la raíz del repo). Lo que no entra:
+#
+# - Secretos y config local. `api/.env` sobre todo: `cargarEnvLocal()` lo leería al
+#   arrancar y rellenaría lo que Railway no mande (F2-200). Ninguna imagen lleva un .env.
+**/.env
+**/.env.*
+!**/.env.example
+**/config.json
+**/*.pem
+**/*.key
+**/*.pfx
+**/*.cer
+
+# - Lo que se reconstruye dentro de la imagen, o no le sirve.
+**/node_modules
+**/dist
+**/dist-landing
+**/coverage
+**/*.tsbuildinfo
+.git
+.github
+.claude
+agent
+docs
+scripts
+**/*.log
