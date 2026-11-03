@@ -103,6 +103,8 @@ public class InstaladorUnClicTests
             "E|$([bool] $env:PASSWORD_LECTOR)|$([bool] $env:BASE_SR)"
             $env:YC_SALIDA = '1'
             try { Get-BasesSql -Sqlcmd '{{falso}}' -Servidor '.' -UsuarioAdmin '' | Out-Null; 'SIN ERROR' } catch { "F|$($_.Exception.Message)" }
+            # El sqlcmd falso salió con 1 a propósito; el script de prueba no debe heredar ese código.
+            $global:LASTEXITCODE = 0
             """);
 
         Assert.Equal("R|0", salida[0]);

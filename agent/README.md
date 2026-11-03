@@ -25,27 +25,50 @@ dotnet publish src/ArkonAgente -c Release -r win-x64 -o publish
 
 ### Armar el paquete del instalador
 
-Lo que se le entrega al restaurante es una carpeta (o un `.zip`) con `agente.exe` y los
-cuatro archivos de [`instalador/`](instalador/), todos juntos:
+Lo que se le entrega al restaurante es **`Instalar-YoControlo.zip`**. Lo arma
+[`empaquetar-instalador.ps1`](empaquetar-instalador.ps1) (Windows o Linux con `pwsh`):
 
 ```powershell
 cd agent
-dotnet publish src/ArkonAgente -c Release -r win-x64 -o publish
-New-Item -ItemType Directory paquete -Force | Out-Null
-Copy-Item publish\agente.exe, instalador\* paquete\
-Compress-Archive paquete\* ArkonAgente-instalador.zip -Force
+pwsh -File .\empaquetar-instalador.ps1 -ApiUrl https://monitor.ejemplo.com
+# Con un agente.exe ya publicado:  -Exe .\publish\agente.exe     Otro destino:  -Salida X.zip
+```
+
+Sin `-Exe` corre `dotnet publish src/ArkonAgente -c Release -r win-x64 -o publish`. `-ApiUrl` es
+la URL **base** de la API tal como la ve la PC del restaurante (la de `config.json`): va embebida
+en `archivos\instalador.json` para que el instalador no la pregunte. No es un secreto; el paquete
+no lleva ninguno. Sin `-ApiUrl` sirve igual, pero el instalador la pregunta. El `.zip` queda en
+`agent/` y está en `.gitignore`.
+
+```text
+Instalar-YoControlo.cmd     <- doble clic (lo único que abre la persona)
+LEEME.txt                   <- los 3 pasos
+archivos\
+    agente.exe
+    instalar-un-clic.ps1, instalar.ps1, funciones-instalador.ps1,
+    crear-usuario-lector.ps1, crear-usuario-lector.sql
+    instalador.json         <- { "apiUrl": ... } (sólo con -ApiUrl)
 ```
 
 | Archivo | Qué es |
 |---|---|
-| `agente.exe` | El agente. |
-| `crear-usuario-lector.ps1` | Paso 3 de la guía: crea el usuario SQL de solo lectura. Pide la contraseña sin mostrarla y corre el `.sql` con `sqlcmd`. |
-| `crear-usuario-lector.sql` | El T-SQL. **Sólo otorga `db_datareader`** (lo vigila `InstaladorSqlTests`). |
-| `instalar.ps1` | Paso 4: copia el exe, protege la carpeta, escribe `config.json`, registra y arranca el servicio y corre `agente test`. |
-| `funciones-instalador.ps1` | Funciones compartidas de los dos scripts (las prueba `InstaladorPs1Tests`). |
+| `Instalar-YoControlo.cmd` | Se eleva (UAC) y corre `archivos\instalar-un-clic.ps1`. **ASCII, sin BOM y CRLF** (cmd.exe lee mal lo demás; lo vigila `InstaladorUnClicTests`). |
+| `instalar-un-clic.ps1` | El instalador de un clic: detecta SQL y base, revisa permisos (sólo lectura), canjea el código de enlace (`POST /agente/enlace`), crea el lector con contraseña aleatoria y llama a `instalar.ps1`. Guía: [`docs/instalacion-agente.md`](../docs/instalacion-agente.md). |
+| `crear-usuario-lector.ps1` | Modo manual, paso 3: crea el usuario SQL de solo lectura. Pide la contraseña sin mostrarla y corre el `.sql` con `sqlcmd`. |
+| `crear-usuario-lector.sql` | El T-SQL de los dos modos. **Sólo otorga `db_datareader`** (lo vigila `InstaladorSqlTests`). |
+| `instalar.ps1` | Modo manual, paso 4 (y el de un clic lo usa por dentro): copia el exe, protege la carpeta, escribe `config.json`, registra y arranca los servicios y corre `agente test`. |
+| `funciones-instalador.ps1` | Funciones compartidas (las prueban `InstaladorPs1Tests` e `InstaladorUnClicTests`): validaciones, `config.json`, argumentos de `sc.exe` y de `sqlcmd`, contraseña aleatoria, canje del código. |
 
-Los `.ps1` y el `.sql` van en **UTF-8 con BOM** (PowerShell 5.1 y `sqlcmd` leen un archivo
-sin BOM como ANSI y los acentos salen rotos); hay un test que lo vigila.
+Los `.ps1`, el `.sql` y el `LEEME.txt` van en **UTF-8 con BOM** (PowerShell 5.1 y `sqlcmd` leen un
+archivo sin BOM como ANSI y los acentos salen rotos); hay un test que lo vigila. Los tests del
+instalador corren en el CI dos veces: con `pwsh` en Linux y con `powershell.exe` 5.1 en Windows.
+
+**Secretos en la config.** `config.json` guarda la API key y la contraseña del lector **en claro**,
+protegidos sólo por los permisos de `C:\ProgramData\ArkonAgente` (SYSTEM, Administradores y la
+cuenta del servicio). No hay DPAPI todavía: con la cuenta virtual `NT SERVICE\ArkonAgente`, cifrar
+con DPAPI de usuario ata el archivo al perfil de esa cuenta (el instalador, que corre como el
+administrador, no podría escribirlo), y DPAPI de máquina lo descifra cualquier proceso de la PC, que
+no protege más que el ACL actual. Ver la decisión abierta en el PR del instalador de un clic.
 
 ## Configuración
 
