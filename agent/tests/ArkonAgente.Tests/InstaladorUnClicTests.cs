@@ -101,6 +101,9 @@ public class InstaladorUnClicTests
             $r = Invoke-CrearLectorSql -Sqlcmd '{{falso}}' -ArchivoSql '{{sql}}' -Servidor '.\NATIONALSOFT' -Base 'softrestaurant10' -Password 'Prueba-12345abc' -UsuarioAdmin 'sa'
             "R|$($r.Codigo)"
             "E|$([bool] $env:PASSWORD_LECTOR)|$([bool] $env:BASE_SR)"
+            # Lo que vio el sqlcmd falso, antes de que la llamada de abajo lo sobrescriba.
+            Copy-Item -LiteralPath '{{registro}}' -Destination '{{registro}}.lector'
+            Copy-Item -LiteralPath '{{registro}}.env' -Destination '{{registro}}.lector.env'
             $env:YC_SALIDA = '1'
             try { Get-BasesSql -Sqlcmd '{{falso}}' -Servidor '.' -UsuarioAdmin '' | Out-Null; 'SIN ERROR' } catch { "F|$($_.Exception.Message)" }
             # El sqlcmd falso salió con 1 a propósito; el script de prueba no debe heredar ese código.
@@ -110,12 +113,12 @@ public class InstaladorUnClicTests
         Assert.Equal("R|0", salida[0]);
         Assert.Equal("E|False|False", salida[1]);
         Assert.StartsWith("F|No se pudo entrar al SQL Server '.'", salida[2]);
-        Assert.Equal("softrestaurant10|Prueba-12345abc", File.ReadAllText(registro + ".env").Trim());
+        Assert.Equal("softrestaurant10|Prueba-12345abc", File.ReadAllText(registro + ".lector.env").Trim());
         if (!OperatingSystem.IsWindows())
         {
             // La contraseña de sa nunca va en la línea de comando (sqlcmd la toma de SQLCMDPASSWORD),
             // ni la del lector.
-            Assert.Equal(["-S", @".\NATIONALSOFT", "-U", "sa", "-b", "-l", "10", "-t", "30", "-i", sql], File.ReadAllLines(registro));
+            Assert.Equal(["-S", @".\NATIONALSOFT", "-U", "sa", "-b", "-l", "10", "-t", "30", "-i", sql], File.ReadAllLines(registro + ".lector"));
         }
     }
 
