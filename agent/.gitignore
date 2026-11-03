@@ -12,3 +12,8 @@ publish/
 # job `guardia` del CI). La creo F1-020, y un test del agente comprueba que la
 # plantilla pasa el mismo cargador que el config real.
 config.json
+
+# El paquete del instalador de un clic (empaquetar-instalador.ps1) y su carpeta de armado
+# manual: se reparten aparte, no se versionan (llevan agente.exe).
+Instalar-YoControlo.zip
+paquete/
