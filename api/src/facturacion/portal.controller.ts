@@ -64,6 +64,7 @@ import {
 } from './dto/portal.dto';
 import { PortalFacturacionService } from './portal.service';
 import { REGIMENES_FISCALES, USOS_CFDI } from './sat';
+import { RequierePacConectado } from './pac-conectado.guard';
 
 const DESC_404_PORTAL =
   'No hay portal con ese enlace, o el portal, su sucursal o su empresa están dados de baja. ' +
@@ -171,6 +172,7 @@ export class PortalPublicoController {
   }
 
   @Post('portal/:slug/facturas')
+  @RequierePacConectado()
   @HttpCode(201)
   @Public()
   @UseGuards(ThrottlerGuard)

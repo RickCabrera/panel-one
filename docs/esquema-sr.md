@@ -3039,6 +3039,13 @@ silencio. Con una operación real de alta rotación (F2-193) hay que ver si alca
   comparten más sucursales activas (empate: la primera alfabética; sin sucursales:
   `America/Mexico_City`). Sólo decide la hora de envío y qué día es "ayer": cada sucursal corta sus
   cifras en su propia zona.
+- **IP del cliente en Railway (deploy, 3-nov-2026)** (`infra/caddy/Caddyfile.railway`):
+  **SUPUESTO / DECISION PROVISIONAL** que el borde de Railway pisa `X-Real-IP` con la IP real
+  de quien se conecta. Sale de una respuesta de staff en station.railway.com, no de la
+  documentación; hay respuestas contradictorias y un bug reportado con una CDN delante. El Caddy
+  del web la usa como `{client_ip}` y la API cuenta un salto (`TRUST_PROXY_SALTOS=1`). Se
+  confirma contra el Railway real con la prueba del §6 de `docs/deploy-railway.md`; Cloudflare en
+  modo proxy delante del dominio la rompe.
 - **Tema (F2-211)** (`web/src/tema/tema.ts`): la preferencia de modo oscuro vive en
   `localStorage`, **por usuario y por navegador**, no en la API: no viaja entre dispositivos.
 
@@ -3218,6 +3225,7 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | `api/src/ventas/por-area.ts#1` | 16 | F2-233 | El cheque trae el mismo id de área que el catálogo. | panel | §2, §8 |
 | `api/src/ventas/tickets.service.ts#1` | 104 | F2-222 | Orden por folio = largo y luego texto. | panel | §2 |
 | `api/src/ventas/tickets.service.ts#2` | 250 | F2-203 | El corte sólo congela cheques que llegan; uno que cambia mueve el total. | panel | §2 |
+| `infra/caddy/Caddyfile.railway#1` | 25 | Deploy Railway | SUPUESTO: el borde de Railway pisa `X-Real-IP` con la IP real del cliente (foro, no documentación); de ahí sale la IP de los rate limits. Se verifica con el §6 de `docs/deploy-railway.md`. | panel | §14 «Panel, landing, correo» |
 | `web/landing/index.html#1` | 183 | F2-147 | Sin precios definidos: la landing no publica cifra. | panel | §14 «Panel, landing, correo» |
 | `web/src/filtros/periodo.ts#1` | 96 | F1-041 | Con sucursales en zonas distintas, el "hoy" del panel es el de America/Mexico_City. | panel | §14 «Zonas horarias» |
 | `web/src/paginas/AyudaConteos.tsx#1` | 11 | F2-123 | Pasos dentro de SR descritos en genérico (menú no mapeado). | panel | §10 |

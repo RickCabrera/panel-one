@@ -1,4 +1,4 @@
-import { FACTURAMA_URL_SANDBOX, leerAdaptadoresConfig } from './config';
+import { FACTURAMA_URL_SANDBOX, falsosEnProduccion, leerAdaptadoresConfig } from './config';
 
 // Llaves VAPID SINTÉTICAS: sólo tienen el largo correcto (65 y 32 bytes); la config no firma.
 const VAPID = {
@@ -63,6 +63,47 @@ describe('Configuración de adaptadores (F2-202)', () => {
         'PAC_IMPL=falso, CORREO_IMPL=falso, ARCHIVOS_IMPL=falso, PUSH_IMPL=falso no se permite ' +
           'con NODE_ENV=production',
       );
+    });
+
+    it('PERMITIR_FALSOS_EN_PRODUCCION deja arrancar SÓLO los puertos que nombra', () => {
+      const todos = 'PAC_IMPL, CORREO_IMPL,ARCHIVOS_IMPL,PUSH_IMPL';
+      const config = leerAdaptadoresConfig({
+        NODE_ENV: 'production',
+        PERMITIR_FALSOS_EN_PRODUCCION: todos,
+      });
+      expect([config.pac.impl, config.correo.impl, config.archivos.impl, config.push.impl]).toEqual(
+        ['falso', 'falso', 'falso', 'falso'],
+      );
+      expect(
+        falsosEnProduccion({ NODE_ENV: 'production', PERMITIR_FALSOS_EN_PRODUCCION: todos }),
+      ).toEqual(['PAC_IMPL', 'CORREO_IMPL', 'ARCHIVOS_IMPL', 'PUSH_IMPL']);
+      // Uno sin nombrar sigue abortando, y el mensaje nombra sólo a ése.
+      expect(() =>
+        leerAdaptadoresConfig({
+          NODE_ENV: 'production',
+          PERMITIR_FALSOS_EN_PRODUCCION: 'CORREO_IMPL,ARCHIVOS_IMPL,PUSH_IMPL',
+        }),
+      ).toThrow(/^PAC_IMPL=falso no se permite con NODE_ENV=production/);
+    });
+
+    it('PERMITIR_FALSOS_EN_PRODUCCION con un nombre que no es un puerto truena', () => {
+      expect(() =>
+        leerAdaptadoresConfig({
+          NODE_ENV: 'production',
+          PERMITIR_FALSOS_EN_PRODUCCION: 'todos',
+        }),
+      ).toThrow('PERMITIR_FALSOS_EN_PRODUCCION sólo acepta');
+    });
+
+    it('un puerto real no se reporta como falso aunque esté nombrado; fuera de producción, nada', () => {
+      expect(
+        falsosEnProduccion({
+          ...REALES,
+          NODE_ENV: 'production',
+          PERMITIR_FALSOS_EN_PRODUCCION: 'PAC_IMPL',
+        }),
+      ).toEqual([]);
+      expect(falsosEnProduccion({ PERMITIR_FALSOS_EN_PRODUCCION: 'PAC_IMPL' })).toEqual([]);
     });
 
     it('con las cuatro reales y sus credenciales, arranca', () => {

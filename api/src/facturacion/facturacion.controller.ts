@@ -34,6 +34,7 @@ import {
 } from './dto/codigo.dto';
 import { FacturacionService } from './facturacion.service';
 import { REGIMENES_FISCALES } from './sat';
+import { RequierePacConectado } from './pac-conectado.guard';
 
 const DESC_404 =
   'La empresa no existe o no está en tu alcance. Misma respuesta en todos los casos (nunca 403), ' +
@@ -108,6 +109,7 @@ export class FacturacionController {
   }
 
   @Post('perfil-fiscal/csd')
+  @RequierePacConectado()
   @HttpCode(200)
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({
