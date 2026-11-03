@@ -2488,6 +2488,42 @@ se registra sin tumbar el ciclo; y `SoloLecturaTests` sigue verde con las consul
 
 ---
 
+# MVP — PEDIDAS POR RICARDO EN SESIÓN INTERACTIVA
+
+Tareas que Ricardo pidió directamente (no salen de la cola nocturna). Se cierran con el mismo
+gate: `[x]` sólo tras merge confirmado a main.
+
+## MVP-01 · Cortes y meseros en vivo
+`[ ]` **MVP** · /agent + /api + /web + /docs · pedida por Ricardo el 3-nov-2026 · PR #83
+
+Lo que pidió el dueño para el MVP: cuánto se ha vendido (día, turno, mes), qué se vendió más,
+**los cortes (turnos)** que se han hecho, monitor de ventas en tiempo real, entrar a cada mesa y
+ver lo pedido en vivo, cola offline en el agente (sin internet o sin luz guarda y sube al
+volver) y **cuánto vende cada mesero en tiempo real**. Mucho ya existía (resumen, top productos,
+por mesero, mesas abiertas con detalle, cola local); esta tarea construye lo que faltaba:
+
+- Agente: lectura de `dbo.turnos` (`sr_turnos.sql`, NOLOCK, timeout corto) como evento `turno`
+  por la cola local; `idturno` de cada cheque como `turnoSr`; migración de `cola.db` (tipo
+  `turno`) y, en un regreso de versión, el watchdog aparta los tipos que la versión anterior no
+  conoce.
+- API: modelo `Turno` con upsert idempotente por `(sucursal_id, turno_sr)`, `cheques.turno_sr`,
+  `GET /cortes`, `/cortes/en-curso`, `/cortes/{id}` y `GET /ventas/meseros-en-vivo`.
+- Web: página Cortes, sección "En vivo · hoy" en Meseros y tarjeta "Turno en curso" en el Panel.
+
+**Listo cuando:** el agente manda los turnos y el turno de cada cheque, y reenviar el mismo lote
+tres veces deja los mismos datos; Cortes muestra la lista del periodo y el detalle de un corte
+(venta, cuentas, comensales, ticket, propinas, descuentos, canceladas, formas de pago, declarado
+vs cobrado, top productos), con el turno abierto como acumulado en curso, y su venta cuadra peso
+a peso con el Corte X de SR en un turno operado a mano; un corte cerrado antes de que el agente
+mandara turnos se marca como posiblemente incompleto; Meseros "En vivo" muestra cobrado + en
+curso por mesero y se actualiza solo (socket o 20 s); el Panel muestra el turno en curso; un
+visor de otra empresa recibe 404 en todos los endpoints nuevos; tras un corte de red o de luz
+los turnos y cheques llegan una vez; un rollback del agente no deja en la cola eventos que la
+versión anterior no entiende; OpenAPI y `docs/esquema-sr.md` al día; CI en verde (API, web y
+agente sin warnings).
+
+---
+
 # RONDA 3 — LO QUE FALTA (cosecha de F2-250)
 
 > **NO AUTORIZADA. Nada de esta sección está en la Cola nocturna.** La autorización del
