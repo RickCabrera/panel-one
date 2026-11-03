@@ -53,7 +53,7 @@ export class SucursalCodigoEnlaceController {
   @ApiOperation({
     summary: 'Genera el código de enlace del instalador de un clic para una sucursal.',
     description:
-      'Un código corto (`K7P-42X`) que el instalador cambia por la API key de la sucursal en ' +
+      'Un código corto (`K7P4-42XQ`) que el instalador cambia por la API key de la sucursal en ' +
       '`POST /agente/enlace`. Se devuelve UNA sola vez (en la base queda su hash), sirve UNA vez ' +
       'y vence a los 30 min. Generar otro invalida el anterior sin usar. Generarlo NO toca la ' +
       'key vigente: ésa se rota hasta que el instalador canjea el código.',
@@ -106,21 +106,22 @@ export class CanjeEnlaceController {
     summary: 'Cambia un código de enlace por la API key de su sucursal (instalador de un clic).',
     description:
       'Pública. Devuelve una API key NUEVA de la sucursal (la anterior deja de servir) y quema el ' +
-      'código: un segundo canje es 404. Límites: 20 por minuto por IP, 5 por código cada 15 min ' +
-      '(de cualquier IP) y, tras 10 códigos equivocados en una hora desde la misma IP, 429 por el ' +
-      'resto de esa hora. No existe, ya se usó, venció o la sucursal está dada de baja: el MISMO ' +
-      '404, y no cambia nada.',
+      'código: un segundo canje es 404. Límites (una IPv6 cuenta por su /64): 20 por minuto por ' +
+      'IP, 5 por código cada 15 min (de cualquier IP), tras 10 códigos equivocados en una hora ' +
+      'desde la misma IP 429 por el resto de esa hora, y un cortacircuito GLOBAL: con 100 códigos ' +
+      'equivocados en una hora entre todas las IPs, 429 para todos hasta que pase la hora. No ' +
+      'existe, ya se usó, venció o la sucursal está dada de baja: el MISMO 404, y no cambia nada.',
   })
   @ApiOkResponse({ type: EnlaceCanjeadoDto })
   @ApiBadRequestResponse({
     type: ErrorDto,
-    description: 'Sin `codigo`, o no tiene el formato (6 de A–Z y 2–9 sin O, 0, I, 1).',
+    description: 'Sin `codigo`, o no tiene el formato (8 de A–Z y 2–9 sin O, 0, I, 1).',
   })
   @ApiNotFoundResponse({
     type: ErrorDto,
     description: 'Código que no sirve. Mismo cuerpo siempre.',
   })
-  @ApiTooManyRequestsResponse({ description: 'Alguno de los tres límites.' })
+  @ApiTooManyRequestsResponse({ description: 'Alguno de los cuatro límites.' })
   canjear(@Body() dto: CanjeEnlaceDto, @Req() req: Request): Promise<EnlaceCanjeadoDto> {
     return this.servicio.canjear(dto.codigo, req.ip ?? 'desconocida');
   }

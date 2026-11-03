@@ -873,7 +873,7 @@
     },
     "/sucursales/{id}/codigo-enlace": {
       "post": {
-        "description": "Un código corto (`K7P-42X`) que el instalador cambia por la API key de la sucursal en `POST /agente/enlace`. Se devuelve UNA sola vez (en la base queda su hash), sirve UNA vez y vence a los 30 min. Generar otro invalida el anterior sin usar. Generarlo NO toca la key vigente: ésa se rota hasta que el instalador canjea el código.",
+        "description": "Un código corto (`K7P4-42XQ`) que el instalador cambia por la API key de la sucursal en `POST /agente/enlace`. Se devuelve UNA sola vez (en la base queda su hash), sirve UNA vez y vence a los 30 min. Generar otro invalida el anterior sin usar. Generarlo NO toca la key vigente: ésa se rota hasta que el instalador canjea el código.",
         "operationId": "SucursalCodigoEnlaceController_emitir",
         "parameters": [
           {
@@ -960,7 +960,7 @@
     },
     "/agente/enlace": {
       "post": {
-        "description": "Pública. Devuelve una API key NUEVA de la sucursal (la anterior deja de servir) y quema el código: un segundo canje es 404. Límites: 20 por minuto por IP, 5 por código cada 15 min (de cualquier IP) y, tras 10 códigos equivocados en una hora desde la misma IP, 429 por el resto de esa hora. No existe, ya se usó, venció o la sucursal está dada de baja: el MISMO 404, y no cambia nada.",
+        "description": "Pública. Devuelve una API key NUEVA de la sucursal (la anterior deja de servir) y quema el código: un segundo canje es 404. Límites (una IPv6 cuenta por su /64): 20 por minuto por IP, 5 por código cada 15 min (de cualquier IP), tras 10 códigos equivocados en una hora desde la misma IP 429 por el resto de esa hora, y un cortacircuito GLOBAL: con 100 códigos equivocados en una hora entre todas las IPs, 429 para todos hasta que pase la hora. No existe, ya se usó, venció o la sucursal está dada de baja: el MISMO 404, y no cambia nada.",
         "operationId": "CanjeEnlaceController_canjear",
         "parameters": [],
         "requestBody": {
@@ -985,7 +985,7 @@
             }
           },
           "400": {
-            "description": "Sin `codigo`, o no tiene el formato (6 de A–Z y 2–9 sin O, 0, I, 1).",
+            "description": "Sin `codigo`, o no tiene el formato (8 de A–Z y 2–9 sin O, 0, I, 1).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1005,7 +1005,7 @@
             }
           },
           "429": {
-            "description": "Alguno de los tres límites."
+            "description": "Alguno de los cuatro límites."
           }
         },
         "summary": "Cambia un código de enlace por la API key de su sucursal (instalador de un clic).",
@@ -14026,7 +14026,7 @@
           },
           "codigo": {
             "type": "string",
-            "example": "K7P-42X",
+            "example": "K7P4-42XQ",
             "description": "El código para el instalador de un clic, con guión. Se muestra SÓLO en esta respuesta: en la base queda su hash. Sirve una vez y vence en `expiraAt`."
           },
           "expiraAt": {
@@ -14052,7 +14052,7 @@
         "properties": {
           "codigo": {
             "type": "string",
-            "example": "K7P-42X",
+            "example": "K7P4-42XQ",
             "description": "El código del panel. Acepta minúsculas, espacios y con o sin guión."
           }
         },

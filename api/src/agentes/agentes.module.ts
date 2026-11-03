@@ -13,6 +13,8 @@ import { ApiKeyService } from './api-key.service';
 import { CanjeEnlaceController, SucursalCodigoEnlaceController } from './codigo-enlace.controller';
 import {
   CodigoEnlaceService,
+  LIMITES_ENLACE,
+  LIMITES_ENLACE_POR_DEFECTO,
   LimiteFallosEnlace,
   URL_PUBLICA_API,
 } from './codigo-enlace.service';
@@ -49,6 +51,7 @@ import { SucursalApiKeyController } from './sucursal-api-key.controller';
     CodigoEnlaceService,
     LimiteFallosEnlace,
     { provide: URL_PUBLICA_API, useFactory: () => leerUrlPublicaApi() },
+    { provide: LIMITES_ENLACE, useValue: LIMITES_ENLACE_POR_DEFECTO },
   ],
   exports: [AgentesAuthService, AgentAuthGuard],
 })

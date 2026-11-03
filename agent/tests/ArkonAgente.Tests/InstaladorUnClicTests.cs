@@ -167,15 +167,15 @@ public class InstaladorUnClicTests
     }
 
     [Theory]
-    [InlineData("K7P-42X", "K7P42X", true)]
-    [InlineData(" k7p 42x ", "K7P42X", true)]
-    [InlineData("k7p42x", "K7P42X", true)]
-    [InlineData("K7P-42", "K7P42", false)]
-    [InlineData("K7P-42XX", "K7P42XX", false)]
-    [InlineData("O7P-42X", "O7P42X", false)]
-    [InlineData("K7P-I2X", "K7PI2X", false)]
-    [InlineData("K1P-42X", "K1P42X", false)]
-    [InlineData("K7P_42X", "K7P_42X", false)]
+    [InlineData("K7P4-42XQ", "K7P442XQ", true)]
+    [InlineData(" k7p4 42xq ", "K7P442XQ", true)]
+    [InlineData("k7p442xq", "K7P442XQ", true)]
+    [InlineData("K7P-42X", "K7P42X", false)]
+    [InlineData("K7P4-42XQQ", "K7P442XQQ", false)]
+    [InlineData("O7P4-42XQ", "O7P442XQ", false)]
+    [InlineData("K7P4-I2XQ", "K7P4I2XQ", false)]
+    [InlineData("K1P4-42XQ", "K1P442XQ", false)]
+    [InlineData("K7P4_42XQ", "K7P4_42XQ", false)]
     public void El_codigo_de_enlace_se_normaliza_y_valida_igual_que_en_la_API(string tecleado, string normalizado, bool valido)
     {
         var salida = Ps($$"""
@@ -267,7 +267,7 @@ public class InstaladorUnClicTests
             "{\"sucursalId\":\"f1011000-0000-4000-8000-0000000000a1\",\"sucursal\":\"Centro\",\"apiKey\":\"msr_key-sintetica_123\",\"apiUrl\":\"https://publica.ejemplo.test/api\"}"));
 
         var salida = Ps($$"""
-            $r = Invoke-CanjeCodigoEnlace -ApiUrl '{{api.Url}}/' -Codigo ' k7p-42x '
+            $r = Invoke-CanjeCodigoEnlace -ApiUrl '{{api.Url}}/' -Codigo ' k7p4-42xq '
             "OK|$($r.Ok)|$($r.ApiKey)|$($r.ApiUrl)|$($r.Sucursal)|$($r.Estado)"
             """);
 
@@ -276,7 +276,7 @@ public class InstaladorUnClicTests
         Assert.Equal("POST", peticion.Metodo);
         Assert.Equal("/agente/enlace", peticion.Ruta);
         Assert.StartsWith("application/json", peticion.ContentType);
-        Assert.Equal("K7P42X", JsonDocument.Parse(peticion.Cuerpo).RootElement.GetProperty("codigo").GetString());
+        Assert.Equal("K7P442XQ", JsonDocument.Parse(peticion.Cuerpo).RootElement.GetProperty("codigo").GetString());
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public class InstaladorUnClicTests
         using var api = new ApiEnlaceFalsa(_ => (200, "{\"sucursal\":\"Centro\",\"apiKey\":\"msr_otra\",\"apiUrl\":null}"));
 
         var salida = Ps($$"""
-            $r = Invoke-CanjeCodigoEnlace -ApiUrl '{{api.Url}}' -Codigo 'K7P-42X'
+            $r = Invoke-CanjeCodigoEnlace -ApiUrl '{{api.Url}}' -Codigo 'K7P4-42XQ'
             "OK|$($r.Ok)|$($r.ApiUrl)"
             """);
 
@@ -303,7 +303,7 @@ public class InstaladorUnClicTests
         using var api = new ApiEnlaceFalsa(_ => (estado, cuerpo));
 
         var salida = Ps($$"""
-            $r = Invoke-CanjeCodigoEnlace -ApiUrl '{{api.Url}}' -Codigo 'K7P-42X'
+            $r = Invoke-CanjeCodigoEnlace -ApiUrl '{{api.Url}}' -Codigo 'K7P4-42XQ'
             "R|$($r.Ok)|$($r.Estado)|$($null -eq $r.ApiKey)"
             "M|$($r.Mensaje)"
             """);
@@ -318,7 +318,7 @@ public class InstaladorUnClicTests
         var url = $"http://127.0.0.1:{ApiEnlaceFalsa.PuertoLibre()}";
 
         var salida = Ps($$"""
-            $r = Invoke-CanjeCodigoEnlace -ApiUrl '{{url}}' -Codigo 'K7P-42X' -TimeoutSegundos 5
+            $r = Invoke-CanjeCodigoEnlace -ApiUrl '{{url}}' -Codigo 'K7P4-42XQ' -TimeoutSegundos 5
             "R|$($r.Ok)|$($null -eq $r.Estado)"
             "M|$($r.Mensaje)"
             """);

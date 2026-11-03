@@ -253,7 +253,7 @@ describe('Sucursales', () => {
   });
 
   it('Conectar sucursal: genera el código al confirmar, lo muestra con su vigencia y los 3 pasos, y no queda en ningún lado', async () => {
-    const CODIGO = 'K7P-42X';
+    const CODIGO = 'K7P4-42XQ';
     const api = apiAdmin('admin_empresa', {
       'GET /sucursales': () => json(200, [SUCURSAL_A1, { ...SUCURSAL_A2, activo: false }]),
       [`POST /sucursales/${SUCURSAL_A1.id}/codigo-enlace`]: () =>
@@ -314,7 +314,7 @@ describe('Sucursales', () => {
       [`POST /sucursales/${SUCURSAL_A1.id}/codigo-enlace`]: () =>
         json(201, {
           sucursalId: SUCURSAL_A1.id,
-          codigo: n++ === 0 ? 'AAA-AAA' : 'BBB-BBB',
+          codigo: n++ === 0 ? 'AAAA-AAAA' : 'BBBB-BBBB',
           expiraAt:
             n === 1
               ? new Date(Date.now() - 1000).toISOString()
@@ -330,7 +330,7 @@ describe('Sucursales', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Venció');
     await userEvent.click(screen.getByRole('button', { name: 'Generar otro' }));
-    await waitFor(() => expect(screen.getByTestId('codigo-enlace')).toHaveTextContent('BBB-BBB'));
+    await waitFor(() => expect(screen.getByTestId('codigo-enlace')).toHaveTextContent('BBBB-BBBB'));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(api.contar('POST', `/sucursales/${SUCURSAL_A1.id}/codigo-enlace`)).toBe(2);
   });

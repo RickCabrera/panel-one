@@ -6,7 +6,7 @@ caja principal). El agente sólo LEE SoftRestaurant: nunca escribe ni cambia nad
 en el punto de venta.
 
 1. En el panel: Administración > Sucursales > "Conectar sucursal" en la fila de
-   esta sucursal > "Generar código". Te da un código como K7P-42X. Sirve una sola
+   esta sucursal > "Generar código". Te da un código como K7P4-42XQ. Sirve una sola
    vez y vence en 30 minutos.
 
 2. En esta PC: si todavía no lo hiciste, extrae el .zip (clic derecho > Extraer

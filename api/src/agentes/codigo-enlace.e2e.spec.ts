@@ -10,7 +10,16 @@ import { TokensService } from '../auth/tokens.service';
 import { configurarApp } from '../configurar-app';
 import { hashApiKey, PREFIJO_API_KEY } from './api-key';
 import { hashCodigoEnlace, normalizarCodigoEnlace, VIGENCIA_ENLACE_MS } from './codigo-enlace';
-import { FALLOS_ENLACE_POR_IP, URL_PUBLICA_API } from './codigo-enlace.service';
+import {
+  LIMITES_ENLACE,
+  LIMITES_ENLACE_POR_DEFECTO,
+  MENSAJE_CORTACIRCUITO,
+  MENSAJE_IP_BLOQUEADA,
+  URL_PUBLICA_API,
+  type LimitesEnlace,
+} from './codigo-enlace.service';
+
+const FALLOS_ENLACE_POR_IP = LIMITES_ENLACE_POR_DEFECTO.fallosPorIp;
 
 // E2E del instalador de un clic sobre la app REAL (AppModule + configurarApp) contra Postgres
 // REAL, con las fixtures sintéticas de F1-011. Cada bloque que cuenta límites levanta SU app:
@@ -33,10 +42,15 @@ describe('Código de enlace del instalador de un clic (e2e)', () => {
   const prisma = new PrismaClient();
   const apps: INestApplication[] = [];
 
-  async function app(urlPublica: string | null = URL_PUBLICA): Promise<INestApplication> {
+  async function app(
+    urlPublica: string | null = URL_PUBLICA,
+    limites: LimitesEnlace = LIMITES_ENLACE_POR_DEFECTO,
+  ): Promise<INestApplication> {
     const modulo = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(URL_PUBLICA_API)
       .useValue(urlPublica)
+      .overrideProvider(LIMITES_ENLACE)
+      .useValue(limites)
       .compile();
     const nueva = configurarApp(modulo.createNestApplication<NestExpressApplication>(), {
       TRUST_PROXY_SALTOS: '1',
@@ -96,7 +110,7 @@ describe('Código de enlace del instalador de un clic (e2e)', () => {
       a = await app();
     });
 
-    it('admin_empresa emite el de su sucursal: 201, formato K7P-42X, 30 min, en la base sólo el hash, y la key vigente intacta', async () => {
+    it('admin_empresa emite el de su sucursal: 201, formato K7P4-42XQ, 30 min, en la base sólo el hash, y la key vigente intacta', async () => {
       const antes = await hashKey(FX.sucursalA1);
       const res = await emitir(a, FX.sucursalA1, USUARIOS.adminEmpresaA);
 
@@ -104,7 +118,7 @@ describe('Código de enlace del instalador de un clic (e2e)', () => {
       expect(res.headers['cache-control']).toBe('no-store');
       expect(res.body).toEqual({
         sucursalId: FX.sucursalA1,
-        codigo: expect.stringMatching(/^[A-HJ-NP-Z2-9]{3}-[A-HJ-NP-Z2-9]{3}$/),
+        codigo: expect.stringMatching(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/),
         expiraAt: expect.any(String),
         vigenciaSegundos: 1800,
       });
@@ -249,7 +263,7 @@ describe('Código de enlace del instalador de un clic (e2e)', () => {
 
     it('acepta minúsculas, espacios y sin guión', async () => {
       const codigo = await codigoDe(a, FX.sucursalA1);
-      const tecleado = ` ${codigo.replace('-', '').toLowerCase().slice(0, 3)} ${codigo.slice(4).toLowerCase()} `;
+      const tecleado = ` ${codigo.slice(0, 4).toLowerCase()} ${codigo.slice(5).toLowerCase()} `;
       expect((await canjear(a, tecleado)).status).toBe(200);
     });
 
@@ -265,7 +279,7 @@ describe('Código de enlace del instalador de un clic (e2e)', () => {
       const antes = await hashKey(FX.sucursalA1);
 
       const vencido = await canjear(a, codigo);
-      const inexistente = await canjear(a, 'ZZZ-ZZZ');
+      const inexistente = await canjear(a, 'ZZZZ-ZZZZ');
 
       expect(vencido.status).toBe(404);
       expect(inexistente.status).toBe(404);
@@ -287,17 +301,17 @@ describe('Código de enlace del instalador de un clic (e2e)', () => {
     });
 
     it('formato inválido → 400 sin buscar nada; sin código o con campos de más → 400', async () => {
-      for (const malo of ['K7P-42', 'K7P-42XX', 'O0I-1AB', 'K7P_42X']) {
+      for (const malo of ['K7P-42X', 'K7P4-42XQQ', 'O0I1-1ABC', 'K7P4_42XQ']) {
         const res = await canjear(a, malo);
         expect(res.status).toBe(400);
-        expect(res.body.message).toContain('6 letras y números');
+        expect(res.body.message).toContain('8 letras y números');
       }
       expect((await canjear(a, undefined)).status).toBe(400);
       expect((await canjear(a, 1234567)).status).toBe(400);
       await request(a.getHttpServer())
         .post('/agente/enlace')
         .set('X-Forwarded-For', ipNueva())
-        .send({ codigo: 'K7P-42X', sucursalId: FX.sucursalB1 })
+        .send({ codigo: 'K7P4-42XQ', sucursalId: FX.sucursalB1 })
         .expect(400);
     });
 
@@ -317,11 +331,12 @@ describe('Código de enlace del instalador de un clic (e2e)', () => {
       const bueno = await codigoDe(a, FX.sucursalA1);
       for (let i = 0; i < FALLOS_ENLACE_POR_IP; i++) {
         // Códigos distintos: cada uno en su cubo de código, para medir sólo el de fallos.
-        const res = await canjear(a, `ZZZ-Z${'23456789ABCDEFGH'[i]}${'Z'}`, ip);
+        const res = await canjear(a, `ZZZZ-ZZZ${'23456789ABCDEFGH'[i]}`, ip);
         expect(res.status).toBe(404);
       }
       const bloqueada = await canjear(a, bueno, ip);
       expect(bloqueada.status).toBe(429);
+      expect(bloqueada.body.message).toBe(MENSAJE_IP_BLOQUEADA);
       expect((await filas(FX.sucursalA1))[0].usadoAt).toBeNull();
       expect((await canjear(a, bueno, ipNueva())).status).toBe(200);
     });
@@ -338,11 +353,47 @@ describe('Código de enlace del instalador de un clic (e2e)', () => {
     it('5 intentos por código cada 15 min, de cualquier IP: el sexto → 429', async () => {
       const a = await app();
       for (let i = 0; i < 5; i++) {
-        expect((await canjear(a, 'XYZ-234', ipNueva())).status).toBe(404);
+        expect((await canjear(a, 'XYZW-2345', ipNueva())).status).toBe(404);
       }
       // El mismo código escrito distinto cae en el mismo cubo.
-      expect((await canjear(a, 'xyz234', ipNueva())).status).toBe(429);
-      expect((await canjear(a, 'XYZ-235', ipNueva())).status).toBe(404);
+      expect((await canjear(a, 'xyzw2345', ipNueva())).status).toBe(429);
+      expect((await canjear(a, 'XYZW-2346', ipNueva())).status).toBe(404);
+    });
+
+    it('IPv6: todo el /64 cuenta como UNA IP para los fallos; otro /64 sigue', async () => {
+      const a = await app();
+      const bueno = await codigoDe(a, FX.sucursalA1);
+      for (let i = 0; i < FALLOS_ENLACE_POR_IP; i++) {
+        // Una dirección distinta del mismo /64 en cada intento.
+        const res = await canjear(
+          a,
+          `ZZZZ-YYY${'23456789ABCDEFGH'[i]}`,
+          `2001:db8:aa:bb::${i + 1}`,
+        );
+        expect(res.status).toBe(404);
+      }
+      const mismoPrefijo = await canjear(a, bueno, '2001:db8:aa:bb:ffff:ffff:ffff:fffe');
+      expect(mismoPrefijo.status).toBe(429);
+      expect((await canjear(a, bueno, '2001:db8:aa:bc::1')).status).toBe(200);
+    });
+
+    it('cortacircuito GLOBAL: pasado el tope de fallos de todas las IPs, 429 para TODOS (aun con un código bueno), sin quemarlo', async () => {
+      const a = await app(URL_PUBLICA, {
+        fallosPorIp: 10,
+        fallosGlobales: 4,
+        ventanaMs: 60 * 60 * 1000,
+      });
+      const bueno = await codigoDe(a, FX.sucursalA2);
+      for (let i = 0; i < 4; i++) {
+        // Cada fallo desde otra IP: ninguna llega a su tope propio.
+        expect((await canjear(a, `WWWW-WWW${'23456789'[i]}`, ipNueva())).status).toBe(404);
+      }
+      const res = await canjear(a, bueno, ipNueva());
+      expect(res.status).toBe(429);
+      expect(res.body.message).toBe(MENSAJE_CORTACIRCUITO);
+      expect((await filas(FX.sucursalA2))[0].usadoAt).toBeNull();
+      // Otra instancia (otra ventana) sí lo deja pasar: el código seguía vivo.
+      expect((await canjear(await app(), bueno, ipNueva())).status).toBe(200);
     });
 
     it('20 por minuto por IP: el 21 → 429', async () => {

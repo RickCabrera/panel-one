@@ -280,8 +280,8 @@ function ConvertTo-ServidorLocal {
 # --- Instalador de un clic: código de enlace, contraseña y paquete (puras) -------------
 
 # El código de enlace que da el panel (Administración > Sucursales > Conectar sucursal): 6 de
-# A-Z y 2-9 sin O, 0, I, 1, mostrado como K7P-42X. La misma regla que la API (codigo-enlace.ts).
-$script:RegexCodigoEnlace = '^[A-HJ-NP-Z2-9]{6}$'
+# A-Z y 2-9 sin O, 0, I, 1, mostrado como K7P4-42XQ. La misma regla que la API (codigo-enlace.ts).
+$script:RegexCodigoEnlace = '^[A-HJ-NP-Z2-9]{8}$'
 
 # Lo que alguien teclea: sin espacios ni guiones, en mayúsculas.
 function ConvertTo-CodigoEnlace {
@@ -296,7 +296,7 @@ function Test-CodigoEnlace {
 
     $codigo = ConvertTo-CodigoEnlace $Texto
     if ($codigo -cnotmatch $script:RegexCodigoEnlace) {
-        return 'El código tiene 6 letras y números, como K7P-42X (no lleva O, 0, I ni 1). Revísalo en el panel.'
+        return 'El código tiene 8 letras y números, como K7P4-42XQ (no lleva O, 0, I ni 1). Revísalo en el panel.'
     }
     return $null
 }
@@ -510,8 +510,55 @@ function Invoke-CrearLectorSql {
     }
 }
 
+# Sólo LEE: ¿el login monitor_lector ya entra con ESTA contraseña? (SELECT 1 en master). Sirve
+# para saber, tras un crear-usuario-lector.sql que falló a medias (ALTER LOGIN sí, CREATE USER o
+# sp_addrolemember no), cuál contraseña vale: no dejar en config.json una que el SQL ya no acepta.
+# La contraseña va por SQLCMDPASSWORD (nunca en la línea de comando) y se restaura la anterior.
+function Test-LoginLector {
+    param(
+        [Parameter(Mandatory)] [string] $Sqlcmd,
+        [Parameter(Mandatory)] [string] $Servidor,
+        [Parameter(Mandatory)] [string] $Password
+    )
+
+    $previa = $env:SQLCMDPASSWORD
+    $env:SQLCMDPASSWORD = $Password
+    try {
+        $argumentos = Get-ArgumentosSqlcmd -Servidor $Servidor -UsuarioAdmin $script:UsuarioLectorPorDefecto `
+            -Extra @('-b', '-l', '10', '-t', '10', '-d', 'master', '-Q', 'SET NOCOUNT ON; SELECT 1;')
+        return ((Invoke-ProgramaSqlcmd -Sqlcmd $Sqlcmd -Argumentos $argumentos).Codigo -eq 0)
+    }
+    catch {
+        return $false
+    }
+    finally {
+        if ($null -ne $previa) { $env:SQLCMDPASSWORD = $previa }
+        else { Remove-Item Env:\SQLCMDPASSWORD -ErrorAction SilentlyContinue }
+    }
+}
+
+# DECISION PROVISIONAL (nocturno): ¿el servicio no arrancó porque su cuenta no pudo INICIAR
+# SESIÓN? Errores de Windows 1069 (ERROR_SERVICE_LOGON_FAILED) y 1079 (la cuenta difiere de la de
+# otros servicios del mismo proceso), en la excepción o en cualquiera de sus internas (Start-Service
+# envuelve la Win32Exception). Es el ÚNICO caso en que el instalador de un clic reintenta con
+# LocalSystem: más privilegios no arreglan ninguna otra caída. Sin verificar en Windows (F1-020b).
+function Test-FallaInicioSesionServicio {
+    param([AllowNull()] $Excepcion)
+
+    $e = $Excepcion
+    while ($null -ne $e) {
+        if ($e -is [System.ComponentModel.Win32Exception] -and
+            ($e.NativeErrorCode -eq 1069 -or $e.NativeErrorCode -eq 1079)) {
+            return $true
+        }
+        $e = $e.InnerException
+    }
+    return $false
+}
+
 # sqlcmd viene con SQL Server (también con el Express de SoftRestaurant) pero no siempre
 # está en el PATH.
+# ⚠️ SUPUESTO (docs/esquema-sr.md §11): el SQL Express de SoftRestaurant trae sqlcmd.
 function Find-Sqlcmd {
     $comando = Get-Command 'sqlcmd.exe' -ErrorAction SilentlyContinue
     if ($comando) { return $comando.Source }
@@ -569,7 +616,7 @@ function Invoke-CanjeCodigoEnlace {
             'El código no sirve: está mal escrito, ya se usó o ya venció (dura 30 minutos). Genera uno nuevo en el panel: Administración > Sucursales > Conectar sucursal.'
         }
         elseif ($estado -eq 400) {
-            'El panel dice que el código no tiene el formato correcto. Cópialo otra vez del panel (6 letras y números, como K7P-42X).'
+            'El panel dice que el código no tiene el formato correcto. Cópialo otra vez del panel (8 letras y números, como K7P4-42XQ).'
         }
         elseif ($estado -eq 429) {
             'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentar; si sigue, llama a soporte.'

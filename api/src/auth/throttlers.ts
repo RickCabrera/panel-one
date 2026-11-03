@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { SkipThrottle, type ThrottlerOptions } from '@nestjs/throttler';
 
 import { THROTTLER_AGENTE } from '../agentes/throttle-agente';
-import { normalizarCodigoEnlace } from '../agentes/codigo-enlace';
+import { claveIp, normalizarCodigoEnlace } from '../agentes/codigo-enlace';
 
 /**
  * Throttlers por IP de las rutas de usuario. Todos se registran en el mismo
@@ -160,11 +160,14 @@ export const OPCIONES_THROTTLER_ENLACE: ThrottlerOptions = {
   name: THROTTLER_ENLACE,
   ttl: 60_000,
   limit: 20,
+  // IPv6 agrupada por /64 (`claveIp`): un cliente tiene el /64 entero.
+  getTracker: (req) => claveIp((req as { ip?: string }).ip ?? ''),
+  generateKey: (_ctx, ip, nombre) => createHash('sha256').update(`${nombre}-${ip}`).digest('hex'),
 };
 
 /**
  * `POST /agente/enlace`, ADEMÁS del de IP: 5 intentos por CÓDIGO cada 15 minutos, vengan de la
- * IP que vengan. La llave es el hash del código normalizado (`K7P-42X` y `k7p42x` cuentan
+ * IP que vengan. La llave es el hash del código normalizado (`K7P4-42XQ` y `k7p442xq` cuentan
  * juntos), nunca el código en claro. Un cuerpo sin código cuenta en un mismo cubo.
  */
 export const OPCIONES_THROTTLER_ENLACE_CODIGO: ThrottlerOptions = {

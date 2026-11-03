@@ -2615,6 +2615,34 @@ Supuestos del instalador (⚠️ ninguno visto funcionando):
   vista `public` no escribe, así que no se agregó. El script sí **avisa** (sin abortar) si
   `public` tiene INSERT/UPDATE/DELETE/EXECUTE/ALTER/CONTROL.
 
+#### Detección del instalador de un clic (`instalar-un-clic.ps1`)
+
+El instalador de un clic encuentra solo el SQL Server y la base de SR, y crea el lector con el
+mismo `crear-usuario-lector.sql`. Lo que supone del POS (⚠️ nada de esto se ha visto funcionar
+en una PC de restaurante; sólo con piezas falsas en los tests):
+
+- ⚠️ **SUPUESTO — el SQL de SR es un servicio `MSSQLSERVER` (instancia por defecto, `.`) o
+  `MSSQL$<INSTANCIA>` (`.\<INSTANCIA>`) de ESTA PC, corriendo.** En la instalación vista es
+  `MSSQL$NATIONALSOFT` → `.\NATIONALSOFT`. **Fallback:** sin ninguno corriendo, se detiene sin
+  cambiar nada; con varios, se queda con el único que tenga una base `softrestaurant*` y, si no
+  hay uno solo, pregunta cuál (lista numerada). `-Servidor` lo fija a mano.
+- ⚠️ **SUPUESTO — la base de SR se llama `softrestaurant*`** (sin distinguir mayúsculas; la
+  vista es `softrestaurant10`). **Fallback:** con varias, pregunta cuál; con ninguna, muestra
+  todas las bases de usuario y pregunta; `-Base` la fija a mano.
+- ⚠️ **SUPUESTO — `sqlcmd` viene con el SQL Express de SR** (en el PATH, o en
+  `Program Files*\Microsoft SQL Server\...\Tools\Binn\`). **Fallback:** sin él, se detiene sin
+  cambiar nada y manda a soporte (el modo manual tiene la alternativa con SSMS).
+- ⚠️ **SUPUESTO — tu usuario de Windows es administrador del SQL** (como en la instalación
+  vista). Antes de gastar el código se revisa, sólo leyendo, `HAS_PERMS_BY_NAME(NULL, NULL,
+  'ALTER ANY LOGIN')` × `HAS_PERMS_BY_NAME('<base>', 'DATABASE', 'ALTER ANY USER')` y
+  `SERVERPROPERTY('IsIntegratedSecurityOnly')`. **Fallback:** si no entra o no le alcanza, pide la
+  contraseña de `sa` (sólo para crear el lector, por `SQLCMDPASSWORD`, nunca se guarda); si el
+  servidor es "sólo Windows", se detiene sin cambiar nada.
+- ⚠️ **SUPUESTO — un `crear-usuario-lector.sql` que falla después del `ALTER LOGIN`** deja puesta
+  la contraseña nueva (el script no es transaccional). El instalador lo comprueba con un `SELECT 1`
+  en `master` como `monitor_lector` (sólo lectura) y escribe en `config.json` la contraseña que el
+  SQL de verdad acepta.
+
 ---
 
 ## 12. Rarezas
@@ -2988,7 +3016,10 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 | `agent/README.md#1` | 180 | F1-026 | Servicio corre con cuenta virtual `NT SERVICE\ArkonAgente` por defecto; nunca probado como servicio; fallback `-CuentaServicio LocalSystem`. | SR | §11, §14 «Agente: cuenta del servicio» |
 | `agent/README.md#2` | 430 | F2-143 | El servicio actualizador corre como LocalSystem, sin verificar con elevación (F1-020b). | SR | §11, §14 «Agente: cuenta del servicio» |
 | `agent/instalador/funciones-instalador.ps1#1` | 237 | F2-143 | El servicio actualizador corre como LocalSystem, sin verificar con elevación (F1-020b). | panel | §11, §14 «Agente: cuenta del servicio» |
+| `agent/instalador/funciones-instalador.ps1#2` | 540 | un clic | Instalador de un clic: sólo una falla de INICIO DE SESIÓN del servicio (Win32 1069/1079) reintenta con LocalSystem; ninguna otra caída. Sin verificar en Windows (F1-020b). | SR | §11 «Detección del instalador de un clic», §14 «Agente: cuenta del servicio» |
+| `agent/instalador/instalar-un-clic.ps1#1` | 416 | un clic | Instalador de un clic: sólo una falla de INICIO DE SESIÓN del servicio (Win32 1069/1079) reintenta con LocalSystem; ninguna otra caída. Sin verificar en Windows (F1-020b). | SR | §11 «Detección del instalador de un clic», §14 «Agente: cuenta del servicio» |
 | `agent/instalador/instalar.ps1#1` | 248 | F1-026 | Servicio corre con cuenta virtual `NT SERVICE\ArkonAgente` por defecto; nunca probado como servicio; fallback `-CuentaServicio LocalSystem`. | panel | §11, §14 «Agente: cuenta del servicio» |
+| `agent/instalador/instalar.ps1#2` | 297 | un clic | Instalador de un clic: sólo una falla de INICIO DE SESIÓN del servicio (Win32 1069/1079) reintenta con LocalSystem; ninguna otra caída. Sin verificar en Windows (F1-020b). | SR | §11 «Detección del instalador de un clic», §14 «Agente: cuenta del servicio» |
 | `agent/src/ArkonAgente/Actualizacion/ServicioActualizador.cs#1` | 70 | F2-143 | Un proceso "agente" que no se puede inspeccionar cuenta como corriendo (no arrancar otro encima). | panel | §14 «Agente: cuenta del servicio» |
 | `agent/src/ArkonAgente/ArkonAgente.csproj#1` | 16 | F1-020 | `InvariantGlobalization=false`: SR guarda varchar CP1252 (Modern_Spanish_CI_AS). | SR | §11 |
 | `agent/src/ArkonAgente/Catalogos/MapeoCatalogos.cs#1` | 228 | F2-240 | Producto con varias filas de `productosdetalle` distintas → precio y estado nulos, con aviso. | SR | §6 |

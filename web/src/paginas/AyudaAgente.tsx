@@ -36,8 +36,8 @@ export function AyudaAgente() {
             >
               Administración › Sucursales
             </Link>{' '}
-            › <em>Conectar sucursal</em>. Es un código como <code>K7P-42X</code>: sirve una sola vez
-            y vence en 30 minutos.
+            › <em>Conectar sucursal</em>. Es un código como <code>K7P4-42XQ</code>: sirve una sola
+            vez y vence en 30 minutos.
           </li>
           <li>
             <strong>En la PC del SQL Server de SoftRestaurant</strong> (casi siempre la caja

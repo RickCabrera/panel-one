@@ -61,8 +61,9 @@
 
 .PARAMETER DesdeUnClic
     INTERNO: lo pasa instalar-un-clic.ps1. No imprime los consejos finales de este script (el de
-    un clic imprime los suyos) y, si el servicio no arranca o se cae, sale con 4 en vez de 3
-    para que el de un clic pueda reintentar con LocalSystem.
+    un clic imprime los suyos) y, SÓLO si el servicio no arranca porque su cuenta no pudo iniciar
+    sesión (errores 1069/1079), sale con 4 en vez de 3 para que el de un clic reintente con
+    LocalSystem.
 #>
 [CmdletBinding()]
 param(
@@ -293,7 +294,12 @@ function Invoke-Instalacion {
     catch {
         Write-Problema "El servicio no arrancó: $($_.Exception.Message)"
         Write-UltimoLog
-        if ($DesdeUnClic) { return 4 }
+        # DECISION PROVISIONAL (nocturno): 4 sólo si fue una falla de INICIO DE SESIÓN del servicio
+        # (1069/1079): es lo único que el de un clic reintenta con LocalSystem.
+        if ($DesdeUnClic) {
+            if (Test-FallaInicioSesionServicio $_.Exception) { return 4 }
+            return 3
+        }
         if ($CuentaServicio -eq 'Virtual') {
             Write-Problema 'Prueba con la otra cuenta:  .\instalar.ps1 -CuentaServicio LocalSystem'
         }
@@ -312,7 +318,8 @@ function Invoke-Instalacion {
     if ($estado -ne 'Running') {
         Write-Problema "El servicio se detuvo después de arrancar (estado: $estado)."
         Write-UltimoLog
-        if ($DesdeUnClic) { return 4 }
+        # Arrancó, así que la cuenta sí inició sesión: no es caso de reintentar con LocalSystem.
+        if ($DesdeUnClic) { return 3 }
         if ($CuentaServicio -eq 'Virtual') {
             Write-Problema 'Prueba con la otra cuenta:  .\instalar.ps1 -CuentaServicio LocalSystem'
         }

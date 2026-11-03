@@ -7,7 +7,7 @@ export class CodigoEnlaceEmitidoDto {
   sucursalId!: string;
 
   @ApiProperty({
-    example: 'K7P-42X',
+    example: 'K7P4-42XQ',
     description:
       'El código para el instalador de un clic, con guión. Se muestra SÓLO en esta respuesta: ' +
       'en la base queda su hash. Sirve una vez y vence en `expiraAt`.',
@@ -24,7 +24,7 @@ export class CodigoEnlaceEmitidoDto {
 /** Cuerpo de `POST /agente/enlace`. */
 export class CanjeEnlaceDto {
   @ApiProperty({
-    example: 'K7P-42X',
+    example: 'K7P4-42XQ',
     description: 'El código del panel. Acepta minúsculas, espacios y con o sin guión.',
   })
   @IsString()

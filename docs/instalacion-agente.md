@@ -35,7 +35,7 @@ Hay dos caminos:
 
 1. En el panel: **Administración** › **Sucursales**.
 2. En la fila de la sucursal, **Conectar sucursal** › **Generar código**.
-3. Sale un código como **`K7P-42X`**, con lo que le queda de vida. **Sirve una sola vez y vence
+3. Sale un código como **`K7P4-42XQ`**, con lo que le queda de vida. **Sirve una sola vez y vence
    en 30 minutos.** Si vence o se pierde, genera otro (el anterior deja de servir).
 
 Generar el código **no** corta al agente si la sucursal ya lo tenía instalado: sigue reportando
@@ -79,13 +79,24 @@ El recuadro dice qué pasó y qué hacer. Los casos más comunes:
 |---|---|---|
 | "El código no sirve: está mal escrito, ya se usó o ya venció" | Nada | Te deja escribir otro (hasta 3 veces). Genera uno nuevo en el panel. |
 | "No pude llegar al panel" | Nada | La PC no tiene internet o un firewall bloquea el panel. Ver el [checklist de red](#checklist-de-firewall-y-red). |
-| "Demasiados intentos" | Nada | Espera unos minutos (el panel limita los intentos para que nadie adivine códigos). |
+| "Demasiados intentos" / "Demasiados códigos equivocados desde esta red" | Nada | Espera unos minutos (o una hora). El panel limita los intentos para que nadie adivine códigos. |
+| "El panel … pausó la conexión de sucursales por seguridad" | Nada | Alguien está probando códigos al azar contra el panel y se pausó para todos (hasta una hora). Intenta más tarde o llama a soporte. |
 | "No encontré un SQL Server funcionando en esta PC" | Nada | No es la PC del SQL Server de SoftRestaurant. |
 | "Este SQL Server sólo acepta usuarios de Windows" | Nada (ni se usó el código) | **No lo cambies tú**: cambiarlo reinicia el SQL de SoftRestaurant y la caja deja de cobrar. Llama a soporte. |
 | "… no puede crear usuarios en ese SQL Server" | Nada (ni se usó el código) | Hace falta la contraseña de `sa` o de otro administrador del SQL. Llama a soporte. |
-| "No se pudo crear el usuario de solo lectura" (con un mensaje `ALTO`) | El código sí se usó | Alguien ya creó `monitor_lector` con más permisos de los debidos. Llama a soporte. Si el agente ya estaba instalado, siguió funcionando con la llave nueva. |
+| "No se pudo crear el usuario de solo lectura" (con un mensaje `ALTO`) | El código sí se usó | Alguien ya creó `monitor_lector` con más permisos de los debidos. Llama a soporte. |
 | "El agente quedó instalado, pero falla una conexión" | Quedó instalado | La línea `[FALLA]` de arriba dice cuál y qué revisar. El agente reintenta solo cada minuto. |
-| "El servicio de Windows del agente no arrancó" | Quedó instalado | Llama a soporte con una foto de la ventana. |
+| "El servicio de Windows del agente no pudo iniciar sesión" / "No se pudo instalar el agente" | El código sí se usó | Llama a soporte con una foto de la ventana. |
+
+**Cuando el código ya se usó y algo falla después**, la llave anterior de la sucursal ya no
+sirve. El recuadro rojo dice en qué quedó el agente que ya estaba en la PC:
+
+- "*se quedó con la llave nueva … y se reinició: sigue reportando*": no hay que hacer nada urgente.
+- "*quedó DESCONECTADO*" o "*no quedó ningún agente con la llave nueva*": **genera un código nuevo**
+  en el panel y vuelve a correr `Instalar-YoControlo`.
+
+Cada corrida deja su resultado en `C:\ProgramData\ArkonAgente\logs\instalacion-AAAAMMDD.log`
+(sin llaves ni contraseñas), junto al log del agente, para soporte.
 
 **Volver a correrlo siempre es seguro**, también sobre una instalación que ya funcionaba: genera
 otro código y repite los pasos 2 y 3. Conserva lo que el agente no había mandado (`cola.db`) y sus
@@ -95,7 +106,7 @@ logs; pone una API key y una contraseña nuevas.
 
 - `Instalar-YoControlo.cmd` se eleva (UAC) y corre `archivos\instalar-un-clic.ps1` con
   `-ExecutionPolicy Bypass`. Acepta el código como argumento:
-  `Instalar-YoControlo.cmd K7P-42X`. El `.ps1` también acepta `-ApiUrl`, `-Servidor`, `-Base`,
+  `Instalar-YoControlo.cmd K7P4-42XQ`. El `.ps1` también acepta `-ApiUrl`, `-Servidor`, `-Base`,
   `-UsuarioAdmin` y `-CuentaServicio` (ver su cabecera).
 - **El orden importa**: todo lo que se puede revisar sin cambiar nada (SQL Server, base, permisos
   con `HAS_PERMS_BY_NAME`, modo mixto) se revisa **antes** de gastar el código. Un código
@@ -110,10 +121,15 @@ logs; pone una API key y una contraseña nuevas.
   se borra en cuanto se crea el lector.
 - Escribe `config.json` y llama a `instalar.ps1` (el del modo manual) con la config ya armada:
   protege `C:\ProgramData\ArkonAgente` **antes** de escribirla, registra los servicios y corre
-  `agente test`. Si el servicio no arranca con la cuenta virtual, reintenta solo con
-  `LocalSystem` y lo dice en el resultado.
-- Si al reinstalar falla el paso del lector **después** de usar el código, deja en el agente que
-  ya estaba la API key nueva con sus datos de SQL de antes, para que siga reportando.
+  `agente test`. Sólo si el servicio no puede **iniciar sesión** con la cuenta virtual (errores
+  de Windows 1069/1079; ninguna otra falla) reintenta con `LocalSystem`, y lo dice en el
+  resultado y en el registro.
+- **Cualquier** falla después de usar el código (el lector, `instalar.ps1` o una excepción) pasa
+  por el respaldo: si en la PC ya había un agente, se le escribe la API key nueva (con la
+  contraseña nueva si el SQL ya la acepta; si no, con la de antes) y se reinicia. Si no se puede,
+  el resultado dice que quedó desconectado y que hace falta un código nuevo.
+- El resultado queda en `logs\instalacion-AAAAMMDD.log` (la carpeta del agente). No llega al
+  panel: el único canal agente → panel es el heartbeat del propio agente.
 - Códigos de salida: 0 listo; 1 instalado pero falla una conexión; 2 `config.json` inválido;
   3 no se pudo.
 

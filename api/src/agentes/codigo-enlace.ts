@@ -5,18 +5,18 @@ import { createHash, randomInt } from 'node:crypto';
  * del restaurante para conectar la sucursal. El instalador lo cambia por la API key (que nunca
  * se copia a mano) en `POST /agente/enlace`. Todo lo de aquí es puro.
  *
- * Formato: 6 símbolos de A–Z y 2–9 SIN los ambiguos O, 0, I, 1 (el mismo alfabeto que el código
- * de facturación de F2-101), mostrados como `K7P-42X`. 32^6 ≈ 1.07·10^9 códigos. Lo que lo vuelve
- * inadivinable no es sólo el tamaño: vive 30 minutos, sirve UNA vez, hay a lo más uno vigente por
- * sucursal y el canje tiene rate limit por IP, por código y de fallos por IP.
+ * Formato: 8 símbolos de A–Z y 2–9 SIN los ambiguos O, 0, I, 1 (el mismo alfabeto que el código
+ * de facturación de F2-101), mostrados como `K7P4-42XQ`. 32^8 ≈ 1.1·10^12 códigos. Además vive 30
+ * minutos, sirve UNA vez, hay a lo más uno vigente por sucursal y el canje tiene rate limit por IP
+ * (IPv6 agrupada por /64), por código, de fallos por IP y un cortacircuito GLOBAL de fallos.
  *
  * En la base sólo queda el SHA-256 del código normalizado (sin guión), igual que la API key.
  */
 
 export const ALFABETO_ENLACE = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-export const LONGITUD_ENLACE = 6;
+export const LONGITUD_ENLACE = 8;
 /** El código sin guión, ya normalizado. */
-export const REGEX_ENLACE = /^[A-HJ-NP-Z2-9]{6}$/;
+export const REGEX_ENLACE = /^[A-HJ-NP-Z2-9]{8}$/;
 /** Cuánto vive un código desde que se genera. */
 export const VIGENCIA_ENLACE_MS = 30 * 60 * 1000;
 
@@ -29,9 +29,38 @@ export function generarCodigoEnlace(aleatorio: (n: number) => number = randomInt
   return codigo;
 }
 
-/** Cómo se muestra: `K7P42X` → `K7P-42X`. */
+/** Cómo se muestra: `K7P442XQ` → `K7P4-42XQ`. */
 export function formatearCodigoEnlace(codigo: string): string {
-  return `${codigo.slice(0, 3)}-${codigo.slice(3)}`;
+  return `${codigo.slice(0, 4)}-${codigo.slice(4)}`;
+}
+
+/**
+ * La llave con la que se cuenta "una IP" en los límites del canje. Una IPv4 es ella misma (también
+ * la mapeada `::ffff:a.b.c.d`). Una IPv6 se agrupa por su /64: un proveedor le da a cada cliente
+ * un /64 entero, y contar dirección por dirección regalaría 2^64 "IPs" a quien adivina.
+ */
+export function claveIp(ip: string): string {
+  const limpia = ip
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .split('%')[0];
+  const mapeada = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(limpia);
+  if (mapeada) return mapeada[1];
+  if (!limpia.includes(':')) return limpia;
+  const [izq, der] = limpia.split('::', 2) as [string, string | undefined];
+  const grupos = (s: string | undefined) => (s ? s.split(':').filter((g) => g !== '') : []);
+  const a = grupos(izq);
+  const b = der === undefined ? [] : grupos(der);
+  const relleno =
+    der === undefined ? [] : Array<string>(Math.max(0, 8 - a.length - b.length)).fill('0');
+  const completa = [...a, ...relleno, ...b];
+  // Sin ceros a la izquierda: `2001:0db8::` y `2001:db8::` son la misma red.
+  const prefijo = completa
+    .slice(0, 4)
+    .map((g) => (g.includes('.') ? 0 : parseInt(g, 16) || 0).toString(16));
+  while (prefijo.length < 4) prefijo.push('0');
+  return `${prefijo.join(':')}::/64`;
 }
 
 /**

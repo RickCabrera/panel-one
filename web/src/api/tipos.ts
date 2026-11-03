@@ -101,7 +101,7 @@ export interface ApiKeyEmitida {
  */
 export interface CodigoEnlaceEmitido {
   sucursalId: string;
-  /** Con guión: `K7P-42X`. */
+  /** Con guión: `K7P4-42XQ`. */
   codigo: string;
   /** ISO-8601 UTC. */
   expiraAt: string;
