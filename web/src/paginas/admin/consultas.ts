@@ -8,6 +8,7 @@ import type {
   AltaGuiadaHecha,
   ApiKeyEmitida,
   Arranque,
+  CodigoEnlaceEmitido,
   CrearSucursal,
   CrearUsuario,
   EditarEmpresa,
@@ -94,6 +95,9 @@ export const api = {
     ),
   rotarApiKey: (sucursalId: string) =>
     pedir<ApiKeyEmitida>(`/sucursales/${sucursalId}/api-key`, { method: 'POST' }),
+  // Instalador de un clic: el código vive sólo en el estado del diálogo que lo muestra.
+  emitirCodigoEnlace: (sucursalId: string) =>
+    pedir<CodigoEnlaceEmitido>(`/sucursales/${sucursalId}/codigo-enlace`, { method: 'POST' }),
   crearUsuario: (datos: CrearUsuario) =>
     pedir<UsuarioAdmin>('/usuarios', { method: 'POST', body: datos }),
   editarUsuario: (id: string, cambios: EditarUsuario) =>

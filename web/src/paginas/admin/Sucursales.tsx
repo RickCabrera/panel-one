@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 
 import type { Empresa, Sucursal } from '../../api/tipos';
 import { useSucursales } from '../../filtros/alcance';
+import { ConectarSucursal } from './ConectarSucursal';
 import { api, useAccion } from './consultas';
 import { Dialogo } from './Dialogo';
 import { CLASE_BOTON, CLASE_INPUT, CLASE_PRIMARIO, CLASE_TABLA } from './estilos';
@@ -9,13 +10,14 @@ import { ZONA_POR_DEFECTO, zonasDisponibles } from './zonas';
 
 type Abierto =
   | { tipo: 'editar'; sucursal: Sucursal }
+  | { tipo: 'conectar'; sucursal: Sucursal }
   | { tipo: 'confirmar-key'; sucursal: Sucursal }
   | { tipo: 'key'; sucursal: Sucursal; apiKey: string };
 
 /**
- * Sucursales de la empresa del alcance (F1-060): alta, edición, baja/reactivación y
- * la API key del agente. La empresa es la del selector del Topbar, también para
- * admin_global.
+ * Sucursales de la empresa del alcance (F1-060): alta, edición, baja/reactivación,
+ * "Conectar sucursal" (el código del instalador de un clic) y la API key del agente (la
+ * instalación avanzada). La empresa es la del selector del Topbar, también para admin_global.
  */
 export function Sucursales({ empresa }: { empresa: Empresa }) {
   const sucursales = useSucursales(empresa.id);
@@ -76,6 +78,15 @@ export function Sucursales({ empresa }: { empresa: Empresa }) {
                     >
                       {s.activo ? 'Dar de baja' : 'Reactivar'}
                     </button>
+                    {s.activo && (
+                      <button
+                        type="button"
+                        className={CLASE_PRIMARIO}
+                        onClick={() => setAbierto({ tipo: 'conectar', sucursal: s })}
+                      >
+                        Conectar sucursal
+                      </button>
+                    )}
                     <button
                       type="button"
                       className={CLASE_BOTON}
@@ -93,6 +104,9 @@ export function Sucursales({ empresa }: { empresa: Empresa }) {
 
       {abierto?.tipo === 'editar' && (
         <EditarSucursal sucursal={abierto.sucursal} onCerrar={() => setAbierto(null)} />
+      )}
+      {abierto?.tipo === 'conectar' && (
+        <ConectarSucursal sucursal={abierto.sucursal} onCerrar={() => setAbierto(null)} />
       )}
       {abierto?.tipo === 'confirmar-key' && (
         <ConfirmarKey

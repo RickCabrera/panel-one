@@ -10,6 +10,13 @@ import { AgenteController } from './agente.controller';
 import { AgentAuthGuard } from './agente-auth.guard';
 import { AgentesAuthService } from './agentes-auth.service';
 import { ApiKeyService } from './api-key.service';
+import { CanjeEnlaceController, SucursalCodigoEnlaceController } from './codigo-enlace.controller';
+import {
+  CodigoEnlaceService,
+  LimiteFallosEnlace,
+  URL_PUBLICA_API,
+} from './codigo-enlace.service';
+import { leerUrlPublicaApi } from './codigo-enlace';
 import { EstadoAgentesController } from './estado-agentes.controller';
 import { EstadoAgentesService } from './estado-agentes.service';
 import { SucursalApiKeyController } from './sucursal-api-key.controller';
@@ -29,6 +36,9 @@ import { SucursalApiKeyController } from './sucursal-api-key.controller';
     VersionesAgenteController,
     SucursalActualizacionController,
     BinarioAgenteController,
+    // Instalador de un clic: emitir el código (admin) y canjearlo (instalador, público).
+    SucursalCodigoEnlaceController,
+    CanjeEnlaceController,
   ],
   providers: [
     AgentesAuthService,
@@ -36,6 +46,9 @@ import { SucursalApiKeyController } from './sucursal-api-key.controller';
     ApiKeyService,
     EstadoAgentesService,
     ActualizacionAgenteService,
+    CodigoEnlaceService,
+    LimiteFallosEnlace,
+    { provide: URL_PUBLICA_API, useFactory: () => leerUrlPublicaApi() },
   ],
   exports: [AgentesAuthService, AgentAuthGuard],
 })

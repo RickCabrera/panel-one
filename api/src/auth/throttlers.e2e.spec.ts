@@ -10,6 +10,7 @@ import { crearFixtures, limpiarFixtures, PASSWORD, USUARIOS } from '../../test/f
 import { UsuariosAdminController } from '../administracion/administracion.controller';
 import { BinarioAgenteController } from '../agentes/actualizacion-agente.controller';
 import { AgenteController } from '../agentes/agente.controller';
+import { CanjeEnlaceController } from '../agentes/codigo-enlace.controller';
 import { AppModule } from '../app.module';
 import { CodigoFacturacionPublicoController } from '../facturacion/codigos.controller';
 import { PortalPublicoController } from '../facturacion/portal.controller';
@@ -192,6 +193,8 @@ describe('Cada ruta con ThrottlerGuard aplica exactamente sus cubos', () => {
       ['binario-agente'],
     ],
     ['POST /ingesta/eventos', IngestaController, ['agente']],
+    // Instalador de un clic: por IP y por código (los fallos por IP van aparte, no son cubo).
+    ['POST /agente/enlace', CanjeEnlaceController.prototype.canjear, ['enlace', 'enlace-codigo']],
     // F2-101: pública; su cubo no gasta el de la baja de reportes, ni al revés.
     [
       'GET /facturacion/codigo/:codigo',

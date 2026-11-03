@@ -35,6 +35,8 @@ describe('whereEmpresa / whereScoped', () => {
       AgenteContacto: 'empresaId',
       // F2-143: último resultado de auto-actualización del agente.
       AgenteActualizacion: 'empresaId',
+      // Instalador de un clic: los códigos de enlace.
+      CodigoEnlace: 'empresaId',
       Cheque: 'empresaId',
       ChequePartida: 'empresaId',
       ChequePago: 'empresaId',

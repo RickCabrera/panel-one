@@ -99,6 +99,8 @@ describe('ScopedPrismaService (contra Postgres)', () => {
       'clienteCatalogo',
       // F2-101: códigos de facturación; los crea la ingesta (`deSucursal(agente)`) y la consulta
       // pública va por `codigoFacturacionPublico`, no por aquí.
+      // Instalador de un clic: sólo lectura con scope; lo escribe `enlaces(scope)` / `canjeEnlace()`.
+      'codigoEnlace',
       'codigoFacturacion',
       // F2-126: compras; se escriben por `comprasDeSucursal(agente)`.
       'compra',

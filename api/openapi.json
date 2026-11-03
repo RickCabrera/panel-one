@@ -871,6 +871,149 @@
         ]
       }
     },
+    "/sucursales/{id}/codigo-enlace": {
+      "post": {
+        "description": "Un código corto (`K7P-42X`) que el instalador cambia por la API key de la sucursal en `POST /agente/enlace`. Se devuelve UNA sola vez (en la base queda su hash), sirve UNA vez y vence a los 30 min. Generar otro invalida el anterior sin usar. Generarlo NO toca la key vigente: ésa se rota hasta que el instalador canjea el código.",
+        "operationId": "SucursalCodigoEnlaceController_emitir",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodigoEnlaceEmitidoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`id` no es un UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin token, token inválido o vencido.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol insuficiente (visor).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La sucursal no existe o es de otra empresa. Misma respuesta en los dos casos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La sucursal o su empresa están dadas de baja.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Genera el código de enlace del instalador de un clic para una sucursal.",
+        "tags": [
+          "agentes"
+        ]
+      }
+    },
+    "/agente/enlace": {
+      "post": {
+        "description": "Pública. Devuelve una API key NUEVA de la sucursal (la anterior deja de servir) y quema el código: un segundo canje es 404. Límites: 20 por minuto por IP, 5 por código cada 15 min (de cualquier IP) y, tras 10 códigos equivocados en una hora desde la misma IP, 429 por el resto de esa hora. No existe, ya se usó, venció o la sucursal está dada de baja: el MISMO 404, y no cambia nada.",
+        "operationId": "CanjeEnlaceController_canjear",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanjeEnlaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnlaceCanjeadoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sin `codigo`, o no tiene el formato (6 de A–Z y 2–9 sin O, 0, I, 1).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Código que no sirve. Mismo cuerpo siempre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Alguno de los tres límites."
+          }
+        },
+        "summary": "Cambia un código de enlace por la API key de su sucursal (instalador de un clic).",
+        "tags": [
+          "agente"
+        ]
+      }
+    },
     "/ingesta/eventos": {
       "post": {
         "description": "Idempotente: reenviar el mismo lote deja exactamente los mismos datos. Cheques por (sucursal, folioSr), reemplazando partidas y pagos; snapshots por (sucursal, capturadoAt), con 24 h de histórico más el último; heartbeat al estado del agente. La sucursal sale de la API key: ningún evento manda ids de tenant. Acepta `Content-Encoding: gzip`. Todo lote con sobre válido registra además el CONTACTO del agente (reloj del servidor, `agente_contacto`; lo lee `GET /agentes/estado`), aunque sus eventos salgan rechazados. El contacto queda fuera de la idempotencia a propósito: un reenvío lo mueve, porque el agente sí volvió a hablar; los datos quedan idénticos. El heartbeat puede traer `tamanoCola` y `latenciaQueryMs` (F1-025).",
@@ -13872,6 +14015,80 @@
         "required": [
           "sucursalId",
           "actualizacionAutomatica"
+        ]
+      },
+      "CodigoEnlaceEmitidoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo": {
+            "type": "string",
+            "example": "K7P-42X",
+            "description": "El código para el instalador de un clic, con guión. Se muestra SÓLO en esta respuesta: en la base queda su hash. Sirve una vez y vence en `expiraAt`."
+          },
+          "expiraAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Cuándo deja de servir (UTC), a los 30 min."
+          },
+          "vigenciaSegundos": {
+            "type": "number",
+            "example": 1800,
+            "description": "Segundos de vigencia desde que se emitió."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "codigo",
+          "expiraAt",
+          "vigenciaSegundos"
+        ]
+      },
+      "CanjeEnlaceDto": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "example": "K7P-42X",
+            "description": "El código del panel. Acepta minúsculas, espacios y con o sin guión."
+          }
+        },
+        "required": [
+          "codigo"
+        ]
+      },
+      "EnlaceCanjeadoDto": {
+        "type": "object",
+        "properties": {
+          "sucursalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sucursal": {
+            "type": "string",
+            "example": "Centro",
+            "description": "Para que el instalador diga qué conectó."
+          },
+          "apiKey": {
+            "type": "string",
+            "example": "msr_3q2-7wXz...",
+            "description": "La API key NUEVA de la sucursal, en claro y UNA sola vez. La anterior deja de servir en este momento (como `POST /sucursales/:id/api-key`)."
+          },
+          "apiUrl": {
+            "type": "string",
+            "nullable": true,
+            "example": "https://monitor.ejemplo.com",
+            "description": "La URL base de la API para `config.json` (`API_URL_PUBLICA` del despliegue). `null` si el despliegue no la define: el instalador usa la URL con la que llamó."
+          }
+        },
+        "required": [
+          "sucursalId",
+          "sucursal",
+          "apiKey",
+          "apiUrl"
         ]
       },
       "ModificadorDto": {
