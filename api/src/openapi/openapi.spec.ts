@@ -1,10 +1,37 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { generarDocumento, RUTA_OPENAPI, serializar } from './documento';
 
 // El contrato versionado (`api/openapi.json`) no puede divergir del código: si
 // alguien cambia un endpoint o un DTO y no corre `npm run openapi`, esto falla.
+/** Todos los `.ts` de `src/` que no son tests. */
+function fuentes(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const ruta = join(dir, e.name);
+    if (e.isDirectory()) return fuentes(ruta);
+    return e.name.endsWith('.ts') && !e.name.endsWith('.spec.ts') ? [ruta] : [];
+  });
+}
+
 describe('Contrato OpenAPI', () => {
+  // Swagger registra cada esquema por el NOMBRE de su clase: dos DTO con el mismo nombre en
+  // módulos distintos se pisan y el contrato describe uno con los campos del otro (pasó con
+  // `PagoDto`, `ContactoDto` y `GuardarSuscripcionDto`). Ninguna clase de un archivo que usa
+  // `@nestjs/swagger` puede repetir nombre.
+  it('no hay dos clases de DTO con el mismo nombre (Swagger las pisaría)', () => {
+    const porNombre = new Map<string, string[]>();
+    for (const archivo of fuentes(join(__dirname, '..'))) {
+      const texto = readFileSync(archivo, 'utf8');
+      if (!texto.includes('@nestjs/swagger')) continue;
+      for (const m of texto.matchAll(/^(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/gm)) {
+        porNombre.set(m[1], [...(porNombre.get(m[1]) ?? []), archivo]);
+      }
+    }
+    const repetidas = [...porNombre].filter(([, archivos]) => archivos.length > 1);
+    expect(repetidas).toEqual([]);
+  });
+
   it('api/openapi.json es exactamente el documento que genera el código', async () => {
     const generado = await generarDocumento();
     // Se compara el JSON parseado (no depende de CRLF/LF del checkout) y además
@@ -1239,8 +1266,9 @@ describe('Contrato OpenAPI', () => {
       Object.keys(op?.responses ?? {}).sort();
     expect(codigos(paths['/empresas']?.post)).toEqual(['201', '400', '401', '403']);
     expect(codigos(paths['/empresas/{id}']?.patch)).toEqual(['200', '400', '401', '403', '404']);
-    expect(codigos(paths['/sucursales']?.post)).toEqual(['201', '400', '401', '403', '404']);
-    expect(codigos(paths['/sucursales/{id}']?.patch)).toEqual(['200', '400', '401', '403', '404']);
+    // Membresías: 409 por el límite de sucursales del plan (alta y reactivación).
+    expect(codigos(paths['/sucursales']?.post)).toEqual(['201', '400', '401', '403', '404', '409']);
+    expect(codigos(paths['/sucursales/{id}']?.patch)).toEqual(['200', '400', '401', '403', '404', '409']);
     expect(codigos(paths['/usuarios']?.get)).toEqual(['200', '400', '401', '403', '404']);
     expect(codigos(paths['/usuarios']?.post)).toEqual(['201', '400', '401', '403', '404', '409']);
     expect(codigos(paths['/usuarios/{id}']?.patch)).toEqual(['200', '400', '401', '403', '404']);

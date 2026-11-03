@@ -51,9 +51,9 @@ import {
   EditarClienteDto,
   EditarPlanDto,
   GuardarAjustesDto,
-  GuardarSuscripcionDto,
+  GuardarMembresiaDto,
   MetricasDto,
-  PagoDto,
+  PagoSuscripcionDto,
   PagoRegistradoDto,
   PagosMesDto,
   PagosQueryDto,
@@ -225,7 +225,7 @@ export class PlataformaController {
     @Req() req: RequestAutenticado,
     @EmpresaScopeActual() scope: EmpresaScope,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: GuardarSuscripcionDto,
+    @Body() dto: GuardarMembresiaDto,
   ): Promise<SuscripcionDto> {
     return this.plataforma.guardarSuscripcion(quien(req, scope), id, dto);
   }
@@ -266,11 +266,11 @@ export class PlataformaController {
 
   @Get('clientes/:id/pagos')
   @ApiOperation({ summary: 'Historial de pagos del cliente (anulados incluidos).' })
-  @ApiOkResponse({ type: [PagoDto] })
+  @ApiOkResponse({ type: [PagoSuscripcionDto] })
   pagosDeCliente(
     @EmpresaScopeActual() scope: EmpresaScope,
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<PagoDto[]> {
+  ): Promise<PagoSuscripcionDto[]> {
     return this.plataforma.pagosDeCliente(scope, id);
   }
 
@@ -300,14 +300,14 @@ export class PlataformaController {
     summary: 'Anula un pago (no se borra) y regresa el vencimiento a donde estaba.',
     description: 'Sólo el más reciente que corrió el vencimiento; si hay uno posterior, 409.',
   })
-  @ApiOkResponse({ type: PagoDto })
+  @ApiOkResponse({ type: PagoSuscripcionDto })
   @ApiConflictResponse({ type: ErrorDto, description: 'Ya anulado, o hay un pago posterior.' })
   anularPago(
     @Req() req: RequestAutenticado,
     @EmpresaScopeActual() scope: EmpresaScope,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AnularPagoDto,
-  ): Promise<PagoDto> {
+  ): Promise<PagoSuscripcionDto> {
     return this.plataforma.anularPago(quien(req, scope), id, dto.motivo);
   }
 

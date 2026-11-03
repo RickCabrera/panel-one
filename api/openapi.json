@@ -46,6 +46,16 @@
               }
             }
           },
+          "403": {
+            "description": "Membresías: contraseña correcta, pero la empresa del usuario está suspendida o cancelada (`codigo: cuenta_bloqueada`). Sólo con la contraseña correcta.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CuentaBloqueadaDto"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Más de 5 intentos por minuto, o de 30 por hora, desde la misma IP."
           }
@@ -72,7 +82,7 @@
             }
           },
           "401": {
-            "description": "Sin cookie, cookie inválida o vencida, o usuario/empresa ya inactivos.",
+            "description": "Sin cookie, cookie inválida o vencida, o usuario/empresa ya inactivos. Con la empresa suspendida o cancelada, el `message` lo dice (\"Tu cuenta está suspendida. Contacta a soporte.\").",
             "content": {
               "application/json": {
                 "schema": {
@@ -3326,6 +3336,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Membresías: la empresa ya tiene las sucursales activas que permite su plan (`codigo: limite_sucursales`). Un admin_empresa no lo puede pasar; un admin_global sí, con `forzarLimite: true` (queda en la bitácora de plataforma).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimiteSucursalesDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3496,6 +3516,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Al reactivar (`activo: true`): Membresías: la empresa ya tiene las sucursales activas que permite su plan (`codigo: limite_sucursales`). Un admin_empresa no lo puede pasar; un admin_global sí, con `forzarLimite: true` (queda en la bitácora de plataforma).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimiteSucursalesDto"
                 }
               }
             }
@@ -14004,7 +14034,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GuardarSuscripcionDto"
+                "$ref": "#/components/schemas/GuardarMembresiaDto"
               }
             }
           }
@@ -14230,7 +14260,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/PagoDto"
+                    "$ref": "#/components/schemas/PagoSuscripcionDto"
                   }
                 }
               }
@@ -14383,7 +14413,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PagoDto"
+                  "$ref": "#/components/schemas/PagoSuscripcionDto"
                 }
               }
             }
@@ -15141,6 +15171,35 @@
           "message"
         ]
       },
+      "CuentaBloqueadaDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 403
+          },
+          "message": {
+            "type": "string",
+            "example": "Tu cuenta está suspendida. Contacta a soporte."
+          },
+          "error": {
+            "type": "string",
+            "example": "Forbidden"
+          },
+          "codigo": {
+            "type": "string",
+            "enum": [
+              "cuenta_bloqueada"
+            ]
+          }
+        },
+        "required": [
+          "statusCode",
+          "message",
+          "error",
+          "codigo"
+        ]
+      },
       "CambiarPasswordDto": {
         "type": "object",
         "properties": {
@@ -15562,88 +15621,21 @@
       "PagoDto": {
         "type": "object",
         "properties": {
-          "id": {
+          "formaRaw": {
             "type": "string",
-            "format": "uuid"
-          },
-          "empresaId": {
-            "type": "string",
-            "format": "uuid"
+            "example": "EFECTIVO",
+            "description": "El nombre de la forma de pago tal como viene de SR."
           },
           "monto": {
             "type": "string",
-            "example": "499.00"
-          },
-          "moneda": {
-            "type": "string",
-            "example": "MXN"
-          },
-          "fechaPago": {
-            "type": "string",
-            "example": "2026-11-02"
-          },
-          "metodo": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/MetodoPago"
-              }
-            ]
-          },
-          "referencia": {
-            "type": "string",
-            "nullable": true
-          },
-          "periodoDesde": {
-            "type": "string",
-            "example": "2026-11-05"
-          },
-          "periodoHasta": {
-            "type": "string",
-            "example": "2026-12-05",
-            "description": "Exclusivo: el nuevo vencimiento."
-          },
-          "notas": {
-            "type": "string",
-            "nullable": true
-          },
-          "registradoPor": {
-            "type": "string",
-            "description": "Quién lo registró (nombre y correo)."
-          },
-          "registradoAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "anuladoAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "anuladoPor": {
-            "type": "string",
-            "nullable": true
-          },
-          "motivoAnulacion": {
-            "type": "string",
-            "nullable": true
+            "pattern": "^-?\\d{1,10}(\\.\\d{1,4})?$",
+            "example": "125.50",
+            "description": "Importe como STRING decimal, nunca número JSON. Hasta 4 decimales; se guarda redondeado a 2 (mitad lejos de cero). Puede ser negativo."
           }
         },
         "required": [
-          "id",
-          "empresaId",
-          "monto",
-          "moneda",
-          "fechaPago",
-          "metodo",
-          "referencia",
-          "periodoDesde",
-          "periodoHasta",
-          "notas",
-          "registradoPor",
-          "registradoAt",
-          "anuladoAt",
-          "anuladoPor",
-          "motivoAnulacion"
+          "formaRaw",
+          "monto"
         ]
       },
       "DatosChequeDto": {
@@ -17897,6 +17889,23 @@
           "catalogo"
         ]
       },
+      "ModificadorTicketDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "precio": {
+            "type": "string",
+            "example": "1234.50",
+            "description": "Incluidos los de $0.00."
+          }
+        },
+        "required": [
+          "nombre",
+          "precio"
+        ]
+      },
       "PartidaTicketDto": {
         "type": "object",
         "properties": {
@@ -17926,7 +17935,7 @@
             "description": "Tal como los guardó la ingesta (esquema-sr.md §13: `{ nombre, precio }`).",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ModificadorDto"
+              "$ref": "#/components/schemas/ModificadorTicketDto"
             }
           }
         },
@@ -18325,6 +18334,50 @@
           "empresaId",
           "nombre",
           "zonaHoraria"
+        ]
+      },
+      "LimiteSucursalesDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 409
+          },
+          "message": {
+            "type": "string",
+            "example": "Tu plan (Esencial) permite 1 sucursal activa. Para agregar más, contacta a soporte."
+          },
+          "error": {
+            "type": "string",
+            "example": "Conflict"
+          },
+          "codigo": {
+            "type": "string",
+            "enum": [
+              "limite_sucursales"
+            ]
+          },
+          "limite": {
+            "type": "number",
+            "description": "Sucursales activas que permite el plan."
+          },
+          "activas": {
+            "type": "number",
+            "description": "Sucursales activas que ya tiene la empresa."
+          },
+          "plan": {
+            "type": "string",
+            "description": "Nombre del plan."
+          }
+        },
+        "required": [
+          "statusCode",
+          "message",
+          "error",
+          "codigo",
+          "limite",
+          "activas",
+          "plan"
         ]
       },
       "EditarSucursalDto": {
@@ -19234,32 +19287,25 @@
       "GuardarSuscripcionDto": {
         "type": "object",
         "properties": {
-          "planId": {
+          "empresaId": {
             "type": "string",
             "format": "uuid",
-            "description": "Cambia el plan (activo). Obligatorio si la empresa aún no tiene suscripción."
+            "description": "Fuera del alcance del usuario = 404."
           },
-          "vencimiento": {
-            "type": "string",
-            "example": "2026-12-05",
-            "description": "Corrige el próximo pago a mano."
+          "diario": {
+            "type": "boolean",
+            "description": "Resumen diario: la venta de ayer, top 5 y alertas."
           },
-          "diaCorte": {
-            "type": "number",
-            "minimum": 1,
-            "maximum": 28
-          },
-          "diasGracia": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 60
-          },
-          "notas": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 2000
+          "semanal": {
+            "type": "boolean",
+            "description": "Resumen semanal (los lunes): comparativo y tendencia."
           }
-        }
+        },
+        "required": [
+          "empresaId",
+          "diario",
+          "semanal"
+        ]
       },
       "VistaPreviaDto": {
         "type": "object",
@@ -27915,6 +27961,38 @@
           "administrador"
         ]
       },
+      "ContactoClienteDto": {
+        "type": "object",
+        "properties": {
+          "contactoNombre": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactoTelefono": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactoEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "rfc": {
+            "type": "string",
+            "nullable": true
+          },
+          "notasPlataforma": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "contactoNombre",
+          "contactoTelefono",
+          "contactoEmail",
+          "rfc",
+          "notasPlataforma"
+        ]
+      },
       "SucursalClienteDto": {
         "type": "object",
         "properties": {
@@ -27989,6 +28067,102 @@
           "ultimoAccesoAt"
         ]
       },
+      "MetodoPago": {
+        "type": "string",
+        "enum": [
+          "transferencia",
+          "efectivo",
+          "tarjeta",
+          "otro"
+        ]
+      },
+      "PagoSuscripcionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "empresaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "monto": {
+            "type": "string",
+            "example": "499.00"
+          },
+          "moneda": {
+            "type": "string",
+            "example": "MXN"
+          },
+          "fechaPago": {
+            "type": "string",
+            "example": "2026-11-02"
+          },
+          "metodo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MetodoPago"
+              }
+            ]
+          },
+          "referencia": {
+            "type": "string",
+            "nullable": true
+          },
+          "periodoDesde": {
+            "type": "string",
+            "example": "2026-11-05"
+          },
+          "periodoHasta": {
+            "type": "string",
+            "example": "2026-12-05",
+            "description": "Exclusivo: el nuevo vencimiento."
+          },
+          "notas": {
+            "type": "string",
+            "nullable": true
+          },
+          "registradoPor": {
+            "type": "string",
+            "description": "Quién lo registró (nombre y correo)."
+          },
+          "registradoAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "anuladoAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "anuladoPor": {
+            "type": "string",
+            "nullable": true
+          },
+          "motivoAnulacion": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "empresaId",
+          "monto",
+          "moneda",
+          "fechaPago",
+          "metodo",
+          "referencia",
+          "periodoDesde",
+          "periodoHasta",
+          "notas",
+          "registradoPor",
+          "registradoAt",
+          "anuladoAt",
+          "anuladoPor",
+          "motivoAnulacion"
+        ]
+      },
       "ClienteDetalleDto": {
         "type": "object",
         "properties": {
@@ -28041,7 +28215,7 @@
             "description": "Cuándo llegó a la API la última venta (cheque) de cualquiera de sus sucursales."
           },
           "contacto": {
-            "$ref": "#/components/schemas/ContactoDto"
+            "$ref": "#/components/schemas/ContactoClienteDto"
           },
           "creadaAt": {
             "type": "string",
@@ -28063,7 +28237,7 @@
             "description": "Del más reciente al más viejo, anulados incluidos.",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/PagoDto"
+              "$ref": "#/components/schemas/PagoSuscripcionDto"
             }
           }
         },
@@ -28116,6 +28290,36 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          }
+        }
+      },
+      "GuardarMembresiaDto": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Cambia el plan (activo). Obligatorio si la empresa aún no tiene suscripción."
+          },
+          "vencimiento": {
+            "type": "string",
+            "example": "2026-12-05",
+            "description": "Corrige el próximo pago a mano."
+          },
+          "diaCorte": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 28
+          },
+          "diasGracia": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60
+          },
+          "notas": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2000
           }
         }
       },
@@ -28271,15 +28475,6 @@
           "mensualidades"
         ]
       },
-      "MetodoPago": {
-        "type": "string",
-        "enum": [
-          "transferencia",
-          "efectivo",
-          "tarjeta",
-          "otro"
-        ]
-      },
       "RegistrarPagoDto": {
         "type": "object",
         "properties": {
@@ -28290,8 +28485,11 @@
           },
           "moneda": {
             "type": "string",
-            "example": "MXN",
-            "default": "MXN"
+            "enum": [
+              "MXN"
+            ],
+            "default": "MXN",
+            "description": "Sólo pesos: la plataforma cobra en MXN."
           },
           "fechaPago": {
             "type": "string",
@@ -28331,7 +28529,7 @@
         "type": "object",
         "properties": {
           "pago": {
-            "$ref": "#/components/schemas/PagoDto"
+            "$ref": "#/components/schemas/PagoSuscripcionDto"
           },
           "suscripcion": {
             "$ref": "#/components/schemas/SuscripcionDto"

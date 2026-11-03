@@ -17,7 +17,7 @@ toca SoftRestaurant ni la ingesta.
 |---|---|
 | `planes` | Lo que vendemos: nombre, precio **mensual** (`NUMERIC(12,2)`, MXN), periodicidad (`mensual`/`anual`: un anual cobra 12 × el mensual por periodo), límite de sucursales (`NULL` = ilimitado), activo. |
 | `suscripciones` | La vigente de cada empresa (`empresa_id` único): plan, estado **guardado** (`prueba`, `activa`, `suspendida`, `cancelada`), inicio, vencimiento (= próximo pago), días de gracia (5), **día de corte** (1–28), notas. |
-| `pagos_suscripcion` | Pagos capturados a mano: monto, moneda, fecha de pago, método (`transferencia`, `efectivo`, `tarjeta`, `otro`), referencia, periodo que cubre (desde/hasta), notas, quién lo registró. **Nunca se borran**: se anulan con motivo (quién y cuándo). |
+| `pagos_suscripcion` | Pagos capturados a mano: monto, moneda (**sólo `MXN`**, CHECK), fecha de pago, método (`transferencia`, `efectivo`, `tarjeta`, `otro`), referencia, periodo que cubre (desde/hasta), notas, quién lo registró y el **estado de la suscripción antes del pago** (`estado_anterior`, para deshacerlo al anular). **Nunca se borran**: se anulan con motivo (quién y cuándo). |
 | `bitacora_plataforma` | Quién (id + correo), qué (`accion`), cuándo, sobre qué empresa/recurso, con `antes`/`despues` en JSON. Sin contraseñas ni hashes. Sólo INSERT, sin FK (un registro de auditoría no se bloquea ni se pierde). |
 | `configuracion_plataforma` | Una fila: el color de interfaz global (`color_acento`, una CLAVE de la lista; `NULL` = el del build). |
 | `empresas` (+) | Contacto del cliente: `contacto_nombre`, `contacto_telefono`, `contacto_email`, `rfc`, `notas_plataforma`. Nunca salen por las rutas de los clientes. |
@@ -29,10 +29,14 @@ instantes (`created_at`, `anulado_at`, `ultimo_acceso_at`) van en UTC.
 
 ### La migración no bloquea a nadie
 
+Migración `20261103030000_plataforma_membresias` (orden de merge acordado: #83 turnos `010000`,
+#85 enlace `020000`, #86 plataforma `030000`).
+
 Las empresas que ya existían quedan **`activa`** en un plan **"Plan inicial"** de **$0.00**,
 sin límite de sucursales, con día de corte = el día de la migración (tope 28) y vencimiento un
 mes después. `activa` y no `prueba` porque ya operan; $0.00 para no inventar ingresos en el MRR.
-Hay que asignarles su plan real desde el panel.
+Un plan de $0.00 **nunca queda vencido** ni muestra aviso de pago (no se cobra): su mensualidad
+cuenta como "pagada". Hay que asignarles su plan real desde el panel.
 
 Las empresas que nazcan **fuera** del panel (`POST /empresas`, alta guiada) quedan **sin
 suscripción**: sin límite, sin aviso, sin bloqueo. El panel las lista como "Sin plan" y deja
@@ -40,8 +44,8 @@ asignarles uno.
 
 ## Reglas de membresía
 
-- **`vencida` se calcula al leer**, no hay job: una suscripción `prueba`/`activa` con
-  `hoy > vencimiento + días de gracia` es `vencida`. Así nunca hay una fila "atrasada" porque un
+- **`vencida` se calcula al leer**, no hay job: una suscripción `prueba`/`activa` de un plan con
+  precio > $0 y `hoy > vencimiento + días de gracia` es `vencida`. Los planes de $0 nunca. Así nunca hay una fila "atrasada" porque un
   job no corrió, y registrar un pago la "desvence" en el acto.
 - **Nada corta el servicio automáticamente.** `vencida` sólo muestra el aviso de "pago
   pendiente" en el panel del cliente (`GET /cuenta/membresia`); sus usuarios entran normal.
@@ -56,12 +60,17 @@ asignarles uno.
   **desde el vencimiento actual** (un cliente atrasado paga los meses que debe) y corre el
   vencimiento al final. `prueba` o `suspendida` → `activa`. Una `cancelada` no recibe pagos
   (409): se reactiva primero. La fecha de pago no puede ser futura.
-- **Anular un pago**: sólo el más reciente que corrió el vencimiento (si hay uno posterior,
-  409); el vencimiento regresa a donde estaba. No cambia el estado guardado.
-- **Límite de sucursales** (alta `POST /sucursales` y reactivación `PATCH … activo: true`,
-  bajo candado): por encima, `409` con `codigo: "limite_sucursales"` y un mensaje claro. Un
+- **Anular un pago**: sólo el **último pago no anulado** de la suscripción por fecha de registro
+  (`created_at`); si hay uno posterior vigente, 409. Deshace el pago: el vencimiento regresa al
+  inicio de lo que cubría y, si el pago había reactivado la suscripción (venía de `prueba` o
+  `suspendida`) y sigue `activa`, regresa a ese estado (el MRR lo refleja). Un cambio de estado
+  hecho a mano después se respeta.
+- **Límite de sucursales** (alta `POST /sucursales` y reactivación `PATCH … activo: true`):
+  conteo y escritura en UNA transacción con `FOR UPDATE` sobre la suscripción, así dos altas o
+  reactivaciones simultáneas no se cuelan por el último cupo. Por encima, `409` con `codigo: "limite_sucursales"` y un mensaje claro. Un
   admin_empresa no lo puede pasar; un admin_global sí, con `forzarLimite: true`, y queda en la
-  bitácora (`sucursal.forzar_limite`). Sin suscripción o plan ilimitado: sin límite.
+  bitácora (`sucursal.forzar_limite`, sólo si la escritura ocurrió). Sin suscripción o plan
+  ilimitado: sin límite. Contrato: `LimiteSucursalesDto` en el 409 de las dos rutas.
 
 ## API (`/plataforma/*`, sólo admin_global)
 
@@ -86,12 +95,18 @@ escribe) y deja su línea de bitácora en la misma transacción.
 
 ## Administradores internos
 
+- Se manejan **SÓLO** en `/plataforma/administradores` (candado y bitácora). En `/usuarios`:
+  `POST` con `rol: admin_global` es 400, y `PATCH` sobre un admin_global sólo cambia el nombre
+  (`activo` o `rol` = 400). La web de Administración › Usuarios ya no ofrece crearlos ni darlos
+  de baja; enlaza a la plataforma.
 - Cada quien cambia **sólo su propia** contraseña (Mi cuenta). **No hay** ruta ni botón para
   cambiar o restablecer la de otro admin, y `POST /usuarios/:id/password` sobre un admin_global
   responde 400.
-- **No se borran.** Se desactivan / reactivan; nadie se desactiva a sí mismo (400) y siempre
-  queda al menos uno activo (candado: dos que se desactivan mutuamente a la vez → sólo uno lo
-  logra).
+- **No se borran.** Se desactivan / reactivan; nadie se desactiva a sí mismo (400). "Siempre
+  queda al menos uno activo" lo sostienen juntas tres cosas: el actor se relee activo después de
+  tomar el candado de administradores, nadie se desactiva a sí mismo, y sólo esta pieza da de
+  baja admins. Dos que se desactivan mutuamente a la vez: el segundo ya no es actor vigente
+  (401), test e2e.
 - Nombre y correo de otro: sí se editan.
 - **Convertir una cuenta de cliente**: se busca por correo a un `admin_empresa`/`visor` y pasa a
   `admin_global` **sin cambiar correo ni contraseña**. Deja de pertenecer a su empresa (un
@@ -119,4 +134,17 @@ escribe) y deja su línea de bitácora en la misma transacción.
 
 `npm run seed` (en /api) corre al final `seed:plataforma`: 3 planes (Esencial, Completo, Cadena
 anual), Restaurante Demo `activa` con un pago vigente y uno anulado, Cafetería Ejemplo en
-`prueba` y Taquería Ejemplo `vencida`. Idempotente.
+`prueba` y Taquería Ejemplo `vencida`. Idempotente. **No corre en producción:** igual que los
+demás seeds, `seed-plataforma.ts` se niega con `NODE_ENV=production` (también si viene del
+`api/.env`).
+
+## Contrato
+
+- `POST /auth/login`: 403 `CuentaBloqueadaDto` (`codigo: cuenta_bloqueada`) con la empresa
+  suspendida o cancelada.
+- `POST /sucursales` y `PATCH /sucursales/{id}`: 409 `LimiteSucursalesDto`
+  (`codigo: limite_sucursales`, `limite`, `activas`, `plan`).
+- Swagger nombra cada esquema por su CLASE: dos DTO con el mismo nombre se pisan. Un test de
+  `openapi.spec.ts` lo impide (por eso los de aquí son `PagoSuscripcionDto`,
+  `GuardarMembresiaDto` y `ContactoClienteDto`, y el modificador de tickets pasó a
+  `ModificadorTicketDto`).

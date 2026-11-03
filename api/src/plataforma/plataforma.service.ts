@@ -36,11 +36,11 @@ import type {
   EditarAdminDto,
   EditarClienteDto,
   EditarPlanDto,
-  GuardarSuscripcionDto,
+  GuardarMembresiaDto,
   MembresiaPropiaDto,
   MensualidadDto,
   MetricasDto,
-  PagoDto,
+  PagoSuscripcionDto,
   PagoRegistradoDto,
   PagosMesDto,
   PagosQueryDto,
@@ -52,6 +52,7 @@ import type {
 import {
   diaDeTexto,
   esDiaValido,
+  esGratuito,
   estadoEfectivo,
   estadoPagoMes,
   fechaLimite,
@@ -69,6 +70,13 @@ export const UMBRAL_AGENTE_CONECTADO_MS = 10 * 60 * 1000;
 export interface QuienPlataforma {
   actorId: string;
   scope: EmpresaScope;
+}
+
+/** La suscripción con la marca de plan gratuito ($0.00: nunca `vencida`). */
+function conPlan<T extends { plan: { precioMensual: Prisma.Decimal } }>(
+  s: T,
+): T & { gratuita: boolean } {
+  return { ...s, gratuita: esGratuito(s.plan.precioMensual) };
 }
 
 function exigirGlobal(scope: EmpresaScope): void {
@@ -153,7 +161,7 @@ export class PlataformaService {
       id: s.id,
       plan: this.#plan(s.plan),
       estado: s.estado,
-      estadoEfectivo: estadoEfectivo(s, hoy),
+      estadoEfectivo: estadoEfectivo(conPlan(s), hoy),
       inicio: textoDia(s.inicio),
       vencimiento: textoDia(s.vencimiento),
       fechaLimite: textoDia(fechaLimite(s)),
@@ -163,7 +171,7 @@ export class PlataformaService {
     };
   }
 
-  #pago(p: PagoGuardado): PagoDto {
+  #pago(p: PagoGuardado): PagoSuscripcionDto {
     return {
       id: p.id,
       empresaId: p.empresaId,
@@ -330,7 +338,7 @@ export class PlataformaService {
         : empresas.filter((e) =>
             q.estado === 'sin_suscripcion'
               ? e.suscripcion === null
-              : e.suscripcion !== null && estadoEfectivo(e.suscripcion, hoy) === q.estado,
+              : e.suscripcion !== null && estadoEfectivo(conPlan(e.suscripcion), hoy) === q.estado,
           );
     return this.#resumenes(datos, filtradas);
   }
@@ -444,7 +452,7 @@ export class PlataformaService {
   async guardarSuscripcion(
     quien: QuienPlataforma,
     empresaId: string,
-    dto: GuardarSuscripcionDto,
+    dto: GuardarMembresiaDto,
   ): Promise<SuscripcionDto> {
     exigirCampos(dto);
     const s = await this.#escritura(quien).guardarSuscripcion(empresaId, {
@@ -469,7 +477,7 @@ export class PlataformaService {
 
   // --- Pagos -----------------------------------------------------------------------------------
 
-  async pagosDeCliente(scope: EmpresaScope, empresaId: string): Promise<PagoDto[]> {
+  async pagosDeCliente(scope: EmpresaScope, empresaId: string): Promise<PagoSuscripcionDto[]> {
     const datos = this.#leer(scope);
     encontradoOr404(
       await datos.empresa.findFirst({ where: { id: empresaId }, select: { id: true } }),
@@ -507,7 +515,11 @@ export class PlataformaService {
     return { pago: this.#pago(pago), suscripcion: this.#suscripcion(suscripcion, hoy) };
   }
 
-  async anularPago(quien: QuienPlataforma, pagoId: string, motivo: string): Promise<PagoDto> {
+  async anularPago(
+    quien: QuienPlataforma,
+    pagoId: string,
+    motivo: string,
+  ): Promise<PagoSuscripcionDto> {
     return this.#pago(await this.#escritura(quien).anularPago(pagoId, motivo));
   }
 
@@ -548,8 +560,8 @@ export class PlataformaService {
         periodicidad: s.plan.periodicidad,
         diaCorte: s.diaCorte,
         vencimiento: textoDia(s.vencimiento),
-        estadoEfectivo: estadoEfectivo(s, hoy),
-        estadoPago: estadoPagoMes(s, hoy),
+        estadoEfectivo: estadoEfectivo(conPlan(s), hoy),
+        estadoPago: estadoPagoMes(conPlan(s), hoy),
         ultimoPago: u
           ? { fechaPago: textoDia(u.fechaPago), monto: u.monto.toFixed(2), moneda: u.moneda }
           : null,
@@ -601,7 +613,7 @@ export class PlataformaService {
     let vencen = 0;
     const en7 = sumarDias(hoy, 7);
     for (const s of suscripciones) {
-      const estado = estadoEfectivo(s, hoy);
+      const estado = estadoEfectivo(conPlan(s), hoy);
       conteo[estado] += 1;
       // MRR: lo que cobramos al mes a quien sigue siendo cliente de pago (activa o vencida: la
       // vencida todavía se cobra). Prueba, suspendida y cancelada no suman.
@@ -776,13 +788,13 @@ export class PlataformaService {
         estado: true,
         vencimiento: true,
         diasGracia: true,
-        plan: { select: { nombre: true } },
+        plan: { select: { nombre: true, precioMensual: true } },
       },
     });
     if (!s) return null;
     const hoy = this.#hoy();
     return {
-      estado: estadoEfectivo(s, hoy),
+      estado: estadoEfectivo(conPlan(s), hoy),
       vencimiento: textoDia(s.vencimiento),
       fechaLimite: textoDia(fechaLimite(s)),
       plan: s.plan.nombre,

@@ -171,6 +171,7 @@ export async function sembrarPlataforma(
         periodoDesde: p.periodoDesde,
         periodoHasta: p.periodoHasta,
         registradoPorId: admin.id,
+        estadoAnterior: EstadoSuscripcion.activa,
         ...(p.anulado
           ? {
               anuladoAt: ahora,

@@ -65,6 +65,7 @@ CREATE TABLE "pagos_suscripcion" (
     "periodo_hasta" DATE NOT NULL,
     "notas" VARCHAR(1000),
     "registrado_por_id" UUID NOT NULL,
+    "estado_anterior" "estado_suscripcion" NOT NULL,
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "anulado_at" TIMESTAMPTZ(3),
     "anulado_por_id" UUID,
@@ -154,8 +155,9 @@ ALTER TABLE "suscripciones" ADD CONSTRAINT "suscripciones_dias_gracia_check"
 ALTER TABLE "pagos_suscripcion" ADD CONSTRAINT "pagos_suscripcion_monto_check" CHECK ("monto" > 0);
 ALTER TABLE "pagos_suscripcion" ADD CONSTRAINT "pagos_suscripcion_periodo_check"
     CHECK ("periodo_hasta" > "periodo_desde");
+-- Sólo pesos: la plataforma cobra en MXN (el MRR y "cobrado del mes" suman montos).
 ALTER TABLE "pagos_suscripcion" ADD CONSTRAINT "pagos_suscripcion_moneda_check"
-    CHECK ("moneda" ~ '^[A-Z]{3}$');
+    CHECK ("moneda" = 'MXN');
 ALTER TABLE "pagos_suscripcion" ADD CONSTRAINT "pagos_suscripcion_anulacion_check"
     CHECK (("anulado_at" IS NULL) = ("anulado_por_id" IS NULL)
        AND ("anulado_at" IS NULL) = ("motivo_anulacion" IS NULL));

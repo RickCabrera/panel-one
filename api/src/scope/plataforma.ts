@@ -14,7 +14,12 @@ import {
   textoDia,
 } from '../plataforma/membresia';
 import type { EmpresaScope } from './empresa-scope';
-import { EscrituraAdmin, SELECT_USUARIO, type UsuarioCreado } from './escritura-admin';
+import {
+  EscrituraAdmin,
+  SELECT_SUCURSAL,
+  SELECT_USUARIO,
+  type UsuarioCreado,
+} from './escritura-admin';
 import { encontradoOr404, whereScoped } from './scope.helper';
 
 /**
@@ -618,6 +623,7 @@ export class EscrituraPlataforma {
           periodoDesde: desde,
           periodoHasta: hasta,
           registradoPorId: actor.id,
+          estadoAnterior: actual.estado,
         },
         select: SELECT_PAGO,
       });
@@ -649,15 +655,19 @@ export class EscrituraPlataforma {
   }
 
   /**
-   * Anula un pago (nunca se borra). Sólo el MÁS RECIENTE de los que corrieron el vencimiento:
-   * el vencimiento vuelve a donde estaba antes de ese pago. Si después de él hay otro vigente,
-   * 409 (se anula primero el posterior). No cambia el estado guardado; si con eso queda fuera de
-   * la gracia, el estado efectivo pasa a `vencida` solo.
+   * Anula un pago (nunca se borra). Sólo el MÁS RECIENTE no anulado de la suscripción (por
+   * `created_at`): si hay uno posterior vigente, 409 (se anula primero ése). Deshace lo que hizo
+   * el pago: el vencimiento vuelve al inicio de lo que cubría y, si el pago había reactivado la
+   * suscripción (venía de `prueba` o `suspendida`) y sigue `activa`, regresa a ese estado (y el
+   * MRR lo refleja). Si después alguien cambió el estado a mano, ése se respeta.
    */
   anularPago(pagoId: string, motivo: string): Promise<PagoGuardado> {
     return this.#correr(async (tx, actor) => {
       const pago = encontradoOr404(
-        await tx.pagoSuscripcion.findFirst({ where: { id: pagoId }, select: SELECT_PAGO }),
+        await tx.pagoSuscripcion.findFirst({
+          where: { id: pagoId },
+          select: { ...SELECT_PAGO, estadoAnterior: true },
+        }),
       );
       const actual = await bloquearSuscripcion(tx, pago.empresaId);
       if (!actual || actual.id !== pago.suscripcionId) {
@@ -666,9 +676,14 @@ export class EscrituraPlataforma {
       if (pago.anuladoAt !== null) {
         throw new ConflictException('El pago ya está anulado');
       }
-      if (actual.vencimiento.getTime() !== pago.periodoHasta.getTime()) {
+      const ultimo = await tx.pagoSuscripcion.findFirst({
+        where: { suscripcionId: actual.id, anuladoAt: null },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: { id: true },
+      });
+      if (ultimo?.id !== pagoId) {
         throw new ConflictException(
-          'Hay un pago posterior que también corrió el vencimiento: anula primero el más reciente',
+          'Hay un pago posterior sin anular: anula primero el más reciente',
         );
       }
       const anulado = await tx.pagoSuscripcion.update({
@@ -676,17 +691,33 @@ export class EscrituraPlataforma {
         data: { anuladoAt: new Date(), anuladoPorId: actor.id, motivoAnulacion: motivo },
         select: SELECT_PAGO,
       });
-      await tx.suscripcion.update({
+      const regresaEstado =
+        actual.estado === EstadoSuscripcion.activa &&
+        pago.estadoAnterior !== EstadoSuscripcion.activa &&
+        pago.estadoAnterior !== EstadoSuscripcion.cancelada;
+      const despues = await tx.suscripcion.update({
         where: { id: actual.id },
-        data: { vencimiento: pago.periodoDesde },
+        data: {
+          vencimiento: pago.periodoDesde,
+          ...(regresaEstado ? { estado: pago.estadoAnterior } : {}),
+        },
+        select: { estado: true },
       });
       await escribirBitacora(tx, actor, {
         accion: 'pago.anular',
         empresaId: pago.empresaId,
         recurso: 'pago',
         recursoId: pagoId,
-        antes: { ...pagoJson(pago), vencimiento: textoDia(actual.vencimiento) },
-        despues: { ...pagoJson(anulado), vencimiento: textoDia(pago.periodoDesde) },
+        antes: {
+          ...pagoJson(pago),
+          vencimiento: textoDia(actual.vencimiento),
+          estado: actual.estado,
+        },
+        despues: {
+          ...pagoJson(anulado),
+          vencimiento: textoDia(pago.periodoDesde),
+          estado: despues.estado,
+        },
       });
       return anulado;
     });
@@ -719,8 +750,14 @@ export class EscrituraPlataforma {
 
   /**
    * Edita nombre/correo de un admin interno, o lo desactiva / reactiva. NUNCA su contraseña (esa
-   * sólo la cambia él mismo en `/cuenta/password`) y nunca se borra. Reglas: nadie se desactiva a
-   * sí mismo (400) y siempre queda al menos un admin activo (409, bajo candado).
+   * sólo la cambia él mismo en `/cuenta/password`) y nunca se borra.
+   *
+   * "Siempre queda al menos un admin activo" lo SOSTIENEN tres cosas juntas, no el conteo de
+   * abajo: (1) el actor se relee activo DESPUÉS de tomar el candado de administradores, (2)
+   * nadie se desactiva a sí mismo (400), y (3) `/usuarios` ya no da de baja ni crea admins
+   * (sólo esta pieza los toca). Con eso, quien desactiva a otro sigue activo él mismo. Dos que
+   * se desactivan mutuamente a la vez se serializan en el candado y el segundo ya no es actor
+   * vigente (401): test e2e "dos admins que se desactivan uno al otro A LA VEZ".
    */
   editarAdmin(
     id: string,
@@ -738,6 +775,8 @@ export class EscrituraPlataforma {
       if (cambios.activo === false && id === actor.id) {
         throw new BadRequestException('No puedes desactivarte a ti mismo');
       }
+      // Defensa en profundidad: por (1)-(3) de arriba esto no se alcanza (el actor activo es otro
+      // admin distinto del destino). Se deja por si alguna escritura futura se salta esta pieza.
       if (cambios.activo === false && antes.activo) {
         const otros = await tx.usuario.count({
           where: { rol: RolUsuario.admin_global, activo: true, id: { not: id } },
@@ -918,37 +957,60 @@ export class CupoSucursales {
           select: { id: true },
         }),
       );
-      await this.#verificarCupo(tx, empresa.id, forzar, 'alta');
-      return new EscrituraAdmin(tx, this.#scope).crearSucursal(empresa.id, datos);
+      const forzada = await this.#verificarCupo(tx, empresa.id, forzar);
+      const sucursal = await new EscrituraAdmin(tx, this.#scope).crearSucursal(empresa.id, datos);
+      if (forzada) await this.#bitacoraForzada(tx, empresa.id, forzada, 'alta', sucursal.id);
+      return sucursal;
     });
   }
 
   /**
-   * Antes de reactivar una sucursal: si está inactiva, toma el candado y revisa el cupo. Una que
-   * ya está activa (o no existe / es de otra empresa) no pasa por aquí: lo resuelve el PATCH.
+   * El PATCH de una sucursal (nombre, zona, alta/baja) en UNA transacción. Si la reactiva (estaba
+   * inactiva y llega `activo: true`), el cupo se revisa bajo el candado de la suscripción y el
+   * UPDATE va en la misma transacción: dos reactivaciones simultáneas no se cuelan las dos por
+   * el último cupo, y la bitácora de "forzó el límite" sólo queda si el UPDATE ocurrió.
+   * Fuera del alcance (o inexistente): 404.
    */
-  verificarReactivacion(sucursalId: string, forzar: boolean): Promise<void> {
+  editarSucursal(
+    sucursalId: string,
+    data: { nombre?: string; zonaHoraria?: string; activo?: boolean },
+    forzar: boolean,
+  ) {
     return enTransaccion(this.#cliente, async (tx) => {
-      const sucursal = await tx.sucursal.findFirst({
-        where: whereScoped(this.#scope, 'Sucursal', { id: sucursalId }),
-        select: { empresaId: true, activo: true },
-      });
-      if (!sucursal || sucursal.activo) return;
-      await this.#verificarCupo(tx, sucursal.empresaId, forzar, 'reactivacion');
+      const donde = whereScoped(this.#scope, 'Sucursal', { id: sucursalId });
+      const actual = encontradoOr404(
+        await tx.sucursal.findFirst({ where: donde, select: { empresaId: true, activo: true } }),
+      );
+      const forzada =
+        data.activo === true && !actual.activo
+          ? await this.#verificarCupo(tx, actual.empresaId, forzar)
+          : null;
+      const { count } = await tx.sucursal.updateMany({ where: donde, data });
+      encontradoOr404(count === 1 ? count : null);
+      if (forzada) {
+        await this.#bitacoraForzada(tx, actual.empresaId, forzada, 'reactivacion', sucursalId);
+      }
+      return encontradoOr404(
+        await tx.sucursal.findFirst({ where: donde, select: SELECT_SUCURSAL }),
+      );
     });
   }
 
+  /**
+   * Con el candado de la suscripción: ¿cabe una sucursal activa más? Si no cabe, 409; salvo un
+   * admin_global con `forzar`, que pasa (devuelve el cupo para la bitácora, que el caller
+   * escribe DESPUÉS de su escritura). Sin suscripción o ilimitado: null.
+   */
   async #verificarCupo(
     tx: Tx,
     empresaId: string,
     forzar: boolean,
-    motivo: 'alta' | 'reactivacion',
-  ): Promise<void> {
+  ): Promise<{ plan: string; limite: number; activas: number } | null> {
     const suscripcion = await bloquearSuscripcion(tx, empresaId);
     const limite = suscripcion?.plan.limiteSucursales ?? null;
-    if (!suscripcion || limite === null) return;
+    if (!suscripcion || limite === null) return null;
     const activas = await tx.sucursal.count({ where: { empresaId, activo: true } });
-    if (activas < limite) return;
+    if (activas < limite) return null;
     const esGlobal = this.#scope.tipo === 'global';
     if (!esGlobal || !forzar) {
       throw new LimiteSucursalesExcedido(
@@ -958,13 +1020,23 @@ export class CupoSucursales {
         suscripcion.plan.nombre,
       );
     }
+    return { plan: suscripcion.plan.nombre, limite, activas };
+  }
+
+  async #bitacoraForzada(
+    tx: Tx,
+    empresaId: string,
+    cupo: { plan: string; limite: number; activas: number },
+    motivo: 'alta' | 'reactivacion',
+    sucursalId: string,
+  ): Promise<void> {
     await escribirBitacora(tx, await actorVigente(tx, this.#actorId), {
       accion: 'sucursal.forzar_limite',
       empresaId,
       recurso: 'empresa',
       recursoId: empresaId,
-      antes: { plan: suscripcion.plan.nombre, limite, activas },
-      despues: { motivo, activas: activas + 1 },
+      antes: cupo,
+      despues: { motivo, sucursalId, activas: cupo.activas + 1 },
     });
   }
 }

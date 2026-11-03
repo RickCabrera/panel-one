@@ -18,6 +18,7 @@ import { TokensService } from '../auth/tokens.service';
 import { Reloj } from '../comun/reloj';
 import { COOKIE_REFRESH } from '../config/auth.config';
 import { configurarApp } from '../configurar-app';
+import { generarDocumento } from '../openapi/documento';
 
 // E2E del panel de plataforma (membresías) sobre la app REAL contra Postgres REAL, con las
 // fixtures sintéticas de F1-011. El reloj de la app está fijo (`AHORA`, mediodía en CDMX del
@@ -154,32 +155,43 @@ describe('Panel de plataforma (e2e, membresías)', () => {
   // --- Acceso por rol --------------------------------------------------------------------------
 
   describe('sólo admin_global: cualquier otro rol recibe 404 (como una ruta que no existe)', () => {
-    const X = FX.inexistente;
-    const rutas: [string, string, object?][] = [
-      ['GET', '/plataforma/metricas'],
-      ['GET', '/plataforma/planes'],
-      ['POST', '/plataforma/planes', { nombre: `Intruso ${SUF}`, precioMensual: '1.00' }],
-      ['PATCH', `/plataforma/planes/${X}`, { activo: false }],
-      ['DELETE', `/plataforma/planes/${X}`],
-      ['GET', '/plataforma/clientes'],
-      ['POST', '/plataforma/clientes', {}],
-      ['GET', `/plataforma/clientes/${FX.empresaA}`],
-      ['PATCH', `/plataforma/clientes/${FX.empresaA}`, { nombre: 'x' }],
-      ['PUT', `/plataforma/clientes/${FX.empresaA}/suscripcion`, { diaCorte: 3 }],
-      ['POST', `/plataforma/clientes/${FX.empresaA}/estado`, { estado: 'suspendida' }],
-      ['GET', '/plataforma/pagos'],
-      ['GET', `/plataforma/clientes/${FX.empresaA}/pagos`],
-      ['POST', `/plataforma/clientes/${FX.empresaA}/pagos`, { monto: '1.00' }],
-      ['POST', `/plataforma/pagos/${X}/anular`, { motivo: 'xxx' }],
-      ['GET', '/plataforma/administradores'],
-      ['POST', '/plataforma/administradores', {}],
-      ['PATCH', `/plataforma/administradores/${GLOBAL.id}`, { activo: false }],
-      ['GET', `/plataforma/administradores/buscar-cuenta?email=${USUARIOS.visorA.email}`],
-      ['POST', '/plataforma/administradores/convertir', { usuarioId: USUARIOS.visorA.id }],
-      ['GET', '/plataforma/bitacora'],
-      ['GET', '/plataforma/ajustes'],
-      ['PUT', '/plataforma/ajustes', { colorAcento: 'rojo' }],
-    ];
+    // Las rutas salen de las REGISTRADAS (el documento OpenAPI que genera la app): una ruta nueva
+    // bajo /plataforma entra al barrido sola, sin que nadie se acuerde de listarla.
+    const rutas: [string, string, object?][] = [];
+    // Cuerpos que SÍ serían válidos para un admin_global: así se ve que nada se escribe.
+    const CUERPOS: Record<string, object> = {
+      'POST /plataforma/planes': { nombre: `Intruso ${SUF}`, precioMensual: '1.00' },
+      'PATCH /plataforma/planes/{id}': { activo: false },
+      'PATCH /plataforma/clientes/{id}': { nombre: 'x' },
+      'PUT /plataforma/clientes/{id}/suscripcion': { diaCorte: 3 },
+      'POST /plataforma/clientes/{id}/estado': { estado: 'suspendida' },
+      'POST /plataforma/pagos/{id}/anular': { motivo: 'xxx' },
+      'PATCH /plataforma/administradores/{id}': { activo: false },
+      'POST /plataforma/administradores/convertir': { usuarioId: USUARIOS.visorA.id },
+      'PUT /plataforma/ajustes': { colorAcento: 'rojo' },
+    };
+    const ID_DE: Record<string, string> = {
+      '/plataforma/clientes/{id}': FX.empresaA,
+      '/plataforma/administradores/{id}': GLOBAL.id,
+    };
+
+    beforeAll(async () => {
+      const { paths } = await generarDocumento();
+      for (const [plantilla, operaciones] of Object.entries(paths)) {
+        if (!plantilla.startsWith('/plataforma')) continue;
+        for (const metodo of Object.keys(operaciones as object)) {
+          const M = metodo.toUpperCase();
+          if (!['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].includes(M)) continue;
+          const base = Object.keys(ID_DE).find((b) => plantilla.startsWith(b));
+          const ruta = plantilla.replace('{id}', base ? ID_DE[base] : FX.inexistente);
+          rutas.push([M, ruta, CUERPOS[`${M} ${plantilla}`] ?? {}]);
+        }
+      }
+    });
+
+    it('el barrido cubre todas las rutas registradas de /plataforma (al menos las 23 de hoy)', () => {
+      expect(rutas.length).toBeGreaterThanOrEqual(23);
+    });
 
     it.each([
       ['admin_empresa', USUARIOS.adminEmpresaA],
@@ -881,13 +893,13 @@ describe('Panel de plataforma (e2e, membresías)', () => {
       void b;
 
       const r = (await yo().get('/plataforma/metricas')).body;
-      // MRR: activas + vencidas = a + b (c en prueba se volvió activa al pagar, pero el pago se
-      // anuló: queda activa) = 3 × 350.50.
+      // MRR: activas + vencidas = a + b = 2 × 350.50. `c` pagó (prueba → activa), pero el
+      // pago se anuló y la anulación la regresa a `prueba`: no suma.
       const centavos = (x: string) => Math.round(Number(x) * 100);
-      expect(centavos(r.mrr) - centavos(antes.mrr)).toBe(3 * 35050);
-      expect(r.activos - antes.activos).toBe(2);
+      expect(centavos(r.mrr) - centavos(antes.mrr)).toBe(2 * 35050);
+      expect(r.activos - antes.activos).toBe(1);
       expect(r.vencidos - antes.vencidos).toBe(1);
-      expect(r.prueba - antes.prueba).toBe(0);
+      expect(r.prueba - antes.prueba).toBe(1);
       expect(r.suspendidos - antes.suspendidos).toBe(1);
       expect(centavos(r.ingresosMes) - centavos(antes.ingresosMes)).toBe(35050);
       // `a` pagó (vence 2026-12-08); `c` vence el 30. Ninguno en 7 días... salvo d, suspendida
@@ -1215,6 +1227,164 @@ describe('Panel de plataforma (e2e, membresías)', () => {
         { colorAcento: 'magenta' },
         { colorAcento: null },
       ]);
+    });
+  });
+
+  // --- Correcciones de la revisión (#86) -------------------------------------------------------
+
+  describe('revisión: planes gratuitos, anulación, moneda y reactivación', () => {
+    const pagoBase = {
+      monto: '499.00',
+      fechaPago: '2026-11-02',
+      metodo: 'transferencia',
+    };
+
+    it('un plan de $0 (como el "Plan inicial") nunca queda vencido ni pide pago', async () => {
+      const gratis = await crearPlan({ precioMensual: '0.00' });
+      const { cliente, email } = await altaCliente(gratis.id, { vencimiento: '2026-09-01' });
+      expect(cliente.suscripcion).toMatchObject({ estado: 'activa', estadoEfectivo: 'activa' });
+
+      const pagos = await yo().get(`/plataforma/pagos?q=${encodeURIComponent(cliente.nombre)}`);
+      expect(pagos.body.mensualidades).toEqual([
+        expect.objectContaining({ estadoEfectivo: 'activa', estadoPago: 'pagado' }),
+      ]);
+      const vencidas = await yo().get('/plataforma/clientes?estado=vencida');
+      expect(vencidas.body.map((c: { id: string }) => c.id)).not.toContain(cliente.id);
+
+      const a = await appNueva();
+      const login = await request(a.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: PASSWORD })
+        .expect(200);
+      const m = await request(a.getHttpServer())
+        .get('/cuenta/membresia')
+        .set('Authorization', `Bearer ${login.body.accessToken}`)
+        .expect(200);
+      expect(m.body.membresia.estado).toBe('activa');
+    });
+
+    it('anular el pago que reactivó a una suspendida la regresa a suspendida (y el MRR lo refleja)', async () => {
+      const plan = await crearPlan({ precioMensual: '275.25' });
+      const { cliente } = await altaCliente(plan.id, { vencimiento: '2026-11-05' });
+      await yo().post(`/plataforma/clientes/${cliente.id}/estado`, { estado: 'suspendida' });
+      const conSuspendida = (await yo().get('/plataforma/metricas')).body;
+
+      const r = await yo().post(`/plataforma/clientes/${cliente.id}/pagos`, pagoBase);
+      expect(r.body.suscripcion.estado).toBe('activa');
+      const pagada = (await yo().get('/plataforma/metricas')).body;
+      const centavos = (x: string) => Math.round(Number(x) * 100);
+      expect(centavos(pagada.mrr) - centavos(conSuspendida.mrr)).toBe(27525);
+      expect(pagada.suspendidos - conSuspendida.suspendidos).toBe(-1);
+
+      const anular = await yo().post(`/plataforma/pagos/${r.body.pago.id}/anular`, {
+        motivo: 'Rebotó',
+      });
+      expect(anular.status).toBe(200);
+      const s = await prisma.suscripcion.findUniqueOrThrow({ where: { empresaId: cliente.id } });
+      expect(s.estado).toBe('suspendida');
+      expect(s.vencimiento.toISOString().slice(0, 10)).toBe('2026-11-05');
+      const despues = (await yo().get('/plataforma/metricas')).body;
+      expect(despues.mrr).toBe(conSuspendida.mrr);
+      expect(despues.suspendidos).toBe(conSuspendida.suspendidos);
+      expect((await bitacora(cliente.id)).at(-1)).toMatchObject({
+        accion: 'pago.anular',
+        antes: expect.objectContaining({ estado: 'activa' }),
+        despues: expect.objectContaining({ estado: 'suspendida' }),
+      });
+    });
+
+    it('"el más reciente" es el último pago NO anulado por fecha de registro, aunque el vencimiento se haya corregido a mano', async () => {
+      const plan = await crearPlan();
+      const { cliente } = await altaCliente(plan.id, { vencimiento: '2026-11-05' });
+      const ruta = `/plataforma/clientes/${cliente.id}/pagos`;
+      const p1 = (await yo().post(ruta, pagoBase)).body.pago;
+      // Alguien corrige el vencimiento a mano: ya no coincide con el `periodoHasta` del pago.
+      await yo().put(`/plataforma/clientes/${cliente.id}/suscripcion`, {
+        vencimiento: '2026-12-20',
+      });
+      const r = await yo().post(`/plataforma/pagos/${p1.id}/anular`, { motivo: 'Duplicado' });
+      expect(r.status).toBe(200);
+
+      const p2 = (await yo().post(ruta, pagoBase)).body.pago;
+      const p3 = (await yo().post(ruta, pagoBase)).body.pago;
+      expect((await yo().post(`/plataforma/pagos/${p2.id}/anular`, { motivo: 'x1x' })).status).toBe(
+        409,
+      );
+      expect((await yo().post(`/plataforma/pagos/${p3.id}/anular`, { motivo: 'x1x' })).status).toBe(
+        200,
+      );
+    });
+
+    it('sólo pesos: otra moneda es 400', async () => {
+      const plan = await crearPlan();
+      const { cliente } = await altaCliente(plan.id);
+      const r = await yo().post(`/plataforma/clientes/${cliente.id}/pagos`, {
+        ...pagoBase,
+        moneda: 'USD',
+      });
+      expect(r.status).toBe(400);
+      const ok = await yo().post(`/plataforma/clientes/${cliente.id}/pagos`, {
+        ...pagoBase,
+        moneda: 'mxn',
+      });
+      expect(ok.status).toBe(201);
+      expect(ok.body.pago.moneda).toBe('MXN');
+    });
+
+    it('reactivar dos sucursales A LA VEZ con un solo cupo libre: sólo una lo logra', async () => {
+      // Empresa A: 2 activas (A1, A2) + 2 inactivas nuevas; el plan permite 3.
+      const plan = await crearPlan({ limiteSucursales: 3 });
+      await yo().put(`/plataforma/clientes/${FX.empresaA}/suscripcion`, { planId: plan.id });
+      const [x, y] = await Promise.all(
+        ['Inactiva X', 'Inactiva Y'].map((nombre) =>
+          prisma.sucursal.create({ data: { empresaId: FX.empresaA, nombre, activo: false } }),
+        ),
+      );
+      try {
+        const dueno = como(app, USUARIOS.adminEmpresaA);
+        const [rx, ry] = await Promise.all([
+          dueno.patch(`/sucursales/${x.id}`, { activo: true }),
+          dueno.patch(`/sucursales/${y.id}`, { activo: true }),
+        ]);
+        expect([rx.status, ry.status].sort()).toEqual([200, 409]);
+        expect(
+          await prisma.sucursal.count({ where: { empresaId: FX.empresaA, activo: true } }),
+        ).toBe(3);
+
+        // Forzada por admin_global: pasa, y la bitácora queda UNA vez, con esa sucursal.
+        const pendiente = rx.status === 409 ? x : y;
+        const antes = await prisma.bitacoraPlataforma.count({
+          where: { accion: 'sucursal.forzar_limite', empresaId: FX.empresaA },
+        });
+        const forzada = await yo().patch(`/sucursales/${pendiente.id}`, {
+          activo: true,
+          forzarLimite: true,
+        });
+        expect(forzada.status).toBe(200);
+        const entradas = await prisma.bitacoraPlataforma.findMany({
+          where: { accion: 'sucursal.forzar_limite', empresaId: FX.empresaA },
+          orderBy: { createdAt: 'asc' },
+        });
+        expect(entradas).toHaveLength(antes + 1);
+        expect(entradas.at(-1)?.despues).toMatchObject({
+          motivo: 'reactivacion',
+          sucursalId: pendiente.id,
+        });
+        // Una que no existe: 404 y ninguna línea de bitácora.
+        const noExiste = await yo().patch(`/sucursales/${FX.inexistente}`, {
+          activo: true,
+          forzarLimite: true,
+        });
+        expect(noExiste.status).toBe(404);
+        expect(
+          await prisma.bitacoraPlataforma.count({
+            where: { accion: 'sucursal.forzar_limite', empresaId: FX.empresaA },
+          }),
+        ).toBe(antes + 1);
+      } finally {
+        await prisma.sucursal.deleteMany({ where: { id: { in: [x.id, y.id] } } });
+        await prisma.suscripcion.deleteMany({ where: { empresaId: FX.empresaA } });
+      }
     });
   });
 

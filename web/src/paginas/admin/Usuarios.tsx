@@ -1,5 +1,6 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router';
 
 import {
   PASSWORD_MAX,
@@ -20,9 +21,9 @@ const ROLES_EMPRESA: readonly Rol[] = ['visor', 'admin_empresa'];
 type Abierto = { tipo: 'editar'; usuario: UsuarioAdmin } | { tipo: 'reset'; usuario: UsuarioAdmin };
 
 /**
- * Usuarios de la empresa del alcance (F1-060). Un admin_empresa sólo asigna visor o
- * admin_empresa; sólo un admin_global ve la opción de crear otro admin_global (y la
- * API lo exige igual: 403 para los demás).
+ * Usuarios de la empresa del alcance (F1-060). Aquí sólo se asignan visor o admin_empresa.
+ * Membresías: los administradores globales (internos) se agregan, desactivan y reactivan SÓLO en
+ * Plataforma › Administradores (candado y bitácora); aquí se ven, y sólo se les edita el nombre.
  */
 export function Usuarios({ empresa }: { empresa: Empresa }) {
   const yo = useUsuario();
@@ -32,7 +33,7 @@ export function Usuarios({ empresa }: { empresa: Empresa }) {
 
   return (
     <div className="space-y-6">
-      <AltaUsuario empresa={empresa} puedeGlobal={esGlobal} />
+      <AltaUsuario empresa={empresa} />
       <section aria-label={`Usuarios de ${empresa.nombre}`} className="space-y-2">
         <h2 className="font-medium">Usuarios de {empresa.nombre}</h2>
         <TablaUsuarios consulta={usuarios} vacio="Esta empresa todavía no tiene usuarios." />
@@ -41,6 +42,13 @@ export function Usuarios({ empresa }: { empresa: Empresa }) {
       {esGlobal && (
         <section aria-label="Administradores globales" className="space-y-2">
           <h2 className="font-medium">Administradores globales</h2>
+          <p className="text-sm text-tinta-tenue">
+            Se agregan, desactivan y reactivan en{' '}
+            <Link className="text-acento-texto underline" to="/plataforma/administradores">
+              Plataforma › Administradores
+            </Link>
+            .
+          </p>
           <TablaUsuarios consulta={globales} vacio="No hay administradores globales." />
         </section>
       )}
@@ -104,8 +112,9 @@ function TablaUsuarios({
                   >
                     Editar
                   </button>
-                  {/* A ti mismo no te das de baja (la API también lo rechaza). */}
-                  {u.id !== yo.id && (
+                  {/* A ti mismo no te das de baja (la API también lo rechaza), y a un admin_global
+                      tampoco aquí: eso es de Plataforma › Administradores (membresías). */}
+                  {u.id !== yo.id && u.rol !== 'admin_global' && (
                     <button
                       type="button"
                       className={CLASE_BOTON}
@@ -174,13 +183,13 @@ function CampoPassword({
   );
 }
 
-function AltaUsuario({ empresa, puedeGlobal }: { empresa: Empresa; puedeGlobal: boolean }) {
+function AltaUsuario({ empresa }: { empresa: Empresa }) {
   const accion = useAccion();
   const [email, setEmail] = useState('');
   const [nombre, setNombre] = useState('');
   const [rol, setRol] = useState<Rol>('visor');
   const [password, setPassword] = useState('');
-  const roles: readonly Rol[] = puedeGlobal ? [...ROLES_EMPRESA, 'admin_global'] : ROLES_EMPRESA;
+  const roles = ROLES_EMPRESA;
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
@@ -190,8 +199,7 @@ function AltaUsuario({ empresa, puedeGlobal }: { empresa: Empresa; puedeGlobal: 
           email,
           nombre,
           rol,
-          // Un admin_global no lleva empresa; los demás, la del alcance.
-          empresaId: rol === 'admin_global' ? null : empresa.id,
+          empresaId: empresa.id,
           password,
         }),
       ['usuarios'],
@@ -241,11 +249,7 @@ function AltaUsuario({ empresa, puedeGlobal }: { empresa: Empresa; puedeGlobal: 
             </option>
           ))}
         </select>
-        <span className="text-xs text-tinta-tenue">
-          {rol === 'admin_global'
-            ? 'Ve y administra TODAS las empresas; no pertenece a ninguna.'
-            : `En la empresa ${empresa.nombre}.`}
-        </span>
+        <span className="text-xs text-tinta-tenue">{`En la empresa ${empresa.nombre}.`}</span>
       </label>
       <CampoPassword etiqueta="Contraseña inicial" valor={password} onCambio={setPassword} />
       {accion.error && (

@@ -3,6 +3,7 @@ import { EstadoSuscripcion, PeriodicidadPlan } from '@prisma/client';
 import {
   bloqueaAcceso,
   diaDeTexto,
+  esGratuito,
   esDiaValido,
   estadoEfectivo,
   estadoPagoMes,
@@ -71,6 +72,16 @@ describe('membresía: reglas puras', () => {
       expect(estadoEfectivo(s, d('2026-11-05'))).toBe('activa');
       expect(estadoEfectivo(s, d('2026-11-10'))).toBe('activa');
       expect(estadoEfectivo(s, d('2026-11-11'))).toBe('vencida');
+    });
+
+    it('un plan de $0 (gratuita) nunca queda vencida y su mensualidad cuenta como pagada', () => {
+      const s = { ...sus('activa', '2026-01-05', 0), gratuita: true };
+      expect(estadoEfectivo(s, d('2026-11-03'))).toBe('activa');
+      expect(estadoPagoMes(s, d('2026-11-03'))).toBe('pagado');
+      expect(esGratuito('0.00')).toBe(true);
+      expect(esGratuito('0.01')).toBe(false);
+      // Suspender a mano sigue valiendo aunque sea gratuita.
+      expect(estadoEfectivo({ ...s, estado: 'suspendida' }, d('2026-11-03'))).toBe('suspendida');
     });
 
     it('una prueba que se acaba sin pago también queda vencida', () => {

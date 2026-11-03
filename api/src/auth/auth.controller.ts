@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiForbiddenResponse,
   ApiBearerAuth,
   ApiCookieAuth,
   ApiNoContentResponse,
@@ -23,7 +24,7 @@ import {
 import { AuthService, type SesionEmitida } from './auth.service';
 import { Public } from './decoradores';
 import { LoginDto } from './dto/login.dto';
-import { ErrorDto, SesionDto, UsuarioActualDto } from './dto/sesion.dto';
+import { CuentaBloqueadaDto, ErrorDto, SesionDto, UsuarioActualDto } from './dto/sesion.dto';
 import type { RequestAutenticado } from './request-autenticado';
 import {
   SoloThrottlers,
@@ -60,6 +61,12 @@ export class AuthController {
       'Credenciales inválidas. Misma respuesta para email inexistente, contraseña mala, ' +
       'usuario inactivo o empresa inactiva.',
   })
+  @ApiForbiddenResponse({
+    type: CuentaBloqueadaDto,
+    description:
+      'Membresías: contraseña correcta, pero la empresa del usuario está suspendida o ' +
+      'cancelada (`codigo: cuenta_bloqueada`). Sólo con la contraseña correcta.',
+  })
   @ApiTooManyRequestsResponse({
     description: 'Más de 5 intentos por minuto, o de 30 por hora, desde la misma IP.',
   })
@@ -84,7 +91,10 @@ export class AuthController {
   @ApiOkResponse({ type: SesionDto })
   @ApiUnauthorizedResponse({
     type: ErrorDto,
-    description: 'Sin cookie, cookie inválida o vencida, o usuario/empresa ya inactivos.',
+    description:
+      'Sin cookie, cookie inválida o vencida, o usuario/empresa ya inactivos. Con la empresa ' +
+      'suspendida o cancelada, el `message` lo dice ("Tu cuenta está suspendida. Contacta a ' +
+      'soporte.").',
   })
   @ApiTooManyRequestsResponse({ description: 'Más de 30 refresh por minuto desde la misma IP.' })
   async refresh(

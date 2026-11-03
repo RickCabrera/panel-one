@@ -33,6 +33,7 @@ import { ErrorDto } from '../auth/dto/sesion.dto';
 import type { RequestAutenticado } from '../auth/request-autenticado';
 import { SoloThrottlers, THROTTLER_RESET } from '../auth/throttlers';
 import { EmpresaDto, SucursalDto } from '../organizacion/dto/organizacion.dto';
+import { LimiteSucursalesDto } from '../plataforma/dto/plataforma.dto';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import type { EmpresaCreada, SucursalCreada, UsuarioCreado } from '../scope/escritura-admin';
@@ -52,6 +53,10 @@ import {
 const DESC_400 = 'Cuerpo inválido, `id` que no es UUID, o un PATCH sin ningún campo.';
 const DESC_401 = 'Sin token, token inválido o vencido.';
 const DESC_403_RUTA = 'Rol insuficiente para la ruta (depende de la ruta, no del recurso).';
+const DESC_409_LIMITE =
+  'Membresías: la empresa ya tiene las sucursales activas que permite su plan ' +
+  '(`codigo: limite_sucursales`). Un admin_empresa no lo puede pasar; un admin_global sí, con ' +
+  '`forzarLimite: true` (queda en la bitácora de plataforma).';
 const DESC_404 = 'No existe o es de otra empresa. Misma respuesta en los dos casos (nunca 403).';
 
 /** El actor y su scope, ambos del access token. Nunca de algo que mande el cliente. */
@@ -119,6 +124,7 @@ export class SucursalesAdminController {
   @ApiBadRequestResponse({ type: ErrorDto, description: `${DESC_400} Zona que no es IANA.` })
   @ApiForbiddenResponse({ type: ErrorDto, description: DESC_403_RUTA })
   @ApiNotFoundResponse({ type: ErrorDto, description: `La empresa: ${DESC_404}` })
+  @ApiConflictResponse({ type: LimiteSucursalesDto, description: DESC_409_LIMITE })
   crear(
     @Req() req: RequestAutenticado,
     @EmpresaScopeActual() scope: EmpresaScope,
@@ -139,6 +145,10 @@ export class SucursalesAdminController {
   @ApiBadRequestResponse({ type: ErrorDto, description: `${DESC_400} Zona que no es IANA.` })
   @ApiForbiddenResponse({ type: ErrorDto, description: DESC_403_RUTA })
   @ApiNotFoundResponse({ type: ErrorDto, description: DESC_404 })
+  @ApiConflictResponse({
+    type: LimiteSucursalesDto,
+    description: `Al reactivar (\`activo: true\`): ${DESC_409_LIMITE}`,
+  })
   editar(
     @Req() req: RequestAutenticado,
     @EmpresaScopeActual() scope: EmpresaScope,

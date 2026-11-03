@@ -1,4 +1,4 @@
-import { EstadoSuscripcion, PeriodicidadPlan } from '@prisma/client';
+import { EstadoSuscripcion, PeriodicidadPlan, Prisma } from '@prisma/client';
 
 /**
  * Reglas de membresía del panel de plataforma, como funciones PURAS (sin base ni reloj): las usan
@@ -93,6 +93,11 @@ export interface SuscripcionParaEstado {
   estado: EstadoSuscripcion;
   vencimiento: Date;
   diasGracia: number;
+  /**
+   * Plan de $0.00 (p. ej. el "Plan inicial" de la migración): no se cobra, así que NUNCA queda
+   * `vencida` ni muestra aviso de pago. Ausente = de pago.
+   */
+  gratuita?: boolean;
 }
 
 /** El último día en que todavía no está vencida: vencimiento + días de gracia. */
@@ -110,6 +115,7 @@ export function estadoEfectivo(s: SuscripcionParaEstado, hoy: Date): EstadoEfect
   if (s.estado === EstadoSuscripcion.suspendida || s.estado === EstadoSuscripcion.cancelada) {
     return s.estado;
   }
+  if (s.gratuita) return s.estado;
   return hoy.getTime() > fechaLimite(s).getTime() ? 'vencida' : s.estado;
 }
 
@@ -138,6 +144,8 @@ export function estadoPagoMes(
   s: SuscripcionParaEstado & { diaCorte: number },
   hoy: Date,
 ): EstadoPagoMes {
+  // Un plan de $0 no debe nada: su mensualidad cuenta como pagada.
+  if (s.gratuita) return 'pagado';
   if (estadoEfectivo(s, hoy) === 'vencida') return 'vencido';
   const corte = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), s.diaCorte));
   return s.vencimiento.getTime() > corte.getTime() ? 'pagado' : 'pendiente';
@@ -158,6 +166,11 @@ export function mensajeLimiteSucursales(
     );
   }
   return `Tu plan (${plan}) permite ${cupo}. Para agregar más, contacta a soporte.`;
+}
+
+/** ¿El plan es de $0.00? (precio en texto o Decimal de Prisma). */
+export function esGratuito(precioMensual: Prisma.Decimal | string): boolean {
+  return new Prisma.Decimal(precioMensual).isZero();
 }
 
 /** Primer y último día (inclusive) del mes de `hoy`. */

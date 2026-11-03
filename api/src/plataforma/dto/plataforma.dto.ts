@@ -266,7 +266,7 @@ export class ClienteResumenDto {
   ultimaVentaRecibidaAt!: string | null;
 }
 
-export class ContactoDto {
+export class ContactoClienteDto {
   @ApiProperty({ type: String, nullable: true })
   contactoNombre!: string | null;
 
@@ -323,7 +323,7 @@ export class UsuarioClienteDto {
   ultimoAccesoAt!: string | null;
 }
 
-export class PagoDto {
+export class PagoSuscripcionDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
@@ -371,8 +371,8 @@ export class PagoDto {
 }
 
 export class ClienteDetalleDto extends ClienteResumenDto {
-  @ApiProperty({ type: ContactoDto })
-  contacto!: ContactoDto;
+  @ApiProperty({ type: ContactoClienteDto })
+  contacto!: ContactoClienteDto;
 
   @ApiProperty({ format: 'date-time' })
   creadaAt!: string;
@@ -384,10 +384,10 @@ export class ClienteDetalleDto extends ClienteResumenDto {
   listaUsuarios!: UsuarioClienteDto[];
 
   @ApiProperty({
-    type: [PagoDto],
+    type: [PagoSuscripcionDto],
     description: 'Del más reciente al más viejo, anulados incluidos.',
   })
-  pagos!: PagoDto[];
+  pagos!: PagoSuscripcionDto[];
 }
 
 export class ClientesQueryDto {
@@ -527,7 +527,7 @@ export class EditarClienteDto extends CamposContacto {
   nombre?: string;
 }
 
-export class GuardarSuscripcionDto {
+export class GuardarMembresiaDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description: 'Cambia el plan (activo). Obligatorio si la empresa aún no tiene suscripción.',
@@ -588,11 +588,15 @@ export class RegistrarPagoDto {
   @Matches(REGEX_MONTO, { message: 'monto debe ser un importe con hasta 2 decimales' })
   monto!: string;
 
-  @ApiPropertyOptional({ example: 'MXN', default: 'MXN' })
+  @ApiPropertyOptional({
+    enum: ['MXN'],
+    default: 'MXN',
+    description: 'Sólo pesos: la plataforma cobra en MXN.',
+  })
   @IsOptional()
   @Mayusculas()
-  @Matches(/^[A-Z]{3}$/)
-  moneda?: string;
+  @IsIn(['MXN'])
+  moneda?: 'MXN';
 
   @ApiProperty({ example: '2026-11-02', description: 'Día en que llegó el dinero. No futuro.' })
   @Matches(REGEX_DIA)
@@ -641,8 +645,8 @@ export class AnularPagoDto {
 }
 
 export class PagoRegistradoDto {
-  @ApiProperty({ type: PagoDto })
-  pago!: PagoDto;
+  @ApiProperty({ type: PagoSuscripcionDto })
+  pago!: PagoSuscripcionDto;
 
   @ApiProperty({ type: SuscripcionDto })
   suscripcion!: SuscripcionDto;
@@ -974,4 +978,30 @@ export class RespuestaMembresiaDto {
     description: 'Nula para admin_global o para una empresa sin suscripción.',
   })
   membresia!: MembresiaPropiaDto | null;
+}
+
+/** El 409 por el límite de sucursales del plan (POST /sucursales, PATCH /sucursales/{id}). */
+export class LimiteSucursalesDto {
+  @ApiProperty({ example: 409 })
+  statusCode!: number;
+
+  @ApiProperty({
+    example: 'Tu plan (Esencial) permite 1 sucursal activa. Para agregar más, contacta a soporte.',
+  })
+  message!: string;
+
+  @ApiProperty({ example: 'Conflict' })
+  error!: string;
+
+  @ApiProperty({ enum: ['limite_sucursales'] })
+  codigo!: 'limite_sucursales';
+
+  @ApiProperty({ description: 'Sucursales activas que permite el plan.' })
+  limite!: number;
+
+  @ApiProperty({ description: 'Sucursales activas que ya tiene la empresa.' })
+  activas!: number;
+
+  @ApiProperty({ description: 'Nombre del plan.' })
+  plan!: string;
 }

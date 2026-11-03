@@ -482,7 +482,8 @@ export class ProductoTopDto implements ProductoTop {
   cantidad!: string;
 }
 
-class ModificadorDto {
+/** Swagger nombra el esquema por la clase: `ModificadorDto` ya es el de la ingesta. */
+class ModificadorTicketDto {
   @ApiProperty()
   nombre!: string;
 
@@ -507,7 +508,7 @@ export class PartidaTicketDto implements PartidaTicket {
   total!: string;
 
   @ApiProperty({
-    type: [ModificadorDto],
+    type: [ModificadorTicketDto],
     description: 'Tal como los guardó la ingesta (esquema-sr.md §13: `{ nombre, precio }`).',
   })
   modificadores!: unknown[];

@@ -157,25 +157,25 @@ model Sucursal {
 }
 
 model Usuario {
-  id            String     @id @default(uuid()) @db.Uuid
+  id             String     @id @default(uuid()) @db.Uuid
   // Siempre en minúsculas: lo normaliza quien escribe (seed, y login en F1-011).
-  email         String     @unique
-  passwordHash  String     @map("password_hash")
-  nombre        String
-  rol           RolUsuario
+  email          String     @unique
+  passwordHash   String     @map("password_hash")
+  nombre         String
+  rol            RolUsuario
   // Nulo sólo para admin_global, obligatorio para los demás roles. Lo garantiza
   // el CHECK `usuarios_rol_empresa_chk` de la migración, no este schema.
-  empresaId     String?    @map("empresa_id") @db.Uuid
-  activo        Boolean    @default(true)
+  empresaId      String?    @map("empresa_id") @db.Uuid
+  activo         Boolean    @default(true)
   // Versión de las sesiones del usuario (F1-060). Va en el refresh token (claim
   // `ver`) y el refresh la compara con la base: cambiar o restablecer la
   // contraseña, o desactivar al usuario, la incrementa y deja sin efecto todo
   // refresh emitido antes. El access token (15 min) NO se revoca con esto.
-  versionSesion Int        @default(0) @map("version_sesion")
+  versionSesion  Int        @default(0) @map("version_sesion")
   // Plataforma: el último login exitoso (lo escribe SÓLO `AuthService.login`). Nulo = nunca.
-  ultimoAccesoAt DateTime? @map("ultimo_acceso_at") @db.Timestamptz(3)
-  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  ultimoAccesoAt DateTime?  @map("ultimo_acceso_at") @db.Timestamptz(3)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   empresa Empresa? @relation(fields: [empresaId], references: [id], onDelete: Restrict)
 
@@ -2234,24 +2234,28 @@ model Suscripcion {
 }
 
 /// Un pago de membresía. Nunca se borra: se ANULA (con motivo). CHECKs a mano: monto > 0,
-/// periodo_hasta > periodo_desde, moneda de 3 letras, y anulado_at/por/motivo todos o ninguno.
+/// periodo_hasta > periodo_desde, moneda = 'MXN' (sólo pesos), y anulado_at/por/motivo todos o
+/// ninguno.
 model PagoSuscripcion {
-  id              String     @id @default(uuid()) @db.Uuid
-  empresaId       String     @map("empresa_id") @db.Uuid
-  suscripcionId   String     @map("suscripcion_id") @db.Uuid
-  monto           Decimal    @db.Decimal(12, 2)
-  moneda          String     @default("MXN") @db.Char(3)
-  fechaPago       DateTime   @map("fecha_pago") @db.Date
+  id              String            @id @default(uuid()) @db.Uuid
+  empresaId       String            @map("empresa_id") @db.Uuid
+  suscripcionId   String            @map("suscripcion_id") @db.Uuid
+  monto           Decimal           @db.Decimal(12, 2)
+  moneda          String            @default("MXN") @db.Char(3)
+  fechaPago       DateTime          @map("fecha_pago") @db.Date
   metodo          MetodoPago
-  referencia      String?    @db.VarChar(120)
-  periodoDesde    DateTime   @map("periodo_desde") @db.Date
-  periodoHasta    DateTime   @map("periodo_hasta") @db.Date
-  notas           String?    @db.VarChar(1000)
-  registradoPorId String     @map("registrado_por_id") @db.Uuid
-  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  anuladoAt       DateTime?  @map("anulado_at") @db.Timestamptz(3)
-  anuladoPorId    String?    @map("anulado_por_id") @db.Uuid
-  motivoAnulacion String?    @map("motivo_anulacion") @db.VarChar(500)
+  referencia      String?           @db.VarChar(120)
+  periodoDesde    DateTime          @map("periodo_desde") @db.Date
+  periodoHasta    DateTime          @map("periodo_hasta") @db.Date
+  notas           String?           @db.VarChar(1000)
+  registradoPorId String            @map("registrado_por_id") @db.Uuid
+  // El estado guardado de la suscripción ANTES de este pago: anularlo lo regresa (un pago que
+  // sacó a alguien de `suspendida` o `prueba` y se anula, lo deja como estaba).
+  estadoAnterior  EstadoSuscripcion @map("estado_anterior")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  anuladoAt       DateTime?         @map("anulado_at") @db.Timestamptz(3)
+  anuladoPorId    String?           @map("anulado_por_id") @db.Uuid
+  motivoAnulacion String?           @map("motivo_anulacion") @db.VarChar(500)
 
   empresa       Empresa     @relation(fields: [empresaId], references: [id], onDelete: Restrict)
   // FK compuesta: el pago es de la empresa de su suscripción, nunca de otra.

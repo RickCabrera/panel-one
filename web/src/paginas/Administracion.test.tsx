@@ -115,37 +115,41 @@ describe('Administración: lo que se ofrece según el rol', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('admin_global: ve Empresas, puede crear un admin_global (sin empresa) y ve la lista de globales', async () => {
-    const api = apiAdmin('admin_global', {
-      'POST /usuarios': (l) => json(201, usuarioAdmin({ id: 'nuevo', ...(l.cuerpo as object) })),
+  it('admin_global: ve Empresas y la lista de globales, pero NO crea ni da de baja admin_global aquí (membresías)', async () => {
+    apiAdmin('admin_global', {
+      'GET /usuarios': (l) =>
+        json(
+          200,
+          l.query.get('empresaId')
+            ? [VISOR]
+            : [
+                VISOR,
+                usuarioAdmin({
+                  id: 'otro-g',
+                  email: 'otro@demo.local',
+                  rol: 'admin_global',
+                  empresaId: null,
+                }),
+              ],
+        ),
     });
     montar(`/admin?empresa=${A}&tab=usuarios`);
 
     expect(await screen.findByRole('tab', { name: 'Empresas' })).toBeInTheDocument();
     const globales = await screen.findByRole('region', { name: 'Administradores globales' });
+    const otro = await within(globales).findByRole('row', { name: 'otro@demo.local' });
+    // Los admins internos se manejan en Plataforma › Administradores: aquí ni baja ni contraseña.
+    expect(within(otro).queryByRole('button', { name: 'Dar de baja' })).toBeNull();
+    expect(within(otro).queryByRole('button', { name: /contraseña/i })).toBeNull();
     expect(
-      await within(globales).findByRole('row', { name: 'ana@demo.local' }),
-    ).toBeInTheDocument();
+      within(globales).getByRole('link', { name: 'Plataforma › Administradores' }),
+    ).toHaveAttribute('href', '/plataforma/administradores');
 
     const alta = screen.getByRole('form', { name: 'Nuevo usuario' });
-    await userEvent.type(within(alta).getByLabelText('Email'), 'nuevo@demo.local');
-    await userEvent.type(within(alta).getByLabelText('Nombre'), 'Nuevo Global');
-    await userEvent.selectOptions(within(alta).getByLabelText(/^Rol/), 'admin_global');
-    await userEvent.type(within(alta).getByLabelText(/Contraseña inicial/), PASSWORD);
-    await userEvent.click(within(alta).getByRole('button', { name: 'Agregar usuario' }));
-
-    await waitFor(() => expect(api.contar('POST', '/usuarios')).toBe(1));
-    expect(
-      api.llamadas.find((l) => l.metodo === 'POST' && l.ruta !== '/auth/refresh')?.cuerpo,
-    ).toEqual({
-      email: 'nuevo@demo.local',
-      nombre: 'Nuevo Global',
-      rol: 'admin_global',
-      empresaId: null,
-      password: PASSWORD,
-    });
-    // La contraseña no se queda en el formulario.
-    await waitFor(() => expect(within(alta).getByLabelText(/Contraseña inicial/)).toHaveValue(''));
+    const opciones = within(alta)
+      .getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(opciones).toEqual(['Visor', 'Administrador']);
   });
 
   it('admin_global da de alta una empresa y la lista se vuelve a pedir', async () => {
