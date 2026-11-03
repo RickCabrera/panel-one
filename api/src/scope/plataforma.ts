@@ -7,6 +7,7 @@ import {
 import { EstadoSuscripcion, Prisma, RolUsuario, type MetodoPago } from '@prisma/client';
 
 import {
+  bloqueaAcceso,
   mensajeLimiteSucursales,
   mesesPorPeriodo,
   siguienteCorte,
@@ -719,6 +720,23 @@ export class EscrituraPlataforma {
           estado: despues.estado,
         },
       });
+      // Si la anulación regresa la suscripción a un estado que deja fuera a sus usuarios
+      // (`suspendida`), se cortan sus sesiones igual que en la suspensión manual, y queda
+      // constancia del cambio de estado aparte de la anulación.
+      if (regresaEstado && bloqueaAcceso(despues.estado)) {
+        await tx.usuario.updateMany({
+          where: { empresaId: pago.empresaId },
+          data: { versionSesion: { increment: 1 } },
+        });
+        await escribirBitacora(tx, actor, {
+          accion: 'cliente.suspender',
+          empresaId: pago.empresaId,
+          recurso: 'suscripcion',
+          recursoId: actual.id,
+          antes: { estado: actual.estado },
+          despues: { estado: despues.estado, motivo: `Anulación del pago ${pagoId}: ${motivo}` },
+        });
+      }
       return anulado;
     });
   }

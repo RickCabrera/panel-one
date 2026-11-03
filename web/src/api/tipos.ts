@@ -260,7 +260,7 @@ export interface VersionAgente {
   vigente: boolean;
 }
 
-/** `ModificadorDto`: como los guardó la ingesta (esquema-sr.md §13). */
+/** `ModificadorTicketDto`: como los guardó la ingesta (esquema-sr.md §13). */
 export interface Modificador {
   nombre: string;
   precio: Importe;

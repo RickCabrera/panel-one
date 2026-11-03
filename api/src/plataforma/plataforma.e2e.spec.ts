@@ -1276,19 +1276,32 @@ describe('Panel de plataforma (e2e, membresías)', () => {
       expect(centavos(pagada.mrr) - centavos(conSuspendida.mrr)).toBe(27525);
       expect(pagada.suspendidos - conSuspendida.suspendidos).toBe(-1);
 
+      const usuarioCliente = await prisma.usuario.findFirstOrThrow({
+        where: { empresaId: cliente.id },
+      });
       const anular = await yo().post(`/plataforma/pagos/${r.body.pago.id}/anular`, {
         motivo: 'Rebotó',
       });
       expect(anular.status).toBe(200);
       const s = await prisma.suscripcion.findUniqueOrThrow({ where: { empresaId: cliente.id } });
       expect(s.estado).toBe('suspendida');
+      // Vuelve a quedar fuera: sus sesiones se cortan, como en la suspensión manual.
+      const tras = await prisma.usuario.findUniqueOrThrow({ where: { id: usuarioCliente.id } });
+      expect(tras.versionSesion).toBe(usuarioCliente.versionSesion + 1);
+      const acciones = (await bitacora(cliente.id)).map((e) => e.accion);
+      expect(acciones.slice(-2)).toEqual(['pago.anular', 'cliente.suspender']);
       expect(s.vencimiento.toISOString().slice(0, 10)).toBe('2026-11-05');
       const despues = (await yo().get('/plataforma/metricas')).body;
       expect(despues.mrr).toBe(conSuspendida.mrr);
       expect(despues.suspendidos).toBe(conSuspendida.suspendidos);
-      expect((await bitacora(cliente.id)).at(-1)).toMatchObject({
+      expect((await bitacora(cliente.id)).at(-2)).toMatchObject({
         accion: 'pago.anular',
         antes: expect.objectContaining({ estado: 'activa' }),
+        despues: expect.objectContaining({ estado: 'suspendida' }),
+      });
+      expect((await bitacora(cliente.id)).at(-1)).toMatchObject({
+        accion: 'cliente.suspender',
+        antes: { estado: 'activa' },
         despues: expect.objectContaining({ estado: 'suspendida' }),
       });
     });
