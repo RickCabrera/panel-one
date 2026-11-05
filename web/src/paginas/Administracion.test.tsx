@@ -171,6 +171,17 @@ describe('Administración: lo que se ofrece según el rol', () => {
 });
 
 describe('Sucursales', () => {
+  it('UI-02: sin sucursales, el estado vacío dice qué hacer y su botón lleva al alta', async () => {
+    apiAdmin('admin_empresa', { 'GET /sucursales': () => json(200, []) });
+    montar(`/admin?empresa=${A}`);
+
+    expect(await screen.findByText('Esta empresa todavía no tiene sucursales.')).toBeVisible();
+    expect(screen.getByText(/Conecta tu primera sucursal/)).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar mi primera sucursal' }));
+    const alta = screen.getByRole('form', { name: 'Nueva sucursal' });
+    expect(within(alta).getByLabelText('Nombre de la sucursal')).toHaveFocus();
+  });
+
   it('alta: manda empresa del alcance, nombre y zona IANA, y refresca la lista', async () => {
     const api = apiAdmin('admin_empresa', {
       'POST /sucursales': (l) =>

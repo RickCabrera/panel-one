@@ -4,7 +4,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router';
 import { ErrorApi } from '../api/cliente';
 import { useAuth } from '../auth/contexto';
 import { destinoSeguro } from '../auth/siguiente';
-import { Logo, NOMBRE_PRODUCTO } from '../marca/Marca';
+import { Logotipo } from '../marca/Marca';
 import { PantallaCarga } from './PantallaCarga';
 
 function mensajeDeError(error: unknown): string {
@@ -57,60 +57,63 @@ export function Login() {
       <form
         onSubmit={enviar}
         aria-busy={enviando}
-        className="w-full max-w-sm rounded-xl border border-linea bg-superficie p-6 shadow-sm sm:p-8"
+        className="w-full max-w-sm overflow-hidden rounded-2xl border border-linea bg-superficie shadow-lg"
       >
-        <div className="flex flex-col items-center text-acento-texto">
-          <Logo className="h-12 w-12" />
-          <h1 className="mt-3 text-center text-xl font-semibold">{NOMBRE_PRODUCTO}</h1>
+        {/* UI-02: la marca va sobre su morado (el logo arena), en los dos temas. */}
+        <div className="flex flex-col items-center border-b border-lateral-borde bg-lateral px-6 pt-8 pb-6">
+          <h1>
+            <Logotipo variante="oscuro" className="h-14" />
+          </h1>
+          <p className="mt-3 text-center text-sm text-lateral-tenue">
+            Ventas y mesas de tus sucursales, en vivo.
+          </p>
         </div>
-        <p className="mt-1 text-center text-sm text-tinta-suave">
-          Ventas y mesas de tus sucursales, en vivo.
-        </p>
+        <div className="p-6 sm:px-8">
+          {aviso && !error && (
+            <p role="status" className="mb-4 rounded-md bg-aviso-fondo p-2 text-sm text-aviso">
+              {aviso}
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="mb-4 rounded-md bg-peligro-fondo p-2 text-sm text-peligro">
+              {error}
+            </p>
+          )}
 
-        {aviso && !error && (
-          <p role="status" className="mt-4 rounded-md bg-aviso-fondo p-2 text-sm text-aviso">
-            {aviso}
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="mt-4 rounded-md bg-peligro-fondo p-2 text-sm text-peligro">
-            {error}
-          </p>
-        )}
+          <label className="block text-sm font-medium" htmlFor="email">
+            Correo
+          </label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-linea-fuerte bg-superficie px-3 py-2 text-sm focus:border-acento-borde focus:outline-none focus:ring-2 focus:ring-acento-borde/30"
+          />
 
-        <label className="mt-4 block text-sm font-medium" htmlFor="email">
-          Correo
-        </label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="username"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mt-1 w-full rounded-md border border-linea-fuerte bg-superficie px-3 py-2 text-sm focus:border-acento-borde focus:outline-none focus:ring-2 focus:ring-acento-borde/30"
-        />
+          <label className="mt-3 block text-sm font-medium" htmlFor="password">
+            Contraseña
+          </label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-linea-fuerte bg-superficie px-3 py-2 text-sm focus:border-acento-borde focus:outline-none focus:ring-2 focus:ring-acento-borde/30"
+          />
 
-        <label className="mt-3 block text-sm font-medium" htmlFor="password">
-          Contraseña
-        </label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mt-1 w-full rounded-md border border-linea-fuerte bg-superficie px-3 py-2 text-sm focus:border-acento-borde focus:outline-none focus:ring-2 focus:ring-acento-borde/30"
-        />
-
-        <button
-          type="submit"
-          disabled={enviando}
-          className="mt-6 w-full rounded-md bg-acento px-3 py-2.5 text-sm font-medium text-sobre-acento hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-borde disabled:opacity-60"
-        >
-          {enviando ? 'Entrando…' : 'Entrar'}
-        </button>
+          <button
+            type="submit"
+            disabled={enviando}
+            className="mt-6 w-full rounded-lg bg-acento px-3 py-2.5 text-sm font-semibold text-sobre-acento shadow-sm hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-borde disabled:opacity-60"
+          >
+            {enviando ? 'Entrando…' : 'Entrar'}
+          </button>
+        </div>
       </form>
       <p className="mt-6 text-center text-xs text-tinta-tenue">
         ¿Sin acceso? Pídeselo al administrador de tu empresa.

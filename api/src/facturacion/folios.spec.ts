@@ -192,6 +192,8 @@ describe('plantillas de aviso', () => {
     expect(t.nombre).toBe('folios-bajo');
     expect(t.asunto).toBe('Saldo de folios de timbrado bajo');
     expect(t.texto).toContain('Quedan 19 de 100 folios vigentes: por debajo del 20 % configurado.');
+    // UI-02: la franja del aviso va en el violeta de Yo Controlo.
+    expect(t.html).toContain('background:#6d3fc0;');
     const agotado = plantillaFoliosBajo({
       estado: 'agotado',
       disponible: 0,

@@ -16,8 +16,11 @@
  * (`VITE_COLOR_ACENTO`) en `acento.ts`, ajustados al contraste de cada tema.
  */
 
-/** Acento de fábrica (VITE_COLOR_ACENTO sin definir o no válido). */
-export const ACENTO_POR_DEFECTO = '#0f766e';
+/**
+ * Acento de fábrica (VITE_COLOR_ACENTO sin definir o no válido): el violeta interactivo de
+ * Yo Controlo (UI-02). Botones, ítem activo, enlaces e interruptores. Ver docs/marca/README.md.
+ */
+export const ACENTO_POR_DEFECTO = '#6d3fc0';
 
 /**
  * Membresías: los colores de interfaz que la plataforma puede elegir para TODOS los clientes
@@ -27,7 +30,9 @@ export const ACENTO_POR_DEFECTO = '#0f766e';
  */
 export const ACENTOS_PLATAFORMA = {
   naranja: { nombre: 'Naranja', hex: '#ea580c' },
-  morado: { nombre: 'Morado', hex: '#7c3aed' },
+  // UI-02: la clave `morado` ES el violeta de la marca (antes #7c3aed): quien ya la tenía
+  // guardada pasa al de Yo Controlo sin migrar nada.
+  morado: { nombre: 'Morado Yo Controlo', hex: ACENTO_POR_DEFECTO },
   azul_electrico: { nombre: 'Azul eléctrico', hex: '#2563eb' },
   verde_azulado: { nombre: 'Verde azulado', hex: '#14b8a6' },
   ambar_dorado: { nombre: 'Ámbar dorado', hex: '#f59e0b' },
@@ -42,22 +47,21 @@ export const NEGRO = '#000000';
 export type Tema = 'claro' | 'oscuro';
 
 const CLARO = {
-  // Superficies
-  fondo: '#f8fafc',
+  // Superficies: lavanda muy clara y blanco, con un tinte del morado de marca.
+  fondo: '#f7f5fb',
   superficie: '#ffffff',
-  realce: '#f1f5f9',
-  'realce-fuerte': '#e2e8f0',
+  realce: '#f1edf7',
+  'realce-fuerte': '#e5deef',
   // Líneas (bordes y divisores)
-  'linea-suave': '#f1f5f9',
-  linea: '#e2e8f0',
-  'linea-fuerte': '#cbd5e1',
-  // Texto, de más a menos énfasis. `tinta-tenue` es más oscura que slate-500: ésa
-  // quedaba en 4.34:1 sobre `realce` y no pasaba.
-  tinta: '#0f172a',
-  'tinta-medio': '#334155',
-  'tinta-suave': '#475569',
-  'tinta-tenue': '#556275',
-  // Estados
+  'linea-suave': '#f1edf7',
+  linea: '#e5deef',
+  'linea-fuerte': '#cdc2dd',
+  // Texto, de más a menos énfasis: el morado de marca (#2c1533) y sus rebajados.
+  tinta: '#2c1533',
+  'tinta-medio': '#3e2a4b',
+  'tinta-suave': '#54426a',
+  'tinta-tenue': '#63527a',
+  // Estados (semánticos: no siguen a la marca)
   peligro: '#b91c1c',
   'peligro-fondo': '#fef2f2',
   'peligro-borde': '#fca5a5',
@@ -73,34 +77,45 @@ const CLARO = {
   info: '#0284c7',
   // Semáforo del monitor de mesas: su ÚNICO canal visual es el color del borde.
   'semaforo-ok': '#059669',
-  'semaforo-alerta': '#d97706',
+  'semaforo-alerta': '#c96d05',
   'semaforo-rojo': '#dc2626',
   'semaforo-sin-dato': '#7c8799',
-  // Gráficas (la serie 1 es el acento)
-  'serie-2': '#6366f1',
-  'serie-3': '#d97706',
+  // Gráficas (la serie 1 es el acento violeta; la 2 se aleja de él: verde azulado)
+  'serie-2': '#0d8a7f',
+  'serie-3': '#c96d05',
   'serie-4': '#64748b',
-  rejilla: '#e2e8f0',
+  rejilla: '#e5deef',
   // Velo detrás de los diálogos (con alfa)
-  velo: '#0f172a80',
+  velo: '#2c153380',
+  // Sombra suave de tarjetas y menús (con alfa), teñida del morado de marca.
+  sombra: '#2c15331f',
+  // Barra lateral: SIEMPRE el morado de marca, en los dos temas (es donde vive el logo arena).
+  lateral: '#2c1533',
+  'lateral-borde': '#40264c',
+  'lateral-realce': '#3c2248',
+  'lateral-tinta': '#f4ece4',
+  'lateral-tenue': '#c3afc8',
+  // El arena del logo: la marca sobre morado y el acento secundario (detalles, no texto largo).
+  arena: '#e3cba8',
 } as const;
 
 export type Token = keyof typeof CLARO;
 
 const OSCURO: Record<Token, string> = {
-  fondo: '#0b1120',
-  superficie: '#131c2e',
-  realce: '#1e293b',
-  'realce-fuerte': '#334155',
-  'linea-suave': '#1e293b',
-  linea: '#2b3647',
-  'linea-fuerte': '#475569',
-  tinta: '#f1f5f9',
-  'tinta-medio': '#e2e8f0',
-  'tinta-suave': '#cbd5e1',
-  'tinta-tenue': '#a3b1c6',
+  // Superficies: el morado de marca y sus vecinos (nada de gris ni azul marino).
+  fondo: '#1e0e24',
+  superficie: '#2c1533',
+  realce: '#3a1f45',
+  'realce-fuerte': '#4a2b58',
+  'linea-suave': '#34193d',
+  linea: '#4a2b58',
+  'linea-fuerte': '#6a4a7a',
+  tinta: '#f6f0f4',
+  'tinta-medio': '#ebe0ea',
+  'tinta-suave': '#d6c6da',
+  'tinta-tenue': '#bea9c5',
   peligro: '#fca5a5',
-  'peligro-fondo': '#3b1219',
+  'peligro-fondo': '#41141f',
   'peligro-borde': '#7f1d1d',
   'peligro-fuerte': '#dc2626',
   'sobre-peligro': '#ffffff',
@@ -115,12 +130,19 @@ const OSCURO: Record<Token, string> = {
   'semaforo-ok': '#34d399',
   'semaforo-alerta': '#fbbf24',
   'semaforo-rojo': '#f87171',
-  'semaforo-sin-dato': '#7b8aa0',
-  'serie-2': '#818cf8',
+  'semaforo-sin-dato': '#8f8aa3',
+  'serie-2': '#2dd4bf',
   'serie-3': '#fbbf24',
-  'serie-4': '#94a3b8',
-  rejilla: '#2b3647',
-  velo: '#000000a0',
+  'serie-4': '#a49cb0',
+  rejilla: '#3a1f45',
+  velo: '#0b040ea8',
+  sombra: '#00000059',
+  lateral: '#2c1533',
+  'lateral-borde': '#40264c',
+  'lateral-realce': '#3c2248',
+  'lateral-tinta': '#f4ece4',
+  'lateral-tenue': '#c3afc8',
+  arena: '#e3cba8',
 };
 
 export const PALETA: Record<Tema, Record<Token, string>> = { claro: CLARO, oscuro: OSCURO };

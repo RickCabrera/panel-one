@@ -33,7 +33,7 @@ export function Campana() {
       aria-label={etiqueta}
       title={etiqueta}
       data-testid="campana-alertas"
-      className="relative inline-flex shrink-0 items-center gap-1 rounded-md border border-linea-fuerte px-2 py-1.5 text-sm hover:bg-realce"
+      className="relative inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm text-tinta-medio hover:bg-realce hover:text-tinta"
     >
       <Bell aria-hidden="true" className="h-4 w-4" />
       {isError ? (

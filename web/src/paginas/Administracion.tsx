@@ -68,7 +68,11 @@ export function Administracion() {
 
   return (
     <Vista titulo="Administración">
-      <div role="tablist" aria-label="Secciones de administración" className="mb-4 flex gap-2">
+      <div
+        role="tablist"
+        aria-label="Secciones de administración"
+        className="mb-4 flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-realce p-0.5 sm:w-fit"
+      >
         {pestanas.map((p) => (
           <button
             key={p}
@@ -76,8 +80,10 @@ export function Administracion() {
             role="tab"
             aria-selected={p === actual}
             onClick={() => elegir(p)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-              p === actual ? 'bg-acento text-sobre-acento' : 'text-tinta-medio hover:bg-realce'
+            className={`shrink-0 rounded-md px-3 py-1 text-sm font-medium ${
+              p === actual
+                ? 'bg-acento text-sobre-acento shadow-xs ring-1 ring-acento-borde ring-inset'
+                : 'text-tinta-suave hover:bg-superficie hover:text-tinta'
             }`}
           >
             {TEXTO[p]}

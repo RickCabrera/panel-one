@@ -1,6 +1,10 @@
-# Monitor para SoftRestaurant
+# Yo Controlo
 
-Panel de monitoreo para restaurantes que operan con **SoftRestaurant**. Un agente
+<img src="docs/marca/yocontrolo-claro.svg" alt="Yo Controlo" height="56">
+
+**Yo Controlo** (antes «Monitor SoftRestaurant») es el panel de monitoreo para restaurantes que
+operan con **SoftRestaurant**. Un agente (el servicio de Windows `ArkonAgente`, que conserva su
+nombre por compatibilidad)
 instalado en la máquina del restaurante **lee** su base de SQL Server, manda lo que
 encuentra a un API propio, y un panel web muestra ventas, mesas abiertas y reportes
 por empresa y sucursal.
@@ -20,7 +24,7 @@ En corto:
 - **Panel web**: Inicio, Resumen ejecutivo, Comparativos, Análisis (mesero, producto, hora ×
   día, área, tiempo de mesa), Tickets con filtros y detalle, Monitor de mesas (y vista de pared,
   en tiempo real por WebSocket), centro de alertas con campana, reportes programados por correo,
-  catálogos (productos y orquestador de menú, meseros, clientes, áreas y canales, ventas por
+  catálogos (productos y orquestador de menú, meseros, comensales, áreas y canales, ventas por
   canal), inventario (existencias, movimientos y kardex, conteos físicos, traspasos, recetas y
   consumo teórico, compras, gastos y estado de resultados, proyecciones y sugerido de compra),
   facturación CFDI 4.0 (datos fiscales y CSD, código corto por cheque, portal público de

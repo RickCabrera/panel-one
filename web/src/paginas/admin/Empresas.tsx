@@ -23,6 +23,14 @@ export function Empresas() {
 
   return (
     <div className="space-y-6">
+      {/* UI-02: los clientes con membresía (plan, pagos, suspensión) se llevan en Plataforma. */}
+      <p className="text-sm text-tinta-suave">
+        ¿Un cliente nuevo con plan y pagos? Dalo de alta en{' '}
+        <Link to="/plataforma/clientes" className="font-medium text-acento-texto underline">
+          Plataforma › Clientes
+        </Link>
+        . Aquí quedan el alta guiada con sus API keys, renombrar y dar de baja.
+      </p>
       {/* F2-147: el camino recomendado; el alta suelta de abajo sigue para casos sueltos. */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-acento-borde p-3 text-sm">
         <Link className={CLASE_PRIMARIO} to="/admin/alta">

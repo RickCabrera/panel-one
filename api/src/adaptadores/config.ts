@@ -219,7 +219,7 @@ export function leerAdaptadoresConfig(entorno: NodeJS.ProcessEnv = process.env):
       apiKey: obligatoria('BREVO_API_KEY', porQue, entorno),
       remitente: {
         email: obligatoria('CORREO_REMITENTE', porQue, entorno),
-        nombre: entorno.CORREO_REMITENTE_NOMBRE || 'Monitor SoftRestaurant',
+        nombre: entorno.CORREO_REMITENTE_NOMBRE || 'Yo Controlo',
       },
     };
   }

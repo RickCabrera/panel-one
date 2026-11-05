@@ -1244,6 +1244,7 @@ describe('Contrato OpenAPI', () => {
         '/sistema',
         '/ventas/comparativo-sucursales',
         '/ventas/formas-pago',
+        '/ventas/formas-pago/textos',
         '/ventas/hora-dia',
         // MVP: meseros en tiempo real.
         '/ventas/meseros-en-vivo',
@@ -1406,6 +1407,8 @@ describe('Contrato OpenAPI', () => {
       '/ventas/por-dia',
       '/ventas/comparativo-sucursales',
       '/ventas/formas-pago',
+      // UI-01: las opciones del filtro de forma de pago de Tickets.
+      '/ventas/formas-pago/textos',
       '/ventas/top-productos',
       '/ventas/tickets',
       '/ventas/por-mesero',
@@ -1432,6 +1435,7 @@ describe('Contrato OpenAPI', () => {
     expect(nombres('/ventas/por-dia')).toEqual(FILTRO);
     expect(nombres('/ventas/por-hora')).toEqual(FILTRO);
     expect(nombres('/ventas/formas-pago')).toEqual(FILTRO);
+    expect(nombres('/ventas/formas-pago/textos')).toEqual(FILTRO);
     expect(nombres('/ventas/comparativo-sucursales')).toEqual(FILTRO);
     // Análisis (F2-221): el mismo filtro común, sin parámetros propios.
     for (const ruta of [
@@ -1457,6 +1461,8 @@ describe('Contrato OpenAPI', () => {
         'mesero',
         'mesa',
         'forma',
+        // UI-01: el texto de SR, sin catálogo.
+        'formaRaw',
         'importeMin',
         'importeMax',
         'canceladas',

@@ -26,7 +26,13 @@ import { usePeriodo } from '../filtros/usePeriodo';
 import { useAnalisis } from './analisis/consultas';
 import type { Filtro } from './inicio/consultas';
 import { Esqueleto, Vacio } from './inicio/Tarjeta';
-import { parametrosDe, POR_PAGINA, useTickets, type ParametrosTickets } from './tickets/consultas';
+import {
+  parametrosDe,
+  POR_PAGINA,
+  useTextosFormaPago,
+  useTickets,
+  type ParametrosTickets,
+} from './tickets/consultas';
 import { ErrorCsv, nombreArchivo, ticketsACsv } from './tickets/csv';
 import { descargar, ErrorExport, exportarTickets } from './tickets/exportar';
 import { FiltrosTicketsForm } from './tickets/Filtros';
@@ -217,6 +223,14 @@ export function Tickets() {
     [meseros.data],
   );
 
+  // UI-01: las opciones de "Forma de pago" son los textos de SR del alcance y periodo (los que
+  // enseña la tabla), no el ENUM del catálogo, que vacío lo vuelve todo `otro`.
+  const textosForma = useTextosFormaPago(filtro, rango);
+  const formasPago = useMemo(
+    () => (textosForma.data ? textosForma.data.map((t) => t.formaRaw) : null),
+    [textosForma.data],
+  );
+
   const porId = useMemo(
     () => new Map((sucursales.data ?? []).map((s) => [s.id, s] as const)),
     [sucursales.data],
@@ -317,6 +331,7 @@ export function Tickets() {
           key={JSON.stringify(filtros)}
           filtros={filtros}
           meseros={nombresMeseros}
+          formasPago={formasPago}
           onAplicar={aplicar}
         />
         {conFiltros && (

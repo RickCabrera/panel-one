@@ -20,6 +20,13 @@ const ENTRADA = resolve(import.meta.dirname, 'src/pwa/sw.ts');
 const PUBLICO = resolve(import.meta.dirname, 'public');
 export const ARCHIVO_SW = 'sw.js';
 
+/**
+ * Lo que se sirve pero NO se precachea: el respaldo `.woff` de las fuentes de @fontsource (UI-02).
+ * Todo navegador con service worker entiende `.woff2` y nunca pide el `.woff`; guardarlo sería
+ * bajar el doble de fuentes en cada instalación. `scripts/revisar-pwa.mjs` usa la misma regla.
+ */
+export const fueraDelPrecache = (archivo: string): boolean => /\.woff$/.test(archivo);
+
 function archivosDe(carpeta: string): string[] {
   return readdirSync(carpeta).flatMap((nombre) => {
     const ruta = join(carpeta, nombre);
@@ -42,7 +49,7 @@ export function pluginServiceWorker(): Plugin {
       }
       const huella = createHash('sha256');
       const delBuild = Object.keys(bundle)
-        .filter((f) => f !== ARCHIVO_SW && !f.endsWith('.map'))
+        .filter((f) => f !== ARCHIVO_SW && !f.endsWith('.map') && !fueraDelPrecache(f))
         .sort();
       for (const f of delBuild) {
         const item = bundle[f];

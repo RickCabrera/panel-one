@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { Store } from 'lucide-react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -16,7 +17,8 @@ import {
   SUCURSAL_A2,
   usuario,
 } from '../test/apiFalsa';
-import { SECCIONES } from './menu';
+import { SECCIONES, type EntradaMenu } from './menu';
+import { EntradaPendiente } from './Sidebar';
 
 // F2-210 contra el router y la app reales: el menú por secciones, las entradas pendientes
 // que no navegan, el orden de Tab, el colapso recordado y el badge de agentes.
@@ -79,8 +81,8 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe('AC1 · las seis secciones con sus entradas', () => {
-  it('admin_global: seis encabezados en orden, y cada entrada como enlace o pendiente', async () => {
+describe('AC1 · las secciones con sus entradas', () => {
+  it('admin_global: los encabezados en orden, y cada entrada como enlace o pendiente', async () => {
     api(usuario('admin_global'));
     montar(`/cuenta?empresa=${A}`);
     const nav = await menu();
@@ -113,48 +115,58 @@ describe('AC1 · las seis secciones con sus entradas', () => {
 
     api(usuario('visor'));
     montar(`/cuenta?empresa=${A}`);
-    await menu();
+    const nav = await menu();
     expect(document.getElementById('menu-seccion-administracion')).toBeNull();
-    // Las pendientes NO se ocultan por no estar construidas: el visor ve el mapa.
-    expect(screen.getByRole('button', { name: 'Empresas' })).toBeInTheDocument();
+    // UI-02: el menú del restaurante ya no trae entradas «Pronto»: todo lo que ve, navega.
+    expect(nav.querySelectorAll('[aria-disabled="true"]')).toHaveLength(0);
+    expect(within(nav).queryByText('Pronto')).not.toBeInTheDocument();
   });
 });
 
 describe('AC2 · una entrada sin módulo no navega a una pantalla rota', () => {
+  // UI-02 quitó del mapa las entradas pendientes que había, pero el mecanismo sigue para la
+  // próxima: se prueba con una entrada sintética montada sola, con el mismo router.
+  const PENDIENTE: EntradaMenu = {
+    id: 'prueba.pendiente',
+    texto: 'Vista futura',
+    icono: Store,
+    pendiente: { tarea: 'F2-999', razon: 'Se construye en F2-999.' },
+  };
+
+  function montarPendiente(ruta: string) {
+    return render(
+      <MemoryRouter initialEntries={[ruta]}>
+        <EntradaPendiente entrada={PENDIENTE} />
+        <Ubicacion />
+      </MemoryRouter>,
+    );
+  }
+
   it('clic y Enter no cambian la vista, y la razón se expone como descripción', async () => {
-    api(usuario('visor'));
-    montar(`/tickets?empresa=${A}`);
-    const nav = await menu();
-    // Ventas por canal ya navega (F2-144): ya no queda ninguna pendiente con tarea, así que la
-    // de ejemplo es una de SIN_TAREA (Empresas, de Principal).
-    const compras = within(nav).getByRole('button', { name: 'Empresas' });
+    montarPendiente(`/tickets?empresa=${A}`);
+    const boton = screen.getByRole('button', { name: 'Vista futura' });
 
-    expect(compras).toHaveAttribute('aria-disabled', 'true');
-    expect(compras).not.toBeDisabled(); // sigue en el orden de Tab
-    expect(compras).toHaveAccessibleDescription(
-      'Vista de consulta sin tarea asignada todavía; se decide en el cierre de la Ronda 2.',
-    );
-    expect(compras).toHaveAttribute(
-      'title',
-      'Empresas: Vista de consulta sin tarea asignada todavía; se decide en el cierre de la Ronda 2.',
-    );
+    expect(boton).toHaveAttribute('aria-disabled', 'true');
+    expect(boton).not.toBeDisabled(); // sigue en el orden de Tab
+    expect(boton).toHaveAccessibleDescription('Se construye en F2-999.');
+    expect(boton).toHaveAttribute('title', 'Vista futura: Se construye en F2-999.');
 
-    await userEvent.click(compras);
+    await userEvent.click(boton);
     expect(ubicacion()).toBe(`/tickets?empresa=${A}`);
-    compras.focus();
+    boton.focus();
     await userEvent.keyboard('{Enter}');
     await userEvent.keyboard(' ');
     expect(ubicacion()).toBe(`/tickets?empresa=${A}`);
-    expect(screen.queryByRole('heading', { name: 'No encontrada' })).not.toBeInTheDocument();
   });
 
-  it('las de SIN_TAREA dicen que no tienen tarea, sin inventarla', async () => {
-    api(usuario('visor'));
+  it('el mapa real ya no trae pendientes: todas las entradas son enlaces', async () => {
+    api(usuario('admin_global'));
     montar(`/cuenta?empresa=${A}`);
-    const principal = await lista('principal');
-    expect(within(principal).getByRole('button', { name: 'Empresas' })).toHaveAccessibleDescription(
-      /sin tarea asignada/,
-    );
+    const nav = await menu();
+    const entradas = SECCIONES.flatMap((s) => s.entradas);
+    for (const entrada of entradas) {
+      expect(within(nav).getByRole('link', { name: entrada.texto })).toBeInTheDocument();
+    }
   });
 
   it('cada destino del menú existe en el router: ninguno cae en "No encontrada"', async () => {
@@ -231,7 +243,7 @@ describe('AC4 · colapso recordado', () => {
     catalogos.focus();
     await evt.keyboard('{Enter}');
     expect(catalogos).toHaveAttribute('aria-expanded', 'false');
-    expect(within(nav).queryByRole('link', { name: 'Clientes' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Comensales' })).not.toBeInTheDocument();
     // Del encabezado colapsado, Tab brinca directo a la siguiente sección.
     await evt.tab();
     expect(nombre(document.activeElement!)).toBe('Inventario y compras');
@@ -246,7 +258,7 @@ describe('AC4 · colapso recordado', () => {
       'aria-expanded',
       'false',
     );
-    expect(within(nav).queryByRole('link', { name: 'Clientes' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('link', { name: 'Comensales' })).not.toBeInTheDocument();
 
     cleanup();
     terminarSesion('cerrada');
@@ -257,8 +269,8 @@ describe('AC4 · colapso recordado', () => {
       'aria-expanded',
       'true',
     );
-    // Clientes ya es enlace (F2-232).
-    expect(within(nav).getByRole('link', { name: 'Clientes' })).toBeInTheDocument();
+    // Clientes ya es enlace (F2-232); UI-02 lo llama «Comensales».
+    expect(within(nav).getByRole('link', { name: 'Comensales' })).toBeInTheDocument();
   });
 });
 

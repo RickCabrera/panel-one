@@ -24,8 +24,11 @@ export const TIPO_PDF = 'application/pdf';
  */
 export const TTL_DESCARGA_PORTAL_S = 60 * 60;
 
-/** El color de la franja del correo cuando la sucursal no tiene portal (o su color no es válido). */
-export const COLOR_CORREO_POR_DEFECTO = '#0f766e';
+/**
+ * El color de la franja del correo cuando la sucursal no tiene portal (o su color no es válido):
+ * el violeta de Yo Controlo (UI-02; antes el verde azulado #0f766e). docs/marca/README.md.
+ */
+export const COLOR_CORREO_POR_DEFECTO = '#6d3fc0';
 
 export type ExtensionCfdi = 'xml' | 'pdf';
 

@@ -200,6 +200,16 @@ export interface FormasPago {
   sinCatalogo: { formaRaw: string; monto: Importe }[];
 }
 
+/** `TextoFormaPagoDto` de `GET /ventas/formas-pago/textos` (UI-01). */
+export interface TextoFormaPago {
+  /** Tal como viene de SR; el valor de `formaRaw` en `GET /ventas/tickets`. */
+  formaRaw: string;
+  /** La del catálogo de la empresa; sin entrada, `otro`. */
+  forma: FormaPago;
+  monto: Importe;
+  cuentas: number;
+}
+
 /** `SnapshotMesasDto`. */
 export interface SnapshotMesas {
   capturadoAt: string;

@@ -338,8 +338,8 @@ describe('cambiar sucursal o periodo actualiza todo sin recargar', () => {
   });
 });
 
-describe('Turno en curso (MVP de cortes)', () => {
-  it('lo cobrado en el turno abierto de SR, con liga a su corte; sin turno, lo dice', async () => {
+describe('Turno en curso (MVP de cortes; UI-01: liga a Turnos)', () => {
+  it('lo cobrado en el turno abierto de SR, con liga a su turno en "Abiertos ahora"', async () => {
     const api = apiDashboard({
       'GET /cortes/en-curso': () =>
         json(200, [
@@ -366,8 +366,8 @@ describe('Turno en curso (MVP de cortes)', () => {
     expect(turno).toHaveTextContent('7 cuentas cobradas · Turno 8 · Centro');
     // 20:00 UTC = 14:00 en CDMX; ahora son las 21:30.
     expect(turno).toHaveTextContent('Abrió 20/09/2026 14:00 (hace 7 h 30 min)');
-    expect(within(turno).getByRole('link', { name: 'Ver corte' }).getAttribute('href')).toBe(
-      `/cortes?empresa=${A}&corte=c0000000-0000-4000-8000-000000000008`,
+    expect(within(turno).getByRole('link', { name: 'Ver turno' }).getAttribute('href')).toBe(
+      `/turnos?empresa=${A}&ver=abiertos&turno=c0000000-0000-4000-8000-000000000008`,
     );
     expect(pedidas(api, '/cortes/en-curso')[0].query.get('empresaId')).toBe(A);
   });

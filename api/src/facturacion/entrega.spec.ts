@@ -66,6 +66,10 @@ describe('plantillaFactura y adjuntos', () => {
     expect(p.texto).toContain(`Folio fiscal (UUID): ${datos.uuid}`);
   });
 
+  it('el color por defecto es el violeta de la marca (UI-02)', () => {
+    expect(COLOR_CORREO_POR_DEFECTO).toBe('#6d3fc0');
+  });
+
   it('un color que no es #rrggbb no entra al HTML: usa el de por defecto', () => {
     for (const color of [null, 'red;background:url(x)', '#12345']) {
       const html = plantillaFactura({ ...datos, color }).html;

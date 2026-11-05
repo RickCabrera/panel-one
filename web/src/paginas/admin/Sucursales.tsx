@@ -8,6 +8,9 @@ import { Dialogo } from './Dialogo';
 import { CLASE_BOTON, CLASE_INPUT, CLASE_PRIMARIO, CLASE_TABLA } from './estilos';
 import { ZONA_POR_DEFECTO, zonasDisponibles } from './zonas';
 
+/** El campo del alta: el estado vacío lleva el foco ahí. */
+const ID_NOMBRE_ALTA = 'alta-sucursal-nombre';
+
 type Abierto =
   | { tipo: 'editar'; sucursal: Sucursal }
   | { tipo: 'conectar'; sucursal: Sucursal }
@@ -45,7 +48,23 @@ export function Sucursales({ empresa }: { empresa: Empresa }) {
             No se pudieron cargar las sucursales.
           </p>
         ) : sucursales.data.length === 0 ? (
-          <p className="text-sm text-tinta-tenue">Esta empresa todavía no tiene sucursales.</p>
+          // UI-02: un estado vacío que dice qué hacer, no sólo que no hay nada.
+          <div className="rounded-xl border border-dashed border-linea-fuerte px-4 py-8 text-center">
+            <p className="font-titulo text-base font-semibold text-tinta">
+              Esta empresa todavía no tiene sucursales.
+            </p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-tinta-suave">
+              Conecta tu primera sucursal: escribe su nombre aquí arriba y, ya creada, «Conectar
+              sucursal» te da el código para instalar el agente en la caja.
+            </p>
+            <button
+              type="button"
+              className={`${CLASE_PRIMARIO} mt-4`}
+              onClick={() => document.getElementById(ID_NOMBRE_ALTA)?.focus()}
+            >
+              Agregar mi primera sucursal
+            </button>
+          </div>
         ) : (
           <table className={CLASE_TABLA}>
             <thead className="text-xs text-tinta-tenue">
@@ -172,11 +191,12 @@ function AltaSucursal({ empresa }: { empresa: Empresa }) {
     <form
       aria-label="Nueva sucursal"
       onSubmit={(e) => void enviar(e)}
-      className="grid min-w-0 gap-3 rounded-lg border border-linea p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+      className="grid min-w-0 gap-3 rounded-xl border border-linea-suave bg-superficie p-3 shadow-sm sm:grid-cols-[1fr_1fr_auto] sm:items-end"
     >
       <label className="min-w-0 text-sm">
         <span className="text-tinta-suave">Nombre de la sucursal</span>
         <input
+          id={ID_NOMBRE_ALTA}
           className={CLASE_INPUT}
           value={nombre}
           required

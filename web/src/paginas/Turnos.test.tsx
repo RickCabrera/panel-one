@@ -1,6 +1,6 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DetalleCorte, ListaCortes, ResumenCorte } from '../api/tipos';
@@ -18,12 +18,13 @@ import {
   type Manejador,
 } from '../test/apiFalsa';
 
-// MVP: la vista Cortes (`/cortes`) contra el router y la app reales. Cifras escritas a mano:
+// MVP: la vista de turnos contra el router y la app reales. UI-01: se llama "Turnos" y vive en
+// `/turnos` (`/cortes` redirige con su query). Cifras escritas a mano:
 // las mismas del e2e del api (turno 7 cerrado con $415.50; turno 8 abierto con $108.00).
 
 const A = EMPRESA_A.id;
 const AHORA = new Date('2026-10-22T22:00:00Z');
-const RUTA = `/cortes?empresa=${A}&periodo=hoy`;
+const RUTA = `/turnos?empresa=${A}&periodo=hoy`;
 
 const T8: ResumenCorte = {
   id: 'c0000000-0000-4000-8000-000000000008',
@@ -108,6 +109,12 @@ function api(extra: Record<string, Manejador> = {}) {
   });
 }
 
+function Ubicacion() {
+  const { pathname, search } = useLocation();
+  return <div data-testid="ubicacion">{pathname + search}</div>;
+}
+const ubicacion = () => new URL(screen.getByTestId('ubicacion').textContent ?? '', 'http://x');
+
 function montar(ruta: string) {
   const queryClient = crearQueryClient();
   queryClient.setDefaultOptions({
@@ -117,6 +124,7 @@ function montar(ruta: string) {
     <MemoryRouter initialEntries={[ruta]}>
       <Proveedores queryClient={queryClient}>
         <Rutas />
+        <Ubicacion />
       </Proveedores>
     </MemoryRouter>,
   );
@@ -139,8 +147,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Cortes (MVP)', () => {
-  it('pide los cortes del periodo global con el alcance', async () => {
+describe('Turnos (MVP; UI-01: antes Cortes)', () => {
+  it('pide los turnos del periodo global con el alcance; el título dice Turnos', async () => {
     const llamadas = api();
     montar(RUTA);
     await filas();
@@ -149,6 +157,9 @@ describe('Cortes (MVP)', () => {
     // "Hoy" en la zona del panel (CDMX): 22-oct a las 16:00.
     expect(pedida.query.get('desde')).toBe('2026-10-22');
     expect(pedida.query.get('hasta')).toBe('2026-10-22');
+    expect(screen.getByRole('heading', { level: 1, name: 'Turnos' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Turnos del periodo' })).toBeInTheDocument();
+    expect(screen.queryByText(/^Cortes/)).not.toBeInTheDocument();
   });
 
   it('la lista: turno abierto y cerrado, horas en la zona de la sucursal y la venta', async () => {
@@ -167,18 +178,20 @@ describe('Cortes (MVP)', () => {
     expect(within(cerrado).getByTestId('corte-incompleto')).toBeInTheDocument();
     expect(within(abierto).queryByTestId('corte-incompleto')).not.toBeInTheDocument();
     expect(screen.getByTestId('cortes-incompletos')).toHaveTextContent(
-      'Corte anterior a la actualización: la venta puede estar incompleta.',
+      'Turno anterior a la actualización: la venta puede estar incompleta.',
     );
     expect(cerrado).toHaveTextContent('$207.75');
   });
 
-  it('clic en un corte: detalle con formas de pago y declarado vs cobrado', async () => {
+  it('clic en un turno: detalle con formas de pago y declarado vs cobrado, ?turno= en la URL', async () => {
     api();
     montar(RUTA);
     const usuarioEvt = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const [, cerrado] = await filas();
     await usuarioEvt.click(within(cerrado).getByRole('button', { name: 'Turno 7 · CAJA1' }));
     const detalle = await screen.findByTestId('detalle-corte');
+    expect(ubicacion().searchParams.get('turno')).toBe(T7.id);
+    expect(screen.getByRole('region', { name: 'Detalle del turno' })).toContainElement(detalle);
     expect(within(detalle).getByTestId('detalle-venta')).toHaveTextContent('$415.50');
     expect(within(detalle).getByTestId('detalle-cuentas')).toHaveTextContent('2');
     expect(within(detalle).getByTestId('detalle-canceladas')).toHaveTextContent('$50.00');
@@ -194,19 +207,50 @@ describe('Cortes (MVP)', () => {
     expect(within(detalle).getByTestId('detalle-top')).toHaveTextContent('Taco sintético');
     expect(screen.queryByTestId('corte-en-curso')).not.toBeInTheDocument();
     expect(within(detalle).getByTestId('detalle-incompleto')).toHaveTextContent(
-      'Corte anterior a la actualización',
+      'Turno anterior a la actualización',
     );
   });
 
-  it('el detalle se abre desde la URL (?corte=) y un turno abierto dice que es acumulado', async () => {
+  it('el detalle se abre desde la URL (?turno=) y un turno abierto dice que es acumulado', async () => {
     api();
-    montar(`${RUTA}&corte=${T8.id}`);
+    montar(`${RUTA}&turno=${T8.id}`);
     const detalle = await screen.findByTestId('detalle-corte');
     expect(within(detalle).getByTestId('corte-en-curso')).toHaveTextContent('acumulado en curso');
     expect(within(detalle).getByTestId('cuadre-total')).toHaveTextContent('$1,100.00$415.50—');
     const usuarioEvt = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await usuarioEvt.click(within(detalle).getByRole('button', { name: 'Cerrar' }));
     expect(screen.queryByTestId('detalle-corte')).not.toBeInTheDocument();
+    expect(ubicacion().searchParams.has('turno')).toBe(false);
+  });
+
+  it('el ?corte= viejo también abre el detalle, y al cerrar no queda ninguno de los dos', async () => {
+    api();
+    montar(`${RUTA}&corte=${T8.id}`);
+    const detalle = await screen.findByTestId('detalle-corte');
+    const usuarioEvt = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await usuarioEvt.click(within(detalle).getByRole('button', { name: 'Cerrar' }));
+    expect(screen.queryByTestId('detalle-corte')).not.toBeInTheDocument();
+    expect(ubicacion().searchParams.has('corte')).toBe(false);
+    expect(ubicacion().searchParams.has('turno')).toBe(false);
+  });
+
+  it('/cortes redirige a /turnos con el mismo query; ?corte= pasa a ?turno=', async () => {
+    api();
+    montar(`/cortes?empresa=${A}&periodo=hoy&corte=${T8.id}`);
+    expect(await screen.findByTestId('detalle-corte')).toBeInTheDocument();
+    const url = ubicacion();
+    expect(url.pathname).toBe('/turnos');
+    expect(url.searchParams.get('empresa')).toBe(A);
+    expect(url.searchParams.get('periodo')).toBe('hoy');
+    expect(url.searchParams.get('turno')).toBe(T8.id);
+    expect(url.searchParams.has('corte')).toBe(false);
+  });
+
+  it('/cortes sin query también llega a /turnos', async () => {
+    api();
+    montar('/cortes');
+    await screen.findByRole('heading', { level: 1, name: 'Turnos' });
+    expect(ubicacion().pathname).toBe('/turnos');
   });
 
   it('sin cortes lo dice; un corte ajeno o inexistente (404) muestra el error en su tarjeta', async () => {
@@ -215,16 +259,96 @@ describe('Cortes (MVP)', () => {
       [`GET /cortes/${T7.id}`]: () =>
         json(404, { statusCode: 404, message: 'Recurso no encontrado' }),
     });
-    montar(`${RUTA}&corte=${T7.id}`);
+    montar(`${RUTA}&turno=${T7.id}`);
     expect(await screen.findByText(/No hubo turnos abiertos en el periodo/)).toBeInTheDocument();
-    const detalle = await screen.findByRole('region', { name: 'Detalle del corte' });
+    const detalle = await screen.findByRole('region', { name: 'Detalle del turno' });
     expect(await within(detalle).findByRole('alert')).toHaveTextContent('No se pudo cargar');
   });
 
-  it('el menú lleva a Cortes, junto a Tickets', async () => {
+  it('el menú lleva a Turnos (ya no dice Cortes), junto a Tickets', async () => {
     api();
     montar(`/tickets?empresa=${A}`);
-    const enlace = await screen.findByRole('link', { name: 'Cortes' });
-    expect(enlace.getAttribute('href')).toContain('/cortes');
+    const enlace = await screen.findByRole('link', { name: 'Turnos' });
+    expect(new URL(enlace.getAttribute('href') ?? '', 'http://x').pathname).toBe('/turnos');
+    expect(screen.queryByRole('link', { name: 'Cortes' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Turnos abiertos ahora (UI-01)', () => {
+  // Dos turnos abiertos en dos sucursales: el 8 de Centro y el 3 de Tijuana, abierto desde AYER
+  // (fuera del periodo "hoy": aquí no importa el periodo).
+  const T3: ResumenCorte = {
+    ...T8,
+    id: 'c0000000-0000-4000-8000-000000000003',
+    sucursalId: SUCURSAL_A2.id,
+    sucursal: 'Tijuana',
+    zonaHoraria: 'America/Tijuana',
+    turnoSr: '3',
+    estacion: null,
+    aperturaAt: '2026-10-21T15:00:00.000Z',
+    fondo: '500.00',
+    venta: '2340.00',
+    cuentas: 9,
+    ticketPromedio: '260.00',
+  };
+
+  it('el botón "Abiertos ahora" muestra los abiertos de todas las sucursales con su acumulado', async () => {
+    const llamadas = api({ 'GET /cortes/en-curso': () => json(200, [T8, T3]) });
+    montar(RUTA);
+    await filas();
+    const usuarioEvt = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const grupo = screen.getByRole('group', { name: 'Qué turnos ver' });
+    expect(within(grupo).getByRole('button', { name: 'Del periodo' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await usuarioEvt.click(within(grupo).getByRole('button', { name: 'Abiertos ahora' }));
+    expect(within(grupo).getByRole('button', { name: 'Abiertos ahora' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(ubicacion().searchParams.get('ver')).toBe('abiertos');
+
+    const tarjeta = await screen.findByRole('region', { name: 'Turnos abiertos ahora' });
+    const [centro, tijuana] = within(
+      await within(tarjeta).findByTestId('tabla-cortes'),
+    ).getAllByTestId('fila-corte');
+    expect(centro).toHaveTextContent('Turno 8 · CAJA1');
+    expect(within(centro).getByTestId('corte-abierto')).toHaveTextContent('Abierto');
+    expect(within(centro).getByTestId('corte-venta')).toHaveTextContent('$108.00');
+    expect(tijuana).toHaveTextContent('Turno 3');
+    expect(tijuana).toHaveTextContent('Tijuana');
+    // 15:00 UTC = 08:00 en Tijuana (PDT el 21-oct); abierto hace 31 h → "1 d 7 h".
+    expect(tijuana).toHaveTextContent('21/10/2026 08:00');
+    expect(tijuana).toHaveTextContent('1 d 7 h');
+    expect(tijuana).toHaveTextContent('$500.00');
+    expect(within(tijuana).getByTestId('corte-venta')).toHaveTextContent('$2,340.00');
+    expect(tijuana).toHaveTextContent('$260.00');
+    // La lista del periodo no se pinta en esta vista.
+    expect(screen.queryByRole('region', { name: 'Turnos del periodo' })).not.toBeInTheDocument();
+
+    // Pide los abiertos del ALCANCE, sin periodo.
+    const pedida = llamadas.llamadas.find((l) => l.ruta === '/cortes/en-curso')!;
+    expect(pedida.query.get('empresaId')).toBe(A);
+    expect(pedida.query.has('sucursalId')).toBe(false);
+    expect(pedida.query.has('desde')).toBe(false);
+
+    // Liga al detalle: el mismo panel de detalle, con ?turno=.
+    await usuarioEvt.click(within(tijuana).getByRole('button', { name: 'Turno 3' }));
+    expect(ubicacion().searchParams.get('turno')).toBe(T3.id);
+    expect(ubicacion().searchParams.get('ver')).toBe('abiertos');
+
+    // Y de vuelta a "Del periodo".
+    await usuarioEvt.click(within(grupo).getByRole('button', { name: 'Del periodo' }));
+    expect(ubicacion().searchParams.has('ver')).toBe(false);
+    expect(await screen.findByRole('region', { name: 'Turnos del periodo' })).toBeInTheDocument();
+  });
+
+  it('?ver=abiertos sin turnos abiertos lo dice; con sucursal elegida, la pide', async () => {
+    const llamadas = api({ 'GET /cortes/en-curso': () => json(200, []) });
+    montar(`/turnos?empresa=${A}&sucursal=${SUCURSAL_A2.id}&ver=abiertos`);
+    expect(await screen.findByText(/No hay turnos abiertos en SoftRestaurant/)).toBeInTheDocument();
+    const pedida = llamadas.llamadas.find((l) => l.ruta === '/cortes/en-curso')!;
+    expect(pedida.query.get('sucursalId')).toBe(SUCURSAL_A2.id);
   });
 });

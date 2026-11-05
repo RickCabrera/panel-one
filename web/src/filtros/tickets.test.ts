@@ -66,13 +66,13 @@ describe('filtros en la URL (F2-222)', () => {
     expect(
       leerFiltros(
         p(
-          'mesero=Ana%20Mar%C3%ADa&mesa=12&forma=tarjeta&min=100.5&max=2000&canceladas=solo&producto=taco',
+          'mesero=Ana%20Mar%C3%ADa&mesa=12&pago=TARJETA%20DE%20CREDITO&min=100.5&max=2000&canceladas=solo&producto=taco',
         ),
       ),
     ).toEqual({
       mesero: 'Ana María',
       mesa: '12',
-      forma: 'tarjeta',
+      formaRaw: 'TARJETA DE CREDITO',
       importeMin: '100.5',
       importeMax: '2000',
       canceladas: 'solo',
@@ -91,6 +91,18 @@ describe('filtros en la URL (F2-222)', () => {
     expect(escrito.get('cliente')).toBe(id.toLowerCase());
     expect(escrito.has('pagina')).toBe(false);
     expect(escribirFiltros(escrito, SIN_FILTROS).has('cliente')).toBe(false);
+  });
+
+  it('UI-01: la forma de pago es el TEXTO de SR, exacto (sin recortar) y con el tope de la API', () => {
+    expect(leerFiltros(p('pago=EFECTIVO')).formaRaw).toBe('EFECTIVO');
+    // Un CHAR de SQL Server relleno de espacios tiene que llegar igual para coincidir.
+    expect(leerFiltros(p('pago=VALES%20%20')).formaRaw).toBe('VALES  ');
+    expect(leerFiltros(p(`pago=${'E'.repeat(81)}`)).formaRaw).toHaveLength(80);
+    // El param viejo (`forma`, el ENUM del catálogo) ya no filtra: se ignora.
+    expect(leerFiltros(p('forma=tarjeta')).formaRaw).toBe('');
+    const escrito = escribirFiltros(p('pagina=2'), { ...SIN_FILTROS, formaRaw: 'VISA' });
+    expect(escrito.toString()).toBe('pago=VISA');
+    expect(escribirFiltros(escrito, SIN_FILTROS).has('pago')).toBe(false);
   });
 
   it('sin nada, o con basura, son los defaults: nada inválido llega a la API', () => {

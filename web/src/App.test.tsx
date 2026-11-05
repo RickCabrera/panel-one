@@ -141,7 +141,7 @@ describe('deep-link y login', () => {
     montar('/');
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Monitor SoftRestaurant' }),
+      await screen.findByRole('heading', { level: 1, name: 'Yo Controlo' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/pídeselo al administrador de tu empresa/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeEnabled();
