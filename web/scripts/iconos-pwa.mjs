@@ -13,20 +13,23 @@ import { join } from 'node:path';
 
 const PUBLICO = join(import.meta.dirname, '..', 'public');
 const SALIDA = join(PUBLICO, 'iconos');
-/** El morado de marca (fondo del ícono). Igual que `theme_color` del manifest. */
-const MORADO = '#2C1533';
+/**
+ * UI-06: el fondo del ícono es NEGRO (el logo que mandó Ricardo: el ojo arena sobre un cuadrado
+ * redondeado negro, `isotipo-app-negro.svg`), el del estilo «Noche» que viene por defecto.
+ */
+const NEGRO = '#000000';
 
 const svg = (nombre) =>
   `data:image/svg+xml;base64,${readFileSync(join(PUBLICO, 'marca', nombre)).toString('base64')}`;
 
-/** El ícono redondeado tal cual (`isotipo-app.svg`). */
+/** El ícono redondeado tal cual (`isotipo-app-negro.svg`). */
 const redondeado = (lado) =>
-  `<body style="margin:0;background:transparent"><img src="${svg('isotipo-app.svg')}" width="${lado}" height="${lado}" style="display:block"></body>`;
+  `<body style="margin:0;background:transparent"><img src="${svg('isotipo-app-negro.svg')}" width="${lado}" height="${lado}" style="display:block"></body>`;
 
-/** A sangre completa: fondo morado y el ojo arena centrado, ocupando `escala` del lado. */
+/** A sangre completa: fondo negro y el ojo arena centrado, ocupando `escala` del lado. */
 const sangre = (lado, escala) => {
   const ojo = Math.round(lado * escala);
-  return `<body style="margin:0;width:${lado}px;height:${lado}px;background:${MORADO};display:grid;place-items:center"><img src="${svg('isotipo-oscuro.svg')}" style="width:${ojo}px;height:${ojo}px;object-fit:contain"></body>`;
+  return `<body style="margin:0;width:${lado}px;height:${lado}px;background:${NEGRO};display:grid;place-items:center"><img src="${svg('isotipo-oscuro.svg')}" style="width:${ojo}px;height:${ojo}px;object-fit:contain"></body>`;
 };
 
 const ICONOS = [

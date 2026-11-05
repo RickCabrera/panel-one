@@ -16,9 +16,9 @@ const config: CapacitorConfig = {
   appId: 'mx.yocontrolo.app',
   appName: 'Yo Controlo',
   webDir: 'www',
-  // Morado de la marca detrás del WebView: es lo que se ve mientras carga el panel y bajo la
-  // barra de estado, en vez de un destello blanco.
-  backgroundColor: '#2C1533',
+  // Negro de la marca (UI-06, estilo «Noche») detrás del WebView: es lo que se ve mientras carga
+  // el panel y bajo la barra de estado, en vez de un destello blanco.
+  backgroundColor: '#000000',
   server: {
     url: urlPanel,
     // Sólo el host del panel navega DENTRO de la app. Cualquier otro (github.com para el

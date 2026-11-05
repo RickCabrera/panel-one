@@ -17,8 +17,9 @@ import {
   ACENTOS_PLATAFORMA,
   BLANCO,
   NEGRO,
-  PALETA,
+  PALETAS,
   SUPERFICIES,
+  type Estilo,
   type Tema,
   type TokenAcento,
 } from './paleta';
@@ -37,10 +38,17 @@ export const ACENTO_DESPLIEGUE = leerAcento(
   import.meta.env.VITE_COLOR_ACENTO as string | undefined,
 );
 
-/** Los tokens del acento para un tema. `acento` debe venir ya validado (`leerAcento`). */
-export function derivarAcento(acento: string, tema: Tema): Record<TokenAcento, string> {
+/**
+ * Los tokens del acento para un tema (y un estilo de marca, UI-06: por omisión el «Clásico»).
+ * `acento` debe venir ya validado (`leerAcento`).
+ */
+export function derivarAcento(
+  acento: string,
+  tema: Tema,
+  estilo: Estilo = 'clasico',
+): Record<TokenAcento, string> {
   const base = normalizarHex(acento);
-  const fondos = SUPERFICIES.map((s) => PALETA[tema][s]);
+  const fondos = SUPERFICIES.map((s) => PALETAS[estilo][tema][s]);
   // En claro se oscurece hacia negro; en oscuro se aclara hacia blanco.
   const destino = tema === 'claro' ? NEGRO : BLANCO;
   const borde = ajustarContraste(base, destino, fondos, 3);

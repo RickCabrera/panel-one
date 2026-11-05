@@ -85,7 +85,7 @@ export function TablaTickets({
   return (
     // La tabla desborda DENTRO de su caja: la página nunca tiene scroll horizontal.
     <div
-      className={`min-w-0 overflow-x-auto rounded-2xl border border-linea-suave shadow-tarjeta ${atenuada ? 'bg-realce' : 'bg-superficie'}`}
+      className={`min-w-0 overflow-x-auto rounded-2xl border border-linea-suave shadow-tarjeta ${atenuada ? 'bg-realce' : 'bg-superficie vidrio-falso'}`}
       aria-busy={atenuada}
     >
       <table className="w-full text-left text-sm">
@@ -254,7 +254,7 @@ function ListaTickets({
         </button>
       </div>
       <ul
-        className={`divide-y divide-linea-suave overflow-hidden rounded-2xl border border-linea-suave shadow-tarjeta ${atenuada ? 'bg-realce' : 'bg-superficie'}`}
+        className={`divide-y divide-linea-suave overflow-hidden rounded-2xl border border-linea-suave shadow-tarjeta ${atenuada ? 'bg-realce' : 'bg-superficie vidrio-falso'}`}
       >
         {tickets.map((t) => {
           const abierto = abiertos.has(t.id);

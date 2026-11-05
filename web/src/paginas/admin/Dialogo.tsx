@@ -75,7 +75,7 @@ export function Dialogo({
         aria-labelledby={idTitulo}
         tabIndex={-1}
         onKeyDown={teclado}
-        className="flex max-h-[92dvh] w-full min-w-0 flex-col overflow-y-auto rounded-t-2xl bg-superficie p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl outline-none motion-safe:animate-hoja md:max-h-full md:max-w-lg md:rounded-lg md:pb-4 md:motion-safe:animate-none"
+        className="flex max-h-[92dvh] w-full min-w-0 flex-col overflow-y-auto rounded-t-2xl bg-superficie vidrio-fuerte p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl outline-none motion-safe:animate-hoja md:max-h-full md:max-w-lg md:rounded-lg md:pb-4 md:motion-safe:animate-none"
       >
         <h2 id={idTitulo} className="text-lg font-semibold break-words">
           {titulo}

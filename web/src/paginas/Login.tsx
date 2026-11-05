@@ -5,6 +5,7 @@ import { ErrorApi } from '../api/cliente';
 import { useAuth } from '../auth/contexto';
 import { destinoSeguro } from '../auth/siguiente';
 import { Isotipo, Logotipo } from '../marca/Marca';
+import { useTema } from '../tema/contexto';
 import { BOTON_PRIMARIO, CAMPO } from './botones';
 import { PantallaCarga } from './PantallaCarga';
 
@@ -31,6 +32,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const { zonaOscura } = useTema();
 
   if (auth.estado === 'cargando') return <PantallaCarga />;
   if (auth.estado === 'autenticado' && !enviando) return <Navigate to={destino} replace />;
@@ -56,7 +58,12 @@ export function Login() {
   return (
     // UI-05: el login vive sobre el morado de la marca (en los dos temas), con el ojo enorme y
     // apagado al fondo, como la landing. Nada de imágenes pesadas: el ojo es el SVG de 1.6 kB.
-    <main className="relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden bg-linear-160 from-hero-fin to-hero p-4 py-10">
+    // UI-06: en «Noche» es negro en los dos temas (el hero translúcido sobre `bg-lateral`, con el
+    // resplandor detrás), y en claro lleva la paleta oscura para que la tarjeta sea de vidrio oscuro.
+    <main
+      style={zonaOscura}
+      className="resplandor relative isolate flex min-h-screen flex-col items-center justify-center overflow-hidden bg-lateral bg-linear-160 from-hero-fin to-hero p-4 py-10"
+    >
       <Isotipo
         variante="oscuro"
         decorativo
@@ -74,7 +81,7 @@ export function Login() {
       <form
         onSubmit={enviar}
         aria-busy={enviando}
-        className="mt-8 w-full max-w-sm rounded-2xl border border-linea bg-superficie p-6 shadow-lg motion-safe:animate-aparecer motion-safe:[animation-delay:80ms] sm:p-8"
+        className="mt-8 w-full max-w-sm rounded-2xl border border-linea bg-superficie p-6 shadow-lg vidrio motion-safe:animate-aparecer motion-safe:[animation-delay:80ms] sm:p-8"
       >
         <p className="font-titulo text-lg font-semibold text-tinta">Entra a tu panel</p>
         <p className="mt-0.5 mb-5 text-sm text-tinta-suave">Con el correo que te dieron de alta.</p>

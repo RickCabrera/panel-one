@@ -123,7 +123,7 @@ export function HojaInferior({
         aria-labelledby={idTitulo}
         tabIndex={-1}
         onKeyDown={teclado}
-        className="flex max-h-[92dvh] w-full min-w-0 flex-col rounded-t-2xl border-t border-linea bg-superficie text-tinta shadow-lg outline-none motion-safe:animate-hoja"
+        className="flex max-h-[92dvh] w-full min-w-0 flex-col rounded-t-2xl border-t border-linea bg-superficie vidrio-fuerte text-tinta shadow-lg outline-none motion-safe:animate-hoja"
       >
         <div
           data-testid="hoja-agarradera"

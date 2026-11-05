@@ -74,6 +74,14 @@
   --color-hero-rejilla: var(--hero-rejilla);
   --color-brillo: var(--brillo);
   --color-resalte: var(--resalte);
+  --color-vidrio: var(--vidrio);
+  --color-vidrio-fuerte: var(--vidrio-fuerte);
+  --color-vidrio-barra: var(--vidrio-barra);
+  --color-vidrio-borde: var(--vidrio-borde);
+  --color-vidrio-brillo: var(--vidrio-brillo);
+  --color-resplandor: var(--resplandor);
+  --color-muestra-noche: var(--muestra-noche);
+  --color-muestra-clasico: var(--muestra-clasico);
 }
 
 /*
@@ -231,6 +239,105 @@ body {
   :focus-visible {
     outline: 2px solid var(--acento-borde);
     outline-offset: 2px;
+  }
+}
+
+/*
+ * UI-06 · estilo «Noche»: vidrio y resplandor. TODO aquí cuelga de `[data-estilo='noche']` (lo
+ * pone aplicarTema en <html>): en «Clásico» estas clases no pintan nada y la v3 se ve igual.
+ *
+ * - `.vidrio`: tarjetas, hero, paneles y filtros que se cuentan con los dedos. Fondo translúcido,
+ *   desenfoque de lo de atrás, borde fino claro y un brillo arriba (un degradado que se apaga en
+ *   los primeros 3 rem). Gana a `bg-superficie` / `border-linea-suave` por especificidad (0,2,0).
+ * - `.vidrio-fuerte`: modales y hojas; casi opaco, porque detrás puede haber cualquier cosa.
+ * - `.vidrio-barra`: la barra de arriba y la de abajo del celular; negro casi opaco.
+ * - `.vidrio-falso`: lo que se repite muchas veces (cada mesa, cada turno, la tabla de Tickets):
+ *   el mismo fondo translúcido y el brillo, SIN desenfoque. El `backdrop-filter` en decenas de
+ *   tarjetas es lo que hace tartamudear el scroll en un celular de gama baja. No toca el borde:
+ *   el de las mesas es el semáforo.
+ * - `.vidrio-hero`: el hero (su fondo son los tokens translúcidos `hero` → `hero-fin`, y su borde
+ *   `hero-borde`, una línea blanca tenue): sólo el desenfoque.
+ * Nunca vidrio sobre vidrio: dentro de una tarjeta de vidrio, lo de adentro es opaco o nada.
+ *
+ * Fallbacks: sin `backdrop-filter`, o con «reducir transparencia», el fondo es sólido (la
+ * superficie o el negro del lateral).
+ */
+@layer utilities {
+  [data-estilo='noche'] .vidrio,
+  [data-estilo='noche'] .vidrio-fuerte,
+  [data-estilo='noche'] .vidrio-barra,
+  [data-estilo='noche'] .vidrio-hero {
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+  }
+  [data-estilo='noche'] .vidrio,
+  [data-estilo='noche'] .vidrio-falso {
+    background-color: var(--vidrio);
+    background-image: linear-gradient(to bottom, var(--vidrio-brillo), transparent 3rem);
+  }
+  [data-estilo='noche'] .vidrio,
+  [data-estilo='noche'] .vidrio-fuerte {
+    border-color: var(--vidrio-borde);
+  }
+  /* Nunca vidrio sobre vidrio: lo repetido DENTRO de una tarjeta de vidrio (los turnos dentro de
+     «Turnos del periodo») vuelve a la superficie opaca. */
+  [data-estilo='noche'] .vidrio .vidrio-falso {
+    background-color: var(--superficie);
+    background-image: none;
+  }
+  [data-estilo='noche'] .vidrio-fuerte {
+    background-color: var(--vidrio-fuerte);
+    background-image: linear-gradient(to bottom, var(--vidrio-brillo), transparent 3rem);
+  }
+  [data-estilo='noche'] .vidrio-barra {
+    background-color: var(--vidrio-barra);
+    border-color: var(--vidrio-borde);
+  }
+
+  /* El resplandor de atrás: dos halos violeta, fijos, en un seudoelemento (CSS puro, sin
+     imágenes) para que el vidrio tenga algo que difuminar. No se mueve al hacer scroll. */
+  [data-estilo='noche'] .resplandor {
+    isolation: isolate;
+  }
+  [data-estilo='noche'] .resplandor::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(56rem 36rem at 88% -8%, var(--resplandor), transparent 70%),
+      radial-gradient(44rem 32rem at 8% 108%, var(--resplandor), transparent 70%);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    [data-estilo='noche'] .vidrio,
+    [data-estilo='noche'] .vidrio-fuerte {
+      background-color: var(--superficie);
+    }
+    [data-estilo='noche'] .vidrio-barra,
+    [data-estilo='noche'] .vidrio-hero {
+      background-color: var(--lateral);
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    [data-estilo='noche'] .vidrio,
+    [data-estilo='noche'] .vidrio-fuerte,
+    [data-estilo='noche'] .vidrio-falso {
+      background-color: var(--superficie);
+    }
+    [data-estilo='noche'] .vidrio-barra,
+    [data-estilo='noche'] .vidrio-hero {
+      background-color: var(--lateral);
+    }
+    [data-estilo='noche'] .vidrio,
+    [data-estilo='noche'] .vidrio-fuerte,
+    [data-estilo='noche'] .vidrio-barra,
+    [data-estilo='noche'] .vidrio-hero {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
   }
 }
 

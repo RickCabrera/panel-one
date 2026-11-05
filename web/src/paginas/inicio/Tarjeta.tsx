@@ -11,9 +11,13 @@ export type Icono = LucideIcon;
  * UI-05 (v3): la superficie de una tarjeta, en UN lugar. Borde suave, radio grande, el filo de
  * luz arriba y una sombra larga y difusa (`shadow-tarjeta`, ver index.css). La usan las
  * tarjetas de todo el panel, así que cambiar aquí cambia todas.
+ *
+ * UI-06: en el estilo «Noche» es de vidrio (`vidrio`: translúcida, con desenfoque); en «Clásico»
+ * esa clase no pinta nada. Son tarjetas que se cuentan con los dedos: lo que se repite muchas
+ * veces (cada mesa, cada turno) usa `vidrio-falso`, sin desenfoque.
  */
 export const SUPERFICIE_TARJETA =
-  'rounded-2xl border border-linea-suave bg-superficie shadow-tarjeta';
+  'rounded-2xl border border-linea-suave bg-superficie shadow-tarjeta vidrio';
 
 export function Tarjeta({
   titulo,

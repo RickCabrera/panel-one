@@ -369,7 +369,7 @@ const TarjetaMesa = memo(function TarjetaMesa({ mesa, conSucursal, onAbrir }: Pr
     <li
       aria-label={nombre}
       data-semaforo={color}
-      className={`group relative min-w-0 overflow-hidden rounded-xl border-2 bg-superficie p-3.5 pb-4 shadow-tarjeta transition-[box-shadow,transform] duration-150 hover:shadow-tarjeta-alta motion-safe:hover:-translate-y-0.5 ${BORDE[color]}`}
+      className={`group relative min-w-0 overflow-hidden rounded-xl border-2 bg-superficie p-3.5 pb-4 shadow-tarjeta vidrio-falso transition-[box-shadow,transform] duration-150 hover:shadow-tarjeta-alta motion-safe:hover:-translate-y-0.5 ${BORDE[color]}`}
     >
       {/* Botón "estirado" sobre toda la tarjeta: un <button> no puede contener la
           lista de partidas, así que no envuelve el contenido. */}

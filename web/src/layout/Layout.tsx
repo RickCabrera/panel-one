@@ -19,6 +19,9 @@ import { useEsMovil } from './useEsMovil';
  * Con `viewport-fit=cover`, un teléfono en horizontal (≥ 768 px muchas veces) pone la muesca
  * o la barra de gestos a los lados: los dos armazones dejan `env(safe-area-inset-left/right)`
  * (en el de escritorio, la izquierda la absorbe el lateral).
+ *
+ * UI-06: `resplandor` pone detrás del contenido, sólo en el estilo «Noche», el halo violeta fijo
+ * que el vidrio de las tarjetas difumina (index.css).
  */
 export function Layout() {
   const esMovil = useEsMovil();
@@ -34,7 +37,7 @@ export function Layout() {
     return (
       <div
         data-armazon="movil"
-        className="min-h-screen bg-fondo pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] text-tinta"
+        className="resplandor min-h-screen bg-fondo pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] text-tinta"
       >
         <CabeceraMovil />
         <SinConexion />
@@ -50,7 +53,7 @@ export function Layout() {
   return (
     <div
       data-armazon="escritorio"
-      className="flex min-h-screen bg-fondo pr-[env(safe-area-inset-right)] text-tinta"
+      className="resplandor flex min-h-screen bg-fondo pr-[env(safe-area-inset-right)] text-tinta"
     >
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">

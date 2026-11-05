@@ -87,7 +87,7 @@ export function DetalleMesa({
         // del modal y Escape/Tab lo siguen escuchando.
         tabIndex={-1}
         onKeyDown={teclado}
-        className="flex max-h-[92dvh] w-full min-w-0 flex-col rounded-t-2xl bg-superficie pb-[env(safe-area-inset-bottom)] shadow-xl outline-none motion-safe:animate-hoja md:max-h-full md:max-w-2xl md:rounded-lg md:pb-0 md:motion-safe:animate-none"
+        className="flex max-h-[92dvh] w-full min-w-0 flex-col rounded-t-2xl bg-superficie vidrio-fuerte pb-[env(safe-area-inset-bottom)] shadow-xl outline-none motion-safe:animate-hoja md:max-h-full md:max-w-2xl md:rounded-lg md:pb-0 md:motion-safe:animate-none"
       >
         <div className="flex items-start justify-between gap-3 border-b border-linea p-4">
           <h2 id="detalle-mesa-titulo" className="min-w-0 text-lg font-semibold break-words">

@@ -17,6 +17,7 @@ import {
   SUCURSAL_A2,
   usuario,
 } from '../test/apiFalsa';
+import { PALETAS } from '../tema/paleta';
 import { anchoDePantalla } from '../test/matchMedia';
 import { barraMovilPara } from './menu';
 
@@ -104,6 +105,22 @@ describe('UI-04 · qué armazón se monta según el ancho', () => {
     expect(document.getElementById('menu-principal')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Más' })).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Tema' })).toBeInTheDocument();
+    // UI-06: el estilo de la marca, junto al tema, en la cabecera.
+    expect(screen.getByRole('group', { name: 'Estilo' })).toBeInTheDocument();
+  });
+
+  it('UI-06: en «Noche» claro la cabecera es negra (zona oscura); en «Clásico», la de siempre', async () => {
+    api();
+    montar(`/?empresa=${A}`);
+    const cabecera = (await screen.findByRole('group', { name: 'Estilo' })).closest('header')!;
+    expect(document.documentElement.dataset.estilo).toBe('noche');
+    expect(cabecera).toHaveClass('vidrio-barra');
+    expect(cabecera.style.getPropertyValue('--fondo')).toBe(PALETAS.noche.oscuro.fondo);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Estilo Clásico' }));
+    expect(document.documentElement.dataset.estilo).toBe('clasico');
+    expect(cabecera.style.getPropertyValue('--fondo')).toBe('');
+    // Lo deja como estaba: la elección se guarda en localStorage.
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Estilo Noche' }));
   });
 
   it('girar el teléfono o agrandar la ventana cambia de armazón sin perder la vista', async () => {
@@ -182,6 +199,7 @@ describe('UI-04 · la barra inferior', () => {
       expect(Boolean(dentro.queryByRole('link', { name: 'Plataforma' }))).toBe(conPlataforma);
       // Las acciones de cuenta, para todos.
       expect(dentro.getByRole('group', { name: 'Tema' })).toBeInTheDocument();
+      expect(dentro.getByRole('group', { name: 'Estilo' })).toBeInTheDocument();
       expect(dentro.getByRole('link', { name: 'Mi cuenta' })).toHaveAttribute(
         'href',
         `/cuenta?empresa=${A}`,
