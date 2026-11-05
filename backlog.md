@@ -2976,7 +2976,7 @@ avisa "editor desconocido"). Hoy lo cubre la prueba de procedencia del workflow;
 va con el canal de versiones (F2-143).
 
 ### UI-03 · Landing de Yo Controlo
-`[ ]` /web (sólo la landing) — pedida por Ricardo el 5-nov-2026
+`[x]` /web (sólo la landing) — pedida por Ricardo el 5-nov-2026
 
 Rehacer la landing con la marca Yo Controlo (logo v2 con el ojo-C, morado #2C1533 y arena
 #E3CBA8): hero con demo animada (el ojo vigila la caja, caen tickets y sube la venta; respeta
@@ -2989,6 +2989,23 @@ Graph (`og.png` 1200×630). No toca el panel (`web/src/**` fuera de `src/landing
 peso con el tope nuevo justificado); el formulario sigue posteando a `/api/publico/contacto` con el
 plan dentro del mensaje; sin scroll horizontal a 360 px.
 **Decisión abierta:** precios y tope de sucursales de cada plan (D-07; "Hasta 5" es propuesta).
+
+### LAND-01 · Landing en /landing y logo del login
+`[x]` /web + /infra (Caddy) — pedida por Ricardo el 5-nov-2026 (rama `feat/land-01-landing-ruta`)
+
+Mientras llega el dominio propio, la landing se ve en `/landing` del dominio del panel
+(`https://web-production-730b5.up.railway.app/landing`) sin ninguna variable nueva: build de la
+landing con `base: './'` (el mismo build sirve en `/landing/` y en la raíz de `LANDING_HOST`),
+snippet `landing_ruta` de Caddy (`redir /landing` → `/landing/` con su query, `handle_path
+/landing/*` con la misma CSP y caché) antes del fallback de la SPA, y el service worker del panel
+ignora `/landing`. En el login, el logo es un `<a href="/landing">` («Ir a la página de Yo
+Controlo», foco visible). Con `LANDING_HOST` la landing sigue en la raíz de ese dominio y en el
+dominio del panel `/` sigue siendo el panel. `docs/deploy-railway.md` actualizado.
+
+**Listo cuando:** CI verde; `/landing` y `/landing/` dan la landing (uno redirige al otro); sus
+assets, fuentes, `og.png`, el formulario (`/api/publico/contacto`) y «Entrar al panel» (`/login`)
+funcionan bajo `/landing/`; `/` y `/login` siguen siendo el panel; test del logo del login,
+guardia del Caddyfile y `check:landing` (rutas relativas) cubren `/landing`.
 
 ---
 
@@ -3008,7 +3025,7 @@ plan dentro del mensaje; sin scroll horizontal a 360 px.
 
 ## UI-01 · Turnos, turnos abiertos y filtro de forma de pago
 
-- [ ] **UI-01 · Turnos, turnos abiertos y filtro de forma de pago** — pedida por Ricardo el
+- [x] **UI-01 · Turnos, turnos abiertos y filtro de forma de pago** — pedida por Ricardo el
   5-nov-2026 (fuera de la cola; rama `fix/turnos-y-forma-de-pago`). Tres correcciones en un PR:
   1. "Cortes" se llama **"Turnos"** en toda la interfaz (título, textos, menú, liga "Ver turno"
      de la tarjeta "Turno en curso" del Panel); la ruta es `/turnos` y `/cortes` redirige con su
@@ -3029,7 +3046,7 @@ plan dentro del mensaje; sin scroll horizontal a 360 px.
 
 ## UI-02 · Marca Yo Controlo e interfaz compacta
 
-- [ ] **UI-02 · Marca Yo Controlo e interfaz compacta** — pedida por Ricardo el 5-nov-2026 (fuera
+- [x] **UI-02 · Marca Yo Controlo e interfaz compacta** — pedida por Ricardo el 5-nov-2026 (fuera
   de la cola; rama `feat/marca-yo-controlo`). Sólo /web y textos de marca de /api; la landing
   pública va aparte.
   El producto pasa a llamarse **Yo Controlo** (título, manifest, login, laterales del panel y de
@@ -3051,7 +3068,7 @@ plan dentro del mensaje; sin scroll horizontal a 360 px.
 
 ## MOV-01 · App Android (APK) con Capacitor
 
-- [ ] **MOV-01 · App Android (APK) con Capacitor** — pedida por Ricardo el 5-nov-2026 (fuera de
+- [x] **MOV-01 · App Android (APK) con Capacitor** — pedida por Ricardo el 5-nov-2026 (fuera de
   la cola; rama `feat/apk-android`). Carpeta `/movil` fuera de los workspaces de npm: Capacitor 8
   con `server.url` al panel de producción (la app carga el panel en su WebView: mismo origen,
   así la cookie SameSite=Strict, el `/api` relativo y la CSP funcionan sin CORS ni cambios en la
@@ -3073,7 +3090,7 @@ plan dentro del mensaje; sin scroll horizontal a 360 px.
 
 ## UI-04 · Versión móvil del panel (barra inferior)
 
-- [ ] **UI-04 · Versión móvil del panel (barra inferior)** — pedida por Ricardo el 5-nov-2026
+- [x] **UI-04 · Versión móvil del panel (barra inferior)** — pedida por Ricardo el 5-nov-2026
   (fuera de la cola; rama `feat/version-movil`). Sólo /web, sin cambiar endpoints ni datos. El
   panel también es la app Android (Capacitor carga el panel remoto en un WebView).
   En anchos < `md` (≤ 767 px) el armazón cambia (se decide con `matchMedia`, no sólo con clases,
@@ -3095,7 +3112,7 @@ plan dentro del mensaje; sin scroll horizontal a 360 px.
 
 ## UI-05 · Pulido visual del panel (v3)
 
-- [ ] **UI-05 · Pulido visual del panel (v3)** — pedida por Ricardo el 5-nov-2026 (fuera de la
+- [x] **UI-05 · Pulido visual del panel (v3)** — pedida por Ricardo el 5-nov-2026 (fuera de la
   cola; rama `feat/ui-v3`). Sólo /web/src (no la landing), sin cambiar datos, endpoints ni
   contratos. Lenguaje visual con identidad propia, el tono de la landing: título de cada vista en
   la display de la marca (Lilita One, un solo peso y sin negritas sintéticas), cifras grandes

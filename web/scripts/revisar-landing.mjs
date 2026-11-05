@@ -13,6 +13,7 @@
 // 5. Ningún `__URL_PANEL__` ni `__URL_SITIO__` sin reemplazar.
 // 6. (UI-03) Open Graph con imagen de 1200×630, planes sin cifras y ningún `style=""` (la CSP
 //    de Caddy, `style-src 'self'`, lo bloquearía en producción sin avisar).
+// 7. (LAND-01) Rutas relativas (`base: './'`): la misma landing sirve en `/landing/` y en `/`.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -118,6 +119,23 @@ try {
   }
 } catch {
   falla('Falta dist-landing/robots.txt.');
+}
+
+// 7. (LAND-01) Rutas relativas: el MISMO build se sirve en `/landing/` del dominio del panel y en
+//    la raíz de LANDING_HOST. Un `/assets/…` absoluto pediría los assets de la SPA bajo
+//    `/landing/`; una `og:image` `/og.png` relativa a la raíz daría el index.html del panel.
+for (const [, atributo, url] of html.matchAll(/\s(src|href)="(\/(?!\/)[^"]*)"/g)) {
+  // `__URL_PANEL__` (`/login` por defecto) sí es absoluto a propósito: es el panel.
+  if (!/^\/login(?:[?#]|$)/.test(url)) falla(`Ruta absoluta en ${atributo}: ${url} (usa ./).`);
+}
+const ogImagen = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/)?.[1] ?? '';
+if (ogImagen.startsWith('/')) {
+  falla(`og:image es ${ogImagen}: debe ser ./og.png o una URL completa.`);
+}
+for (const f of archivos(DIST).filter((f) => f.endsWith('.css'))) {
+  if (/url\((?:["']?)\/(?!\/)/.test(readFileSync(f, 'utf8'))) {
+    falla(`${relative(DIST, f)} pide un url(/…) absoluto: bajo /landing/ no lo encuentra.`);
+  }
 }
 
 // 5. Placeholder

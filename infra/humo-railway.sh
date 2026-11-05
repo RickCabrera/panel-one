@@ -13,7 +13,8 @@
 # curl mandando X-Real-IP.
 #
 # Comprueba: validación previa, migraciones + admin inicial (y que el 2.º arranque no lo
-# toca), /health por el proxy, la SPA con su CSP y HSTS, login con la cookie
+# toca), /health por el proxy, la SPA con su CSP y HSTS, la landing en /landing/ (308 con
+# query, CSP/HSTS, CSS immutable, 404 sin fallback, /landings sigue siendo la SPA), login con la cookie
 # Secure/HttpOnly/SameSite=Strict y Path=/api/auth, refresh con esa cookie, un DELETE con
 # cuerpo, que el portal sin PAC conectado contesta 503 sin simular, el handshake de
 # socket.io bajo /api (polling y upgrade a WebSocket), y el rate limit del login POR IP DEL
@@ -104,6 +105,48 @@ curl -fsS -D "$TMP/spa.h" -o "$TMP/spa.html" "$WEB/ventas"
 grep -qi "^content-security-policy: default-src 'self'" "$TMP/spa.h" || fallo "sin CSP"
 grep -qi "^strict-transport-security: max-age=31536000" "$TMP/spa.h" || fallo "sin HSTS"
 grep -q 'id="root"' "$TMP/spa.html" || fallo "/ventas no sirvió el index.html de la SPA"
+
+echo "== 4b. La landing en /landing/ del dominio del panel (LAND-01)"
+# /landing (sin diagonal) -> 308 a /landing/, conservando la query.
+codigo="$(curl -sS -o /dev/null -D "$TMP/landing-redir.h" -w '%{http_code}' "$WEB/landing?plan=x")"
+[ "$codigo" = 308 ] || fallo "/landing?plan=x respondió $codigo (se esperaba 308)"
+destino="$(grep -i '^location:' "$TMP/landing-redir.h" | tr -d '\r' | sed -E 's/^[Ll]ocation: *//')"
+case "$destino" in
+  */landing/\?plan=x) ;;
+  *) fallo "/landing?plan=x redirigió a '$destino' (se esperaba …/landing/?plan=x)" ;;
+esac
+echo "   /landing?plan=x -> $codigo Location: $destino"
+# /landing/ -> 200, con la CSP y el HSTS, y NO es el index.html de la SPA.
+codigo="$(curl -sS -D "$TMP/landing.h" -o "$TMP/landing.html" -w '%{http_code}' "$WEB/landing/")"
+[ "$codigo" = 200 ] || fallo "/landing/ respondió $codigo (se esperaba 200)"
+grep -qi "^content-security-policy: default-src 'self'" "$TMP/landing.h" || fallo "/landing/ sin CSP"
+grep -qi "^strict-transport-security: max-age=31536000" "$TMP/landing.h" || fallo "/landing/ sin HSTS"
+if grep -q 'id="root"' "$TMP/landing.html"; then
+  fallo "/landing/ sirvió el index.html de la SPA (trae id=\"root\")"
+fi
+echo "   /landing/ -> $codigo con CSP y HSTS, sin id=\"root\""
+# Un CSS de la landing, con la ruta sacada de su HTML: 200 y caché immutable.
+css="$(grep -oE 'href="[^"]+\.css"' "$TMP/landing.html" | head -n 1 | sed -E 's/^href="(.*)"$/\1/')"
+[ -n "$css" ] || fallo "el HTML de /landing/ no enlaza ningún .css"
+case "$css" in
+  /*) url_css="$WEB$css" ;;
+  ./*) url_css="$WEB/landing/${css#./}" ;;
+  *) url_css="$WEB/landing/$css" ;;
+esac
+codigo="$(curl -sS -o /dev/null -D "$TMP/landing-css.h" -w '%{http_code}' "$url_css")"
+[ "$codigo" = 200 ] || fallo "el CSS de la landing ($url_css) respondió $codigo"
+grep -qi '^cache-control:.*immutable' "$TMP/landing-css.h" \
+  || fallo "el CSS de la landing ($url_css) no trae Cache-Control immutable"
+echo "   ${url_css#"$WEB"} -> $codigo immutable"
+# Lo que no existe bajo /landing/ es 404 de verdad (sin fallback de SPA).
+codigo="$(curl -sS -o /dev/null -w '%{http_code}' "$WEB/landing/no-existe")"
+[ "$codigo" = 404 ] || fallo "/landing/no-existe respondió $codigo (se esperaba 404)"
+echo "   /landing/no-existe -> $codigo"
+# /landings NO es la landing: es una ruta de la SPA y cae en su index.html.
+codigo="$(curl -sS -o "$TMP/landings.html" -w '%{http_code}' "$WEB/landings")"
+[ "$codigo" = 200 ] || fallo "/landings respondió $codigo (se esperaba 200 de la SPA)"
+grep -q 'id="root"' "$TMP/landings.html" || fallo "/landings no sirvió el index.html de la SPA"
+echo "   /landings -> $codigo index.html de la SPA"
 
 echo "== 5. Login: cookie Secure, HttpOnly, SameSite=Strict, Path=/api/auth"
 codigo="$(curl -sS -o "$TMP/login.json" -D "$TMP/login.h" -w '%{http_code}' \
