@@ -112,6 +112,12 @@ describe('Landing: formulario de contacto', () => {
     await cargarModulo();
     const botones = document.querySelectorAll<HTMLAnchorElement>('#planes a[data-plan]');
     expect([...botones].map((b) => b.dataset.plan)).toEqual(['Esencial', 'Completo', 'Cadena']);
+    // Cada botón se nombra distinto para un lector de pantalla.
+    expect([...botones].map((b) => b.textContent)).toEqual([
+      'Quiero este plan Esencial',
+      'Quiero este plan Completo',
+      'Quiero este plan Cadena',
+    ]);
     // Sin JS el enlace igual funciona: baja al formulario con el plan en la URL.
     expect(botones[1].getAttribute('href')).toBe('?plan=completo#contacto');
 

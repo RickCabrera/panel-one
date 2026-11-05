@@ -68,6 +68,12 @@ datos. Nada de esto toca SoftRestaurant.
   (ilimitadas); cada uno dice "Cotiza" y su botón "Quiero este plan" lleva al formulario con el
   plan preseleccionado (`?plan=completo#contacto`, funciona sin JS). La cifra y el tope de
   sucursales los decide Ricardo (D-07); un test y `check:landing` fijan que no se publica una cifra.
+  Lo que no está listo de verdad no se promete (revisión de UI-03): la facturación CFDI dice
+  "próximamente" (PAC real pendiente, F2-190) y el código en el ticket depende de la versión de
+  SR; la utilidad dice "estimada" (sin captura de compras); los tickets se exportan a CSV.
+- **Accesibilidad de la demo:** el hero lleva el pie "Ilustración con datos de demostración" y un
+  botón "Pausar animación" (WCAG 2.2.2) que sólo aparece si la demo se mueve; los tres "Quiero este
+  plan" se nombran distinto para lectores de pantalla.
 - `URL_PANEL` (al construir): a dónde lleva "Entrar al panel". Por defecto `/login`.
 - `URL_SITIO` (al construir, UI-03): el origen público (`https://…`) para la `og:image` absoluta
   (`og.png`, 1200×630). Sin ella queda `/og.png`, que algunos lectores de Open Graph no toman.

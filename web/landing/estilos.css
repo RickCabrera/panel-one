@@ -144,6 +144,18 @@ a {
   width: min(760px, 100% - 2.5rem);
 }
 
+.solo-lector {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .saltar {
   position: absolute;
   left: 1rem;
@@ -558,6 +570,41 @@ a {
   }
 }
 
+.captura-demo {
+  display: grid;
+  justify-items: end;
+}
+
+.captura-demo .demo {
+  width: 100%;
+}
+
+.hero .captura-demo figcaption {
+  color: var(--lavanda);
+}
+
+.demo-pausa {
+  margin-top: 0.4rem;
+  min-height: 40px;
+  padding: 0.3rem 0.9rem;
+  border: 2px solid var(--borde);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--arena);
+  font: 700 0.88rem/1.2 var(--texto);
+  cursor: pointer;
+}
+
+.demo-pausa:hover {
+  border-color: var(--arena);
+}
+
+/* En pausa (botón) se detiene también lo que anima el CSS. */
+.demo.en-pausa *,
+.demo.en-pausa *::before {
+  animation-play-state: paused !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ojo-c path,
   .en-vivo::before,
@@ -569,6 +616,9 @@ a {
 @media (max-width: 860px) {
   .hero-rejilla {
     grid-template-columns: 1fr;
+  }
+  .captura-demo {
+    justify-items: start;
   }
   .demo {
     justify-items: start;

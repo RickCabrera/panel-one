@@ -6,7 +6,8 @@
  *
  * Sin librerías: clases de CSS para los movimientos y `element.style` (CSSOM, permitido por la
  * CSP) para la pupila. Con `prefers-reduced-motion: reduce` no se mueve nada: queda la foto fija
- * del HTML. Se pausa con la pestaña oculta o con el hero fuera de pantalla.
+ * del HTML. Se pausa con la pestaña oculta, con el hero fuera de pantalla y con el botón
+ * "Pausar animación" (WCAG 2.2.2), que sólo aparece cuando hay algo que pausar.
  */
 
 interface Venta {
@@ -60,7 +61,9 @@ export function iniciarAnimacion(raiz: Document = document): void {
   const venta = raiz.getElementById('demo-venta');
   const tickets = raiz.getElementById('demo-tickets');
   const hero = raiz.getElementById('inicio');
-  if (!ojo || !pupila || !lista || !venta || !tickets || !hero) return;
+  const demo = raiz.querySelector<HTMLElement>('.demo');
+  const boton = raiz.querySelector<HTMLButtonElement>('#demo-pausa');
+  if (!ojo || !pupila || !lista || !venta || !tickets || !hero || !demo) return;
   const vista = raiz.defaultView;
   if (!vista || vista.matchMedia?.('(prefers-reduced-motion: reduce)').matches !== false) return;
 
@@ -70,6 +73,18 @@ export function iniciarAnimacion(raiz: Document = document): void {
   let visible = true;
   let usaPuntero = false;
   let cuadro = 0;
+  let enPausa = false;
+  const corre = () => visible && !enPausa && !raiz.hidden;
+
+  if (boton) {
+    boton.hidden = false;
+    boton.addEventListener('click', () => {
+      enPausa = !enPausa;
+      boton.setAttribute('aria-pressed', String(enPausa));
+      boton.textContent = enPausa ? 'Reanudar animación' : 'Pausar animación';
+      demo.classList.toggle('en-pausa', enPausa);
+    });
+  }
 
   const mirar = (x: number, y: number) => {
     const r = ojo.getBoundingClientRect();
@@ -81,7 +96,7 @@ export function iniciarAnimacion(raiz: Document = document): void {
   vista.addEventListener(
     'pointermove',
     (e) => {
-      if (e.pointerType !== 'mouse') return;
+      if (e.pointerType !== 'mouse' || enPausa) return;
       usaPuntero = true;
       mirar(e.clientX, e.clientY);
     },
@@ -142,13 +157,13 @@ export function iniciarAnimacion(raiz: Document = document): void {
   };
 
   const parpadear = () => {
-    if (visible && !raiz.hidden) reiniciarClase(ojo, 'parpadea');
+    if (corre()) reiniciarClase(ojo, 'parpadea');
     vista.setTimeout(parpadear, 3500 + Math.random() * 3500);
   };
   vista.setTimeout(parpadear, 2500);
 
   vista.setInterval(() => {
-    if (visible && !raiz.hidden) nuevaVenta();
+    if (corre()) nuevaVenta();
   }, CADA_MS);
 
   if (typeof vista.IntersectionObserver === 'function') {

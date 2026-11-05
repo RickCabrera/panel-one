@@ -57,6 +57,28 @@ describe('iniciarAnimacion', () => {
     vi.advanceTimersByTime(20_000);
     expect(document.getElementById('demo-lista')!.innerHTML).toBe(antes);
     expect(document.getElementById('demo-venta')!.textContent).toBe('$48,215.50');
+    // Nada que pausar: el botón sigue oculto.
+    expect(document.getElementById('demo-pausa')!.hidden).toBe(true);
+  });
+
+  it('el botón de pausa detiene la demo y la reanuda (WCAG 2.2.2)', () => {
+    vi.useFakeTimers();
+    movimientoReducido(false);
+    vi.stubGlobal('IntersectionObserver', undefined);
+    montar();
+    iniciarAnimacion();
+    const boton = document.getElementById('demo-pausa') as HTMLButtonElement;
+    expect(boton.hidden).toBe(false);
+    boton.click();
+    expect(boton.getAttribute('aria-pressed')).toBe('true');
+    expect(boton.textContent).toBe('Reanudar animación');
+    expect(document.querySelector('.demo')!.classList.contains('en-pausa')).toBe(true);
+    vi.advanceTimersByTime(2800 * 3);
+    expect(document.getElementById('demo-tickets')!.textContent).toBe('127');
+    boton.click();
+    expect(boton.textContent).toBe('Pausar animación');
+    vi.advanceTimersByTime(2800);
+    expect(document.getElementById('demo-tickets')!.textContent).toBe('128');
   });
 
   it('sin movimiento reducido entra una venta: ticket arriba, a lo más 4, y cuenta un ticket más', () => {

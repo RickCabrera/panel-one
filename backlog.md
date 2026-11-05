@@ -3032,7 +3032,10 @@ escribe como tarea (o se descarta) y se borra de aquí.
   por tramos o fuera de hora pico?); una cancelación de más de 35 días no llega si la fila
   conserva la fecha original.
 - **D-07 · Landing:** precios, tope de sucursales por plan y capturas reales (hoy "Cotiza",
-  "Hasta 5 sucursales" propuesto e ilustraciones HTML/CSS; UI-03, `docs/onboarding.md`).
+  "Hasta 5 sucursales" propuesto e ilustraciones HTML/CSS; UI-03, `docs/onboarding.md`). También
+  son decisión comercial de Ricardo, prometidas en el plan Cadena: "Soporte prioritario" y "Alta
+  asistida: instalamos contigo cada sucursal". La facturación CFDI sale como "próximamente" hasta
+  conectar el PAC real (F2-190).
 - **D-08 · Push del resumen del día con montos** en la pantalla bloqueada (hoy sí lleva la
   venta; las alertas no llevan cifras; esquema-sr §14.6, `docs/notificaciones.md`).
 - **D-09 · Canales:** enum fijo y mapeo por sucursal o por empresa; ingesta de canal por cuenta

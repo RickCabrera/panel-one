@@ -6,7 +6,7 @@
     <title>Yo Controlo · Tu restaurante en vivo, desde el celular</title>
     <meta
       name="description"
-      content="Ventas, mesas abiertas, meseros y turnos de tu SoftRestaurant, en vivo en tu celular. Solo lectura: no toca tu caja. Si se va el internet, no se pierde nada."
+      content="Ventas, mesas abiertas, meseros y turnos de tu SoftRestaurant, en vivo en tu celular. Solo lectura: no toca tu caja. Sin internet, guarda las ventas y las sube al volver."
     />
     <meta name="theme-color" content="#2C1533" />
     <link rel="icon" type="image/svg+xml" href="./marca/isotipo-app.svg" />
@@ -61,11 +61,12 @@
             </p>
             <ul class="garantias">
               <li>Solo lee: tu caja sigue igual</li>
-              <li>Sin internet no se pierde ninguna venta</li>
+              <li>Si se va el internet, guarda las ventas y las sube al volver</li>
               <li>Una sucursal o todas juntas</li>
             </ul>
           </div>
 
+          <figure class="captura captura-demo">
           <div class="demo" aria-hidden="true">
             <svg class="ojo" viewBox="425 246 337 389" width="337" height="389" focusable="false">
               <g class="ojo-c">
@@ -97,6 +98,11 @@
               </ol>
             </div>
           </div>
+            <figcaption>Ilustración con datos de demostración.</figcaption>
+            <button type="button" id="demo-pausa" class="demo-pausa" aria-pressed="false" hidden>
+              Pausar animación
+            </button>
+          </figure>
         </div>
       </section>
 
@@ -166,8 +172,8 @@
                 <p>El turno en curso al momento y el corte de caja de cada turno, con lo cobrado por forma de pago.</p>
               </li>
               <li>
-                <h3>Sin internet no se pierde nada</h3>
-                <p>Si se va el internet o la luz, las ventas se guardan en la PC y se mandan solas cuando vuelve.</p>
+                <h3>Si se va el internet</h3>
+                <p>Si se va el internet o la luz, el agente guarda las ventas en la PC y las sube solas cuando vuelve.</p>
               </li>
               <li>
                 <h3>Todas tus sucursales</h3>
@@ -244,7 +250,7 @@
 
       <section id="como-funciona" class="seccion seccion-clara" aria-labelledby="titulo-como">
         <div class="envoltura">
-          <h2 id="titulo-como">Empiezas en una tarde</h2>
+          <h2 id="titulo-como">Lo conectas el mismo día</h2>
           <ol class="pasos">
             <li>
               <h3>Te damos de alta</h3>
@@ -252,7 +258,7 @@
             </li>
             <li>
               <h3>Doble clic en el instalador</h3>
-              <p>En la PC donde está SoftRestaurant. Se conecta solo y en minutos empieza a mandar ventas. La caja no se detiene.</p>
+              <p>En la PC donde está SoftRestaurant. Se conecta solo y empieza a mandar las ventas. La caja no se detiene.</p>
             </li>
             <li>
               <h3>Lo ves todo en tu celular</h3>
@@ -280,11 +286,11 @@
                 <li>Mesas abiertas y lo que lleva cada una</li>
                 <li>Meseros en vivo</li>
                 <li>Turnos y cortes de caja</li>
-                <li>Tickets con su detalle y exportación a Excel</li>
+                <li>Tickets con su detalle y exportación a CSV (se abre en Excel)</li>
                 <li>Panel instalable en el celular</li>
                 <li>Usuarios con permisos por puesto</li>
               </ul>
-              <a class="boton boton-violeta" href="?plan=esencial#contacto" data-plan="Esencial">Quiero este plan</a>
+              <a class="boton boton-violeta" href="?plan=esencial#contacto" data-plan="Esencial">Quiero este plan<span class="solo-lector"> Esencial</span></a>
             </li>
             <li class="plan plan-destacado">
               <h3>Completo</h3>
@@ -299,7 +305,7 @@
                 <li>Catálogo de productos y precios por sucursal</li>
                 <li>Inventario: existencias, conteos, recetas y sugerido de compra</li>
               </ul>
-              <a class="boton boton-violeta" href="?plan=completo#contacto" data-plan="Completo">Quiero este plan</a>
+              <a class="boton boton-violeta" href="?plan=completo#contacto" data-plan="Completo">Quiero este plan<span class="solo-lector"> Completo</span></a>
             </li>
             <li class="plan">
               <h3>Cadena</h3>
@@ -307,14 +313,14 @@
               <p class="precio">Cotiza</p>
               <ul class="incluye">
                 <li>Todo lo de Completo</li>
-                <li>Facturación CFDI: tus clientes facturan su ticket desde el celular</li>
+                <li>Facturación CFDI, próximamente: tus clientes facturan su ticket desde el celular (el código en el ticket depende de tu versión de SoftRestaurant)</li>
                 <li>Factura global y cancelaciones</li>
-                <li>Compras, gastos y utilidad</li>
+                <li>Gastos y utilidad estimada</li>
                 <li>Traspasos entre sucursales</li>
                 <li>Soporte prioritario</li>
                 <li>Alta asistida: instalamos contigo cada sucursal</li>
               </ul>
-              <a class="boton boton-violeta" href="?plan=cadena#contacto" data-plan="Cadena">Quiero este plan</a>
+              <a class="boton boton-violeta" href="?plan=cadena#contacto" data-plan="Cadena">Quiero este plan<span class="solo-lector"> Cadena</span></a>
             </li>
           </ul>
         </div>
