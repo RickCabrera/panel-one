@@ -2990,6 +2990,23 @@ peso con el tope nuevo justificado); el formulario sigue posteando a `/api/publi
 plan dentro del mensaje; sin scroll horizontal a 360 px.
 **Decisión abierta:** precios y tope de sucursales de cada plan (D-07; "Hasta 5" es propuesta).
 
+### LAND-01 · Landing en /landing y logo del login
+`[ ]` /web + /infra (Caddy) — pedida por Ricardo el 5-nov-2026 (rama `feat/land-01-landing-ruta`)
+
+Mientras llega el dominio propio, la landing se ve en `/landing` del dominio del panel
+(`https://web-production-730b5.up.railway.app/landing`) sin ninguna variable nueva: build de la
+landing con `base: './'` (el mismo build sirve en `/landing/` y en la raíz de `LANDING_HOST`),
+snippet `landing_ruta` de Caddy (`redir /landing` → `/landing/` con su query, `handle_path
+/landing/*` con la misma CSP y caché) antes del fallback de la SPA, y el service worker del panel
+ignora `/landing`. En el login, el logo es un `<a href="/landing">` («Ir a la página de Yo
+Controlo», foco visible). Con `LANDING_HOST` la landing sigue en la raíz de ese dominio y en el
+dominio del panel `/` sigue siendo el panel. `docs/deploy-railway.md` actualizado.
+
+**Listo cuando:** CI verde; `/landing` y `/landing/` dan la landing (uno redirige al otro); sus
+assets, fuentes, `og.png`, el formulario (`/api/publico/contacto`) y «Entrar al panel» (`/login`)
+funcionan bajo `/landing/`; `/` y `/login` siguen siendo el panel; test del logo del login,
+guardia del Caddyfile y `check:landing` (rutas relativas) cubren `/landing`.
+
 ---
 
 ## PLAT-01 · Panel de plataforma y membresías

@@ -61,9 +61,17 @@ export function Login() {
       >
         {/* UI-02: la marca va sobre su morado (el logo arena), en los dos temas. */}
         <div className="flex flex-col items-center border-b border-lateral-borde bg-lateral px-6 pt-8 pb-6">
-          <h1>
-            <Logotipo variante="oscuro" className="h-14" />
-          </h1>
+          {/* LAND-01: el logo lleva a la landing. Un <a> normal, no el router: la landing no es
+              parte de la SPA (Caddy la sirve aparte en /landing/). */}
+          <a
+            href="/landing"
+            aria-label="Ir a la página de Yo Controlo"
+            className="cursor-pointer rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-arena"
+          >
+            <h1>
+              <Logotipo variante="oscuro" className="h-14" />
+            </h1>
+          </a>
           <p className="mt-3 text-center text-sm text-lateral-tenue">
             Ventas y mesas de tus sucursales, en vivo.
           </p>

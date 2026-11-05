@@ -37,6 +37,15 @@ Por qué así:
 - **La landing sólo ve `/api/publico/*`.** En el dominio de la landing (`LANDING_HOST`) Caddy
   pasa a la API únicamente `/api/publico/*` (el formulario de contacto); el resto de `/api`
   —login, `/docs`, todo— responde 404 ahí y vive sólo en el dominio del panel.
+- **La landing vive en `/landing/` mientras no haya dominio propio** (LAND-01). En el dominio
+  del panel (hoy `https://web-production-730b5.up.railway.app/landing`) Caddy sirve la landing
+  bajo `/landing/`, sin ninguna variable: `/landing` redirige (308) a `/landing/` conservando la
+  query (`?plan=…`), y la raíz `/` sigue siendo el panel. El build de la landing usa rutas
+  relativas (`base: './'` en `web/vite.landing.config.ts`), así que el MISMO build sirve bajo
+  `/landing/` y en la raíz de un dominio propio. Ahí, el formulario postea al `/api` del panel
+  (mismo origen) y «Entrar al panel» lleva a `/login`. El logo del login enlaza a `/landing`.
+  El service worker del panel no toca `/landing` (ni armazón ni caché): sin red, la landing no
+  se disfraza de panel.
 - **Una réplica por servicio** (`numReplicas: 1`). La API trae programadores internos
   (alertas, reportes, folios, conciliación, push): con dos réplicas cada uno corre dos veces,
   y el socket necesitaría sesiones pegajosas. Escalar es vertical (más CPU/RAM al servicio).
@@ -114,9 +123,13 @@ falla y el log dice **qué variables** (nunca sus valores).
    arranque falla con `PANEL_URL="https://" no es una URL válida.`, y es esperado) y luego de
    `web`. En `web` también: **Deploy → Wait for CI** encendido.
 
-Landing pública (opcional): `LANDING_HOST=tu-dominio.mx` y `URL_PANEL=https://panel.tu-dominio.mx/login`
+Landing pública: sin hacer nada, se ve en `/landing` del dominio del panel (LAND-01). Cuando
+haya dominio propio: `LANDING_HOST=tu-dominio.mx` y `URL_PANEL=https://panel.tu-dominio.mx/login`
 en el `web` (URL_PANEL se lee al construir: redeploy después de ponerla), y agrega ese dominio
-también en Networking. Sin `LANDING_HOST` la landing no se sirve.
+también en Networking. Con `LANDING_HOST` la landing pasa a la RAÍZ de ese dominio (ahí sólo se
+expone `/api/publico/*`); `/landing` del dominio del panel sigue sirviéndola. Opcional:
+`URL_SITIO=https://tu-dominio.mx` (también al construir) para que la `og:image` sea absoluta;
+sin ella queda `./og.png`, relativa a la página.
 
 ## 4. Dominio propio
 
