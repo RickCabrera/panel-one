@@ -104,6 +104,50 @@ public class InstaladorPs1Tests
         Assert.Equal(["FIN"], salida);
     }
 
+    // Compatibilidad: con valores normales la cadena sale idéntica a la de antes de
+    // Format-ValorCadena (las configs ya instaladas y lo que esperaba el diagnóstico).
+    [Fact]
+    public void Con_valores_normales_la_cadena_no_cambia()
+    {
+        var salida = CorrerPowerShell("""
+            New-CadenaConexion -Servidor '.\NATIONALSOFT' -Base 'softrestaurant10' -Usuario 'monitor_lector' -Password 'Abc123xyz'
+            """);
+
+        Assert.Equal(
+            [@"Server=.\NATIONALSOFT;Database=softrestaurant10;User ID=monitor_lector;Password=Abc123xyz;TrustServerCertificate=True"],
+            salida);
+    }
+
+    // Contraseñas que rompen una cadena de conexión armada a mano (';', comillas y espacios
+    // en las orillas ya los rechaza Test-PasswordCadena antes; aquí van como defensa en
+    // profundidad): '=' al principio (se lee
+    // como "==" de llave), ';' (corta el valor), comillas, llaves y espacios en las orillas.
+    [Theory]
+    [InlineData("=abc-123_X")]
+    [InlineData("==doble")]
+    [InlineData("abc=")]
+    [InlineData("a;b;c")]
+    [InlineData("con'simple")]
+    [InlineData("con\"doble")]
+    [InlineData("'\"mezcla\"'")]
+    [InlineData("{llaves}")]
+    [InlineData(" orillas ")]
+    [InlineData("Abc-123_x.!@#*+=?")]
+    public void La_cadena_de_conexion_conserva_cualquier_contraseña(string password)
+    {
+        var escapada = password.Replace("'", "''");
+        var salida = CorrerPowerShell($$"""
+            New-CadenaConexion -Servidor '.\NATIONALSOFT' -Base 'softrestaurant10' -Usuario 'monitor_lector' -Password '{{escapada}}'
+            """);
+
+        var cadena = new SqlConnectionStringBuilder(Assert.Single(salida));
+        Assert.Equal(password, cadena.Password);
+        Assert.Equal(@".\NATIONALSOFT", cadena.DataSource);
+        Assert.Equal("softrestaurant10", cadena.InitialCatalog);
+        Assert.Equal("monitor_lector", cadena.UserID);
+        Assert.True(cadena.TrustServerCertificate);
+    }
+
     [Fact]
     public void El_config_que_escribe_el_instalador_lo_acepta_el_agente_tal_cual()
     {
