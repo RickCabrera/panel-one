@@ -36,3 +36,7 @@ agent/instalador/*.sql text eol=crlf
 agent/instalador/*.cmd text eol=crlf
 agent/instalador/*.txt text eol=crlf
 agent/*.ps1 text eol=crlf
+
+# App Android (MOV-01): el wrapper de Gradle lo ejecuta sh en el CI (LF) y cmd.exe en Windows (CRLF).
+movil/android/gradlew text eol=lf
+movil/android/gradlew.bat text eol=crlf

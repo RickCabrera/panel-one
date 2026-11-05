@@ -64,7 +64,7 @@ jobs:
       # tiene por qué estar versionado nunca.
       - name: Ningún secreto versionado
         run: |
-          hits=$(git ls-files | grep -E '(^|/)\.env($|\.)|\.(pem|key|cer|pfx)$|(^|/)config\.json$' | grep -v '\.env\.example$' | grep -v '^infra/config\.example\.json$' || true)
+          hits=$(git ls-files | grep -E '(^|/)\.env($|\.)|\.(pem|key|cer|pfx|jks|keystore|p12)$|(^|/)config\.json$' | grep -v '\.env\.example$' | grep -v '^infra/config\.example\.json$' || true)
           if [ -n "$hits" ]; then
             echo "::error::Archivos sensibles versionados:"
             echo "$hits"

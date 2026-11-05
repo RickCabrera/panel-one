@@ -84,10 +84,25 @@ Lo que importa de ese dibujo:
 | [`/api`](api) | Ingesta del agente + lectura para el panel | NestJS 11 + Prisma + Postgres |
 | [`/web`](web) | Panel web | React 18 + Vite + TypeScript |
 | [`/infra`](infra) | Postgres local (dev) y, más adelante, el compose de producción | Docker Compose |
+| [`/movil`](movil) | App Android (APK) que carga el panel de producción; iOS después | Capacitor 8 |
 | [`/docs`](docs) | [Esquema real de SoftRestaurant](docs/esquema-sr.md) y log del modo autónomo | — |
 
 `/api` y `/web` son **workspaces de npm**: se instalan juntos desde la raíz y comparten
-un único `package-lock.json`. El CI cuenta con eso.
+un único `package-lock.json`. El CI cuenta con eso. `/movil` **no** es workspace: tiene su
+propio `package.json` y `package-lock.json` (`cd movil && npm ci`).
+
+### App Android (MOV-01)
+
+[`/movil`](movil) es la app de Android de Yo Controlo hecha con **Capacitor**: un WebView que
+carga el panel de producción (no empaqueta el build de `/web`), así que la sesión, la API y
+cada deploy del panel funcionan igual que en el navegador. El workflow
+[`apk.yml`](.github/workflows/apk.yml) la arma en cada PR que la toca y, tras CI verde en main,
+la publica en una URL fija:
+
+https://github.com/RickCabrera/panel-one/releases/download/android/YoControlo.apk
+
+Cómo instalarla, qué pasa sin internet, cómo firmarla para Play Store y cómo sumar iOS:
+[`movil/README.md`](movil/README.md).
 
 ## Levantar todo en local
 
@@ -295,7 +310,8 @@ Formato: `npm run format` (prettier). Sólo toca `/api` y `/web`; `scripts/`, `.
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) tiene cinco jobs:
 
 - **`guardia`** — corre desde el commit inicial. Falla si se cuela un centinela del
-  orquestador nocturno, un secreto versionado (`.env`, `.pem`, `.key`, `config.json`) o
+  orquestador nocturno, un secreto versionado (`.env`, `.pem`, `.key`, `config.json`, llaves
+  de firma `.jks`/`.keystore`/`.p12`) o
   si el hook `pre-push` pierde sus finales LF.
 - **`api`**, **`web`**, **`agent`** — activos desde F1-001: lint, typecheck y build, y sus
   tests: `api` con un Postgres 16 de servicio y las migraciones aplicadas (F1-011), `web`
@@ -303,6 +319,10 @@ Formato: `npm run format` (prettier). Sólo toca `/api` y `/web`; `scripts/`, `.
 - **`docker`** — construye las imágenes de Railway (`api/Dockerfile`, `web/Dockerfile`) sin
   publicarlas y les corre la prueba de humo `infra/humo-railway.sh` (producción simulada:
   migraciones, admin inicial, login, socket.io y rate limit por IP a través de Caddy).
+
+Aparte de `ci.yml`: [`instalador.yml`](.github/workflows/instalador.yml) publica el instalador
+del agente y [`apk.yml`](.github/workflows/apk.yml) la app Android (MOV-01). Los dos arman con
+permisos de sólo lectura y publican en un job que no ejecuta código del repo.
 
 **Producción** (Railway): guía en [`docs/deploy-railway.md`](docs/deploy-railway.md) y
 variables por servicio en [`infra/railway.env.example`](infra/railway.env.example).
