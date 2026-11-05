@@ -1,8 +1,10 @@
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown } from 'lucide-react';
 import { Fragment, useState } from 'react';
 
 import type { EstadoCodigoFacturacion, Sucursal, Ticket } from '../../api/tipos';
 import { pesos } from '../../dinero/dinero';
 import { siguienteOrden, type Orden, type OrdenTickets } from '../../filtros/tickets';
+import { useEsMovil } from '../../layout/useEsMovil';
 import {
   cantidad,
   fechaHoraDe,
@@ -22,6 +24,11 @@ export const NOTA_HORA_CANCELACION = 'El panel no recibe la hora de la cancelaci
 
 /** Columnas que en móvil se esconden (siguen en el detalle de la fila). */
 const SOLO_ESCRITORIO = 'hidden md:table-cell';
+/**
+ * UI-04: columnas que en tableta (md a lg) también se esconden, para que el total quepa sin
+ * desplazar la tabla. Siguen en el detalle de la fila.
+ */
+const SOLO_ANCHO = 'hidden lg:table-cell';
 const CELDA = 'px-3 py-2 align-top';
 
 export function TablaTickets({
@@ -46,6 +53,7 @@ export function TablaTickets({
   onOrdenar: (orden: OrdenTickets) => void;
 }) {
   const [abiertos, setAbiertos] = useState<ReadonlySet<string>>(new Set());
+  const esMovil = useEsMovil();
   const alternar = (id: string) =>
     setAbiertos((previos) => {
       const nuevos = new Set(previos);
@@ -53,6 +61,21 @@ export function TablaTickets({
       else nuevos.add(id);
       return nuevos;
     });
+
+  if (esMovil) {
+    return (
+      <ListaTickets
+        tickets={tickets}
+        sucursales={sucursales}
+        mostrarSucursal={mostrarSucursal}
+        atenuada={atenuada}
+        orden={orden}
+        onOrdenar={onOrdenar}
+        abiertos={abiertos}
+        onAlternar={alternar}
+      />
+    );
+  }
 
   const columnas = 8 + (mostrarSucursal ? 1 : 0) + 3;
   const encabezado = (columna: Orden, texto: string, clase = '') => (
@@ -80,11 +103,11 @@ export function TablaTickets({
             )}
             {encabezado('mesa', 'Mesa')}
             {encabezado('mesero', 'Mesero', SOLO_ESCRITORIO)}
-            {encabezado('comensales', 'Comensales', `${SOLO_ESCRITORIO} text-right`)}
-            {encabezado('duracion', 'Tiempo', `${SOLO_ESCRITORIO} text-right`)}
-            {encabezado('propina', 'Propina', `${SOLO_ESCRITORIO} text-right`)}
+            {encabezado('comensales', 'Comensales', `${SOLO_ANCHO} text-right`)}
+            {encabezado('duracion', 'Tiempo', `${SOLO_ANCHO} text-right`)}
+            {encabezado('propina', 'Propina', `${SOLO_ANCHO} text-right`)}
             {encabezado('total', 'Total', 'text-right')}
-            <th scope="col" className={`${CELDA} ${SOLO_ESCRITORIO}`}>
+            <th scope="col" className={`${CELDA} ${SOLO_ANCHO}`}>
               Forma de pago
             </th>
           </tr>
@@ -130,14 +153,12 @@ export function TablaTickets({
                   )}
                   <td className={CELDA}>{t.mesa ?? '—'}</td>
                   <td className={`${CELDA} ${SOLO_ESCRITORIO}`}>{t.mesero ?? '—'}</td>
-                  <td className={`${CELDA} ${SOLO_ESCRITORIO} text-right`}>
-                    {t.comensales ?? '—'}
-                  </td>
-                  <td className={`${CELDA} ${SOLO_ESCRITORIO} text-right whitespace-nowrap`}>
+                  <td className={`${CELDA} ${SOLO_ANCHO} text-right`}>{t.comensales ?? '—'}</td>
+                  <td className={`${CELDA} ${SOLO_ANCHO} text-right whitespace-nowrap`}>
                     {textoTiempoMesa(tiempoMesa(t))}
                   </td>
                   <td
-                    className={`${CELDA} ${SOLO_ESCRITORIO} text-right whitespace-nowrap tabular-nums`}
+                    className={`${CELDA} ${SOLO_ANCHO} text-right whitespace-nowrap tabular-nums`}
                   >
                     {pesos(t.propina)}
                   </td>
@@ -146,7 +167,7 @@ export function TablaTickets({
                   >
                     {pesos(t.total)}
                   </td>
-                  <td className={`${CELDA} ${SOLO_ESCRITORIO}`}>{formasDePago(t.pagos) || '—'}</td>
+                  <td className={`${CELDA} ${SOLO_ANCHO}`}>{formasDePago(t.pagos) || '—'}</td>
                 </tr>
                 {abierto && (
                   <tr id={idDetalle} className="border-b border-linea bg-fondo">
@@ -160,6 +181,146 @@ export function TablaTickets({
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+const NOMBRE_ORDEN: Record<Orden, string> = {
+  folio: 'Folio',
+  momento: 'Hora',
+  mesa: 'Mesa',
+  mesero: 'Mesero',
+  comensales: 'Comensales',
+  duracion: 'Tiempo de mesa',
+  propina: 'Propina',
+  total: 'Total',
+};
+
+/**
+ * UI-04: los tickets en el celular. Una tarjeta por ticket con lo que se busca de un vistazo
+ * (folio, hora, total; mesa, mesero y sucursal debajo) en vez de una tabla que escondía el
+ * total fuera de la pantalla. Tocarla abre el mismo detalle que la fila de escritorio, y el
+ * orden (los encabezados en escritorio) es un selector con su sentido.
+ */
+function ListaTickets({
+  tickets,
+  sucursales,
+  mostrarSucursal,
+  atenuada,
+  orden,
+  onOrdenar,
+  abiertos,
+  onAlternar,
+}: {
+  tickets: readonly Ticket[];
+  sucursales: ReadonlyMap<string, Sucursal>;
+  mostrarSucursal: boolean;
+  atenuada: boolean;
+  orden: OrdenTickets;
+  onOrdenar: (orden: OrdenTickets) => void;
+  abiertos: ReadonlySet<string>;
+  onAlternar: (id: string) => void;
+}) {
+  const ascendente = orden.dir === 'asc';
+  const Sentido = ascendente ? ArrowUpNarrowWide : ArrowDownWideNarrow;
+  return (
+    <div className="min-w-0" aria-busy={atenuada}>
+      <div className="mb-2 flex items-center justify-end gap-2 text-sm">
+        <label className="flex min-w-0 items-center gap-2 text-tinta-suave">
+          Ordenar por
+          <select
+            value={orden.orden}
+            onChange={(e) => onOrdenar(siguienteOrden(orden, e.target.value as Orden))}
+            className="h-10 min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 text-sm font-medium text-tinta"
+          >
+            {(Object.keys(NOMBRE_ORDEN) as Orden[]).map((o) => (
+              <option key={o} value={o}>
+                {NOMBRE_ORDEN[o]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => onOrdenar({ ...orden, dir: ascendente ? 'desc' : 'asc' })}
+          aria-label={
+            ascendente
+              ? 'Orden ascendente; cambiar a descendente'
+              : 'Orden descendente; cambiar a ascendente'
+          }
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-linea-fuerte bg-superficie text-tinta-suave"
+        >
+          <Sentido aria-hidden="true" className="h-4 w-4" />
+        </button>
+      </div>
+      <ul
+        className={`divide-y divide-linea-suave overflow-hidden rounded-lg border border-linea shadow-sm ${atenuada ? 'bg-realce' : 'bg-superficie'}`}
+      >
+        {tickets.map((t) => {
+          const abierto = abiertos.has(t.id);
+          const fechaHora = fechaHoraDe(t, sucursales);
+          const idDetalle = `detalle-${t.id}`;
+          const sucursal = sucursales.get(t.sucursalId);
+          const pie = [
+            t.mesa ? `Mesa ${t.mesa}` : null,
+            t.mesero,
+            mostrarSucursal ? (sucursal?.nombre ?? SIN_DATO) : null,
+          ].filter(Boolean);
+          return (
+            <li
+              key={t.id}
+              data-testid={`ticket-${t.folio}`}
+              className={t.cancelado ? 'bg-fondo' : ''}
+            >
+              <button
+                type="button"
+                aria-expanded={abierto}
+                aria-controls={idDetalle}
+                aria-label={`${abierto ? 'Ocultar' : 'Ver'} detalle del folio ${t.folio}`}
+                onClick={() => onAlternar(t.id)}
+                className="flex min-h-14 w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left hover:bg-realce"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className={`font-semibold ${t.cancelado ? 'text-tinta-tenue' : ''}`}>
+                      {t.folio}
+                    </span>
+                    {t.cancelado && (
+                      <span className="rounded bg-realce-fuerte px-1.5 py-0.5 text-xs text-tinta-suave">
+                        Cancelado
+                      </span>
+                    )}
+                    <span className="ml-auto shrink-0 text-xs text-tinta-tenue tabular-nums">
+                      {fechaHora
+                        ? `${fechaParaTabla(fechaHora.fecha)} ${fechaHora.hora}`
+                        : SIN_DATO}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 flex min-w-0 items-baseline gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs text-tinta-suave">
+                      {pie.join(' · ') || '—'}
+                    </span>
+                    <span
+                      className={`shrink-0 text-base font-semibold tabular-nums ${t.cancelado ? 'text-tinta-tenue line-through' : ''}`}
+                    >
+                      {pesos(t.total)}
+                    </span>
+                  </span>
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`h-4 w-4 shrink-0 text-tinta-tenue transition-transform ${abierto ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {abierto && (
+                <div id={idDetalle} className="border-t border-linea-suave bg-fondo px-3 py-3">
+                  <Detalle ticket={t} sucursal={sucursal} />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -359,8 +520,8 @@ function Detalle({ ticket: t, sucursal }: { ticket: Ticket; sucursal: Sucursal |
           </dd>
           <dt className="md:hidden">Mesero</dt>
           <dd className="text-right md:hidden">{t.mesero ?? '—'}</dd>
-          <dt className="md:hidden">Comensales</dt>
-          <dd className="text-right md:hidden">{t.comensales ?? '—'}</dd>
+          <dt className="lg:hidden">Comensales</dt>
+          <dd className="text-right lg:hidden">{t.comensales ?? '—'}</dd>
           <dt>Subtotal</dt>
           <dd className="text-right tabular-nums">{pesos(t.subtotal)}</dd>
           <dt>Impuestos</dt>

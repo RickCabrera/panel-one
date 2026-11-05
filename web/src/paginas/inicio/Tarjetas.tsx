@@ -63,7 +63,7 @@ export function TarjetaVentaTotal({
 }) {
   const dias = diasDe(rango);
   return (
-    <Tarjeta titulo="Venta total" className="lg:col-span-2">
+    <Tarjeta titulo="Venta total" className="md:col-span-2">
       <SegunEstado consulta={resumen} esqueleto={<Esqueleto lineas={1} grafica />}>
         {(r) =>
           r.cuentas === 0 ? (

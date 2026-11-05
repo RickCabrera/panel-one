@@ -20,7 +20,7 @@ const PUNTO: Record<string, string> = {
  * la hora cada vez. El texto completo está en pantalla y en el `aria-label`. El punto es
  * decorativo: todo estado se dice con palabras, nunca sólo con color.
  */
-export function OperacionEnVivo() {
+export function OperacionEnVivo({ compacto = false }: { compacto?: boolean }) {
   const { empresa, sucursal, sucursalId, sucursales } = useAlcance();
   const { zona } = usePeriodo();
   // Sólo con el alcance validado, igual que las vistas.
@@ -36,22 +36,32 @@ export function OperacionEnVivo() {
   let punto = PUNTO.apagado;
   let principal: string;
   let detalle: string | null = null;
+  // UI-04: en la cabecera del celular caben dos renglones cortos; lo completo sigue en el
+  // `aria-label` y el `title`.
+  let corto: [string, string | null];
   switch (operacion.estado) {
     case 'consultando':
       principal = 'Consultando sucursales…';
+      corto = ['Consultando', null];
       break;
     case 'sin-sucursales':
       principal = 'Sin sucursales';
+      corto = ['Sin sucursales', null];
       break;
     case 'sin-lectura':
       principal = 'Sin lectura reciente';
       detalle =
         operacion.total === null ? 'No se pudo consultar' : textoSucursales(0, operacion.total);
+      corto = ['Sin lectura', 'reciente'];
       break;
     case 'en-vivo':
       punto = PUNTO[operacion.frescura];
       principal = `${operacion.frescura === 'demorada' ? 'En vivo (con demora)' : 'En vivo'} · ${horaEn(zona, operacion.recibidoAt)}`;
       detalle = textoSucursales(operacion.reportando, operacion.total);
+      corto = [
+        operacion.frescura === 'demorada' ? 'Con demora' : 'En vivo',
+        horaEn(zona, operacion.recibidoAt),
+      ];
       break;
   }
   const texto = detalle ? `${principal} · ${detalle}` : principal;
@@ -62,13 +72,20 @@ export function OperacionEnVivo() {
       data-estado={operacion.estado}
       aria-label={`Operación: ${texto}`}
       title={texto}
-      className="flex min-w-0 items-center gap-2 text-xs leading-tight"
+      className={`flex min-w-0 items-center gap-2 text-xs leading-tight ${compacto ? 'shrink-0' : ''}`}
     >
       <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${punto}`} />
-      <span className="min-w-0">
-        <span className="block font-medium text-tinta">{principal}</span>
-        {detalle && <span className="block text-tinta-tenue">{detalle}</span>}
-      </span>
+      {compacto ? (
+        <span aria-hidden="true" className="min-w-0 whitespace-nowrap">
+          <span className="block font-medium text-tinta">{corto[0]}</span>
+          {corto[1] && <span className="block text-tinta-tenue tabular-nums">{corto[1]}</span>}
+        </span>
+      ) : (
+        <span className="min-w-0">
+          <span className="block font-medium text-tinta">{principal}</span>
+          {detalle && <span className="block text-tinta-tenue">{detalle}</span>}
+        </span>
+      )}
     </div>
   );
 }

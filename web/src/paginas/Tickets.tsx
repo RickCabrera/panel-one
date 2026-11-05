@@ -1,3 +1,4 @@
+import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -23,6 +24,7 @@ import {
   type OrdenTickets,
 } from '../filtros/tickets';
 import { usePeriodo } from '../filtros/usePeriodo';
+import { useEsMovil } from '../layout/useEsMovil';
 import { useAnalisis } from './analisis/consultas';
 import type { Filtro } from './inicio/consultas';
 import { Esqueleto, Vacio } from './inicio/Tarjeta';
@@ -263,6 +265,8 @@ export function Tickets() {
     [setParametros],
   );
   const conFiltros = hayFiltros(filtros);
+  const esMovil = useEsMovil();
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const zonaCorte = sucursal?.zonaHoraria ?? ZONA_PRESENTACION;
 
   const datos = consulta.data;
@@ -327,13 +331,43 @@ export function Tickets() {
       )}
 
       <div className="mt-4 min-w-0">
-        <FiltrosTicketsForm
-          key={JSON.stringify(filtros)}
-          filtros={filtros}
-          meseros={nombresMeseros}
-          formasPago={formasPago}
-          onAplicar={aplicar}
-        />
+        {/* UI-04: en el celular los ocho campos tapaban la lista; se pliegan tras un botón que
+            dice cuántos hay aplicados (los activos siguen a la vista abajo). */}
+        {esMovil && (
+          <button
+            type="button"
+            aria-expanded={filtrosAbiertos}
+            aria-controls="filtros-tickets"
+            onClick={() => setFiltrosAbiertos((v) => !v)}
+            className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-linea bg-superficie px-3 text-sm font-medium shadow-xs"
+          >
+            <span className="inline-flex items-center gap-2">
+              <SlidersHorizontal aria-hidden="true" className="h-4 w-4 text-tinta-suave" />
+              Filtros
+              {conFiltros && (
+                <span className="rounded-full bg-acento px-2 text-xs text-sobre-acento">
+                  {activos(filtros).length}
+                </span>
+              )}
+            </span>
+            <ChevronDown
+              aria-hidden="true"
+              className={`h-4 w-4 text-tinta-suave transition-transform ${filtrosAbiertos ? 'rotate-180' : ''}`}
+            />
+          </button>
+        )}
+        <div id="filtros-tickets" hidden={esMovil && !filtrosAbiertos} className="max-md:mt-2">
+          <FiltrosTicketsForm
+            key={JSON.stringify(filtros)}
+            filtros={filtros}
+            meseros={nombresMeseros}
+            formasPago={formasPago}
+            onAplicar={(nuevos) => {
+              aplicar(nuevos);
+              setFiltrosAbiertos(false);
+            }}
+          />
+        </div>
         {conFiltros && (
           <ul aria-label="Filtros activos" className="mt-2 flex min-w-0 flex-wrap gap-2 text-xs">
             {activos(filtros).map(({ llave, texto }) => (

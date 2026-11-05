@@ -20,16 +20,15 @@ import {
 } from './menu';
 
 /*
- * Tres anchos (F2-210):
- * - < md: cajón que se abre con ☰; cerrado queda fuera de pantalla e `invisible`, así no
- *   tapa el contenido ni recibe foco.
+ * Dos anchos (F2-210; UI-04 quitó el cajón del celular, que ahora es la barra inferior y la
+ * hoja «Más»: el lateral sólo se monta desde `md`):
  * - md a lg: riel de iconos (`w-16`). Los textos se ocultan; el nombre accesible no cambia
  *   porque cada control lleva `aria-label`, y a la vista sale en su `title`. Sin barra de scroll
  *   visible (en 64 px se come el icono): se desplaza igual con rueda, toque y Tab.
  * - ≥ lg: lateral completo.
  */
 // Sin `truncate`: un nombre largo ("Orquestador de menú") pasa de renglón, no se recorta.
-const SOLO_TEXTO_ANCHO = 'min-w-0 md:hidden lg:block';
+const SOLO_TEXTO_ANCHO = 'min-w-0 hidden lg:block';
 
 /*
  * UI-02: el lateral es SIEMPRE del morado de marca (tokens `lateral-*`), en los dos temas: es
@@ -38,15 +37,16 @@ const SOLO_TEXTO_ANCHO = 'min-w-0 md:hidden lg:block';
 const FOCO_LATERAL =
   'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-arena';
 
-export function Sidebar({ abierto, onNavegar }: { abierto: boolean; onNavegar: () => void }) {
+const sinAccion = () => {};
+
+export function Sidebar() {
   const usuario = useUsuario();
+  const onNavegar = sinAccion;
 
   return (
     <aside
       id="menu-principal"
-      className={`print:hidden fixed inset-y-0 left-0 z-30 w-60 max-w-[80vw] overflow-y-auto border-r border-lateral-borde bg-lateral text-lateral-tinta [scrollbar-color:var(--lateral-borde)_transparent] transition-transform md:sticky md:top-0 md:z-auto md:h-screen md:w-16 md:max-w-none md:shrink-0 md:translate-x-0 md:[scrollbar-width:none] lg:w-60 lg:[scrollbar-width:thin] ${
-        abierto ? 'translate-x-0' : '-translate-x-full max-md:invisible'
-      }`}
+      className="print:hidden sticky top-0 h-screen w-16 shrink-0 overflow-y-auto border-r border-lateral-borde bg-lateral text-lateral-tinta [scrollbar-color:var(--lateral-borde)_transparent] [scrollbar-width:none] lg:w-60 lg:[scrollbar-width:thin]"
     >
       <div className="flex h-16 items-center px-5 md:justify-center md:px-0 lg:justify-start lg:px-5">
         <span className="md:hidden lg:block">

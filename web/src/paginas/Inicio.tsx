@@ -85,7 +85,7 @@ export function Inicio() {
           Corrige el rango de fechas para ver los datos.
         </p>
       ) : (
-        <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           <TarjetaVentaTotal
             resumen={resumen}
             porHora={porHora}

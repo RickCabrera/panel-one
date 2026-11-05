@@ -1,9 +1,11 @@
+import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { useFiltroAlcance } from '../alertas/consultas';
 import type { DetalleCorte, ResumenCorte } from '../api/tipos';
 import { pesos } from '../dinero/dinero';
 import { usePeriodo } from '../filtros/usePeriodo';
+import { MEDIA_HASTA_LG, useEsMovil, useMedia } from '../layout/useEsMovil';
 import {
   useCortes,
   useCortesEnCurso,
@@ -210,73 +212,140 @@ function ListaDeCortes({
   elegir: (id: string) => void;
 }) {
   const ahora = useAhora();
+  // UI-04: tarjetas hasta lg (en tableta, de dos en dos); la tabla, desde lg.
+  const conTarjetas = useMedia(MEDIA_HASTA_LG);
   return (
     <>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-max text-sm" data-testid="tabla-cortes">
-          <thead className="text-left text-xs text-tinta-suave">
-            <tr>
-              <th className={TH}>Turno</th>
-              <th className={TH}>Sucursal</th>
-              <th className={TH}>Apertura</th>
-              <th className={TH}>Cierre</th>
-              <th className={TH}>Duración</th>
-              <th className={`${TH} text-right`}>Fondo</th>
-              <th className={`${TH} text-right`}>Venta</th>
-              <th className={`${TH} text-right`}>Cuentas</th>
-              <th className={`${TH} text-right`}>Ticket prom.</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-linea">
-            {cortes.map((c) => (
-              <tr
-                key={c.id}
-                className={elegido === c.id ? 'bg-realce' : undefined}
-                data-testid="fila-corte"
+      {conTarjetas ? (
+        // UI-04: en el celular, una tarjeta por turno con la venta a la vista (en la tabla
+        // quedaba fuera de la pantalla, a la derecha).
+        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2" data-testid="tabla-cortes">
+          {cortes.map((c) => (
+            <li key={c.id} data-testid="fila-corte">
+              <button
+                type="button"
+                onClick={() => elegir(c.id)}
+                aria-label={`${nombreCorte(c)}, ${c.sucursal}`}
+                aria-pressed={elegido === c.id}
+                className={`block w-full min-w-0 rounded-lg border px-3 py-2.5 text-left ${
+                  elegido === c.id
+                    ? 'border-acento-borde bg-realce'
+                    : 'border-linea bg-superficie hover:bg-realce'
+                }`}
               >
-                <td className={TD}>
-                  <button
-                    type="button"
-                    className="text-left text-acento-texto underline-offset-2 hover:underline"
-                    onClick={() => elegir(c.id)}
-                  >
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="min-w-0 flex-1 truncate font-semibold text-acento-texto">
                     {nombreCorte(c)}
-                  </button>
-                </td>
-                <td className={TD}>{c.sucursal}</td>
-                <td className={`${TD} whitespace-nowrap`}>
-                  {momento(c.zonaHoraria, c.aperturaAt)}
-                </td>
-                <td className={`${TD} whitespace-nowrap`}>
+                  </span>
+                  <span
+                    className="shrink-0 text-lg font-semibold tabular-nums"
+                    data-testid="corte-venta"
+                  >
+                    {pesos(c.venta)}
+                    {c.posiblementeIncompleto && (
+                      <span className="ml-0.5 text-aviso" title={TEXTO_INCOMPLETO}>
+                        *
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <span className="mt-0.5 flex min-w-0 items-baseline gap-2 text-xs text-tinta-suave">
+                  <span className="min-w-0 flex-1 truncate">
+                    {c.sucursal} · {momento(c.zonaHoraria, c.aperturaAt)}
+                  </span>
                   {c.cierreAt === null ? (
-                    <span className="font-medium text-exito" data-testid="corte-abierto">
-                      Abierto
-                    </span>
+                    <span className="shrink-0 font-medium text-exito">Abierto</span>
                   ) : (
-                    momento(c.zonaHoraria, c.cierreAt)
-                  )}
-                </td>
-                <td className={TD}>{duracionTurno(c.aperturaAt, c.cierreAt, ahora)}</td>
-                <td className={NUM}>{pesos(c.fondo)}</td>
-                <td className={NUM} data-testid="corte-venta">
-                  {pesos(c.venta)}
-                  {c.posiblementeIncompleto && (
-                    <span
-                      className="ml-1 text-aviso"
-                      title={TEXTO_INCOMPLETO}
-                      data-testid="corte-incompleto"
-                    >
-                      *
+                    <span className="shrink-0">
+                      {duracionTurno(c.aperturaAt, c.cierreAt, ahora)}
                     </span>
                   )}
-                </td>
-                <td className={NUM}>{c.cuentas}</td>
-                <td className={NUM}>{importe(c.ticketPromedio)}</td>
+                </span>
+                <span className="mt-1.5 grid grid-cols-3 gap-2 border-t border-linea-suave pt-1.5 text-xs">
+                  <span>
+                    <span className="block text-tinta-tenue">Cuentas</span>
+                    <span className="tabular-nums">{c.cuentas}</span>
+                  </span>
+                  <span>
+                    <span className="block text-tinta-tenue">Ticket prom.</span>
+                    <span className="tabular-nums">{importe(c.ticketPromedio)}</span>
+                  </span>
+                  <span>
+                    <span className="block text-tinta-tenue">Fondo</span>
+                    <span className="tabular-nums">{pesos(c.fondo)}</span>
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-sm" data-testid="tabla-cortes">
+            <thead className="text-left text-xs text-tinta-suave">
+              <tr>
+                <th className={TH}>Turno</th>
+                <th className={TH}>Sucursal</th>
+                <th className={TH}>Apertura</th>
+                <th className={TH}>Cierre</th>
+                <th className={TH}>Duración</th>
+                <th className={`${TH} text-right`}>Fondo</th>
+                <th className={`${TH} text-right`}>Venta</th>
+                <th className={`${TH} text-right`}>Cuentas</th>
+                <th className={`${TH} text-right`}>Ticket prom.</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-linea">
+              {cortes.map((c) => (
+                <tr
+                  key={c.id}
+                  className={elegido === c.id ? 'bg-realce' : undefined}
+                  data-testid="fila-corte"
+                >
+                  <td className={TD}>
+                    <button
+                      type="button"
+                      className="text-left text-acento-texto underline-offset-2 hover:underline"
+                      onClick={() => elegir(c.id)}
+                    >
+                      {nombreCorte(c)}
+                    </button>
+                  </td>
+                  <td className={TD}>{c.sucursal}</td>
+                  <td className={`${TD} whitespace-nowrap`}>
+                    {momento(c.zonaHoraria, c.aperturaAt)}
+                  </td>
+                  <td className={`${TD} whitespace-nowrap`}>
+                    {c.cierreAt === null ? (
+                      <span className="font-medium text-exito" data-testid="corte-abierto">
+                        Abierto
+                      </span>
+                    ) : (
+                      momento(c.zonaHoraria, c.cierreAt)
+                    )}
+                  </td>
+                  <td className={TD}>{duracionTurno(c.aperturaAt, c.cierreAt, ahora)}</td>
+                  <td className={NUM}>{pesos(c.fondo)}</td>
+                  <td className={NUM} data-testid="corte-venta">
+                    {pesos(c.venta)}
+                    {c.posiblementeIncompleto && (
+                      <span
+                        className="ml-1 text-aviso"
+                        title={TEXTO_INCOMPLETO}
+                        data-testid="corte-incompleto"
+                      >
+                        *
+                      </span>
+                    )}
+                  </td>
+                  <td className={NUM}>{c.cuentas}</td>
+                  <td className={NUM}>{importe(c.ticketPromedio)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {cortes.some((c) => c.posiblementeIncompleto) && (
         <p className="mt-2 text-xs text-aviso" data-testid="cortes-incompletos">
           * {TEXTO_INCOMPLETO} Se cerró antes de que el agente empezara a mandar los turnos.
@@ -293,12 +362,21 @@ function ListaDeCortes({
 
 function Detalle({ id, onCerrar }: { id: string; onCerrar: () => void }) {
   const consulta = useDetalleCorte(id);
+  const esMovil = useEsMovil();
+  const caja = useRef<HTMLDivElement>(null);
+  // UI-04: en el celular el detalle queda bajo la lista, fuera de la pantalla: al elegir un
+  // turno se lleva a la vista (con `scroll-mt` para no quedar bajo la cabecera fija).
+  useEffect(() => {
+    if (esMovil) caja.current?.scrollIntoView?.({ block: 'start' });
+  }, [id, esMovil]);
   return (
-    <Tarjeta titulo="Detalle del turno" className="mt-4">
-      <SegunEstado consulta={consulta} esqueleto={<Esqueleto lineas={6} />}>
-        {(d) => <ContenidoDetalle d={d} onCerrar={onCerrar} />}
-      </SegunEstado>
-    </Tarjeta>
+    <div ref={caja} className="scroll-mt-20">
+      <Tarjeta titulo="Detalle del turno" className="mt-4">
+        <SegunEstado consulta={consulta} esqueleto={<Esqueleto lineas={6} />}>
+          {(d) => <ContenidoDetalle d={d} onCerrar={onCerrar} />}
+        </SegunEstado>
+      </Tarjeta>
+    </div>
   );
 }
 

@@ -9,6 +9,7 @@ import { Proveedores, Rutas } from './App';
 import { terminarSesion, tokenActual } from './auth/sesion';
 import { crearQueryClient } from './consultas/queryClient';
 import { ACENTO_POR_DEFECTO } from './tema/acento';
+import { anchoDePantalla } from './test/matchMedia';
 import { iniciarTema } from './tema/tema';
 import {
   EMPRESA_A,
@@ -359,30 +360,29 @@ describe('sidebar y roles', () => {
     expect(screen.getByRole('link', { name: 'Ir al inicio' })).toHaveAttribute('href', '/');
   });
 
-  it('el menú móvil abre, cierra con Escape y al navegar', async () => {
+  // UI-04: el cajón del celular pasó a ser la barra inferior con la hoja «Más».
+  it('en el celular, «Más» abre, cierra con Escape y al navegar', async () => {
+    anchoDePantalla(390);
     apiDePrueba({ u: usuario('visor'), cookieViva: true });
     montar(`/?empresa=${A}`);
     const evt = userEvent.setup();
 
-    const boton = await screen.findByRole('button', { name: 'Abrir menú' });
+    const boton = await screen.findByRole('button', { name: 'Más' });
     await evt.click(boton);
-    expect(screen.getByRole('button', { name: 'Cerrar menú' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    expect(boton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('dialog', { name: 'Más' })).toBeInTheDocument();
 
     await evt.keyboard('{Escape}');
-    expect(screen.getByRole('button', { name: 'Abrir menú' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(boton).toHaveAttribute('aria-expanded', 'false');
 
-    await evt.click(screen.getByRole('button', { name: 'Abrir menú' }));
-    await evt.click(screen.getByRole('link', { name: 'Tickets' }));
-    expect(screen.getByRole('button', { name: 'Abrir menú' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
+    await evt.click(boton);
+    await evt.click(
+      within(screen.getByRole('dialog', { name: 'Más' })).getByRole('link', { name: 'Resumen' }),
     );
+    expect(ubicacion()).toBe(`/resumen?empresa=${A}`);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Más' })).toHaveAttribute('aria-expanded', 'false');
   });
 });
 

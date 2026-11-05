@@ -81,7 +81,7 @@ export function TarjetasKpi({
   const sinContar =
     monitor.excluidas.length > 0 ? `Sin contar: ${monitor.excluidas.join(', ')}.` : null;
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       <Tarjeta titulo="Mesas abiertas">
         <Cifra testId="kpi-mesas">{monitor.mesas.length}</Cifra>
         <p className="text-sm text-tinta-tenue">
@@ -465,7 +465,8 @@ export function GridMesas({
       className={
         variante === 'pared'
           ? 'grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
-          : 'grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4'
+          : // UI-04: dos por renglón desde 360 px: en el celular se ve el salón de un vistazo.
+            'grid min-w-0 grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4'
       }
     >
       {visibles.map((m) => (
