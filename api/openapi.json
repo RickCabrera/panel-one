@@ -3222,7 +3222,7 @@
             "name": "formaRaw",
             "required": false,
             "in": "query",
-            "description": "UI-01: el ticket tiene AL MENOS un pago cuyo texto de SR (`pagos[].formaRaw`, el que se ve en la tabla) es EXACTAMENTE éste (sensible a mayúsculas y espacios). No depende del catálogo de la empresa: funciona aunque el catálogo esté vacío. Las opciones válidas del periodo salen de `porTexto` de `GET /ventas/formas-pago`. Combinable con `forma` (AND).",
+            "description": "UI-01: el ticket tiene AL MENOS un pago cuyo texto de SR (`pagos[].formaRaw`, el que se ve en la tabla) es EXACTAMENTE éste (sensible a mayúsculas y espacios). No depende del catálogo de la empresa: funciona aunque el catálogo esté vacío. Las opciones válidas del periodo salen de `GET /ventas/formas-pago/textos`. Combinable con `forma` (AND).",
             "schema": {
               "maxLength": 80,
               "type": "string"

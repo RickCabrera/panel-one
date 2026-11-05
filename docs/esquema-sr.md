@@ -1143,6 +1143,18 @@ usa ningún agregado.
   **Consecuencia vista (UI-01):** sin catálogo, todo lo que deriva el ENUM (dona de Inicio,
   "Cobrado por forma de pago" de un turno, el filtro viejo de Tickets) cae en `otro`. El filtro de
   Tickets ya no depende de él (§2, filtros de F2-222); los desgloses siguen esperando el catálogo.
+- ⚠️ **SUPUESTO (UI-01) — `formasdepago.descripcion` es `varchar` de 80 caracteres o menos y
+  SIN relleno de espacios.** No se ha visto su tipo en el `INFORMATION_SCHEMA` de una instalación
+  real. De él dependen el `MaxLength(80)` de `formaRaw` en `GET /ventas/tickets` (un texto más largo
+  no se podría pedir: 400) y el recorte a 80 de `?pago=` en `web/src/filtros/tickets.ts`. Si
+  resulta ser `char(n)` con relleno, el filtro sigue coincidiendo (ni el web ni la API recortan
+  espacios), pero conviene normalizarlo en la ingesta; si pasa de 80, hay que subir los dos topes.
+- ⚠️ **DECISIÓN ABIERTA (UI-01) — ¿SR guarda pagos en cuentas que luego se cancelan?** No se ha
+  visto. Hoy `/ventas/formas-pago` y `/ventas/formas-pago/textos` sólo leen pagos de cuentas NO
+  canceladas (`pagos_ventas`), mientras que el filtro `formaRaw` de Tickets también encuentra
+  canceladas (`pagos_empresa`, como `forma` y `producto`). Si SR los guarda, un texto que sólo
+  aparezca en canceladas no sale como opción del select (se puede pedir por URL). Lo prueba el e2e
+  de `lectura.e2e.spec.ts` con un pago sintético en una cancelada.
 
 **Cuentas con pago mixto:** ✅ una fila por forma, cada una con su importe (efectivo 100 + VISA
 175 = una cuenta de 275). Un pago capturado en una forma y corregido antes de aceptar no deja

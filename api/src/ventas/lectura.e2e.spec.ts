@@ -380,6 +380,85 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
       }
     });
 
+    it('UI-01: Σ textos = Σ formas-pago = venta + propina del resumen, con el mismo filtro', async () => {
+      // En SR `chequespagos.importe` NO lleva propina (esquema-sr.md §4) y ahí Σ pagos = venta.
+      // El seed SINTÉTICO mete la propina en el pago con tarjeta (`total + propina`), así que aquí
+      // el cuadre exacto es contra venta + propina. Lo que se prueba: que /textos reparte
+      // EXACTAMENTE los mismos pagos que /formas-pago y que el resumen, sin perder ni duplicar.
+      const sumar = (xs: Array<{ monto: string }>) =>
+        xs.reduce((a, x) => a.plus(new Prisma.Decimal(x.monto)), new Prisma.Decimal(0));
+      const filtros: Array<{
+        empresaId: string;
+        desde: string;
+        hasta: string;
+        sucursalId?: string;
+      }> = [
+        { empresaId: FX.empresaA, desde: '2026-10-20', hasta: HOY },
+        { empresaId: FX.empresaA, desde: '2026-10-20', hasta: HOY, sucursalId: FX.sucursalA1 },
+      ];
+      for (const f of filtros) {
+        const qs = Q(f);
+        const textos = (await get(`/ventas/formas-pago/textos?${qs}`, USUARIOS.visorA))
+          .body as Array<{
+          monto: string;
+        }>;
+        const formas = (await get(`/ventas/formas-pago?${qs}`, USUARIOS.visorA)).body as {
+          formas: Array<{ monto: string }>;
+        };
+        const resumen = (await get(`/ventas/resumen?${qs}`, USUARIOS.visorA)).body as {
+          venta: string;
+          propina: string;
+        };
+        expect(textos.length).toBeGreaterThan(0);
+        expect(sumar(textos).toFixed(2)).toBe(sumar(formas.formas).toFixed(2));
+        expect(sumar(textos).toFixed(2)).toBe(
+          new Prisma.Decimal(resumen.venta).plus(new Prisma.Decimal(resumen.propina)).toFixed(2),
+        );
+      }
+    });
+
+    it('UI-01: el pago de una cuenta CANCELADA no es opción en /textos, pero sí filtra en /tickets', async () => {
+      // Fixture: un pago con texto único colgado de una cuenta cancelada del seed (en SR no se ha
+      // visto si una cuenta cancelada conserva sus pagos: decisión abierta, esquema-sr.md §4).
+      const TEXTO = 'SOLO EN CANCELADA UI01';
+      const cancelada = chequesA.find((c) => {
+        if (!c.cancelado) return false;
+        const dia = diaLocal(c.cerradoAt ?? c.abiertoAt, ZONA[c.sucursalId]);
+        return dia >= RANGO.desde && dia <= RANGO.hasta;
+      })!;
+      expect(cancelada).toBeDefined();
+      const dia = diaLocal(cancelada.cerradoAt ?? cancelada.abiertoAt, ZONA[cancelada.sucursalId]);
+      // Rango de UN día (el de la cancelada): una llave de cache que ningún otro test usó.
+      const f = { empresaId: FX.empresaA, desde: dia, hasta: dia };
+      const pago = await prisma.chequePago.create({
+        data: {
+          chequeId: cancelada.id,
+          empresaId: FX.empresaA,
+          forma: FormaPago.otro,
+          formaRaw: TEXTO,
+          monto: new Prisma.Decimal('123.45'),
+        },
+      });
+      try {
+        const textos = await get(`/ventas/formas-pago/textos?${Q(f)}`, USUARIOS.visorA);
+        expect(textos.status).toBe(200);
+        expect(textos.body.length).toBeGreaterThan(0);
+        expect(textos.body.some((t: { formaRaw: string }) => t.formaRaw === TEXTO)).toBe(false);
+
+        const tickets = await get(
+          `/ventas/tickets?${Q({ ...f, formaRaw: TEXTO })}`,
+          USUARIOS.visorA,
+        );
+        expect(tickets.status).toBe(200);
+        expect(tickets.body.total).toBe(1);
+        expect(
+          tickets.body.items.map((i: { id: string; cancelado: boolean }) => [i.id, i.cancelado]),
+        ).toEqual([[cancelada.id, true]]);
+      } finally {
+        await prisma.chequePago.delete({ where: { id: pago.id } });
+      }
+    });
+
     it('F1-043: por día y comparativo suman exactamente lo que dice el resumen', async () => {
       const filtros = [
         filtro,
