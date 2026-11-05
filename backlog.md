@@ -2975,6 +2975,21 @@ enlazan sin reconstruir el web (con `VITE_URL_INSTALADOR_AGENTE` de respaldo).
 avisa "editor desconocido"). Hoy lo cubre la prueba de procedencia del workflow; la firma de código
 va con el canal de versiones (F2-143).
 
+### UI-03 · Landing de Yo Controlo
+`[ ]` /web (sólo la landing) — pedida por Ricardo el 5-nov-2026
+
+Rehacer la landing con la marca Yo Controlo (logo v2 con el ojo-C, morado #2C1533 y arena
+#E3CBA8): hero con demo animada (el ojo vigila la caja, caen tickets y sube la venta; respeta
+`prefers-reduced-motion`), beneficios, ilustraciones HTML/CSS del panel, cómo funciona en 3 pasos,
+planes **sin precio** (Esencial, Completo, Cadena: "Cotiza" + "Quiero este plan" con el plan
+preseleccionado en el formulario de contacto), preguntas frecuentes, contacto y pie. SEO con Open
+Graph (`og.png` 1200×630). No toca el panel (`web/src/**` fuera de `src/landing/`).
+
+**Listo cuando:** CI verde; `check:landing` pasa (secciones, OG, planes sin cifras, sin `style=""`,
+peso con el tope nuevo justificado); el formulario sigue posteando a `/api/publico/contacto` con el
+plan dentro del mensaje; sin scroll horizontal a 360 px.
+**Decisión abierta:** precios y tope de sucursales de cada plan (D-07; "Hasta 5" es propuesta).
+
 ---
 
 ## PLAT-01 · Panel de plataforma y membresías
@@ -3057,8 +3072,11 @@ escribe como tarea (o se descarta) y se borra de aquí.
   recetas?); el heap de `movsinv` puede dar timeout permanente (¿subir el timeout sólo ahí, leer
   por tramos o fuera de hora pico?); una cancelación de más de 35 días no llega si la fila
   conserva la fecha original.
-- **D-07 · Landing:** precios y capturas reales (hoy "por confirmar" y SVG ilustrativos,
-  `docs/onboarding.md`).
+- **D-07 · Landing:** precios, tope de sucursales por plan y capturas reales (hoy "Cotiza",
+  "Hasta 5 sucursales" propuesto e ilustraciones HTML/CSS; UI-03, `docs/onboarding.md`). También
+  son decisión comercial de Ricardo, prometidas en el plan Cadena: "Soporte prioritario" y "Alta
+  asistida: instalamos contigo cada sucursal". La facturación CFDI sale como "próximamente" hasta
+  conectar el PAC real (F2-190).
 - **D-08 · Push del resumen del día con montos** en la pantalla bloqueada (hoy sí lleva la
   venta; las alertas no llevan cifras; esquema-sr §14.6, `docs/notificaciones.md`).
 - **D-09 · Canales:** enum fijo y mapeo por sucursal o por empresa; ingesta de canal por cuenta
