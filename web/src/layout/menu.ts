@@ -327,11 +327,22 @@ export function barraMovilPara(rol: Rol): EntradaMenu[] {
     .sort((a, b) => a.movil!.barra - b.movil!.barra);
 }
 
-/** UI-04: lo que va en la hoja «Más»: las secciones del rol sin lo que ya está en la barra. */
-export function seccionesMasPara(rol: Rol): SeccionMenu[] {
-  return seccionesPara(rol)
-    .map((s) => ({ ...s, entradas: s.entradas.filter((e) => !e.movil) }))
+/**
+ * UI-04: lo que va en la hoja «Más» a partir de unas secciones: sin lo que ya está en la barra
+ * y, a propósito, SIN las entradas pendientes (sin `destino`). En el lateral una pendiente se ve
+ * como «Pronto» con su razón; en la hoja del celular sería un botón que no hace nada en un
+ * espacio escaso. Hoy no hay ninguna (`SIN_TAREA` y el mapa real), pero si vuelve a haber, no
+ * sale aquí. Secciones que quedan vacías, fuera.
+ */
+export function paraHojaMas(secciones: readonly SeccionMenu[]): SeccionMenu[] {
+  return secciones
+    .map((s) => ({ ...s, entradas: s.entradas.filter((e) => !e.movil && e.destino) }))
     .filter((s) => s.entradas.length > 0);
+}
+
+/** UI-04: la hoja «Más» de un rol (sus secciones, por `paraHojaMas`). */
+export function seccionesMasPara(rol: Rol): SeccionMenu[] {
+  return paraHojaMas(seccionesPara(rol));
 }
 
 /** `?empresa=&sucursal=` que ya trae el enlace, más la pestaña de Administración si aplica. */

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   barraMovilPara,
   entradaActiva,
+  paraHojaMas,
   guardarColapsadas,
   leerColapsadas,
   searchDestino,
@@ -280,5 +281,33 @@ describe('UI-04 · la barra inferior del celular sale de este mapa', () => {
     expect(admin.entradas.map((e) => e.texto)).not.toContain('Empresas');
     // Principal se queda con Comparativos: Inicio ya está en la barra.
     expect(seccionesMasPara('visor')[0].entradas.map((e) => e.texto)).toEqual(['Comparativos']);
+  });
+
+  it('la hoja omite las entradas pendientes (sin destino) y las secciones que quedan vacías', () => {
+    const icono = porId('principal.inicio').icono;
+    const pendiente = { tarea: 'X-1', razon: 'Todavía no existe' };
+    const hoja = paraHojaMas([
+      {
+        id: 'a',
+        titulo: 'Con mezcla',
+        entradas: [
+          { id: 'a.ok', texto: 'Navega', icono, destino: { ruta: '/x' } },
+          { id: 'a.pronto', texto: 'Pronto', icono, pendiente },
+          {
+            id: 'a.barra',
+            texto: 'En barra',
+            icono,
+            destino: { ruta: '/' },
+            movil: { barra: 1, corto: 'B' },
+          },
+        ],
+      },
+      {
+        id: 'b',
+        titulo: 'Sólo pendientes',
+        entradas: [{ id: 'b.p', texto: 'P', icono, pendiente }],
+      },
+    ]);
+    expect(hoja.map((s) => [s.id, s.entradas.map((e) => e.id)])).toEqual([['a', ['a.ok']]]);
   });
 });

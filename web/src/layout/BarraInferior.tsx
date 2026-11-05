@@ -3,9 +3,10 @@ import { useState, type ReactNode } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 
 import { useAuth, useUsuario } from '../auth/contexto';
-import { NOMBRE_ROL } from '../auth/roles';
+import { NOMBRE_ROL, ROLES_ADMIN } from '../auth/roles';
 import { queryVista } from '../filtros/vista';
 import { InterruptorTema } from '../tema/InterruptorTema';
+import { textoAgentesCaidos, useAgentesCaidos } from './agentesCaidos';
 import { HojaInferior } from './HojaInferior';
 import { iniciales } from './iniciales';
 import {
@@ -65,12 +66,14 @@ export function BarraInferior() {
   const abierta = abiertaEn === location.key;
   const destinos = barraMovilPara(usuario.rol);
   const enBarra = destinos.some((e) => entradaActiva(e, location.pathname, parametros));
+  // F1-061 en el celular: sólo para admins (el visor ni siquiera pide el estado de agentes).
+  const esAdmin = ROLES_ADMIN.includes(usuario.rol);
 
   return (
     <>
       <nav
         aria-label="Principal"
-        className="print:hidden fixed inset-x-0 bottom-0 z-30 border-t border-lateral-borde bg-lateral pb-[env(safe-area-inset-bottom)] text-lateral-tinta"
+        className="print:hidden fixed inset-x-0 bottom-0 z-30 border-t border-lateral-borde bg-lateral pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-lateral-tinta"
       >
         <ul className={`mx-auto flex max-w-xl items-stretch ${ALTO_BARRA}`}>
           {destinos.map((entrada) => (
@@ -83,6 +86,8 @@ export function BarraInferior() {
               type="button"
               aria-haspopup="dialog"
               aria-expanded={abierta}
+              aria-controls={ID_HOJA_MAS}
+              aria-describedby={esAdmin ? ID_AVISO_MAS : undefined}
               onClick={() => setAbiertaEn(location.key)}
               className={`${CLASE_DESTINO} ${!enBarra ? 'text-lateral-tinta' : 'text-lateral-tenue'}`}
             >
@@ -91,7 +96,10 @@ export function BarraInferior() {
                 <Ellipsis className="h-5 w-5" />
               </Pastilla>
               <span>Más</span>
+              {esAdmin && <PuntoAgentes />}
             </button>
+            {/* Fuera del botón: dentro, el texto se sumaría a su nombre («Más»). */}
+            {esAdmin && <DescripcionAgentes id={ID_AVISO_MAS} />}
           </li>
         </ul>
       </nav>
@@ -125,6 +133,48 @@ function DestinoBarra({ entrada, alcance }: { entrada: EntradaMenu; alcance: str
   );
 }
 
+const ID_HOJA_MAS = 'hoja-mas';
+const ID_AVISO_MAS = 'aviso-mas-agentes';
+const ID_AVISO_AGENTES = 'aviso-hoja-agentes';
+
+/** Punto rojo sobre «Más» cuando alguna sucursal lleva más de 10 min sin reportar. */
+function PuntoAgentes() {
+  const caidas = useAgentesCaidos();
+  if (caidas === 0) return null;
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="aviso-mas-agentes"
+      className="absolute top-1.5 left-1/2 ml-3 h-2.5 w-2.5 rounded-full bg-peligro-fuerte ring-2 ring-lateral"
+    />
+  );
+}
+
+/** El mismo aviso en palabras, para `aria-describedby` (vacío si todo reporta). */
+function DescripcionAgentes({ id }: { id: string }) {
+  const caidas = useAgentesCaidos();
+  return (
+    <span id={id} className="sr-only">
+      {caidas > 0 ? textoAgentesCaidos(caidas) : ''}
+    </span>
+  );
+}
+
+/** El conteo junto a «Agentes» en la hoja (el badge del lateral, F1-061). */
+function ConteoAgentes() {
+  const caidas = useAgentesCaidos();
+  if (caidas === 0) return null;
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="alerta-agentes"
+      className="ml-auto shrink-0 rounded-full bg-peligro-fuerte px-2 py-0.5 text-xs font-semibold text-sobre-peligro"
+    >
+      {caidas}
+    </span>
+  );
+}
+
 const CLASE_FILA =
   'flex min-h-11 w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-base font-medium';
 
@@ -137,7 +187,7 @@ function HojaMas({ alcance, onCerrar }: { alcance: string; onCerrar: () => void 
   const secciones = seccionesMasPara(usuario.rol);
 
   return (
-    <HojaInferior titulo="Más" onCerrar={onCerrar}>
+    <HojaInferior id={ID_HOJA_MAS} titulo="Más" onCerrar={onCerrar}>
       <nav aria-label="Más secciones" className="space-y-4 pb-2">
         {secciones.map((seccion) => (
           <section key={seccion.id} aria-labelledby={`mas-${seccion.id}`}>
@@ -149,8 +199,10 @@ function HojaMas({ alcance, onCerrar }: { alcance: string; onCerrar: () => void 
             </h3>
             <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
               {seccion.entradas.map((entrada) => {
+                // `seccionesMasPara` ya dejó sólo entradas con destino; esto sólo estrecha el tipo.
                 const destino = entrada.destino;
                 if (!destino) return null;
+                const esAgentes = entrada.id === 'administracion.agentes';
                 const activa = entradaActiva(entrada, pathname, parametros);
                 const Icono = entrada.icono;
                 return (
@@ -159,6 +211,7 @@ function HojaMas({ alcance, onCerrar }: { alcance: string; onCerrar: () => void 
                       to={{ pathname: destino.ruta, search: searchDestino(destino, alcance) }}
                       onClick={onCerrar}
                       aria-current={activa ? 'page' : undefined}
+                      aria-describedby={esAgentes ? ID_AVISO_AGENTES : undefined}
                       className={`flex min-h-12 min-w-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium ${
                         activa
                           ? 'bg-acento text-sobre-acento shadow-xs'
@@ -167,7 +220,9 @@ function HojaMas({ alcance, onCerrar }: { alcance: string; onCerrar: () => void 
                     >
                       <Icono aria-hidden="true" className="h-4.5 w-4.5 shrink-0 opacity-90" />
                       <span className="min-w-0 leading-snug">{entrada.texto}</span>
+                      {esAgentes && <ConteoAgentes />}
                     </Link>
+                    {esAgentes && <DescripcionAgentes id={ID_AVISO_AGENTES} />}
                   </li>
                 );
               })}

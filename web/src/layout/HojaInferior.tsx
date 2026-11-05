@@ -26,10 +26,13 @@ export const UMBRAL_ARRASTRE_PX = 80;
  * de entrada (`motion-safe:`).
  */
 export function HojaInferior({
+  id,
   titulo,
   onCerrar,
   children,
 }: {
+  /** Para el `aria-controls` de quien la abre. */
+  id?: string;
   titulo: string;
   onCerrar: () => void;
   children: ReactNode;
@@ -114,6 +117,7 @@ export function HojaInferior({
     >
       <div
         ref={panel}
+        id={id}
         role="dialog"
         aria-modal="true"
         aria-labelledby={idTitulo}

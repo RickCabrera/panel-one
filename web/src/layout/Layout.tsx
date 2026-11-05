@@ -15,6 +15,10 @@ import { useEsMovil } from './useEsMovil';
  * UI-04: dos armazones con el mismo contenido. En el celular (< md), cabecera compacta arriba
  * y barra de navegación abajo; el `main` deja libre el alto de la barra más el área segura
  * para que la barra no tape la última fila. Desde md, el lateral y la cabecera de siempre.
+ *
+ * Con `viewport-fit=cover`, un teléfono en horizontal (≥ 768 px muchas veces) pone la muesca
+ * o la barra de gestos a los lados: los dos armazones dejan `env(safe-area-inset-left/right)`
+ * (en el de escritorio, la izquierda la absorbe el lateral).
  */
 export function Layout() {
   const esMovil = useEsMovil();
@@ -28,7 +32,10 @@ export function Layout() {
 
   if (esMovil) {
     return (
-      <div data-armazon="movil" className="min-h-screen bg-fondo text-tinta">
+      <div
+        data-armazon="movil"
+        className="min-h-screen bg-fondo pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] text-tinta"
+      >
         <CabeceraMovil />
         <SinConexion />
         <AvisoMembresia />
@@ -41,7 +48,10 @@ export function Layout() {
   }
 
   return (
-    <div data-armazon="escritorio" className="flex min-h-screen bg-fondo text-tinta">
+    <div
+      data-armazon="escritorio"
+      className="flex min-h-screen bg-fondo pr-[env(safe-area-inset-right)] text-tinta"
+    >
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />

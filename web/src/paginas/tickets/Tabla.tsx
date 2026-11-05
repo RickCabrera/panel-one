@@ -277,10 +277,13 @@ function ListaTickets({
                 aria-expanded={abierto}
                 aria-controls={idDetalle}
                 aria-label={`${abierto ? 'Ocultar' : 'Ver'} detalle del folio ${t.folio}`}
+                // El nombre dice qué hace; hora, total, mesa, mesero y si está cancelado se leen como
+                // descripción (el `aria-label` solo los tapaba).
+                aria-describedby={`resumen-${t.id}`}
                 onClick={() => onAlternar(t.id)}
                 className="flex min-h-14 w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left hover:bg-realce"
               >
-                <span className="min-w-0 flex-1">
+                <span id={`resumen-${t.id}`} className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className={`font-semibold ${t.cancelado ? 'text-tinta-tenue' : ''}`}>
                       {t.folio}
@@ -301,6 +304,7 @@ function ListaTickets({
                       {pie.join(' · ') || '—'}
                     </span>
                     <span
+                      data-testid="ticket-total"
                       className={`shrink-0 text-base font-semibold tabular-nums ${t.cancelado ? 'text-tinta-tenue line-through' : ''}`}
                     >
                       {pesos(t.total)}

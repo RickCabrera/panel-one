@@ -3,12 +3,9 @@ import { useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 
 import { useUsuario } from '../auth/contexto';
-import { useAlcance } from '../filtros/alcance';
 import { queryVista } from '../filtros/vista';
 import { Isotipo, Logotipo, NOMBRE_PRODUCTO } from '../marca/Marca';
-import { sinReportar, UMBRAL_ALERTA_S } from '../paginas/admin/reglasAgentes';
-import { useEstadoAgentes } from '../paginas/admin/consultas';
-import { useConReloj } from '../paginas/mesas/consultas';
+import { textoAgentesCaidos, useAgentesCaidos } from './agentesCaidos';
 import {
   entradaActiva,
   guardarColapsadas,
@@ -37,16 +34,15 @@ const SOLO_TEXTO_ANCHO = 'min-w-0 hidden lg:block';
 const FOCO_LATERAL =
   'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-arena';
 
-const sinAccion = () => {};
-
 export function Sidebar() {
   const usuario = useUsuario();
-  const onNavegar = sinAccion;
 
   return (
     <aside
       id="menu-principal"
-      className="print:hidden sticky top-0 h-screen w-16 shrink-0 overflow-y-auto border-r border-lateral-borde bg-lateral text-lateral-tinta [scrollbar-color:var(--lateral-borde)_transparent] [scrollbar-width:none] lg:w-60 lg:[scrollbar-width:thin]"
+      // El ancho suma el área segura izquierda (teléfono en horizontal con `viewport-fit=cover`):
+      // el riel y el lateral conservan su espacio y la muesca cae en el relleno.
+      className="print:hidden sticky top-0 h-screen w-[calc(4rem+env(safe-area-inset-left))] shrink-0 overflow-y-auto pl-[env(safe-area-inset-left)] lg:w-[calc(15rem+env(safe-area-inset-left))] border-r border-lateral-borde bg-lateral text-lateral-tinta [scrollbar-color:var(--lateral-borde)_transparent] [scrollbar-width:none] lg:[scrollbar-width:thin]"
     >
       <div className="flex h-16 items-center px-5 md:justify-center md:px-0 lg:justify-start lg:px-5">
         <span className="md:hidden lg:block">
@@ -57,12 +53,12 @@ export function Sidebar() {
         </span>
       </div>
       {/* Remontar por usuario: el colapso recordado es de cada quien. */}
-      <Menu key={usuario.id} onNavegar={onNavegar} />
+      <Menu key={usuario.id} />
     </aside>
   );
 }
 
-function Menu({ onNavegar }: { onNavegar: () => void }) {
+function Menu() {
   const usuario = useUsuario();
   const [colapsadas, setColapsadas] = useState(() => leerColapsadas(usuario.id));
   const secciones = seccionesPara(usuario.rol);
@@ -83,7 +79,6 @@ function Menu({ onNavegar }: { onNavegar: () => void }) {
           seccion={seccion}
           colapsada={colapsadas.includes(seccion.id)}
           onAlternar={() => alternar(seccion.id)}
-          onNavegar={onNavegar}
         />
       ))}
     </nav>
@@ -94,12 +89,10 @@ function Seccion({
   seccion,
   colapsada,
   onAlternar,
-  onNavegar,
 }: {
   seccion: SeccionMenu;
   colapsada: boolean;
   onAlternar: () => void;
-  onNavegar: () => void;
 }) {
   const [parametros] = useSearchParams();
   // Los enlaces conservan empresa, sucursal y periodo (F2-212): cambiar de vista no
@@ -129,7 +122,7 @@ function Seccion({
           />
         </button>
         {/* Con Administración colapsada la alerta de agentes no se esconde: sube aquí. */}
-        {tieneAgentes && colapsada && <AlertaAgentes search={alcance} onNavegar={onNavegar} />}
+        {tieneAgentes && colapsada && <AlertaAgentes search={alcance} />}
       </div>
       {/* `hidden` y sin hijos: lo colapsado no se ve ni entra en el orden de Tab. */}
       <ul id={idLista} hidden={colapsada} className="mt-0.5 space-y-px">
@@ -137,13 +130,11 @@ function Seccion({
           seccion.entradas.map((entrada) => (
             <li key={entrada.id} className="relative flex flex-wrap items-center gap-1">
               {entrada.destino ? (
-                <EnlaceEntrada entrada={entrada} alcance={alcance} onNavegar={onNavegar} />
+                <EnlaceEntrada entrada={entrada} alcance={alcance} />
               ) : (
                 <EntradaPendiente entrada={entrada} />
               )}
-              {entrada.id === 'administracion.agentes' && (
-                <AlertaAgentes search={alcance} onNavegar={onNavegar} />
-              )}
+              {entrada.id === 'administracion.agentes' && <AlertaAgentes search={alcance} />}
             </li>
           ))}
       </ul>
@@ -153,15 +144,7 @@ function Seccion({
 
 const CLASE_ENTRADA = `relative flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium md:justify-center md:px-0 md:py-2 lg:justify-start lg:px-2.5 lg:py-1.5 ${FOCO_LATERAL}`;
 
-function EnlaceEntrada({
-  entrada,
-  alcance,
-  onNavegar,
-}: {
-  entrada: EntradaMenu;
-  alcance: string;
-  onNavegar: () => void;
-}) {
+function EnlaceEntrada({ entrada, alcance }: { entrada: EntradaMenu; alcance: string }) {
   const { pathname } = useLocation();
   const [parametros] = useSearchParams();
   const destino = entrada.destino!;
@@ -171,7 +154,6 @@ function EnlaceEntrada({
   return (
     <Link
       to={{ pathname: destino.ruta, search: searchDestino(destino, alcance) }}
-      onClick={onNavegar}
       aria-current={activa ? 'page' : undefined}
       aria-label={entrada.texto}
       title={entrada.texto}
@@ -235,27 +217,16 @@ export function EntradaPendiente({ entrada }: { entrada: EntradaMenu }) {
  * comparte la consulta con la pestaña Agentes. Enlaza a esa pestaña conservando el
  * alcance.
  */
-function AlertaAgentes({ search, onNavegar }: { search: string; onNavegar: () => void }) {
-  const { empresa } = useAlcance();
-  const consulta = useEstadoAgentes(empresa?.id);
-  const { data, dataUpdatedAt } = consulta;
-  // Sólo el CONTEO depende del reloj: el badge se vuelve a pintar cuando cambia, no
-  // cada pulso (F1-094).
-  const caidas = useConReloj((ahora) =>
-    data === undefined ? 0 : sinReportar(data, dataUpdatedAt, ahora).length,
-  );
+function AlertaAgentes({ search }: { search: string }) {
+  const caidas = useAgentesCaidos();
   if (caidas === 0) return null;
 
   const destino = new URLSearchParams(search);
   destino.set('tab', 'agentes');
-  const texto =
-    caidas === 1
-      ? `1 sucursal lleva más de ${UMBRAL_ALERTA_S / 60} min sin reportar`
-      : `${caidas} sucursales llevan más de ${UMBRAL_ALERTA_S / 60} min sin reportar`;
+  const texto = textoAgentesCaidos(caidas);
   return (
     <Link
       to={{ pathname: '/admin', search: `?${destino.toString()}` }}
-      onClick={onNavegar}
       aria-label={texto}
       title={texto}
       data-testid="alerta-agentes"

@@ -221,62 +221,13 @@ function ListaDeCortes({
         // quedaba fuera de la pantalla, a la derecha).
         <ul className="grid grid-cols-1 gap-2 md:grid-cols-2" data-testid="tabla-cortes">
           {cortes.map((c) => (
-            <li key={c.id} data-testid="fila-corte">
-              <button
-                type="button"
-                onClick={() => elegir(c.id)}
-                aria-label={`${nombreCorte(c)}, ${c.sucursal}`}
-                aria-pressed={elegido === c.id}
-                className={`block w-full min-w-0 rounded-lg border px-3 py-2.5 text-left ${
-                  elegido === c.id
-                    ? 'border-acento-borde bg-realce'
-                    : 'border-linea bg-superficie hover:bg-realce'
-                }`}
-              >
-                <span className="flex min-w-0 items-baseline gap-2">
-                  <span className="min-w-0 flex-1 truncate font-semibold text-acento-texto">
-                    {nombreCorte(c)}
-                  </span>
-                  <span
-                    className="shrink-0 text-lg font-semibold tabular-nums"
-                    data-testid="corte-venta"
-                  >
-                    {pesos(c.venta)}
-                    {c.posiblementeIncompleto && (
-                      <span className="ml-0.5 text-aviso" title={TEXTO_INCOMPLETO}>
-                        *
-                      </span>
-                    )}
-                  </span>
-                </span>
-                <span className="mt-0.5 flex min-w-0 items-baseline gap-2 text-xs text-tinta-suave">
-                  <span className="min-w-0 flex-1 truncate">
-                    {c.sucursal} · {momento(c.zonaHoraria, c.aperturaAt)}
-                  </span>
-                  {c.cierreAt === null ? (
-                    <span className="shrink-0 font-medium text-exito">Abierto</span>
-                  ) : (
-                    <span className="shrink-0">
-                      {duracionTurno(c.aperturaAt, c.cierreAt, ahora)}
-                    </span>
-                  )}
-                </span>
-                <span className="mt-1.5 grid grid-cols-3 gap-2 border-t border-linea-suave pt-1.5 text-xs">
-                  <span>
-                    <span className="block text-tinta-tenue">Cuentas</span>
-                    <span className="tabular-nums">{c.cuentas}</span>
-                  </span>
-                  <span>
-                    <span className="block text-tinta-tenue">Ticket prom.</span>
-                    <span className="tabular-nums">{importe(c.ticketPromedio)}</span>
-                  </span>
-                  <span>
-                    <span className="block text-tinta-tenue">Fondo</span>
-                    <span className="tabular-nums">{pesos(c.fondo)}</span>
-                  </span>
-                </span>
-              </button>
-            </li>
+            <TarjetaCorte
+              key={c.id}
+              corte={c}
+              elegido={elegido === c.id}
+              ahora={ahora}
+              onElegir={() => elegir(c.id)}
+            />
           ))}
         </ul>
       ) : (
@@ -357,6 +308,95 @@ function ListaDeCortes({
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * UI-04: un turno como tarjeta (celular y tableta). El nombre del botón es el del turno
+ * (`aria-labelledby`) y todo lo demás (venta, estado, horas, cuentas) se lee como su
+ * descripción (`aria-describedby`): ningún `aria-label` tapa el contenido.
+ */
+function TarjetaCorte({
+  corte: c,
+  elegido,
+  ahora,
+  onElegir,
+}: {
+  corte: ResumenCorte;
+  elegido: boolean;
+  ahora: number;
+  onElegir: () => void;
+}) {
+  const idNombre = `corte-${c.id}-nombre`;
+  const idDatos = `corte-${c.id}-datos`;
+  return (
+    <li data-testid="fila-corte">
+      <button
+        type="button"
+        onClick={onElegir}
+        aria-pressed={elegido}
+        aria-labelledby={idNombre}
+        aria-describedby={idDatos}
+        className={`block w-full min-w-0 rounded-lg border px-3 py-2.5 text-left ${
+          elegido ? 'border-acento-borde bg-realce' : 'border-linea bg-superficie hover:bg-realce'
+        }`}
+      >
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span id={idNombre} className="min-w-0 flex-1 truncate font-semibold text-acento-texto">
+            {nombreCorte(c)}
+          </span>
+          {c.cierreAt === null && (
+            <span
+              className="shrink-0 rounded-full bg-exito-fondo px-2 text-xs font-medium text-exito"
+              data-testid="corte-abierto"
+            >
+              Abierto
+            </span>
+          )}
+        </span>
+        <span id={idDatos} className="block">
+          <span className="mt-0.5 flex min-w-0 items-baseline gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs text-tinta-suave">{c.sucursal}</span>
+            <span className="shrink-0 text-lg font-semibold tabular-nums" data-testid="corte-venta">
+              <span className="sr-only">Venta </span>
+              {pesos(c.venta)}
+              {c.posiblementeIncompleto && (
+                <span className="ml-0.5 text-aviso" data-testid="corte-incompleto">
+                  <span aria-hidden="true">*</span>
+                  <span className="sr-only"> ({TEXTO_INCOMPLETO})</span>
+                </span>
+              )}
+            </span>
+          </span>
+          <span className="mt-0.5 block text-xs text-tinta-suave">
+            Abrió {momento(c.zonaHoraria, c.aperturaAt)}
+            {c.cierreAt === null ? (
+              <> · acumulado en curso</>
+            ) : (
+              <>
+                {' '}
+                · cerró {momento(c.zonaHoraria, c.cierreAt)} (
+                {duracionTurno(c.aperturaAt, c.cierreAt, ahora)})
+              </>
+            )}
+          </span>
+          <span className="mt-1.5 grid grid-cols-3 gap-2 border-t border-linea-suave pt-1.5 text-xs">
+            <span>
+              <span className="block text-tinta-tenue">Cuentas</span>
+              <span className="tabular-nums">{c.cuentas}</span>
+            </span>
+            <span>
+              <span className="block text-tinta-tenue">Ticket prom.</span>
+              <span className="tabular-nums">{importe(c.ticketPromedio)}</span>
+            </span>
+            <span>
+              <span className="block text-tinta-tenue">Fondo</span>
+              <span className="tabular-nums">{pesos(c.fondo)}</span>
+            </span>
+          </span>
+        </span>
+      </button>
+    </li>
   );
 }
 
