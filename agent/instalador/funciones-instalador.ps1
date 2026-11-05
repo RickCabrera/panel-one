@@ -53,7 +53,9 @@ function Test-ApiUrl {
 # Reglas de la contraseña NUEVA del lector (la que crea crear-usuario-lector.ps1). Son
 # estrictas a propósito: la contraseña viaja dentro del T-SQL (entre comillas simples),
 # dentro de la cadena de conexión (separada por ';') y por la consola. Con sólo letras,
-# números y estos símbolos no hay nada que escapar en ningún lado.
+# números y estos símbolos no hay nada que escapar en el T-SQL ni en la consola. En la cadena
+# de conexión SÍ: un '=' al principio rompe el valor, y por eso New-CadenaConexion pasa todo
+# por Format-ValorCadena (comillas de ADO.NET).
 $script:SimbolosPassword = '-_.!@#*+=?'
 
 function Test-PasswordNueva {
@@ -146,7 +148,25 @@ function New-CadenaConexion {
     # Autenticación SQL a propósito, nunca Integrated Security (ver agent/README.md).
     # TrustServerCertificate: el SQL Express del POS trae certificado autofirmado
     # (docs/esquema-sr.md §11).
-    return "Server=$Servidor;Database=$Base;User ID=$Usuario;Password=$Password;TrustServerCertificate=True"
+    $partes = @(
+        "Server=$(Format-ValorCadena $Servidor)",
+        "Database=$(Format-ValorCadena $Base)",
+        "User ID=$(Format-ValorCadena $Usuario)",
+        "Password=$(Format-ValorCadena $Password)",
+        'TrustServerCertificate=True'
+    )
+    return ($partes -join ';')
+}
+
+# Un valor de la cadena de conexión con las reglas de comillas de ADO.NET. Sin esto, una
+# contraseña que EMPIEZA con '=' ("Password==abc") se lee como la llave "Password=abc" y el
+# agente no arranca ("Keyword not supported"); un ';' la cortaría. New-PasswordLector puede
+# generar '=' en cualquier posición, así que pasaba en ~1 de cada 70 instalaciones.
+function Format-ValorCadena {
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Valor)
+
+    if ($Valor -notmatch '[;=''"{}]' -and $Valor -eq $Valor.Trim()) { return $Valor }
+    return '"' + $Valor.Replace('"', '""') + '"'
 }
 
 # Texto JSON de una cadena. A mano y no con ConvertTo-Json: 5.1 y 7 escapan distinto, y
@@ -302,7 +322,7 @@ function Test-CodigoEnlace {
 }
 
 # Contraseña ALEATORIA del lector para el instalador de un clic: nadie la ve ni la escribe. Cumple
-# Test-PasswordNueva (sólo letras sin acento, números y los símbolos que no hay que escapar) y la
+# Test-PasswordNueva (sólo letras sin acento, números y los símbolos de $SimbolosPassword; en la cadena de conexión van con Format-ValorCadena) y la
 # política de complejidad de Windows (CHECK_POLICY = ON): al menos una minúscula, una mayúscula, un
 # número y un símbolo. Generador criptográfico, sin sesgo de módulo.
 function New-PasswordLector {
