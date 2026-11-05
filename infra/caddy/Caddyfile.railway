@@ -11,8 +11,9 @@
 #   API_INTERNAL_URL  la API por la red privada, p. ej. http://api.railway.internal:3000
 #                     (el nombre es el del servicio "api"; el puerto, su PORT). Obligatoria:
 #                     el entrypoint de la imagen no arranca sin ella.
-#   LANDING_HOST      opcional. El dominio donde se sirve la landing pública (p. ej.
-#                     midominio.mx). Sin ella, la landing no se sirve en ningún host.
+#   LANDING_HOST      opcional. El dominio donde se sirve la landing pública en su raíz
+#                     (p. ej. midominio.mx). Con o sin ella, la landing también se sirve en
+#                     `/landing/` del dominio del panel (LAND-01).
 #
 # Mismo origen, sin CORS: el navegador ve el panel y `/api` en el MISMO dominio; la API
 # NO tiene dominio público (la cookie de refresh es SameSite=Strict, Path=/api/auth).
@@ -77,10 +78,12 @@ http://{$LANDING_HOST:landing.invalid}:{$PORT:8080} {
 }
 
 # El panel: cualquier otro host (el dominio propio, el *.up.railway.app y el healthcheck
-# de Railway, que llega con su propio Host).
+# de Railway, que llega con su propio Host). La raíz `/` es el panel; la landing vive en
+# `/landing/` (LAND-01) y su formulario usa el `/api` del panel (mismo origen).
 :{$PORT:8080} {
 	import cabeceras_seguridad
 	import manifest
 	import api {$API_INTERNAL_URL}
+	import landing_ruta /srv/landing
 	import spa /srv/web
 }

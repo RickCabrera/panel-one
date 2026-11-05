@@ -111,3 +111,21 @@
 		file_server
 	}
 }
+
+# La landing bajo `/landing/` del dominio del panel (LAND-01; {args[0]} = carpeta de
+# `web/dist-landing`), mientras no haya dominio propio (LANDING_HOST). `handle_path` le quita
+# el prefijo: adentro es la MISMA landing que en la raíz de su dominio (el build va con
+# `base: './'`, sus rutas son relativas), con la misma CSP y la misma caché de `/assets/*`.
+# `/landing` (sin diagonal) redirige a `/landing/`, con su query: sin la diagonal, las rutas
+# relativas (`./assets/…`) resolverían contra la raíz, que es la SPA. Lo que impide que el
+# fallback de la SPA la alcance NO es el orden del `import`: Caddy ordena los `handle` por la
+# especificidad de su matcher, y `handle_path /landing/*` (con matcher de ruta) va antes que el
+# `handle` sin matcher del `spa`, que siempre queda al final. Los `handle` son mutuamente
+# excluyentes: con `/landing/*` gana el de la landing, y el `spa` no ve esa petición. Se importa
+# antes del `spa` sólo para que se lea en el orden en que se evalúa.
+(landing_ruta) {
+	redir /landing /landing/{?query} 308
+	handle_path /landing/* {
+		import landing {args[0]}
+	}
+}
