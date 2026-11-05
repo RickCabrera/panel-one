@@ -6,6 +6,7 @@ import request from 'supertest';
 
 import {
   CATALOGO_SEED,
+  FORMA_SIN_CATALOGO,
   generarVentas,
   sembrarVentas,
   type ChequeSeed,
@@ -108,6 +109,7 @@ const CON_EMPRESA: Array<{ ruta: string; extra: Record<string, string> }> = [
   { ruta: '/ventas/por-dia', extra: RANGO },
   { ruta: '/ventas/comparativo-sucursales', extra: RANGO },
   { ruta: '/ventas/formas-pago', extra: RANGO },
+  { ruta: '/ventas/formas-pago/textos', extra: RANGO },
   { ruta: '/ventas/top-productos', extra: RANGO },
   { ruta: '/ventas/tickets', extra: RANGO },
   { ruta: '/mesas/abiertas', extra: {} },
@@ -337,6 +339,124 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
       expect((await get(`/ventas/comparativo-sucursales?${qs}`, USUARIOS.visorA)).body).toEqual(
         await s.comparativoSucursales(A, filtro),
       );
+    });
+
+    it('UI-01: /ventas/formas-pago/textos = cada texto de SR cobrado, calculado a mano', async () => {
+      const formaDe = new Map(CATALOGO_SEED.map((c) => [c.formaRaw, c.forma] as const));
+      const filtros: Array<{
+        empresaId: string;
+        desde: string;
+        hasta: string;
+        sucursalId?: string;
+      }> = [filtro, { ...filtro, sucursalId: FX.sucursalA2 }];
+      for (const f of filtros) {
+        const porTexto = new Map<string, { monto: Prisma.Decimal; cuentas: number }>();
+        for (const c of chequesA) {
+          if (c.cancelado || !c.cerradoAt) continue;
+          if (f.sucursalId !== undefined && c.sucursalId !== f.sucursalId) continue;
+          const dia = diaLocal(c.cerradoAt, ZONA[c.sucursalId]);
+          if (dia < f.desde || dia > f.hasta) continue;
+          for (const texto of new Set(c.pagos.map((p) => p.formaRaw))) {
+            const previo = porTexto.get(texto) ?? { monto: new Prisma.Decimal(0), cuentas: 0 };
+            const monto = c.pagos
+              .filter((p) => p.formaRaw === texto)
+              .reduce((a, p) => a.plus(p.monto), new Prisma.Decimal(0));
+            porTexto.set(texto, { monto: previo.monto.plus(monto), cuentas: previo.cuentas + 1 });
+          }
+        }
+        const esperado = [...porTexto.entries()]
+          .sort(([ta, a], [tb, b]) => b.monto.comparedTo(a.monto) || (ta < tb ? -1 : 1))
+          .map(([formaRaw, v]) => ({
+            formaRaw,
+            forma: formaDe.get(formaRaw) ?? FormaPago.otro,
+            monto: v.monto.toFixed(2),
+            cuentas: v.cuentas,
+          }));
+        expect(esperado.length).toBeGreaterThan(2);
+        expect(esperado.some((e) => e.formaRaw === FORMA_SIN_CATALOGO)).toBe(true);
+        const res = await get(`/ventas/formas-pago/textos?${Q(f)}`, USUARIOS.visorA);
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual(esperado);
+      }
+    });
+
+    it('UI-01: Σ textos = Σ formas-pago = venta + propina del resumen, con el mismo filtro', async () => {
+      // En SR `chequespagos.importe` NO lleva propina (esquema-sr.md §4) y ahí Σ pagos = venta.
+      // El seed SINTÉTICO mete la propina en el pago con tarjeta (`total + propina`), así que aquí
+      // el cuadre exacto es contra venta + propina. Lo que se prueba: que /textos reparte
+      // EXACTAMENTE los mismos pagos que /formas-pago y que el resumen, sin perder ni duplicar.
+      const sumar = (xs: Array<{ monto: string }>) =>
+        xs.reduce((a, x) => a.plus(new Prisma.Decimal(x.monto)), new Prisma.Decimal(0));
+      const filtros: Array<{
+        empresaId: string;
+        desde: string;
+        hasta: string;
+        sucursalId?: string;
+      }> = [
+        { empresaId: FX.empresaA, desde: '2026-10-20', hasta: HOY },
+        { empresaId: FX.empresaA, desde: '2026-10-20', hasta: HOY, sucursalId: FX.sucursalA1 },
+      ];
+      for (const f of filtros) {
+        const qs = Q(f);
+        const textos = (await get(`/ventas/formas-pago/textos?${qs}`, USUARIOS.visorA))
+          .body as Array<{
+          monto: string;
+        }>;
+        const formas = (await get(`/ventas/formas-pago?${qs}`, USUARIOS.visorA)).body as {
+          formas: Array<{ monto: string }>;
+        };
+        const resumen = (await get(`/ventas/resumen?${qs}`, USUARIOS.visorA)).body as {
+          venta: string;
+          propina: string;
+        };
+        expect(textos.length).toBeGreaterThan(0);
+        expect(sumar(textos).toFixed(2)).toBe(sumar(formas.formas).toFixed(2));
+        expect(sumar(textos).toFixed(2)).toBe(
+          new Prisma.Decimal(resumen.venta).plus(new Prisma.Decimal(resumen.propina)).toFixed(2),
+        );
+      }
+    });
+
+    it('UI-01: el pago de una cuenta CANCELADA no es opción en /textos, pero sí filtra en /tickets', async () => {
+      // Fixture: un pago con texto único colgado de una cuenta cancelada del seed (en SR no se ha
+      // visto si una cuenta cancelada conserva sus pagos: decisión abierta, esquema-sr.md §4).
+      const TEXTO = 'SOLO EN CANCELADA UI01';
+      const cancelada = chequesA.find((c) => {
+        if (!c.cancelado) return false;
+        const dia = diaLocal(c.cerradoAt ?? c.abiertoAt, ZONA[c.sucursalId]);
+        return dia >= RANGO.desde && dia <= RANGO.hasta;
+      })!;
+      expect(cancelada).toBeDefined();
+      const dia = diaLocal(cancelada.cerradoAt ?? cancelada.abiertoAt, ZONA[cancelada.sucursalId]);
+      // Rango de UN día (el de la cancelada): una llave de cache que ningún otro test usó.
+      const f = { empresaId: FX.empresaA, desde: dia, hasta: dia };
+      const pago = await prisma.chequePago.create({
+        data: {
+          chequeId: cancelada.id,
+          empresaId: FX.empresaA,
+          forma: FormaPago.otro,
+          formaRaw: TEXTO,
+          monto: new Prisma.Decimal('123.45'),
+        },
+      });
+      try {
+        const textos = await get(`/ventas/formas-pago/textos?${Q(f)}`, USUARIOS.visorA);
+        expect(textos.status).toBe(200);
+        expect(textos.body.length).toBeGreaterThan(0);
+        expect(textos.body.some((t: { formaRaw: string }) => t.formaRaw === TEXTO)).toBe(false);
+
+        const tickets = await get(
+          `/ventas/tickets?${Q({ ...f, formaRaw: TEXTO })}`,
+          USUARIOS.visorA,
+        );
+        expect(tickets.status).toBe(200);
+        expect(tickets.body.total).toBe(1);
+        expect(
+          tickets.body.items.map((i: { id: string; cancelado: boolean }) => [i.id, i.cancelado]),
+        ).toEqual([[cancelada.id, true]]);
+      } finally {
+        await prisma.chequePago.delete({ where: { id: pago.id } });
+      }
     });
 
     it('F1-043: por día y comparativo suman exactamente lo que dice el resumen', async () => {
@@ -1061,6 +1181,8 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
       ['porPagina 101', 'porPagina=101'],
       ['folio vacío', 'folio='],
       ['folio de 41 caracteres', `folio=${'1'.repeat(41)}`],
+      ['formaRaw vacío (UI-01)', 'formaRaw='],
+      ['formaRaw de 81 caracteres (UI-01)', `formaRaw=${'E'.repeat(81)}`],
     ])('400: %s', async (_n, extra) => {
       const res = await get(`/ventas/tickets?${Q(base)}&${extra}`, USUARIOS.visorA);
       expect(res.status).toBe(400);
@@ -1139,6 +1261,64 @@ describe('Endpoints de lectura (e2e, F1-033)', () => {
         },
         60_000,
       );
+
+      // UI-01, el bug "Forma de pago no jala": la tabla enseña el TEXTO de SR (`formaRaw`) y el
+      // filtro pedía el ENUM del catálogo. Sin catálogo (lo normal en producción: no tiene CRUD,
+      // esquema-sr.md §4) todo pago es `otro`, así que "Efectivo" daba 0 tickets y "Otro" los
+      // daba todos. Se reproduce vaciando el catálogo de A; `formaRaw` filtra por el texto.
+      it('UI-01: sin catálogo, `forma=efectivo` da 0 y `formaRaw=EFECTIVO` da los de EFECTIVO', async () => {
+        const conTexto = (texto: string) =>
+          todos().filter((c) => c.pagos.some((p) => p.formaRaw === texto));
+        const efectivo = conTexto('EFECTIVO');
+        expect(efectivo.length).toBeGreaterThan(0);
+        expect(efectivo.length).toBeLessThan(todos().length);
+        const respaldo = await prisma.formaPagoCatalogo.findMany({
+          where: { empresaId: FX.empresaA },
+          select: { empresaId: true, formaRaw: true, forma: true },
+        });
+        expect(respaldo.length).toBeGreaterThan(0);
+        await prisma.formaPagoCatalogo.deleteMany({ where: { empresaId: FX.empresaA } });
+        try {
+          // El síntoma tal cual: con el ENUM, efectivo vacío y `otro` = todo (no filtra nada).
+          expect((await idsDe({ forma: FormaPago.efectivo })).total).toBe(0);
+          expect((await idsDe({ forma: FormaPago.otro })).total).toBe(
+            todos().filter((c) => c.pagos.length > 0).length,
+          );
+          // El arreglo: por texto, el mismo resultado que el filtro a mano, en el mismo orden.
+          const r = await idsDe({ formaRaw: 'EFECTIVO' });
+          expect(r.total).toBe(efectivo.length);
+          expect(r.ids).toEqual(efectivo.map((c) => c.id));
+        } finally {
+          await prisma.formaPagoCatalogo.createMany({ data: respaldo });
+        }
+      }, 60_000);
+
+      it.each<[string, () => { formaRaw: string; producto?: string }]>([
+        ['un texto con catálogo', () => ({ formaRaw: 'TARJETA DE DEBITO' })],
+        ['un texto SIN catálogo', () => ({ formaRaw: FORMA_SIN_CATALOGO })],
+        ['texto + producto', () => ({ formaRaw: 'EFECTIVO', producto: producto() })],
+      ])(
+        'UI-01, formaRaw %s = el filtro hecho a mano sobre el generador',
+        async (_n, filtro) => {
+          const f = filtro();
+          const e = todos().filter(
+            (c) =>
+              c.pagos.some((p) => p.formaRaw === f.formaRaw) && cumple(c, { producto: f.producto }),
+          );
+          expect(e.length).toBeGreaterThan(0);
+          expect(e.length).toBeLessThan(todos().length);
+          const r = await idsDe(f as Record<string, string>);
+          expect(r.total).toBe(e.length);
+          expect(r.ids).toEqual(e.map((c) => c.id));
+        },
+        60_000,
+      );
+
+      it('UI-01: formaRaw es igualdad exacta (ni mayúsculas, ni prefijo, ni comodines)', async () => {
+        for (const formaRaw of ['efectivo', 'EFECTIV', 'EFECTIVO ', '%', 'TARJETA%']) {
+          expect((await idsDe({ formaRaw })).total).toBe(0);
+        }
+      }, 60_000);
 
       // AC: "combinar tres filtros a la vez responde en menos de un segundo con 90 días de seed".
       // Extremo a extremo (supertest, token, ValidationPipe, dos consultas y el detalle), sin

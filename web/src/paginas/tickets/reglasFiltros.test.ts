@@ -23,9 +23,9 @@ describe('activos', () => {
   it('uno por filtro aplicado, en el orden del formulario; el default de canceladas no cuenta', () => {
     expect(activos(SIN_FILTROS)).toEqual([]);
     expect(
-      activos({ ...SIN_FILTROS, producto: 'taco', forma: 'otro', canceladas: 'solo' }).map(
+      activos({ ...SIN_FILTROS, producto: 'taco', formaRaw: 'VALES', canceladas: 'solo' }).map(
         (a) => a.texto,
       ),
-    ).toEqual(['Pago: Otro', 'Sólo canceladas', 'Producto: taco']);
+    ).toEqual(['Pago: VALES', 'Sólo canceladas', 'Producto: taco']);
   });
 });

@@ -139,6 +139,8 @@ export interface OpcionesTickets {
   mesa?: string;
   /** Al menos un pago de esa forma, según el catálogo (F2-222). */
   forma?: FormaPago;
+  /** Al menos un pago con ESE texto de SR, igualdad exacta, sin catálogo (UI-01). */
+  formaRaw?: string;
   /** `total >= importeMin`, texto decimal (F2-222). */
   importeMin?: string;
   /** `total <= importeMax`, texto decimal (F2-222). */
@@ -196,6 +198,14 @@ function condicionesFiltro(opciones: OpcionesTickets): Prisma.Sql[] {
       LEFT JOIN catalogo_formas cf ON cf.empresa_id = gt.empresa_id AND cf.forma_raw = gt.forma_raw
       WHERE gt.cheque_id = t.id AND gt.empresa_id = t.empresa_id
         AND COALESCE(cf.forma, ${FormaPago.otro}) = ${opciones.forma})`);
+  }
+  if (opciones.formaRaw !== undefined) {
+    // UI-01: el texto de SR tal cual (el que muestra la tabla), sin pasar por el catálogo. Con el
+    // catálogo vacío (lo normal hoy: no tiene CRUD, esquema-sr.md §4) todo pago es `otro` y el
+    // filtro por `forma` no distingue nada; éste sí.
+    c.push(Prisma.sql`EXISTS (SELECT 1 FROM pagos_empresa gr
+      WHERE gr.cheque_id = t.id AND gr.empresa_id = t.empresa_id
+        AND gr.forma_raw = ${opciones.formaRaw})`);
   }
   return c;
 }

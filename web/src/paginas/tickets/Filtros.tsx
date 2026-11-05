@@ -1,9 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
 
-import type { FormaPago } from '../../api/tipos';
 import {
   CANCELADAS,
-  FORMAS,
   limpiarImporte,
   MAX_LARGO_MESA,
   MAX_LARGO_TEXTO_FILTRO,
@@ -11,7 +9,6 @@ import {
   type Canceladas,
   type FiltrosTickets,
 } from '../../filtros/tickets';
-import { etiquetaForma } from '../inicio/formasPago';
 import { errorDe, ETIQUETA_CANCELADAS } from './reglasFiltros';
 
 const CAMPO =
@@ -27,14 +24,19 @@ const BOTON =
  *
  * `meseros` son los del alcance y periodo (de `/ventas/por-mesero`); con `null` (cargando o
  * error) el campo es de texto libre: el filtro es igualdad exacta y sigue sirviendo.
+ *
+ * `formasPago` (UI-01) son los textos de forma de pago de SR del alcance y periodo (de
+ * `/ventas/formas-pago/textos`), los mismos que enseña la tabla; con `null`, texto libre.
  */
 export function FiltrosTicketsForm({
   filtros,
   meseros,
+  formasPago = null,
   onAplicar,
 }: {
   filtros: FiltrosTickets;
   meseros: readonly string[] | null;
+  formasPago?: readonly string[] | null;
   onAplicar: (filtros: FiltrosTickets) => void;
 }) {
   const id = useId();
@@ -63,6 +65,11 @@ export function FiltrosTicketsForm({
     meseros && filtros.mesero && !meseros.includes(filtros.mesero)
       ? [filtros.mesero, ...meseros]
       : meseros;
+  // Igual con la forma de pago: la de la URL sigue elegible aunque no se cobrara en el periodo.
+  const opcionesForma =
+    formasPago && filtros.formaRaw && !formasPago.includes(filtros.formaRaw)
+      ? [filtros.formaRaw, ...formasPago]
+      : formasPago;
 
   return (
     <form
@@ -112,19 +119,31 @@ export function FiltrosTicketsForm({
       </div>
       <div className="flex min-w-0 flex-col gap-1 text-sm">
         <label htmlFor={`${id}-c3`}>Forma de pago</label>
-        <select
-          id={`${id}-c3`}
-          value={borrador.forma}
-          onChange={(e) => cambiar('forma', e.target.value as FormaPago | '')}
-          className={CAMPO}
-        >
-          <option value="">Todas</option>
-          {FORMAS.map((f) => (
-            <option key={f} value={f}>
-              {etiquetaForma(f)}
-            </option>
-          ))}
-        </select>
+        {opcionesForma ? (
+          <select
+            id={`${id}-c3`}
+            value={borrador.formaRaw}
+            onChange={(e) => cambiar('formaRaw', e.target.value)}
+            className={CAMPO}
+          >
+            <option value="">Todas</option>
+            {opcionesForma.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            id={`${id}-c3`}
+            type="text"
+            value={borrador.formaRaw}
+            maxLength={MAX_LARGO_TEXTO_FILTRO}
+            onChange={(e) => cambiar('formaRaw', e.target.value)}
+            placeholder="Como en el POS, p. ej. EFECTIVO"
+            className={CAMPO}
+          />
+        )}
       </div>
       <div className="flex min-w-0 flex-col gap-1 text-sm">
         <label htmlFor={`${id}-c4`}>Canceladas</label>

@@ -15,7 +15,7 @@ const PARAMS: ParametrosTickets = {
   // F2-222: los filtros y el orden viajan en TODAS las llamadas, la del corte incluida.
   mesero: 'Ana María',
   mesa: undefined,
-  forma: 'tarjeta',
+  formaRaw: 'TARJETA DE CREDITO',
   importeMin: '100.50',
   importeMax: undefined,
   canceladas: 'excluir',
@@ -97,7 +97,8 @@ describe('exportarTickets', () => {
       expect(l.query.get('folio')).toBe('10');
       expect(l.query.has('sucursalId')).toBe(false);
       expect(l.query.get('mesero')).toBe('Ana María');
-      expect(l.query.get('forma')).toBe('tarjeta');
+      expect(l.query.get('formaRaw')).toBe('TARJETA DE CREDITO');
+      expect(l.query.has('forma')).toBe(false);
       expect(l.query.get('importeMin')).toBe('100.50');
       expect(l.query.get('canceladas')).toBe('excluir');
       expect(l.query.get('producto')).toBe('taco');

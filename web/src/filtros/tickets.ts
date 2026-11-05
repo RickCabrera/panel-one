@@ -1,4 +1,3 @@
-import type { FormaPago } from '../api/tipos';
 import { aCentavos } from '../dinero/dinero';
 
 /**
@@ -61,7 +60,9 @@ export function paginasDe(total: number, porPagina: number): number {
 export const PARAMS_FILTRO = {
   mesero: 'mesero',
   mesa: 'mesa',
-  forma: 'forma',
+  // UI-01: el TEXTO de SR (`formaRaw`), no el ENUM del catálogo. Param nuevo (`pago`, no
+  // `forma`): un enlace viejo con `?forma=tarjeta` se ignora en vez de buscar el texto "tarjeta".
+  formaRaw: 'pago',
   importeMin: 'min',
   importeMax: 'max',
   canceladas: 'canceladas',
@@ -75,12 +76,6 @@ export const PARAM_DIR = 'dir';
 export const MAX_LARGO_TEXTO_FILTRO = 80;
 export const MAX_LARGO_MESA = 40;
 
-export const FORMAS = [
-  'efectivo',
-  'tarjeta',
-  'transferencia',
-  'otro',
-] as const satisfies readonly FormaPago[];
 export const CANCELADAS = ['incluir', 'excluir', 'solo'] as const;
 export type Canceladas = (typeof CANCELADAS)[number];
 export const ORDENES = [
@@ -99,7 +94,12 @@ export type Direccion = 'asc' | 'desc';
 export interface FiltrosTickets {
   mesero: string;
   mesa: string;
-  forma: FormaPago | '';
+  /**
+   * UI-01: el texto de la forma de pago TAL COMO viene de SR (`pagos[].formaRaw`, el que se ve en
+   * la tabla), igualdad exacta. `''` = sin filtro. Antes era el ENUM del catálogo
+   * (`efectivo`/`tarjeta`/…), que con el catálogo vacío no distinguía nada (todo era `otro`).
+   */
+  formaRaw: string;
   /** Pesos en texto (`"100"`, `"99.50"`); `''` = sin filtro. */
   importeMin: string;
   importeMax: string;
@@ -115,7 +115,7 @@ export interface FiltrosTickets {
 export const SIN_FILTROS: FiltrosTickets = {
   mesero: '',
   mesa: '',
-  forma: '',
+  formaRaw: '',
   importeMin: '',
   importeMax: '',
   canceladas: 'incluir',
@@ -153,11 +153,9 @@ function textoDe(parametros: URLSearchParams, clave: string, tope: number): stri
 }
 
 /**
- * Los filtros de la URL. Lo inválido se descarta (igual que `leerPagina`): una forma fuera del
- * catálogo, un importe mal escrito o un rango de importes al revés no llegan a la API.
+ * Los filtros de la URL. Lo inválido se descarta (igual que `leerPagina`): un importe mal escrito o un rango de importes al revés no llegan a la API.
  */
 export function leerFiltros(parametros: URLSearchParams): FiltrosTickets {
-  const forma = parametros.get(PARAMS_FILTRO.forma) ?? '';
   const canceladas = parametros.get(PARAMS_FILTRO.canceladas) ?? '';
   let importeMin = limpiarImporte(parametros.get(PARAMS_FILTRO.importeMin) ?? '');
   let importeMax = limpiarImporte(parametros.get(PARAMS_FILTRO.importeMax) ?? '');
@@ -168,7 +166,9 @@ export function leerFiltros(parametros: URLSearchParams): FiltrosTickets {
   return {
     mesero: textoDe(parametros, PARAMS_FILTRO.mesero, MAX_LARGO_TEXTO_FILTRO),
     mesa: textoDe(parametros, PARAMS_FILTRO.mesa, MAX_LARGO_MESA),
-    forma: (FORMAS as readonly string[]).includes(forma) ? (forma as FormaPago) : '',
+    // Sin `trim`: es un texto de SR elegido de la lista y se compara EXACTO (un `CHAR` con
+    // espacios de relleno dejaría de coincidir si se recortara).
+    formaRaw: (parametros.get(PARAMS_FILTRO.formaRaw) ?? '').slice(0, MAX_LARGO_TEXTO_FILTRO),
     importeMin,
     importeMax,
     canceladas: (CANCELADAS as readonly string[]).includes(canceladas)

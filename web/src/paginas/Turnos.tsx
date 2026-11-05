@@ -4,15 +4,25 @@ import { useFiltroAlcance } from '../alertas/consultas';
 import type { DetalleCorte, ResumenCorte } from '../api/tipos';
 import { pesos } from '../dinero/dinero';
 import { usePeriodo } from '../filtros/usePeriodo';
-import { useCortes, useDetalleCorte, useTiempoRealCortes } from './cortes/consultas';
+import {
+  useCortes,
+  useCortesEnCurso,
+  useDetalleCorte,
+  useTiempoRealCortes,
+} from './cortes/consultas';
 import {
   duracionTurno,
+  elegirTurno,
+  leerTurno,
+  leerVista,
   momento,
   nombreCorte,
-  PARAM_CORTE,
+  PARAM_VISTA,
   TEXTO_INCOMPLETO,
   sentidoDiferencia,
   TEXTO_CONCEPTO,
+  VISTA_ABIERTOS,
+  type VistaTurnos,
 } from './cortes/reglas';
 import { useAhora } from './mesas/consultas';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './inicio/Tarjeta';
@@ -23,6 +33,10 @@ const TD = 'px-2 py-2';
 const NUM = 'px-2 py-2 text-right tabular-nums whitespace-nowrap';
 const BOTON =
   'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
+const SEGMENTO =
+  'px-3 py-1 text-sm first:rounded-l-md last:rounded-r-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento-borde';
+const SEGMENTO_ACTIVO = 'bg-realce font-medium text-tinta';
+const SEGMENTO_INACTIVO = 'bg-superficie text-tinta-medio hover:bg-realce';
 
 const importe = (v: string | null) => (v === null ? '—' : pesos(v));
 
@@ -34,60 +48,153 @@ const TEXTO_FORMA: Record<string, string> = {
 };
 
 /**
- * Cortes (MVP): los turnos de SoftRestaurant del periodo, con lo cobrado en cada uno, y el
- * detalle de un corte (`?corte=<id>`): venta, cuentas, formas de pago y lo que el cajero declaró
- * contra lo cobrado. Un turno abierto es el acumulado en curso y se refresca solo.
+ * Turnos (UI-01; antes "Cortes", el MVP): los turnos de SoftRestaurant (cortes de caja) con lo
+ * cobrado en cada uno, y el detalle de uno (`?turno=<id>`; el viejo `?corte=` también abre):
+ * venta, cuentas, formas de pago y lo que el cajero declaró contra lo cobrado. Un turno abierto
+ * es el acumulado en curso y se refresca solo.
+ *
+ * Dos vistas (`?ver=`): "Del periodo" (los que caen en el periodo de la cabecera, el default) y
+ * "Abiertos ahora" (`?ver=abiertos`): los turnos SIN cierre de todas las sucursales del alcance,
+ * sin importar el periodo (`GET /cortes/en-curso`, el mismo dato que "Turno en curso" del Panel).
+ *
+ * Sólo cambia la INTERFAZ: la API y el modelo siguen llamándose `cortes`.
  */
-export function Cortes() {
+export function Turnos() {
   const filtro = useFiltroAlcance();
   const { rango } = usePeriodo();
   const [parametros, setParametros] = useSearchParams();
-  const elegido = parametros.get(PARAM_CORTE);
+  const elegido = leerTurno(parametros);
+  const vista = leerVista(parametros);
   useTiempoRealCortes(filtro);
-  const lista = useCortes(filtro, rango);
 
-  const elegir = (id: string | null) =>
+  const elegir = (id: string | null) => setParametros((previos) => elegirTurno(previos, id));
+  const cambiarVista = (nueva: VistaTurnos) =>
     setParametros((previos) => {
       const nuevos = new URLSearchParams(previos);
-      if (id === null) nuevos.delete(PARAM_CORTE);
-      else nuevos.set(PARAM_CORTE, id);
+      if (nueva === VISTA_ABIERTOS) nuevos.set(PARAM_VISTA, VISTA_ABIERTOS);
+      else nuevos.delete(PARAM_VISTA);
       return nuevos;
     });
 
   return (
-    <Vista titulo="Cortes">
+    <Vista titulo="Turnos">
       <p className="mb-4 text-sm text-tinta-tenue">
         Los turnos (cortes de caja) de SoftRestaurant. La venta de cada turno es lo COBRADO en él:
         la cuenta se cuenta en el turno donde se pagó, como en el Corte X del POS. Un turno abierto
         es el acumulado en curso.
       </p>
-      {rango === null ? (
-        <Tarjeta titulo="Cortes del periodo">
-          <Vacio>Elige un periodo válido para ver los cortes.</Vacio>
-        </Tarjeta>
+      <div
+        role="group"
+        aria-label="Qué turnos ver"
+        className="mb-4 inline-flex divide-x divide-linea-fuerte rounded-md border border-linea-fuerte"
+      >
+        {(
+          [
+            ['periodo', 'Del periodo'],
+            [VISTA_ABIERTOS, 'Abiertos ahora'],
+          ] as const
+        ).map(([valor, texto]) => (
+          <button
+            key={valor}
+            type="button"
+            aria-pressed={vista === valor}
+            onClick={() => cambiarVista(valor)}
+            className={`${SEGMENTO} ${vista === valor ? SEGMENTO_ACTIVO : SEGMENTO_INACTIVO}`}
+          >
+            {texto}
+          </button>
+        ))}
+      </div>
+      {vista === VISTA_ABIERTOS ? (
+        <TurnosAbiertos filtro={filtro} elegido={elegido} elegir={elegir} />
       ) : (
-        <Tarjeta titulo="Cortes del periodo">
-          <SegunEstado consulta={lista} esqueleto={<Esqueleto lineas={5} />}>
-            {(r) =>
-              r.cortes.length === 0 ? (
-                <Vacio>
-                  No hubo turnos abiertos en el periodo. Si esperabas cortes, revisa que el agente
-                  de la sucursal esté conectado y actualizado.
-                </Vacio>
-              ) : (
-                <ListaDeCortes
-                  cortes={r.cortes}
-                  truncado={r.truncado}
-                  elegido={elegido}
-                  elegir={elegir}
-                />
-              )
-            }
-          </SegunEstado>
-        </Tarjeta>
+        <TurnosDelPeriodo filtro={filtro} rango={rango} elegido={elegido} elegir={elegir} />
       )}
       {elegido !== null && <Detalle id={elegido} onCerrar={() => elegir(null)} />}
     </Vista>
+  );
+}
+
+type Alcance = ReturnType<typeof useFiltroAlcance>;
+
+function TurnosDelPeriodo({
+  filtro,
+  rango,
+  elegido,
+  elegir,
+}: {
+  filtro: Alcance;
+  rango: ReturnType<typeof usePeriodo>['rango'];
+  elegido: string | null;
+  elegir: (id: string) => void;
+}) {
+  const lista = useCortes(filtro, rango);
+  if (rango === null) {
+    return (
+      <Tarjeta titulo="Turnos del periodo">
+        <Vacio>Elige un periodo válido para ver los turnos.</Vacio>
+      </Tarjeta>
+    );
+  }
+  return (
+    <Tarjeta titulo="Turnos del periodo">
+      <SegunEstado consulta={lista} esqueleto={<Esqueleto lineas={5} />}>
+        {(r) =>
+          r.cortes.length === 0 ? (
+            <Vacio>
+              No hubo turnos abiertos en el periodo. Si esperabas turnos, revisa que el agente de la
+              sucursal esté conectado y actualizado.
+            </Vacio>
+          ) : (
+            <ListaDeCortes
+              cortes={r.cortes}
+              truncado={r.truncado}
+              elegido={elegido}
+              elegir={elegir}
+            />
+          )
+        }
+      </SegunEstado>
+    </Tarjeta>
+  );
+}
+
+/**
+ * "Abiertos ahora": los turnos sin cierre de todas las sucursales del alcance, con su acumulado
+ * en curso. No depende del periodo (un turno abierto desde ayer también sale). Se refresca solo
+ * (60 s y con cada aviso de ingesta), como la tarjeta del Panel.
+ */
+function TurnosAbiertos({
+  filtro,
+  elegido,
+  elegir,
+}: {
+  filtro: Alcance;
+  elegido: string | null;
+  elegir: (id: string) => void;
+}) {
+  const consulta = useCortesEnCurso(filtro);
+  return (
+    <Tarjeta titulo="Turnos abiertos ahora">
+      <SegunEstado consulta={consulta} esqueleto={<Esqueleto lineas={3} />}>
+        {(turnos) =>
+          turnos.length === 0 ? (
+            <Vacio>
+              No hay turnos abiertos en SoftRestaurant (o el agente de la sucursal no los ha
+              reportado).
+            </Vacio>
+          ) : (
+            <>
+              <p className="mb-2 text-xs text-tinta-tenue">
+                Acumulado en curso: lo cobrado hasta ahora en cada turno, sin importar el periodo
+                elegido. Se actualiza solo.
+              </p>
+              <ListaDeCortes cortes={turnos} truncado={false} elegido={elegido} elegir={elegir} />
+            </>
+          )
+        }
+      </SegunEstado>
+    </Tarjeta>
   );
 }
 
@@ -97,7 +204,7 @@ function ListaDeCortes({
   elegido,
   elegir,
 }: {
-  cortes: ResumenCorte[];
+  cortes: readonly ResumenCorte[];
   truncado: boolean;
   elegido: string | null;
   elegir: (id: string) => void;
@@ -187,7 +294,7 @@ function ListaDeCortes({
 function Detalle({ id, onCerrar }: { id: string; onCerrar: () => void }) {
   const consulta = useDetalleCorte(id);
   return (
-    <Tarjeta titulo="Detalle del corte" className="mt-4">
+    <Tarjeta titulo="Detalle del turno" className="mt-4">
       <SegunEstado consulta={consulta} esqueleto={<Esqueleto lineas={6} />}>
         {(d) => <ContenidoDetalle d={d} onCerrar={onCerrar} />}
       </SegunEstado>

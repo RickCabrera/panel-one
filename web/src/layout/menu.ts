@@ -139,8 +139,9 @@ export const SECCIONES: readonly SeccionMenu[] = [
         destino: { ruta: '/resumen' },
       },
       { id: 'ventas.tickets', texto: 'Tickets', icono: Receipt, destino: { ruta: '/tickets' } },
-      // MVP: los turnos de SR (cortes de caja) y lo cobrado en cada uno.
-      { id: 'ventas.cortes', texto: 'Cortes', icono: Calculator, destino: { ruta: '/cortes' } },
+      // MVP: los turnos de SR (cortes de caja) y lo cobrado en cada uno. UI-01: en la interfaz se
+      // llaman "Turnos" y viven en `/turnos` (`/cortes` redirige). El id se queda: es interno.
+      { id: 'ventas.cortes', texto: 'Turnos', icono: Calculator, destino: { ruta: '/turnos' } },
       {
         id: 'ventas.mesas',
         texto: 'Monitor de mesas',
