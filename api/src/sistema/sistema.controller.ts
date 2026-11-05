@@ -4,6 +4,7 @@ import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ADAPTADORES_CONFIG } from '../adaptadores/adaptadores.module';
 import type { AdaptadoresConfig } from '../adaptadores/config';
 import { Public } from '../auth/decoradores';
+import { ONBOARDING_CONFIG, type OnboardingConfig } from '../onboarding/onboarding.config';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 import { SistemaDto } from './dto/sistema.dto';
 
@@ -14,6 +15,7 @@ export class SistemaController {
   constructor(
     @Inject(ADAPTADORES_CONFIG) private readonly config: AdaptadoresConfig,
     private readonly datos: ScopedPrismaService,
+    @Inject(ONBOARDING_CONFIG) private readonly onboarding: OnboardingConfig,
   ) {}
 
   @Get()
@@ -22,13 +24,14 @@ export class SistemaController {
     description:
       'Pública (sin token): la marca de "Datos de ejemplo" tiene que verse también en el ' +
       'login. No expone nada de ninguna empresa. El color de interfaz es el GLOBAL de la ' +
-      'plataforma.',
+      'plataforma, y la descarga del instalador del agente es la misma para todos.',
   })
   @ApiOkResponse({ type: SistemaDto })
   async sistema(): Promise<SistemaDto> {
     return {
       modoDemo: this.config.modoDemo,
       colorAcento: await this.datos.aparienciaPlataforma().colorAcento(),
+      descargaAgente: this.onboarding.descargaAgente,
     };
   }
 }

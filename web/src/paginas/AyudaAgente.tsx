@@ -1,7 +1,7 @@
 import { Link, useSearchParams } from 'react-router';
 
 import { queryVista } from '../filtros/vista';
-import { URL_INSTALADOR } from './admin/reglasEnlace';
+import { useUrlInstalador } from './admin/urlInstalador';
 import { Tarjeta } from './inicio/Tarjeta';
 import { Vista } from './Vista';
 
@@ -12,6 +12,7 @@ import { Vista } from './Vista';
  */
 export function AyudaAgente() {
   const [parametros] = useSearchParams();
+  const urlInstalador = useUrlInstalador();
   const conTab = (tab: string) => {
     const p = new URLSearchParams(queryVista(parametros));
     p.set('tab', tab);
@@ -42,11 +43,11 @@ export function AyudaAgente() {
           <li>
             <strong>En la PC del SQL Server de SoftRestaurant</strong> (casi siempre la caja
             principal), descarga el instalador
-            {URL_INSTALADOR ? (
+            {urlInstalador ? (
               <>
                 {' '}
                 (
-                <a className="text-acento-texto underline" href={URL_INSTALADOR}>
+                <a className="text-acento-texto underline" href={urlInstalador}>
                   Instalar-YoControlo.zip
                 </a>
                 )

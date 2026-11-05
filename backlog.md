@@ -2959,6 +2959,19 @@ de desvío de migraciones); en la PC de Ricardo, reinstalar con un código deja 
 "Conectado" sin escribir nada más que el código; reusar el código no cambia nada; un
 `crear-usuario-lector.ps1` sin `-UsuarioAdmin` ya no da "Unknown Option".
 
+### INST-02 · Publicar el instalador y enlazarlo en el panel
+`[ ]` /api · /web · CI — pedida por Ricardo el 4-nov-2026
+
+Que nadie tenga que compilar ni empaquetar a mano. El workflow `instalador.yml` arma
+`Instalar-YoControlo.zip` con la URL de producción embebida (`API_URL_PUBLICA`, variable del repo)
+tras cada CI verde en main y lo publica en el release fijo `instalador`. `GET /sistema` devuelve
+`descargaAgente` (de `AGENTE_URL_DESCARGA`) y "Conectar sucursal" y "Cómo se instala el agente" lo
+enlazan sin reconstruir el web (con `VITE_URL_INSTALADOR_AGENTE` de respaldo).
+
+**Listo cuando:** CI verde; el workflow publica el `.zip` en el release `instalador`; con
+`AGENTE_URL_DESCARGA` puesta en Railway, el diálogo "Conectar sucursal" enlaza la descarga; el
+`.zip` descargado instala en la PC de Ricardo sin preguntar la dirección del panel.
+
 ---
 
 ## PLAT-01 · Panel de plataforma y membresías

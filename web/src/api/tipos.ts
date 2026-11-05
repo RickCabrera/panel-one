@@ -367,6 +367,11 @@ export interface Sistema {
    * `null` (o ausente, con una API vieja) = el del build (`VITE_COLOR_ACENTO`).
    */
   colorAcento?: ColorAcento | null;
+  /**
+   * INST-02: de dónde se baja el instalador de un clic del agente (`AGENTE_URL_DESCARGA`).
+   * `null` (o ausente, con una API vieja) = el del build o "pídelo a soporte".
+   */
+  descargaAgente?: string | null;
 }
 
 // ---------------------------------------------------------------------------

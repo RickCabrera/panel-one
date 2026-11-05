@@ -312,6 +312,52 @@ describe('Sucursales', () => {
     expect(api.contar('POST', `/sucursales/${SUCURSAL_A1.id}/codigo-enlace`)).toBe(1);
   });
 
+  it('Conectar sucursal (INST-02): el enlace de descarga sale de GET /sistema; sin él, "pídele a soporte"', async () => {
+    const DESCARGA =
+      'https://github.com/RickCabrera/panel-one/releases/download/instalador/Instalar-YoControlo.zip';
+    apiAdmin('admin_empresa', {
+      'GET /sucursales': () => json(200, [SUCURSAL_A1]),
+      [`POST /sucursales/${SUCURSAL_A1.id}/codigo-enlace`]: () =>
+        json(201, {
+          sucursalId: SUCURSAL_A1.id,
+          codigo: 'K7P4-42XQ',
+          expiraAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+          vigenciaSegundos: 1800,
+        }),
+      'GET /sistema': () => json(200, { modoDemo: false, colorAcento: null, descargaAgente: DESCARGA }),
+    });
+    montar(`/admin?empresa=${A}`);
+    const fila = await screen.findByRole('row', { name: 'Centro' });
+    await userEvent.click(within(fila).getByRole('button', { name: 'Conectar sucursal' }));
+    const dialogo = screen.getByRole('dialog', { name: 'Conectar Centro' });
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Generar código' }));
+    const enlace = await within(dialogo).findByRole('link', { name: 'Instalar-YoControlo.zip' });
+    expect(enlace).toHaveAttribute('href', DESCARGA);
+    expect(dialogo).not.toHaveTextContent('pídele a soporte');
+  });
+
+  it('Conectar sucursal (INST-02): una descarga que no es https no se enlaza', async () => {
+    apiAdmin('admin_empresa', {
+      'GET /sucursales': () => json(200, [SUCURSAL_A1]),
+      [`POST /sucursales/${SUCURSAL_A1.id}/codigo-enlace`]: () =>
+        json(201, {
+          sucursalId: SUCURSAL_A1.id,
+          codigo: 'K7P4-42XQ',
+          expiraAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+          vigenciaSegundos: 1800,
+        }),
+      'GET /sistema': () =>
+        json(200, { modoDemo: false, colorAcento: null, descargaAgente: 'http://inseguro.test/a.zip' }),
+    });
+    montar(`/admin?empresa=${A}`);
+    const fila = await screen.findByRole('row', { name: 'Centro' });
+    await userEvent.click(within(fila).getByRole('button', { name: 'Conectar sucursal' }));
+    const dialogo = screen.getByRole('dialog', { name: 'Conectar Centro' });
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Generar código' }));
+    expect(await within(dialogo).findByText(/pídele a soporte/)).toBeInTheDocument();
+    expect(within(dialogo).queryByRole('link', { name: 'Instalar-YoControlo.zip' })).toBeNull();
+  });
+
   it('Conectar sucursal: un código vencido lo dice y ofrece generar otro', async () => {
     let n = 0;
     const api = apiAdmin('admin_empresa', {

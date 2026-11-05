@@ -29,4 +29,15 @@ export class SistemaDto {
       '(Plataforma › Ajustes). Nulo = el del build (`VITE_COLOR_ACENTO`).',
   })
   colorAcento!: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'INST-02: de dónde se baja el instalador de un clic del agente (`AGENTE_URL_DESCARGA`, ' +
+      'https). Es la misma para todos los clientes. Nulo = no está configurada y la interfaz ' +
+      'dice que lo pidan a soporte.',
+    example: 'https://github.com/RickCabrera/panel-one/releases/download/instalador/Instalar-YoControlo.zip',
+  })
+  descargaAgente!: string | null;
 }

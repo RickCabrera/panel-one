@@ -1,0 +1,76 @@
+name: Instalador del agente
+
+# Arma Instalar-YoControlo.zip (el instalador de un clic, INST-01) con la URL de producción
+# embebida y lo publica como asset del release fijo `instalador`. Así la descarga tiene una URL
+# estable que el panel enseña en "Conectar sucursal":
+#
+#   https://github.com/<owner>/<repo>/releases/download/instalador/Instalar-YoControlo.zip
+#
+# Corre SOLO después de un CI verde en main (nunca publica código que no pasó el gate) o a mano.
+# La URL de la API sale de la variable del repo `API_URL_PUBLICA` (Settings › Secrets and
+# variables › Actions › Variables). No es un secreto: es la misma dirección que cualquier
+# restaurante ve. El paquete no lleva config.json, API keys ni contraseñas (lista cerrada en
+# agent/empaquetar-instalador.ps1).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instalador
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    name: Armar y publicar
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      API_URL_PUBLICA: ${{ vars.API_URL_PUBLICA }}
+      GH_TOKEN: ${{ github.token }}
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - name: Falta la URL de la API
+        if: env.API_URL_PUBLICA == ''
+        run: |
+          echo "::error::Define la variable del repo API_URL_PUBLICA (p. ej. https://DOMINIO/api)."
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # dotnet publish win-x64 self-contained corre en Linux; el .ps1 usa el pwsh de ubuntu-latest.
+      - name: Armar Instalar-YoControlo.zip
+        shell: pwsh
+        run: ./agent/empaquetar-instalador.ps1 -ApiUrl $env:API_URL_PUBLICA -Salida ./Instalar-YoControlo.zip
+
+      - name: Revisar el contenido del paquete
+        run: |
+          unzip -l Instalar-YoControlo.zip
+          # Nada fuera de la lista cerrada (defensa extra contra un config.json colado).
+          if unzip -l Instalar-YoControlo.zip | grep -Ei 'config\.json|\.env|\.key|\.pfx|cola\.db'; then
+            echo "::error::El paquete trae un archivo que no debe ir."; exit 1
+          fi
+          sha256sum Instalar-YoControlo.zip | tee Instalar-YoControlo.zip.sha256
+
+      - name: Publicar en el release `instalador`
+        run: |
+          notas="Instalador de un clic del agente Yo Controlo. Commit ${SHA}. Se reemplaza en cada CI verde de main."
+          if ! gh release view instalador >/dev/null 2>&1; then
+            gh release create instalador --title "Instalador del agente" --notes "$notas" \
+              --target "$SHA" --latest=false
+          else
+            gh release edit instalador --notes "$notas"
+          fi
+          gh release upload instalador Instalar-YoControlo.zip Instalar-YoControlo.zip.sha256 --clobber
+          echo "Descarga: https://github.com/${GITHUB_REPOSITORY}/releases/download/instalador/Instalar-YoControlo.zip"

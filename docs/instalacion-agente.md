@@ -28,7 +28,10 @@ Hay dos caminos:
 - **La PC donde está el SQL Server de SoftRestaurant** (casi siempre la caja principal o la PC
   "servidor"). El agente se instala **en esa misma PC**, con un usuario de Windows que pueda
   "Ejecutar como administrador".
-- **El paquete `Instalar-YoControlo.zip`** (se descarga del enlace del panel, o te lo da soporte).
+- **El paquete `Instalar-YoControlo.zip`**: se descarga del enlace que sale en **Conectar
+  sucursal** (y en "Cómo se instala el agente"). Ya trae la dirección del panel adentro, así que
+  el instalador no la pregunta. Si el panel dice "pídele a soporte", es que el despliegue no
+  tiene configurada la descarga (ver "De dónde sale el paquete", abajo).
 - **Alguien con el panel abierto como administrador** (puedes ser tú, desde el celular).
 
 ### Paso 1 · El código, en el panel (1 min)
@@ -134,6 +137,27 @@ logs; pone una API key y una contraseña nuevas.
   3 no se pudo.
 
 ---
+
+## De dónde sale el paquete (para nosotros, no para el restaurante)
+
+Nadie arma el `.zip` a mano. El workflow **Instalador del agente**
+(`.github/workflows/instalador.yml`) lo arma y lo publica solo después de **cada CI verde en
+main** (o a mano: GitHub › Actions › *Instalador del agente* › *Run workflow*):
+
+1. `dotnet publish` del agente (win-x64, un solo `agente.exe`) y
+   `agent/empaquetar-instalador.ps1 -ApiUrl <API_URL_PUBLICA>`: la dirección del panel va
+   embebida en `archivos\instalador.json`.
+2. Revisa que el paquete no traiga nada fuera de la lista cerrada (ni `config.json`, ni llaves).
+3. Lo sube, con su `.sha256`, al release fijo **`instalador`** del repo. La descarga queda en
+   una URL que no cambia:
+   `https://github.com/RickCabrera/panel-one/releases/download/instalador/Instalar-YoControlo.zip`
+
+Para que el panel la enseñe, en Railway (servicio **api**) va
+`AGENTE_URL_DESCARGA=<esa URL>`; el web la lee de `GET /sistema` al cargar, sin reconstruir.
+La dirección que se embebe sale de la variable del repo **`API_URL_PUBLICA`** (GitHub › Settings ›
+Secrets and variables › Actions › *Variables*), p. ej. `https://DOMINIO/api`. Si cambia el dominio
+(un dominio propio), se cambia esa variable y se corre el workflow a mano: los restaurantes ya
+instalados no se tocan (su `config.json` conserva la dirección con la que se instalaron).
 
 ## Instalación avanzada (manual, para soporte)
 
