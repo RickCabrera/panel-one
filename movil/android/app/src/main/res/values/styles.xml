@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <!--
+      Tema de la actividad ya cargada. La ventana es morada: es lo que se ve bajo la barra de
+      estado (el WebView queda debajo de ella, SystemBars insetsHandling=native) y mientras el panel
+      termina de cargar. statusBarColor/navigationBarColor sólo aplican antes de Android 15; en 15+
+      las barras son transparentes y se ve la ventana morada detrás.
+    -->
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <item name="android:windowBackground">@color/yc_morado</item>
+        <item name="android:statusBarColor">@color/yc_morado</item>
+        <item name="android:navigationBarColor">@color/yc_morado</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!--
+      Splash. Android 12+ dibuja el ícono adaptativo sobre windowSplashScreenBackground; antes de
+      12 se ve @drawable/splash (morado con el ojo, generado por scripts/generar-iconos.mjs).
+    -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/yc_morado</item>
+    </style>
+</resources>
