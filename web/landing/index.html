@@ -3,17 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Monitor SoftRestaurant · Tus ventas y tus mesas, en vivo, desde el celular</title>
+    <title>Yo Controlo · Tu restaurante en vivo, desde el celular</title>
     <meta
       name="description"
-      content="Panel en la nube para restaurantes con SoftRestaurant: ventas en vivo, mesas abiertas, alertas, inventario y autofactura de todas tus sucursales, sin tocar tu POS."
+      content="Ventas, mesas abiertas, meseros y turnos de tu SoftRestaurant, en vivo en tu celular. Solo lectura: no toca tu caja. Si se va el internet, no se pierde nada."
     />
-    <meta name="theme-color" content="#0f766e" />
-    <link
-      rel="icon"
-      type="image/svg+xml"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M8 23V14M14 23V9M20 23v-6M26 23V12' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E"
+    <meta name="theme-color" content="#2C1533" />
+    <link rel="icon" type="image/svg+xml" href="./marca/isotipo-app.svg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_MX" />
+    <meta property="og:site_name" content="Yo Controlo" />
+    <meta property="og:title" content="Yo Controlo · Tu restaurante en vivo, desde el celular" />
+    <meta
+      property="og:description"
+      content="Ventas, mesas, meseros y turnos de tu SoftRestaurant, en vivo en tu celular, sin tocar tu caja."
     />
+    <meta property="og:image" content="__URL_SITIO__/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Logo de Yo Controlo y la frase: tu restaurante en vivo, desde el celular." />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="stylesheet" href="./estilos.css" />
     <script type="module" src="../src/landing/main.ts"></script>
   </head>
@@ -21,243 +30,336 @@
     <a class="saltar" href="#contenido">Saltar al contenido</a>
     <header class="cabecera">
       <div class="envoltura cabecera-fila">
-        <a class="marca" href="#inicio" aria-label="Monitor SoftRestaurant, inicio">
-          <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true" focusable="false">
-            <rect width="32" height="32" rx="7" class="logo-fondo" />
-            <path d="M8 23V14M14 23V9M20 23v-6M26 23V12" class="logo-barras" stroke-width="3" stroke-linecap="round" />
-          </svg>
-          <span>Monitor SoftRestaurant</span>
+        <a class="marca" href="#inicio">
+          <img src="./marca/yocontrolo-oscuro.svg" width="150" height="39" alt="Yo Controlo, inicio" />
         </a>
         <nav aria-label="Secciones">
           <ul class="nav">
-            <li><a href="#que-ves">Qué ves</a></li>
-            <li><a href="#precios">Precios</a></li>
-            <li><a href="#preguntas">Preguntas</a></li>
-            <li><a class="boton boton-secundario" href="__URL_PANEL__">Entrar al panel</a></li>
+            <li class="nav-seccion"><a href="#que-ves">Qué ves</a></li>
+            <li class="nav-seccion"><a href="#como-funciona">Cómo funciona</a></li>
+            <li class="nav-seccion"><a href="#planes">Planes</a></li>
+            <li class="nav-seccion"><a href="#preguntas">Preguntas</a></li>
+            <li><a class="boton boton-contorno" href="__URL_PANEL__">Entrar al panel</a></li>
           </ul>
         </nav>
       </div>
     </header>
 
     <main id="contenido">
-      <section id="inicio" class="hero">
+      <section id="inicio" class="hero" aria-labelledby="titulo-hero">
         <div class="envoltura hero-rejilla">
-          <div>
-            <p class="antetitulo">Para restaurantes que ya usan SoftRestaurant</p>
-            <h1>Tus ventas y tus mesas, en vivo, desde el celular.</h1>
+          <div class="hero-texto">
+            <p class="para-quien">Para restaurantes con SoftRestaurant</p>
+            <h1 id="titulo-hero">Ve tu restaurante en vivo, aunque no estés ahí.</h1>
             <p class="entrada">
-              Un agente lee tu SoftRestaurant cada 30 segundos y manda los datos a un panel en la
-              nube. Ves cuánto llevas vendido hoy, qué mesas siguen abiertas y qué sucursal se
-              quedó sin conexión, sin estar en la caja.
+              Cuánto llevas vendido, qué mesas siguen abiertas y cuánto ha cobrado cada mesero.
+              Yo Controlo lo lee de tu SoftRestaurant y te lo pone en el celular, al momento.
             </p>
-            <ul class="promesas">
-              <li><strong>Solo lectura.</strong> El agente nunca escribe en tu POS.</li>
-              <li><strong>Todas tus sucursales</strong> en una sola pantalla.</li>
-              <li><strong>Sin cambiar tu operación:</strong> la caja sigue igual.</li>
-            </ul>
             <p class="acciones">
-              <a class="boton" href="#contacto">Pide una demostración</a>
-              <a class="boton boton-secundario" href="#como-funciona">Cómo funciona</a>
+              <a class="boton boton-arena" href="#contacto">Pide una demostración</a>
+              <a class="boton boton-contorno" href="#planes">Ver planes</a>
             </p>
+            <ul class="garantias">
+              <li>Solo lee: tu caja sigue igual</li>
+              <li>Sin internet no se pierde ninguna venta</li>
+              <li>Una sucursal o todas juntas</li>
+            </ul>
           </div>
-          <figure class="captura">
-            <svg viewBox="0 0 480 320" role="img" aria-labelledby="cap1-titulo" width="480" height="320">
-              <title id="cap1-titulo">Ilustración del panel de ventas: venta del día, ticket promedio y ventas por hora</title>
-              <rect class="c-fondo" x="0" y="0" width="480" height="320" rx="14" />
-              <rect class="c-barra" x="0" y="0" width="480" height="36" rx="14" />
-              <rect class="c-barra" x="0" y="20" width="480" height="16" />
-              <circle class="c-punto" cx="20" cy="18" r="5" />
-              <text class="c-texto-claro" x="34" y="23">Panel de ventas · Hoy</text>
-              <rect class="c-tarjeta" x="16" y="52" width="140" height="78" rx="10" />
-              <text class="c-etiqueta" x="28" y="74">Venta total</text>
-              <text class="c-cifra" x="28" y="108">$48,215.50</text>
-              <rect class="c-tarjeta" x="170" y="52" width="140" height="78" rx="10" />
-              <text class="c-etiqueta" x="182" y="74">Ticket promedio</text>
-              <text class="c-cifra" x="182" y="108">$386.20</text>
-              <rect class="c-tarjeta" x="324" y="52" width="140" height="78" rx="10" />
-              <text class="c-etiqueta" x="336" y="74">Mesas abiertas</text>
-              <text class="c-cifra" x="336" y="108">14</text>
-              <rect class="c-tarjeta" x="16" y="144" width="448" height="160" rx="10" />
-              <text class="c-etiqueta" x="28" y="166">Ventas por hora</text>
-              <g class="c-barras">
-                <rect x="40" y="258" width="22" height="30" /><rect x="72" y="244" width="22" height="44" />
-                <rect x="104" y="214" width="22" height="74" /><rect x="136" y="190" width="22" height="98" />
-                <rect x="168" y="202" width="22" height="86" /><rect x="200" y="236" width="22" height="52" />
-                <rect x="232" y="250" width="22" height="38" /><rect x="264" y="226" width="22" height="62" />
-                <rect x="296" y="196" width="22" height="92" /><rect x="328" y="182" width="22" height="106" />
-                <rect x="360" y="206" width="22" height="82" /><rect x="392" y="238" width="22" height="50" />
+
+          <div class="demo" aria-hidden="true">
+            <svg class="ojo" viewBox="425 246 337 389" width="337" height="389" focusable="false">
+              <g class="ojo-c">
+                <path
+                  fill="currentColor"
+                  d="M624.9 600l-0.8-0.6-1.2-6.6-3.7-10.5-0.4-6.6-2.6-6.4-0.4-5.6-3.6-10.5-0.4-7.4-1.7-4.7-0.3-3.5-1.5-3.5-5.8-2.9-8.6-3.1-5.3 2.1-11.4 15.5-2.3 4.6-7.3 10.4-3.5 2.7-3-1 0-2.3 1-4.3 1.8-4.6 4.2-16.4 2.7-7.4 0.4-4.8 2.7-8.1 0.1-6-4.3-4.1-3.5-2.3-3.6-1.5-3.8 1.4-9.3 7.7-6 3.6-7 6.4-24.9 19-1.8 0.7-2.6-0.9-0.2-2.9 3.8-4.3 3.4-5.7 4.6-5.2 5.4-8.7 6.2-8.4 9.3-10.9 3.6-6 3.7-4 0-6.8-5.4-3.3-3.4-0.2-14.4 3-11.6 3.7-7.4 0.4-4.3 1-3.4 1.7-9.5 1.3-12.6 3.8-2.8-1.6-0.1-1.6 10.7-6.7 22.6-12.3 5.2-3.6 10.7-5.3 3.4-2.8 10.8-5.4 1.5-1.3 0-6.8-3.5-2.5-5.4-2-3.2-0.2-6-1.8-6.2-0.3-4.9-1.7-6.6-0.2-2.3-0.8-5.8-0.2-2-0.8-3.2-0.2-7.6-2.7-5.3-0.3-9.9-2.8-3.6-0.3-2.5-2 0.2-1.2 2.3-1.4 9.2-0.3 3-0.8 13.6-0.2 2.6-0.8 11.6-0.2 4.8-0.9 11.4 0.9 11.4-2.8 3.6 0.9 2.3-0.1 5.2-2.7 0.8-1.4 0-4.2-2.5-2.5-16.9-11.3-7.3-7.7-7.1-3.7-22-18.8-2.8-3-0.3-1.8 2.4-1.3 3 0.7 9 4.6 5 1.4 7 3.6 5 1.4 7 3.6 5 1.4 17 8.6 6.2 2.1 1.6 0 4.1-2.1 2.5-3.9 0-3-1-3.2-6.7-13.2-3.4-8.9-3.6-6.1-2.3-7.7-3.7-6.3-2.1-6.3 0.1-1.4 1-1 1.6-0.2 4.1 2.9 30.2 33.9 4.4 2 3.9-1.6 7.9-4.9 2.7-2.5-0.1-7.2-2.7-8.9-0.3-6.2-0.9-3.6 2.8-10.2 0.3-6.2 1-3.4 4.2-9.2 9.2-12.3 2.8-1.7 2.7 1-0.1 3.6-0.8 2.3-0.1 8.4 1.2 5.7 3.1 6.9 6.4 7.1 2.8 4.2 9 7 4 2.1 12 0.3 2.5 0.8 5 0.2 5.9 1.8 3.2 0.2 8.1 2 8.3 3.1 13.7 6.9 10.4 7.2 8 6.9 9.3 10.5 5 7 2.2 4.7-0.7 1.5-3.1 3-10.9 5.3-16 9.6-3.1 1.2-3.5-1.8-6.6-8.4-8.5-7.3-4.4-3.4-7.8-3.9-15.3-5-8-0.3-2.7-0.8-11.6 0-16.4 4.1-16.1 8.1-6.1 5-6.9 7.1-4.3 6.4-4.8 9.5-4.1 12.4-0.3 5.3-0.9 3.4 0.1 10.7 4.1 15.4 6 11.9 6.4 7.6 8.7 8.6 10.2 6.3 4 1.9 9.3 3.1 9.3 2 17 0 6.8-1.8 3.2-0.2 9.4-3.1 9.1-4.1 6.3-4.3 15.3-14.8 3.3-1.6 16.9 9.2 14.1 9 2.5 3-0.1 1.9-2.1 3.2-9.6 11.9-13.3 11.2-6.3 4.4-17.9 8.9-3.5 1.2-22.1 4.9-9.7 0.3-2.3 0.8-4.2 0.2-4.5 2.3-1.3 4-0.2 20.4-0.8 3.7-0.2 10.6-0.8 2.7-0.1 16.7-2.2 0.9z"
+                />
+              </g>
+              <g class="pupila-mueve">
+                <circle class="pupila" cx="633.5" cy="434" r="33.5" fill="currentColor" />
               </g>
             </svg>
-            <figcaption>Ilustración con datos de demostración.</figcaption>
-          </figure>
+
+            <div class="caja">
+              <div class="caja-cabeza">
+                <span>Sucursal Centro, hoy</span>
+                <span class="en-vivo">En vivo</span>
+              </div>
+              <p class="caja-cifra"><span id="demo-venta">$48,215.50</span></p>
+              <dl class="caja-datos">
+                <div><dt>Tickets</dt><dd id="demo-tickets">127</dd></div>
+                <div><dt>Mesas abiertas</dt><dd>14</dd></div>
+                <div><dt>Turno</dt><dd>Vespertino</dd></div>
+              </dl>
+              <ol class="tickets" id="demo-lista">
+                <li class="ticket"><span class="t-mesa">Mesa 7</span><span class="t-mesero">Toño</span><span class="t-importe">$615.50</span></li>
+                <li class="ticket"><span class="t-mesa">Terraza 2</span><span class="t-mesero">Lupita</span><span class="t-importe">$884.00</span></li>
+                <li class="ticket"><span class="t-mesa">Barra 1</span><span class="t-mesero">Memo</span><span class="t-importe">$310.00</span></li>
+              </ol>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section id="que-ves" class="seccion">
+      <section id="que-ves" class="seccion seccion-clara" aria-labelledby="titulo-que-ves">
         <div class="envoltura">
-          <h2>Qué ves en el panel</h2>
-          <ul class="rejilla-3">
-            <li class="tarjeta">
-              <h3>Ventas en vivo</h3>
-              <p>Venta del día, ticket promedio, formas de pago, descuentos y ventas por hora, por sucursal o de todo el grupo.</p>
-            </li>
-            <li class="tarjeta">
-              <h3>Monitor de mesas</h3>
-              <p>Qué mesas están abiertas, cuánto llevan y cuánto tiempo. Una vista de pared para la cocina o la gerencia.</p>
-            </li>
-            <li class="tarjeta">
-              <h3>Alertas</h3>
-              <p>Aviso cuando una mesa lleva demasiado, cuando una sucursal se desconecta o cuando algo se sale de lo normal.</p>
-            </li>
-            <li class="tarjeta">
-              <h3>Comparativos y análisis</h3>
-              <p>Sucursal contra sucursal, periodo contra periodo, meseros, productos y horas fuertes.</p>
-            </li>
-            <li class="tarjeta">
-              <h3>Inventario</h3>
-              <p>Existencias y su valor, movimientos, conteos físicos desde el celular, recetas y sugerido de compra.</p>
-            </li>
-            <li class="tarjeta">
-              <h3>Autofactura</h3>
-              <p>Tus clientes facturan su ticket desde el celular con un código corto, y tú ves el tablero de facturación.</p>
-            </li>
-          </ul>
+          <h2 id="titulo-que-ves">Lo que pasa en tu restaurante, en la palma de tu mano</h2>
+          <p class="entrada">
+            Abres el panel y ya está: las cifras se actualizan solas mientras tu equipo cobra. Sin
+            esperar al corte, sin hablarle al gerente.
+          </p>
+
+          <div class="que-ves-rejilla">
+            <figure class="captura captura-celular">
+              <div class="celular" aria-hidden="true">
+                <div class="celular-pantalla">
+                  <div class="m-barra"><span>Inicio</span><span class="m-vivo">En vivo</span></div>
+                  <div class="m-tarjeta m-principal">
+                    <span class="m-etiqueta">Venta de hoy</span>
+                    <span class="m-cifra">$48,215.50</span>
+                    <span class="m-sube">12% más que el jueves pasado</span>
+                  </div>
+                  <div class="m-tarjeta">
+                    <span class="m-etiqueta">Ventas por hora</span>
+                    <svg viewBox="0 0 200 64" width="200" height="64" focusable="false">
+                      <g class="m-barras">
+                        <rect x="2" y="50" width="12" height="14" rx="2" /><rect x="18" y="42" width="12" height="22" rx="2" />
+                        <rect x="34" y="30" width="12" height="34" rx="2" /><rect x="50" y="14" width="12" height="50" rx="2" />
+                        <rect x="66" y="8" width="12" height="56" rx="2" /><rect x="82" y="24" width="12" height="40" rx="2" />
+                        <rect x="98" y="40" width="12" height="24" rx="2" /><rect x="114" y="44" width="12" height="20" rx="2" />
+                        <rect x="130" y="30" width="12" height="34" rx="2" /><rect x="146" y="16" width="12" height="48" rx="2" />
+                        <rect x="162" y="10" width="12" height="54" rx="2" />
+                      </g>
+                      <rect class="m-ahora" x="178" y="26" width="12" height="38" rx="2" />
+                    </svg>
+                  </div>
+                  <div class="m-tarjeta">
+                    <span class="m-etiqueta">Turno vespertino, desde las 15:00</span>
+                    <div class="m-fila"><span>Efectivo</span><span>$12,430.00</span></div>
+                    <div class="m-fila"><span>Tarjeta</span><span>$19,880.50</span></div>
+                  </div>
+                  <div class="m-tarjeta">
+                    <span class="m-etiqueta">Meseros</span>
+                    <div class="m-fila"><span>Lupita</span><span>$9,240.00</span></div>
+                    <div class="m-fila"><span>Toño</span><span>$7,615.50</span></div>
+                    <div class="m-fila"><span>Memo</span><span>$6,102.00</span></div>
+                  </div>
+                </div>
+              </div>
+              <figcaption>Ilustración con datos de demostración.</figcaption>
+            </figure>
+
+            <ul class="beneficios">
+              <li>
+                <h3>En vivo</h3>
+                <p>La venta del día, el ticket promedio y las ventas por hora se actualizan solas mientras cobras.</p>
+              </li>
+              <li>
+                <h3>Por mesa</h3>
+                <p>Qué mesas están abiertas, cuánto llevan, cuánto tiempo y qué pidieron, platillo por platillo.</p>
+              </li>
+              <li>
+                <h3>Por mesero</h3>
+                <p>Cuánto vende cada mesero, sus cuentas, su ticket promedio, propinas y cancelaciones.</p>
+              </li>
+              <li>
+                <h3>Turnos y cortes</h3>
+                <p>El turno en curso al momento y el corte de caja de cada turno, con lo cobrado por forma de pago.</p>
+              </li>
+              <li>
+                <h3>Sin internet no se pierde nada</h3>
+                <p>Si se va el internet o la luz, las ventas se guardan en la PC y se mandan solas cuando vuelve.</p>
+              </li>
+              <li>
+                <h3>Todas tus sucursales</h3>
+                <p>Cada sucursal por separado o todo el grupo junto, y compáralas entre sí o contra otro periodo.</p>
+              </li>
+            </ul>
+          </div>
+
           <figure class="captura captura-ancha">
-            <svg viewBox="0 0 720 260" role="img" aria-labelledby="cap2-titulo" width="720" height="260">
-              <title id="cap2-titulo">Ilustración del monitor de mesas: mesas abiertas con su importe y su tiempo, una marcada en rojo por llevar más de una hora</title>
-              <rect class="c-fondo" x="0" y="0" width="720" height="260" rx="14" />
-              <text class="c-etiqueta-fuerte" x="20" y="34">Monitor de mesas · Centro</text>
-              <g>
-                <rect class="c-mesa" x="20" y="54" width="160" height="88" rx="10" />
-                <text class="c-etiqueta-fuerte" x="34" y="80">Mesa 4</text>
-                <text class="c-etiqueta" x="34" y="104">$1,240.00 · 3 personas</text>
-                <text class="c-etiqueta" x="34" y="126">32 min</text>
-                <rect class="c-mesa" x="196" y="54" width="160" height="88" rx="10" />
-                <text class="c-etiqueta-fuerte" x="210" y="80">Mesa 7</text>
-                <text class="c-etiqueta" x="210" y="104">$615.50 · 2 personas</text>
-                <text class="c-etiqueta" x="210" y="126">18 min</text>
-                <rect class="c-mesa-alerta" x="372" y="54" width="160" height="88" rx="10" />
-                <text class="c-etiqueta-fuerte" x="386" y="80">Mesa 12</text>
-                <text class="c-etiqueta" x="386" y="104">$2,980.00 · 6 personas</text>
-                <text class="c-alerta" x="386" y="126">1 h 12 min</text>
-                <rect class="c-mesa" x="548" y="54" width="152" height="88" rx="10" />
-                <text class="c-etiqueta-fuerte" x="562" y="80">Barra 2</text>
-                <text class="c-etiqueta" x="562" y="104">$310.00 · 1 persona</text>
-                <text class="c-etiqueta" x="562" y="126">9 min</text>
-                <rect class="c-mesa" x="20" y="156" width="160" height="88" rx="10" />
-                <text class="c-etiqueta-fuerte" x="34" y="182">Terraza 1</text>
-                <text class="c-etiqueta" x="34" y="206">$884.00 · 4 personas</text>
-                <text class="c-etiqueta" x="34" y="228">41 min</text>
-                <rect class="c-mesa" x="196" y="156" width="160" height="88" rx="10" />
-                <text class="c-etiqueta-fuerte" x="210" y="182">Mesa 15</text>
-                <text class="c-etiqueta" x="210" y="206">$455.00 · 2 personas</text>
-                <text class="c-etiqueta" x="210" y="228">25 min</text>
-              </g>
-            </svg>
+            <div class="mesas" aria-hidden="true">
+              <div class="mesas-lista">
+                <p class="mesas-titulo">Mesas abiertas en Centro</p>
+                <ul>
+                  <li class="mesa"><b>Mesa 4</b><span>$1,240.00</span><small>3 personas, 32 min</small></li>
+                  <li class="mesa mesa-elegida"><b>Mesa 12</b><span>$2,980.00</span><small>6 personas, 1 h 12 min</small></li>
+                  <li class="mesa"><b>Mesa 7</b><span>$615.50</span><small>2 personas, 18 min</small></li>
+                  <li class="mesa"><b>Terraza 1</b><span>$884.00</span><small>4 personas, 41 min</small></li>
+                  <li class="mesa"><b>Barra 2</b><span>$310.00</span><small>1 persona, 9 min</small></li>
+                  <li class="mesa"><b>Mesa 15</b><span>$455.00</span><small>2 personas, 25 min</small></li>
+                </ul>
+              </div>
+              <div class="cuenta">
+                <p class="mesas-titulo">Mesa 12, la atiende Lupita</p>
+                <ul>
+                  <li><span>4 Tacos al pastor (orden)</span><span>$640.00</span></li>
+                  <li><span>2 Molcajete mixto</span><span>$1,180.00</span></li>
+                  <li><span>6 Agua de horchata</span><span>$330.00</span></li>
+                  <li><span>3 Cerveza clara</span><span>$255.00</span></li>
+                  <li><span>1 Flan napolitano</span><span>$95.00</span></li>
+                  <li class="cuenta-pendiente"><span>4 Café de olla, en cocina</span><span>$180.00</span></li>
+                </ul>
+                <p class="cuenta-total"><span>Lleva</span><span>$2,980.00</span></p>
+                <p class="cuenta-aviso">Abierta hace 1 h 12 min</p>
+              </div>
+            </div>
             <figcaption>Ilustración con datos de demostración.</figcaption>
           </figure>
         </div>
       </section>
 
-      <section id="como-funciona" class="seccion seccion-alterna">
+      <section id="tranquilidad" class="seccion seccion-honda" aria-labelledby="titulo-tranquilidad">
+        <div class="envoltura tranquilidad-rejilla">
+          <div>
+            <h2 id="titulo-tranquilidad">Tu caja sigue igual</h2>
+            <dl class="puntos">
+              <div>
+                <dt>Solo lee, nunca escribe</dt>
+                <dd>Entra a SoftRestaurant con un usuario de solo lectura. No crea tablas, no cambia ventas y no toca la configuración del punto de venta.</dd>
+              </div>
+              <div>
+                <dt>Se va el internet</dt>
+                <dd>Las ventas se guardan en la PC del restaurante y se mandan en cuanto regresa la conexión. El panel te dice qué sucursal está desconectada en lugar de enseñarte números viejos.</dd>
+              </div>
+              <div>
+                <dt>Se va la luz</dt>
+                <dd>El agente arranca solo con Windows y sigue donde se quedó. Lo que no alcanzó a mandar sigue guardado.</dd>
+              </div>
+            </dl>
+          </div>
+          <figure class="captura captura-sucursales">
+            <div class="sucursales" aria-hidden="true">
+              <p class="mesas-titulo">Tus sucursales</p>
+              <ul>
+                <li><b>Centro</b><span class="s-ok">En vivo</span><span>$48,215.50</span></li>
+                <li><b>Norte</b><span class="s-ok">En vivo</span><span>$36,902.00</span></li>
+                <li class="s-caida"><b>Plaza Sur</b><span class="s-sin">Sin internet desde las 14:32</span><span>$21,480.00</span></li>
+              </ul>
+              <p class="s-nota">Plaza Sur guarda sus ventas y se pone al día cuando vuelva el internet.</p>
+            </div>
+            <figcaption>Ilustración con datos de demostración.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="como-funciona" class="seccion seccion-clara" aria-labelledby="titulo-como">
         <div class="envoltura">
-          <h2>Cómo funciona</h2>
+          <h2 id="titulo-como">Empiezas en una tarde</h2>
           <ol class="pasos">
             <li>
-              <h3>Instalamos el agente</h3>
-              <p>Un servicio de Windows en la PC de tu SQL Server de SoftRestaurant. Unos 15 minutos por sucursal, sin detener la caja.</p>
+              <h3>Te damos de alta</h3>
+              <p>Creamos tu cuenta y tus sucursales. Tú decides quién de tu equipo entra y qué puede ver.</p>
             </li>
             <li>
-              <h3>Lee, nunca escribe</h3>
-              <p>Entra con un usuario de solo lectura. Si el internet se cae, guarda lo pendiente y lo manda cuando vuelve.</p>
+              <h3>Doble clic en el instalador</h3>
+              <p>En la PC donde está SoftRestaurant. Se conecta solo y en minutos empieza a mandar ventas. La caja no se detiene.</p>
             </li>
             <li>
-              <h3>Tú ves todo en el panel</h3>
-              <p>Desde el navegador o instalado en tu celular, con los accesos que tú decidas para tu equipo.</p>
+              <h3>Lo ves todo en tu celular</h3>
+              <p>Instálalo como app desde el navegador y recibe avisos, como una mesa que lleva demasiado o una sucursal sin conexión.</p>
             </li>
           </ol>
         </div>
       </section>
 
       <!--
-        DECISION PROVISIONAL (nocturno): todavía no hay precios definidos (no están en el backlog
-        ni en ningún documento). La tabla dice qué incluye cada plan y cómo se cobra; la cifra la
-        pone Ricardo. No se publica un precio inventado.
+        Planes SIN precio (UI-03): la cifra la define Ricardo. Cada botón lleva al formulario con el
+        plan elegido. "Hasta 5 sucursales" del plan Completo es una propuesta para que Ricardo la ajuste.
       -->
-      <section id="precios" class="seccion">
+      <section id="planes" class="seccion seccion-lavanda" aria-labelledby="titulo-planes">
         <div class="envoltura">
-          <h2>Precios</h2>
-          <p class="entrada">Se cobra por sucursal, al mes.</p>
-          <ul class="rejilla-3 planes">
-            <li class="tarjeta plan">
-              <h3>Monitor</h3>
-              <p class="precio">Precio por confirmar</p>
+          <h2 id="titulo-planes">Planes</h2>
+          <p class="entrada">Te cotizamos según tus sucursales. Elige el que te quede y te contactamos con el precio.</p>
+          <ul class="planes">
+            <li class="plan">
+              <h3>Esencial</h3>
+              <p class="plan-alcance">1 sucursal</p>
+              <p class="precio">Cotiza</p>
               <ul class="incluye">
-                <li>Ventas en vivo y reportes</li>
-                <li>Monitor de mesas</li>
-                <li>Alertas y avisos al celular</li>
-                <li>Usuarios con permisos por rol</li>
+                <li>Ventas del día en vivo</li>
+                <li>Mesas abiertas y lo que lleva cada una</li>
+                <li>Meseros en vivo</li>
+                <li>Turnos y cortes de caja</li>
+                <li>Tickets con su detalle y exportación a Excel</li>
+                <li>Panel instalable en el celular</li>
+                <li>Usuarios con permisos por puesto</li>
               </ul>
+              <a class="boton boton-violeta" href="?plan=esencial#contacto" data-plan="Esencial">Quiero este plan</a>
             </li>
-            <li class="tarjeta plan plan-destacado">
-              <h3>Monitor + Inventario</h3>
-              <p class="precio">Precio por confirmar</p>
-              <ul class="incluye">
-                <li>Todo lo de Monitor</li>
-                <li>Existencias, movimientos y kardex</li>
-                <li>Conteos físicos y traspasos</li>
-                <li>Recetas, utilidad y sugerido de compra</li>
-              </ul>
-            </li>
-            <li class="tarjeta plan">
+            <li class="plan plan-destacado">
               <h3>Completo</h3>
-              <p class="precio">Precio por confirmar</p>
+              <p class="plan-alcance">Hasta 5 sucursales</p>
+              <p class="precio">Cotiza</p>
               <ul class="incluye">
-                <li>Todo lo anterior</li>
-                <li>Autofactura desde el ticket (el código en el ticket depende de tu versión de SoftRestaurant)</li>
-                <li>Factura global y cancelaciones</li>
-                <li>Tablero de facturación</li>
+                <li>Todo lo de Esencial</li>
+                <li>Comparativos entre sucursales y periodos</li>
+                <li>Alertas y avisos al celular</li>
+                <li>Resumen diario por correo</li>
+                <li>Productos más vendidos, horas fuertes y análisis por mesero</li>
+                <li>Catálogo de productos y precios por sucursal</li>
+                <li>Inventario: existencias, conteos, recetas y sugerido de compra</li>
               </ul>
+              <a class="boton boton-violeta" href="?plan=completo#contacto" data-plan="Completo">Quiero este plan</a>
+            </li>
+            <li class="plan">
+              <h3>Cadena</h3>
+              <p class="plan-alcance">Sucursales ilimitadas</p>
+              <p class="precio">Cotiza</p>
+              <ul class="incluye">
+                <li>Todo lo de Completo</li>
+                <li>Facturación CFDI: tus clientes facturan su ticket desde el celular</li>
+                <li>Factura global y cancelaciones</li>
+                <li>Compras, gastos y utilidad</li>
+                <li>Traspasos entre sucursales</li>
+                <li>Soporte prioritario</li>
+                <li>Alta asistida: instalamos contigo cada sucursal</li>
+              </ul>
+              <a class="boton boton-violeta" href="?plan=cadena#contacto" data-plan="Cadena">Quiero este plan</a>
             </li>
           </ul>
-          <p class="nota">Pide tu cotización en el formulario de abajo: te decimos el precio para tu número de sucursales.</p>
         </div>
       </section>
 
-      <section id="preguntas" class="seccion seccion-alterna">
+      <section id="preguntas" class="seccion seccion-clara" aria-labelledby="titulo-preguntas">
         <div class="envoltura estrecha">
-          <h2>Preguntas frecuentes</h2>
+          <h2 id="titulo-preguntas">Preguntas frecuentes</h2>
           <details>
-            <summary>¿Puede el panel descomponer mi SoftRestaurant?</summary>
-            <p>No. El agente entra con un usuario de SQL Server que sólo puede leer, y cada consulta es corta y sin bloquear las tablas de la operación. No crea tablas, no cambia datos y no toca la configuración del POS.</p>
+            <summary>¿Puede Yo Controlo descomponer mi SoftRestaurant?</summary>
+            <p>No. El agente entra con un usuario de SQL Server que solo puede leer, y cada consulta es corta y sin bloquear las tablas con las que cobras. No crea tablas, no cambia datos y no toca la configuración del punto de venta.</p>
           </details>
           <details>
             <summary>¿Qué necesito para empezar?</summary>
-            <p>La PC donde está el SQL Server de SoftRestaurant en cada sucursal, con Windows e internet, y un usuario administrador de Windows para instalar. Nosotros te damos el instalador y una guía paso a paso.</p>
+            <p>La PC donde está SoftRestaurant en cada sucursal, con Windows e internet, y alguien que pueda instalar programas en ella. Nosotros te damos el instalador y te acompañamos.</p>
           </details>
           <details>
-            <summary>¿Qué pasa si se va el internet del restaurante?</summary>
-            <p>El agente guarda lo que no pudo mandar y lo envía cuando regresa la conexión. El panel te avisa que esa sucursal está desconectada en vez de mostrarte números viejos como si fueran de hoy.</p>
+            <summary>¿Funciona sin internet?</summary>
+            <p>Tu caja sí, como siempre. El agente guarda en la PC lo que no pudo mandar y lo envía cuando regresa la conexión; mientras tanto, el panel te avisa que esa sucursal está desconectada.</p>
+          </details>
+          <details>
+            <summary>¿Y si se va la luz?</summary>
+            <p>Cuando la PC vuelve a prender, el agente arranca solo con Windows y sigue donde se quedó. No tienes que hacer nada.</p>
           </details>
           <details>
             <summary>¿Quién ve la información de mi negocio?</summary>
-            <p>Sólo los usuarios que tú des de alta, con el rol que les asignes. La información de cada empresa está separada de la de las demás.</p>
+            <p>Solo las personas que tú des de alta, con el puesto que les asignes. La información de cada negocio está separada de la de los demás.</p>
           </details>
           <details>
-            <summary>¿Funciona con varias sucursales?</summary>
-            <p>Sí. Cada sucursal tiene su agente y su llave, y en el panel ves cada una o todo el grupo junto, cada una con su zona horaria.</p>
+            <summary>¿Tengo que cambiar algo en mi forma de trabajar?</summary>
+            <p>No. Tus meseros y tu cajero siguen usando SoftRestaurant igual que hoy. Yo Controlo solo mira y te cuenta.</p>
           </details>
           <details>
-            <summary>¿Qué versiones de SoftRestaurant soporta?</summary>
-            <p>Lo revisamos contigo antes de instalar: el agente detecta la versión y te decimos qué se puede leer de la tuya.</p>
+            <summary>¿Qué versiones de SoftRestaurant funcionan?</summary>
+            <p>Lo revisamos contigo antes de instalar: el agente detecta tu versión y te decimos qué se puede leer de ella.</p>
           </details>
         </div>
       </section>
 
-      <section id="contacto" class="seccion">
-        <div class="envoltura estrecha">
-          <h2>Pide una demostración</h2>
-          <p class="entrada">Déjanos tus datos y te contactamos para mostrarte el panel con datos de ejemplo.</p>
+      <section id="contacto" class="seccion seccion-oscura" aria-labelledby="titulo-contacto">
+        <div class="envoltura contacto-rejilla">
+          <div>
+            <h2 id="titulo-contacto">Pide una demostración</h2>
+            <p class="entrada">Déjanos tus datos y te enseñamos el panel con datos de ejemplo. Te decimos también cuánto cuesta para tu número de sucursales.</p>
+          </div>
           <form id="formulario-contacto" class="formulario" novalidate>
             <div class="campo">
               <label for="nombre">Tu nombre</label>
@@ -284,6 +386,15 @@
               <input id="sucursales" name="sucursales" type="number" inputmode="numeric" min="1" max="500" aria-describedby="error-sucursales" />
               <p id="error-sucursales" class="error" aria-live="polite"></p>
             </div>
+            <div class="campo campo-sin-error">
+              <label for="plan">Plan que te interesa (opcional)</label>
+              <select id="plan" name="plan">
+                <option value="">Todavía no sé</option>
+                <option value="Esencial">Esencial</option>
+                <option value="Completo">Completo</option>
+                <option value="Cadena">Cadena</option>
+              </select>
+            </div>
             <div class="campo campo-ancho">
               <label for="mensaje">¿Qué te gustaría ver?</label>
               <textarea id="mensaje" name="mensaje" rows="4" maxlength="2000" required aria-describedby="error-mensaje"></textarea>
@@ -294,7 +405,7 @@
               <input id="sitio" name="sitio" tabindex="-1" autocomplete="off" />
             </div>
             <div class="campo-ancho">
-              <button class="boton" type="submit">Enviar</button>
+              <button class="boton boton-arena" type="submit">Enviar</button>
               <p id="contacto-estado" class="estado" role="status" aria-live="polite"></p>
             </div>
           </form>
@@ -303,9 +414,18 @@
     </main>
 
     <footer class="pie">
-      <div class="envoltura pie-fila">
-        <p>© Monitor SoftRestaurant</p>
-        <p>SoftRestaurant es una marca de su titular. Este producto es independiente y no está afiliado a su fabricante.</p>
+      <div class="envoltura pie-rejilla">
+        <img src="./marca/yocontrolo-oscuro.svg" width="124" height="32" alt="Yo Controlo" loading="lazy" />
+        <ul class="pie-nav">
+          <li><a href="#planes">Planes</a></li>
+          <li><a href="#preguntas">Preguntas</a></li>
+          <li><a href="#contacto">Contacto</a></li>
+          <li><a href="__URL_PANEL__">Entrar al panel</a></li>
+        </ul>
+        <p class="pie-legal">
+          © 2026 Yo Controlo. SoftRestaurant es una marca de su titular; Yo Controlo es un producto
+          independiente y no está afiliado a su fabricante.
+        </p>
       </div>
     </footer>
   </body>

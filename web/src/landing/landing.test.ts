@@ -85,23 +85,59 @@ describe('Landing: formulario de contacto', () => {
     expect(trampa.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 
-  it('las capturas son ilustraciones con título y lo dicen', () => {
+  it('las capturas son ilustraciones marcadas: el dibujo se oculta y el pie lo dice', () => {
     montar();
     const capturas = document.querySelectorAll('figure.captura');
     expect(capturas.length).toBeGreaterThanOrEqual(2);
     for (const c of capturas) {
-      expect(c.querySelector('svg[role="img"] title')?.textContent).toMatch(/^Ilustración/);
+      // UI-03: las capturas son HTML/CSS (no SVG); los datos inventados no se leen en voz alta.
+      expect(c.firstElementChild?.getAttribute('aria-hidden')).toBe('true');
       expect(c.querySelector('figcaption')?.textContent).toBe(
         'Ilustración con datos de demostración.',
       );
     }
   });
 
-  it('los precios no inventan cifras: dicen que están por confirmar', () => {
+  it('los planes no inventan cifras: son tres y dicen "Cotiza"', () => {
     montar();
-    const precios = [...document.querySelectorAll('#precios .precio')].map((p) => p.textContent);
-    expect(precios).toHaveLength(3);
-    for (const p of precios) expect(p).toBe('Precio por confirmar');
-    expect(document.querySelector('#precios')!.textContent).not.toMatch(/\$\s?\d/);
+    const precios = [...document.querySelectorAll('#planes .precio')].map((p) => p.textContent);
+    expect(precios).toEqual(['Cotiza', 'Cotiza', 'Cotiza']);
+    expect(document.querySelector('#planes')!.textContent).not.toMatch(/\$\s?\d/);
+  });
+
+  it('"Quiero este plan" preselecciona el plan en el formulario y lleva al contacto', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    montar();
+    Element.prototype.scrollIntoView = vi.fn();
+    await cargarModulo();
+    const botones = document.querySelectorAll<HTMLAnchorElement>('#planes a[data-plan]');
+    expect([...botones].map((b) => b.dataset.plan)).toEqual(['Esencial', 'Completo', 'Cadena']);
+    // Sin JS el enlace igual funciona: baja al formulario con el plan en la URL.
+    expect(botones[1].getAttribute('href')).toBe('?plan=completo#contacto');
+
+    botones[1].click();
+    expect((document.getElementById('plan') as HTMLSelectElement).value).toBe('Completo');
+    expect(document.activeElement).toBe(document.getElementById('nombre'));
+  });
+
+  it('el plan elegido viaja al inicio del mensaje (el api no tiene campo de plan)', async () => {
+    const fetchFalso = vi.fn(async () => new Response('{"recibido":true}', { status: 202 }));
+    vi.stubGlobal('fetch', fetchFalso);
+    montar();
+    Element.prototype.scrollIntoView = vi.fn();
+    await cargarModulo();
+    document.querySelector<HTMLAnchorElement>('#planes a[data-plan="Cadena"]')!.click();
+    (document.getElementById('nombre') as HTMLInputElement).value = 'Ana';
+    (document.getElementById('email') as HTMLInputElement).value = 'ana@ejemplo.test';
+    (document.getElementById('mensaje') as HTMLTextAreaElement).value = 'Tengo 8 sucursales';
+    document
+      .querySelector<HTMLButtonElement>('#formulario-contacto button[type="submit"]')!
+      .click();
+
+    await vi.waitFor(() => expect(fetchFalso).toHaveBeenCalled());
+    const [, init] = fetchFalso.mock.calls[0] as unknown as [string, RequestInit];
+    const enviado = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(enviado.mensaje).toBe('Plan de interés: Cadena.\n\nTengo 8 sucursales');
+    expect(enviado).not.toHaveProperty('plan');
   });
 });

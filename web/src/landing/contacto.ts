@@ -12,14 +12,34 @@ export interface DatosContacto {
   negocio: string;
   sucursales: string;
   mensaje: string;
+  /**
+   * El plan que le interesa (UI-03): `''` o uno de `PLANES`. `ContactoDto` no tiene ese campo (y
+   * rechaza los que no conoce), así que viaja al inicio del mensaje; ver `cuerpo`.
+   */
+  plan: string;
   /** La trampa para bots: el formulario la esconde; una persona la deja vacía. */
   sitio: string;
 }
 
-export type Campo = Exclude<keyof DatosContacto, 'sitio'>;
+export type Campo = Exclude<keyof DatosContacto, 'sitio' | 'plan'>;
 export type Errores = Partial<Record<Campo, string>>;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MENSAJE_MAX = 2000;
+
+/** Los planes de la landing, sin precio (UI-03). */
+export const PLANES = ['Esencial', 'Completo', 'Cadena'] as const;
+
+/** Lo que se antepone al mensaje cuando hay plan elegido; un valor desconocido se ignora. */
+export function prefijoPlan(plan: string): string {
+  return (PLANES as readonly string[]).includes(plan) ? `Plan de interés: ${plan}.\n\n` : '';
+}
+
+/** Normaliza `?plan=completo` (o "Completo") al nombre del plan; `''` si no es uno conocido. */
+export function planDeTexto(texto: string | null | undefined): string {
+  const t = (texto ?? '').trim().toLowerCase();
+  return PLANES.find((p) => p.toLowerCase() === t) ?? '';
+}
 
 export function validar(d: DatosContacto): Errores {
   const errores: Errores = {};
@@ -43,8 +63,10 @@ export function validar(d: DatosContacto): Errores {
   }
 
   const mensaje = d.mensaje.trim();
+  // El plan viaja dentro del mensaje: el tope del api (2000) es para los dos juntos.
+  const tope = MENSAJE_MAX - prefijoPlan(d.plan).length;
   if (mensaje === '') errores.mensaje = 'Cuéntanos qué necesitas.';
-  else if (mensaje.length > 2000) errores.mensaje = 'El mensaje admite hasta 2000 caracteres.';
+  else if (mensaje.length > tope) errores.mensaje = `El mensaje admite hasta ${tope} caracteres.`;
   return errores;
 }
 
@@ -53,7 +75,7 @@ export function cuerpo(d: DatosContacto): Record<string, string | number> {
   const salida: Record<string, string | number> = {
     nombre: d.nombre.trim(),
     email: d.email.trim(),
-    mensaje: d.mensaje.trim(),
+    mensaje: prefijoPlan(d.plan) + d.mensaje.trim(),
   };
   if (d.telefono.trim()) salida.telefono = d.telefono.trim();
   if (d.negocio.trim()) salida.negocio = d.negocio.trim();
