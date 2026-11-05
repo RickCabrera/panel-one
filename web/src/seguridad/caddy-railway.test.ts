@@ -81,3 +81,32 @@ describe('la landing, sólo en su dominio', () => {
     expect(landing).toMatch(/import landing \/srv\/landing/);
   });
 });
+
+describe('la landing en /landing/ del dominio del panel (LAND-01)', () => {
+  const panel = bloque(conf, '\n:{$PORT:8080} {');
+  const ruta = bloque(snip, '(landing_ruta)');
+
+  it('el panel la importa ANTES de la SPA, sin variable nueva', () => {
+    const iLanding = panel.indexOf('import landing_ruta /srv/landing');
+    expect(iLanding).toBeGreaterThan(0);
+    expect(iLanding).toBeLessThan(panel.indexOf('import spa /srv/web'));
+    expect(ruta).not.toMatch(/\{\$/);
+  });
+
+  it('/landing redirige a /landing/ conservando la query', () => {
+    expect(ruta).toMatch(/redir \/landing \/landing\/\{\?query\} 308/);
+  });
+
+  it('handle_path quita el prefijo y sirve la MISMA landing (CSP y caché de estaticos)', () => {
+    const handle = bloque(ruta, 'handle_path /landing/* {');
+    expect(handle).toMatch(/import landing \{args\[0\]\}/);
+    // Sin fallback de SPA: lo que no existe bajo /landing/ es 404.
+    expect(handle).not.toMatch(/rewrite|import spa/);
+    expect(bloque(snip, '(landing)')).toMatch(/import estaticos \{args\[0\]\}/);
+  });
+
+  it('con LANDING_HOST la landing sigue en la raíz de su dominio, sin /landing/', () => {
+    const landing = bloque(conf, 'http://{$LANDING_HOST:landing.invalid}:{$PORT:8080} {');
+    expect(landing).not.toMatch(/landing_ruta/);
+  });
+});

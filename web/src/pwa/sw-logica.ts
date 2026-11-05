@@ -37,6 +37,14 @@ export const ICONO_NOTIFICACION = '/iconos/icono-192.png';
 /** Rutas que NUNCA toca el service worker (datos, tiempo real, archivos firmados). */
 const NUNCA = ['/api/', '/socket.io/'];
 
+/**
+ * LAND-01: la landing que Caddy sirve en `/landing/` del dominio del panel NO es parte de la
+ * SPA. Si el service worker la tratara como navegación del panel, sin red respondería con el
+ * `index.html` de la SPA (el panel disfrazado de landing). Pasa directo a la red, como si el
+ * service worker no existiera.
+ */
+const esLanding = (ruta: string): boolean => ruta === '/landing' || ruta.startsWith('/landing/');
+
 export function nombreCache(version: string): string {
   return `${PREFIJO_CACHE}${version}`;
 }
@@ -51,6 +59,7 @@ export function estrategia(p: PeticionSW, origen: string): Estrategia {
   }
   if (url.origin !== origen) return 'ignorar';
   if (NUNCA.some((prefijo) => url.pathname.startsWith(prefijo))) return 'ignorar';
+  if (esLanding(url.pathname)) return 'ignorar';
   if (p.mode === 'navigate') return 'armazon';
   if (
     url.pathname.startsWith('/assets/') ||

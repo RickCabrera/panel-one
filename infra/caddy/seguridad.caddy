@@ -111,3 +111,17 @@
 		file_server
 	}
 }
+
+# La landing bajo `/landing/` del dominio del panel (LAND-01; {args[0]} = carpeta de
+# `web/dist-landing`), mientras no haya dominio propio (LANDING_HOST). `handle_path` le quita
+# el prefijo: adentro es la MISMA landing que en la raíz de su dominio (el build va con
+# `base: './'`, sus rutas son relativas), con la misma CSP y la misma caché de `/assets/*`.
+# `/landing` (sin diagonal) redirige a `/landing/`, con su query: sin la diagonal, las rutas
+# relativas (`./assets/…`) resolverían contra la raíz, que es la SPA. Va ANTES del `spa`, que
+# es un `handle` sin matcher y por eso queda al final: el fallback de la SPA no la alcanza.
+(landing_ruta) {
+	redir /landing /landing/{?query} 308
+	handle_path /landing/* {
+		import landing {args[0]}
+	}
+}

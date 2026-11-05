@@ -9,8 +9,12 @@ import { defineConfig } from 'vitest/config';
  * formulario de contacto, sin React. Sale a `dist-landing/` (no a `dist/`), así que no entra al
  * precache de la PWA ni al tope de `check:bundle`. `npm run build` construye las dos.
  *
- * En producción Caddy sirve `dist-landing/` en el dominio raíz y pasa `/api` al api en el mismo
- * origen (el formulario postea a `/api/publico/contacto`, sin CORS): nota en F1-002.
+ * En producción Caddy sirve `dist-landing/` en DOS lugares (LAND-01, docs/deploy-railway.md): en
+ * `/landing/` del dominio del panel (siempre) y en la raíz de `LANDING_HOST` (cuando exista el
+ * dominio propio). Por eso el build usa `base: './'`: el HTML pide `./assets/…` y el CSS sus
+ * fuentes relativas a sí mismo, y el MISMO build funciona bajo `/landing/` y en `/`. En los dos el
+ * `/api` va al api en el mismo origen (el formulario postea a `/api/publico/contacto`, absoluto,
+ * sin CORS): nota en F1-002.
  *
  * `URL_PANEL` (sin `VITE_`, no entra a ningún bundle): a dónde lleva "Entrar al panel". Por
  * defecto `/login`, el panel en el mismo origen.
@@ -18,7 +22,8 @@ import { defineConfig } from 'vitest/config';
  *
  * `URL_SITIO` (UI-03, sin `VITE_`): el origen público de la landing, p. ej.
  * `https://yocontrolo.mx`, para la `og:image` absoluta que piden WhatsApp y Facebook. Vacío por
- * defecto: la imagen queda como `/og.png` (relativa; algunos lectores de Open Graph no la toman).
+ * defecto: la imagen queda como `./og.png` (relativa a la página, para que sirva igual bajo
+ * `/landing/` y en la raíz; algunos lectores de Open Graph no toman una relativa).
  */
 function reemplazos(valores: Record<string, string>): Plugin {
   return {
@@ -48,13 +53,17 @@ export default defineConfig(({ mode }) => {
   };
   return {
     root: resolve(import.meta.dirname, 'landing'),
+    // Relativa (LAND-01): el mismo build se sirve en `/landing/` del panel y en la raíz de
+    // LANDING_HOST. Una absoluta (`/`) chocaría con los `/assets/*` de la SPA en el dominio del
+    // panel; una `/landing/` rompería la raíz del dominio propio.
+    base: './',
     // Su propio `public/` (robots.txt, og.png), no el de la SPA: el manifest y los íconos son de
     // la PWA.
     publicDir: resolve(import.meta.dirname, 'landing', 'public'),
     plugins: [
       reemplazos({
         __URL_PANEL__: entorno.URL_PANEL || '/login',
-        __URL_SITIO__: (entorno.URL_SITIO || '').replace(/\/+$/, ''),
+        __URL_SITIO__: (entorno.URL_SITIO || '').replace(/\/+$/, '') || '.',
       }),
     ],
     resolve: { alias: [{ find: /^@fontsource\//, replacement: `${FONTSOURCE}/` }] },

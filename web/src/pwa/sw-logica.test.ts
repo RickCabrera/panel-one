@@ -101,6 +101,14 @@ describe('estrategia por petición', () => {
     ['/manifest.webmanifest', 'GET', 'cors', 'cache-primero'],
     ['/archivos/factura.pdf', 'GET', 'cors', 'ignorar'],
     ['/assets/index-abc.js', 'POST', 'cors', 'ignorar'],
+    // LAND-01: la landing en /landing/ no es la SPA: ni armazón ni caché.
+    ['/landing', 'GET', 'navigate', 'ignorar'],
+    ['/landing/', 'GET', 'navigate', 'ignorar'],
+    ['/landing/?plan=completo', 'GET', 'navigate', 'ignorar'],
+    ['/landing/assets/index-abc.js', 'GET', 'cors', 'ignorar'],
+    ['/landing/og.png', 'GET', 'no-cors', 'ignorar'],
+    // Sólo el prefijo exacto: una ruta del panel que empiece igual sigue siendo del panel.
+    ['/landings', 'GET', 'navigate', 'armazon'],
   ])('%s %s (%s) → %s', (ruta, method, mode, esperada) => {
     expect(estrategia({ url: `${ORIGEN}${ruta}`, method, mode }, ORIGEN)).toBe(esperada);
   });

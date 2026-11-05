@@ -4,7 +4,8 @@
 #
 #     caddy run --config infra/caddy/Caddyfile.local --adapter caddyfile
 #
-# y abre http://localhost:8080. Sin HTTPS: el navegador ignora el HSTS sobre http.
+# y abre http://localhost:8080 (la landing, en http://localhost:8080/landing/). Sin HTTPS: el
+# navegador ignora el HSTS sobre http.
 {
 	admin off
 	auto_https off
@@ -15,5 +16,6 @@ import seguridad.caddy
 :8080 {
 	import cabeceras_seguridad
 	import api localhost:3000
+	import landing_ruta web/dist-landing
 	import spa web/dist
 }
