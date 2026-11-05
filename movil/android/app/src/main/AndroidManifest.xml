@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      allowBackup=false: la sesión del panel (cookies y almacenamiento del WebView) no se respalda
+      a la nube ni se pasa a otro teléfono (Android 12+: reglas_respaldo.xml). Sin FileProvider (venía en la plantilla para la cámara
+      de <input capture>, que el panel no usa; sin él Capacitor cae al selector de archivos).
+      El CI (apk.yml) comprueba las dos cosas con aapt2.
+    -->
+
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/reglas_respaldo"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -23,16 +32,6 @@
             </intent-filter>
 
         </activity>
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths"></meta-data>
-        </provider>
     </application>
 
     <!-- Permissions -->

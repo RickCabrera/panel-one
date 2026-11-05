@@ -35,6 +35,9 @@ panel de producción (`server.url` en `capacitor.config.ts`).
 - **Plugins:** ninguno además de `@capacitor/core` y `@capacitor/android`. `SystemBars` (barra de
   estado con íconos claros sobre el morado) viene dentro de `@capacitor/android`. Permiso único:
   `INTERNET` (el CI falla si aparece otro).
+- **Sin respaldo:** `allowBackup="false"` y `dataExtractionRules` que excluyen todo (Android 12+
+  también en la transferencia entre teléfonos): la sesión del panel no sale del teléfono. Sin el
+  FileProvider de la plantilla (era para la cámara de `<input capture>`, que el panel no usa).
 
 ### Lo que todavía no hace
 
@@ -60,14 +63,16 @@ Para comprobar que el archivo es el que armó el CI:
 
 ### Actualizar (y por qué hoy hay que desinstalar)
 
-El APK que se publica hoy es de **debug**: lo firma la llave de debug que el runner de GitHub
-genera en cada corrida. Android sólo instala una versión encima de otra si las dos tienen la
-**misma firma**, así que cada APK nuevo pide **desinstalar el anterior** (sólo se pierde la sesión
-guardada; los datos viven en el panel). Para no molestar de más, el CI sólo publica un APK nuevo
-cuando cambia la app (`movil/` o `apk.yml`), no en cada deploy del panel.
+Lo que se publica es siempre el APK de **release** (no debuggable: el CI lo comprueba con
+`aapt2`). Mientras no estén los secrets de la llave de release, `publicar` lo firma con una llave
+**efímera**: la genera con `keytool` en esa corrida y la borra al terminar. Android sólo instala una
+versión encima de otra si las dos tienen la **misma firma**, así que con la llave efímera cada APK
+nuevo pide **desinstalar el anterior** (sólo se pierde la sesión guardada; los datos viven en el
+panel). Para no molestar de más, el CI sólo publica un APK nuevo cuando cambia algo de la app
+(`movil/`, `apk.yml`, la URL del panel o el tipo de firma), no en cada deploy del panel.
 
-No se versiona una llave de debug fija en el repo: el repo es público y cualquiera podría firmar
-un APK "de Yo Controlo" que se instale encima del bueno. La salida es la llave de release.
+No se versiona una llave fija en el repo: el repo es público y cualquiera podría firmar un APK "de
+Yo Controlo" que se instale encima del bueno. La solución es la llave de release.
 
 ## Firmar con la llave de release (lo que falta para actualizar sin desinstalar y para Play Store)
 
@@ -90,14 +95,14 @@ un APK "de Yo Controlo" que se instale encima del bueno. La salida es la llave d
    | `ANDROID_KEY_PASSWORD` | la contraseña de la llave (la misma si no se dio otra) |
 
 3. Correr *Actions › App Android (APK) › Run workflow* sobre `main`. Desde ahí el release `android`
-   trae el APK firmado con esa llave. Quien tenga el de debug lo desinstala UNA última vez; las
+   trae el APK firmado con esa llave. Quien tenga uno firmado con llave efímera lo desinstala UNA última vez; las
    siguientes versiones se instalan encima.
 
 Cómo se protege la llave: el job `armar` (que compila código del repo, y en un PR código sin
 revisar) **nunca** la ve; arma `app-release-unsigned.apk`. El job `publicar` no hace checkout ni
-ejecuta código del repo: decodifica la llave en `$RUNNER_TEMP`, firma con `zipalign` + `apksigner`
-del SDK del runner y la borra. Los cuatro secrets o ninguno: con una configuración a medias el
-workflow falla en vez de publicar debug en silencio.
+ejecuta código del repo: con `umask 077` decodifica la llave en `$RUNNER_TEMP`, firma con
+`zipalign` + `apksigner` del SDK del runner y la borra (`trap`). Los cuatro secrets o ninguno: con
+una configuración a medias el workflow falla en vez de caer en silencio a la llave efímera.
 
 ### Play Store
 

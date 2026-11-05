@@ -3050,11 +3050,11 @@ va con el canal de versiones (F2-143).
   Ricardo, abre el panel con su sesión, Atrás regresa y sale en la raíz, un enlace a GitHub abre
   el navegador y, en modo avión en la primera apertura, se ve "Sin conexión" (después, el
   service worker de la PWA sirve el armazón del panel, como en el navegador).
-  **Decisión abierta:** hoy se publica el APK de **debug** (sin secrets de firma en el repo): la
-  llave cambia en cada corrida y una actualización pide desinstalar la anterior. Siguiente paso:
-  crear la llave de release y cargar los secrets `ANDROID_KEYSTORE_*` (`movil/README.md`). Las
-  descargas del panel (CSV, PDF/XML) no bajan dentro de la app: el WebView no tiene gestor de
-  descargas (MOV-02, si se quiere).
+  **Decisión abierta:** sin secrets de firma en el repo, el APK publicado (release, nunca debug)
+  va firmado con una llave **efímera** que cambia en cada publicación: actualizar pide desinstalar
+  la anterior. Siguiente paso: crear la llave de release y cargar los secrets
+  `ANDROID_KEYSTORE_*` (`movil/README.md`). Las descargas del panel (CSV, PDF/XML) no bajan dentro
+  de la app: el WebView no tiene gestor de descargas (MOV-02, si se quiere).
 
 ## Decisiones abiertas para Ricardo
 
