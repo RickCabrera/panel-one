@@ -104,7 +104,23 @@ public class InstaladorPs1Tests
         Assert.Equal(["FIN"], salida);
     }
 
-    // Contraseñas que rompen una cadena de conexión armada a mano: '=' al principio (se lee
+    // Compatibilidad: con valores normales la cadena sale idéntica a la de antes de
+    // Format-ValorCadena (las configs ya instaladas y lo que esperaba el diagnóstico).
+    [Fact]
+    public void Con_valores_normales_la_cadena_no_cambia()
+    {
+        var salida = CorrerPowerShell("""
+            New-CadenaConexion -Servidor '.\NATIONALSOFT' -Base 'softrestaurant10' -Usuario 'monitor_lector' -Password 'Abc123xyz'
+            """);
+
+        Assert.Equal(
+            [@"Server=.\NATIONALSOFT;Database=softrestaurant10;User ID=monitor_lector;Password=Abc123xyz;TrustServerCertificate=True"],
+            salida);
+    }
+
+    // Contraseñas que rompen una cadena de conexión armada a mano (';', comillas y espacios
+    // en las orillas ya los rechaza Test-PasswordCadena antes; aquí van como defensa en
+    // profundidad): '=' al principio (se lee
     // como "==" de llave), ';' (corta el valor), comillas, llaves y espacios en las orillas.
     [Theory]
     [InlineData("=abc-123_X")]

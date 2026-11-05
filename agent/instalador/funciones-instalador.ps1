@@ -53,7 +53,9 @@ function Test-ApiUrl {
 # Reglas de la contraseña NUEVA del lector (la que crea crear-usuario-lector.ps1). Son
 # estrictas a propósito: la contraseña viaja dentro del T-SQL (entre comillas simples),
 # dentro de la cadena de conexión (separada por ';') y por la consola. Con sólo letras,
-# números y estos símbolos no hay nada que escapar en ningún lado.
+# números y estos símbolos no hay nada que escapar en el T-SQL ni en la consola. En la cadena
+# de conexión SÍ: un '=' al principio rompe el valor, y por eso New-CadenaConexion pasa todo
+# por Format-ValorCadena (comillas de ADO.NET).
 $script:SimbolosPassword = '-_.!@#*+=?'
 
 function Test-PasswordNueva {
@@ -320,7 +322,7 @@ function Test-CodigoEnlace {
 }
 
 # Contraseña ALEATORIA del lector para el instalador de un clic: nadie la ve ni la escribe. Cumple
-# Test-PasswordNueva (sólo letras sin acento, números y los símbolos que no hay que escapar) y la
+# Test-PasswordNueva (sólo letras sin acento, números y los símbolos de $SimbolosPassword; en la cadena de conexión van con Format-ValorCadena) y la
 # política de complejidad de Windows (CHECK_POLICY = ON): al menos una minúscula, una mayúscula, un
 # número y un símbolo. Generador criptográfico, sin sesgo de módulo.
 function New-PasswordLector {
