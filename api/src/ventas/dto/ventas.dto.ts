@@ -21,6 +21,7 @@ import {
   LIMITE_TOP_DEFAULT,
   LIMITE_TOP_MAX,
   type FormasPago,
+  type TextoFormaPago,
   type OrdenTop,
   type ProductoTop,
   type Resumen,
@@ -231,6 +232,20 @@ export class TicketsQueryDto extends FiltroVentasQueryDto {
   @IsOptional()
   @IsIn(Object.values(FormaPago))
   forma?: FormaPago;
+
+  @ApiPropertyOptional({
+    maxLength: LARGO_MAX_TEXTO_FILTRO,
+    description:
+      'UI-01: el ticket tiene AL MENOS un pago cuyo texto de SR (`pagos[].formaRaw`, el que se ' +
+      've en la tabla) es EXACTAMENTE éste (sensible a mayúsculas y espacios). No depende del ' +
+      'catálogo de la empresa: funciona aunque el catálogo esté vacío. Las opciones válidas del ' +
+      'periodo salen de `GET /ventas/formas-pago/textos`. Combinable con `forma` (AND).',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(LARGO_MAX_TEXTO_FILTRO)
+  formaRaw?: string;
 
   @ApiPropertyOptional({
     type: String,
@@ -466,6 +481,28 @@ export class FormasPagoDto implements FormasPago {
     description: 'Formas de SR sin entrada en el catálogo de la empresa (ya sumadas en `otro`).',
   })
   sinCatalogo!: SinCatalogoDto[];
+}
+
+export class TextoFormaPagoDto implements TextoFormaPago {
+  @ApiProperty({
+    description:
+      'Texto de la forma de pago tal como viene de SR (el de `pagos[].formaRaw`). Es el valor a ' +
+      'mandar en `formaRaw` de `GET /ventas/tickets`.',
+  })
+  formaRaw!: string;
+
+  @ApiProperty({
+    enum: FormaPago,
+    enumName: 'FormaPago',
+    description: 'La del catálogo de la empresa; un texto sin catálogo es `otro`.',
+  })
+  forma!: FormaPago;
+
+  @ApiProperty({ ...DINERO, description: 'Σ de los pagos con ese texto (sin propina ni cambio).' })
+  monto!: string;
+
+  @ApiProperty({ description: 'Cuentas no canceladas con al menos un pago con ese texto.' })
+  cuentas!: number;
 }
 
 export class ProductoTopDto implements ProductoTop {

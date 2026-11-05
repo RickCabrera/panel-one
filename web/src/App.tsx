@@ -13,7 +13,7 @@ import { Alertas } from './paginas/Alertas';
 import { Analisis } from './paginas/Analisis';
 import { BajaReportes } from './paginas/BajaReportes';
 import { Comparativos } from './paginas/Comparativos';
-import { Cortes } from './paginas/Cortes';
+import { RedirigirATurnos } from './paginas/cortes/RedirigirATurnos';
 import { Cuenta } from './paginas/Cuenta';
 import { AyudaAgente } from './paginas/AyudaAgente';
 import { AyudaConteos } from './paginas/AyudaConteos';
@@ -46,6 +46,7 @@ import { Tablero as PlataformaTablero } from './paginas/plataforma/Tablero';
 import { Reportes } from './paginas/Reportes';
 import { Resumen } from './paginas/Resumen';
 import { Tickets } from './paginas/Tickets';
+import { Turnos } from './paginas/Turnos';
 import { TraspasoDetalle } from './paginas/TraspasoDetalle';
 import { TraspasoNuevo } from './paginas/TraspasoNuevo';
 import { Compras } from './paginas/Compras';
@@ -129,7 +130,9 @@ export function Rutas() {
         <Route path="analisis" element={<Analisis />} />
         <Route path="mesas" element={<Mesas />} />
         <Route path="tickets" element={<Tickets />} />
-        <Route path="cortes" element={<Cortes />} />
+        {/* UI-01: "Cortes" pasó a "Turnos" en la interfaz; la ruta vieja redirige con su query. */}
+        <Route path="turnos" element={<Turnos />} />
+        <Route path="cortes" element={<RedirigirATurnos />} />
         <Route path="reportes" element={<Reportes />} />
         <Route path="alertas" element={<Alertas />} />
         <Route path="productos" element={<Productos />} />

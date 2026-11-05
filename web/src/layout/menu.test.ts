@@ -16,13 +16,13 @@ import {
 // Ventas y dirección) y con «Comensales» en vez de «Clientes» (los clientes del POS).
 const FICHA: [string, string[]][] = [
   ['Principal', ['Inicio', 'Comparativos']],
-  // MVP: "Cortes" (turnos de SR) junto a Tickets.
+  // MVP: los turnos de SR junto a Tickets; UI-01: se llaman "Turnos" (antes "Cortes").
   [
     'Ventas y dirección',
     [
       'Resumen',
       'Tickets',
-      'Cortes',
+      'Turnos',
       'Monitor de mesas',
       'Análisis',
       'Ventas por canal',

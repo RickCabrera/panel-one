@@ -491,7 +491,7 @@ function filtrando(todos: Ticket[], tarde: ReadonlySet<string> = new Set()): Man
     const filtrados = todos.filter(
       (t) =>
         (!q.has('mesero') || t.mesero === q.get('mesero')) &&
-        (!q.has('forma') || t.pagos.some((p) => p.forma === q.get('forma'))) &&
+        (!q.has('formaRaw') || t.pagos.some((p) => p.formaRaw === q.get('formaRaw'))) &&
         (q.get('canceladas') !== 'excluir' || !t.cancelado) &&
         (q.get('canceladas') !== 'solo' || t.cancelado) &&
         (!producto || t.partidas.some((p) => p.producto.toLowerCase().includes(producto))) &&
@@ -517,6 +517,12 @@ const MESEROS = [
   { sucursalId: SUCURSAL_A1.id, sucursal: 'Centro', mesero: null },
 ];
 
+/** UI-01: los textos de SR del periodo, como `GET /ventas/formas-pago/textos`. */
+const TEXTOS_FORMA = [
+  { formaRaw: 'TARJETA DE CREDITO', forma: 'tarjeta', monto: '9000.00', cuentas: 8 },
+  { formaRaw: 'EFECTIVO', forma: 'efectivo', monto: '5000.00', cuentas: 6 },
+];
+
 function apiFiltros(
   todos: Ticket[],
   extra: Record<string, Manejador> = {},
@@ -525,6 +531,7 @@ function apiFiltros(
   return apiTickets([], {
     'GET /ventas/tickets': filtrando(todos, tarde),
     'GET /ventas/por-mesero': () => json(200, MESEROS),
+    'GET /ventas/formas-pago/textos': () => json(200, TEXTOS_FORMA),
     ...extra,
   });
 }
@@ -590,7 +597,7 @@ describe('Vista Tickets: filtros y orden (F2-222)', () => {
     await user.selectOptions(mesero, 'Ana');
     const campo = (nombre: string) => within(form).getByRole('textbox', { name: nombre });
     const lista = (nombre: string) => within(form).getByRole('combobox', { name: nombre });
-    await user.selectOptions(lista('Forma de pago'), 'tarjeta');
+    await user.selectOptions(lista('Forma de pago'), 'TARJETA DE CREDITO');
     await user.selectOptions(lista('Canceladas'), 'excluir');
     await user.type(campo('Importe desde'), '100.5');
     await user.type(campo('Producto'), ' taco ');
@@ -599,7 +606,7 @@ describe('Vista Tickets: filtros y orden (F2-222)', () => {
 
     await waitFor(() => expect(ubicacion().searchParams.get('mesero')).toBe('Ana'));
     const url = ubicacion().searchParams;
-    expect(url.get('forma')).toBe('tarjeta');
+    expect(url.get('pago')).toBe('TARJETA DE CREDITO');
     expect(url.get('canceladas')).toBe('excluir');
     expect(url.get('min')).toBe('100.5');
     expect(url.get('producto')).toBe('taco');
@@ -608,7 +615,8 @@ describe('Vista Tickets: filtros y orden (F2-222)', () => {
 
     await waitFor(() => expect(ultima(falsa).get('mesero')).toBe('Ana'));
     const q = ultima(falsa);
-    expect(q.get('forma')).toBe('tarjeta');
+    expect(q.get('formaRaw')).toBe('TARJETA DE CREDITO');
+    expect(q.has('forma')).toBe(false);
     expect(q.get('canceladas')).toBe('excluir');
     expect(q.get('importeMin')).toBe('100.5');
     expect(q.get('producto')).toBe('taco');
@@ -624,7 +632,7 @@ describe('Vista Tickets: filtros y orden (F2-222)', () => {
     ).toEqual([
       'Mesero: Ana×',
       'Mesa: 5×',
-      'Pago: Tarjeta×',
+      'Pago: TARJETA DE CREDITO×',
       'Desde $100.5×',
       'Sin canceladas×',
       'Producto: taco×',
@@ -634,14 +642,14 @@ describe('Vista Tickets: filtros y orden (F2-222)', () => {
   it('una recarga con los filtros en la URL pide exactamente lo mismo y los muestra', async () => {
     const falsa = apiFiltros(SURTIDOS);
     montar(
-      `/tickets?empresa=${A}&mesero=Ana&forma=tarjeta&min=100&max=2000&canceladas=solo` +
+      `/tickets?empresa=${A}&mesero=Ana&pago=TARJETA%20DE%20CREDITO&min=100&max=2000&canceladas=solo` +
         '&producto=taco&mesa=5&orden=total&dir=asc&pagina=2',
     );
     await waitFor(() => expect(pedidas(falsa).length).toBeGreaterThan(0));
     // La PRIMERA consulta ya lleva todo: nada se pierde al recargar.
     expect(Object.fromEntries(pedidas(falsa)[0].query)).toMatchObject({
       mesero: 'Ana',
-      forma: 'tarjeta',
+      formaRaw: 'TARJETA DE CREDITO',
       importeMin: '100',
       importeMax: '2000',
       canceladas: 'solo',
@@ -662,9 +670,107 @@ describe('Vista Tickets: filtros y orden (F2-222)', () => {
     montar(`/tickets?empresa=${A}&forma=cheque&min=abc&max=1e3&canceladas=todas&orden=id&dir=up`);
     await waitFor(() => expect(pedidas(falsa).length).toBeGreaterThan(0));
     const q = pedidas(falsa)[0].query;
-    for (const nombre of ['forma', 'importeMin', 'importeMax', 'canceladas', 'orden', 'dir']) {
+    // `forma=` es el param VIEJO (el ENUM): ya no filtra, ni como `forma` ni como `formaRaw`.
+    for (const nombre of [
+      'forma',
+      'formaRaw',
+      'importeMin',
+      'importeMax',
+      'canceladas',
+      'orden',
+      'dir',
+    ]) {
       expect(q.has(nombre)).toBe(false);
     }
+  });
+
+  // UI-01, el bug "Forma de pago no jala": la tabla enseña el texto de SR (`EFECTIVO`, `VISA`) y
+  // el select ofrecía el ENUM del catálogo (Efectivo/Tarjeta/Transferencia/Otro). Con el catálogo
+  // vacío todo pago es `otro`: "Efectivo" daba 0 tickets y "Otro" los daba todos. Ahora las
+  // opciones son los textos de SR del periodo y el filtro viaja como `formaRaw`.
+  it('UI-01: las opciones son los textos de SR (los de la tabla) y filtran por ese texto', async () => {
+    const user = userEvent.setup();
+    // Lo que manda la API con el catálogo vacío: todo pago es `otro`, sólo el texto distingue.
+    const sinCatalogo: Ticket[] = [
+      ticket({
+        id: 'e',
+        folio: '3001',
+        pagos: [{ formaRaw: 'EFECTIVO', forma: 'otro', monto: '1160.00' }],
+      }),
+      ticket({
+        id: 'v',
+        folio: '3002',
+        pagos: [{ formaRaw: 'VISA', forma: 'otro', monto: '1160.00' }],
+      }),
+    ];
+    const falsa = apiFiltros(sinCatalogo, {
+      'GET /ventas/formas-pago/textos': () =>
+        json(200, [
+          { formaRaw: 'VISA', forma: 'otro', monto: '1160.00', cuentas: 1 },
+          { formaRaw: 'EFECTIVO', forma: 'otro', monto: '1160.00', cuentas: 1 },
+        ]),
+    });
+    montar(`/tickets?empresa=${A}`);
+    expect(await screen.findByTestId('ticket-3001')).toHaveTextContent('EFECTIVO');
+    const form = screen.getByRole('form', { name: 'Filtros de tickets' });
+    const forma = await within(form).findByRole('combobox', { name: 'Forma de pago' });
+    await waitFor(() =>
+      expect(
+        within(forma)
+          .getAllByRole('option')
+          .map((o) => o.textContent),
+      ).toEqual(['Todas', 'VISA', 'EFECTIVO']),
+    );
+    // Las opciones salen del mismo alcance y periodo que la lista.
+    const textos = falsa.llamadas.filter((l) => l.ruta === '/ventas/formas-pago/textos');
+    expect(textos.at(-1)!.query.get('empresaId')).toBe(A);
+    expect(textos.at(-1)!.query.get('desde')).toBe(ultima(falsa).get('desde'));
+    expect(textos.at(-1)!.query.get('hasta')).toBe(ultima(falsa).get('hasta'));
+
+    await user.selectOptions(forma, 'EFECTIVO');
+    await user.click(within(form).getByRole('button', { name: 'Aplicar filtros' }));
+    await waitFor(() => expect(ultima(falsa).get('formaRaw')).toBe('EFECTIVO'));
+    await waitFor(() => expect(screen.queryByTestId('ticket-3002')).toBeNull());
+    expect(screen.getByTestId('ticket-3001')).toBeInTheDocument();
+    expect(ubicacion().searchParams.get('pago')).toBe('EFECTIVO');
+
+    // "Todas" quita el filtro: vuelven las dos.
+    await user.selectOptions(
+      within(screen.getByRole('form', { name: 'Filtros de tickets' })).getByRole('combobox', {
+        name: 'Forma de pago',
+      }),
+      '',
+    );
+    await user.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+    // (La lista sin filtro ya estaba en el cache: puede no volver a pedirse.)
+    await waitFor(() => expect(ubicacion().searchParams.has('pago')).toBe(false));
+    expect(await screen.findByTestId('ticket-3002')).toBeInTheDocument();
+  });
+
+  it('UI-01: sin la lista de textos (error), la forma de pago se escribe a mano', async () => {
+    const user = userEvent.setup();
+    const falsa = apiFiltros(SURTIDOS, {
+      'GET /ventas/formas-pago/textos': () => json(500, { statusCode: 500 }),
+    });
+    montar(`/tickets?empresa=${A}`);
+    const form = await screen.findByRole('form', { name: 'Filtros de tickets' });
+    const campo = await within(form).findByRole('textbox', { name: 'Forma de pago' });
+    await user.type(campo, 'EFECTIVO');
+    await user.click(within(form).getByRole('button', { name: 'Aplicar filtros' }));
+    await waitFor(() => expect(ultima(falsa).get('formaRaw')).toBe('EFECTIVO'));
+  });
+
+  it('UI-01: una forma de la URL que no se cobró en el periodo sigue elegible', async () => {
+    apiFiltros(SURTIDOS);
+    montar(`/tickets?empresa=${A}&pago=VALES`);
+    const form = await screen.findByRole('form', { name: 'Filtros de tickets' });
+    const forma = await within(form).findByRole('combobox', { name: 'Forma de pago' });
+    await waitFor(() => expect(forma).toHaveValue('VALES'));
+    expect(
+      within(forma)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Todas', 'VALES', 'TARJETA DE CREDITO', 'EFECTIVO']);
   });
 
   it('un rango de importes al revés en la URL tampoco llega a la API', async () => {

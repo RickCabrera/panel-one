@@ -2991,6 +2991,27 @@ va con el canal de versiones (F2-143).
   plan da 409 (admin_global puede forzarlo, con bitácora); `/usuarios` ya no crea ni da de baja
   admin_global; todo con e2e de rol y OpenAPI actualizado. Detalle en `docs/plataforma.md`.
 
+## UI-01 · Turnos, turnos abiertos y filtro de forma de pago
+
+- [ ] **UI-01 · Turnos, turnos abiertos y filtro de forma de pago** — pedida por Ricardo el
+  5-nov-2026 (fuera de la cola; rama `fix/turnos-y-forma-de-pago`). Tres correcciones en un PR:
+  1. "Cortes" se llama **"Turnos"** en toda la interfaz (título, textos, menú, liga "Ver turno"
+     de la tarjeta "Turno en curso" del Panel); la ruta es `/turnos` y `/cortes` redirige con su
+     query (`?corte=<id>` pasa a `?turno=<id>`; el viejo se sigue aceptando). La API y el modelo
+     siguen siendo `cortes`.
+  2. Botón segmentado **"Del periodo | Abiertos ahora"** (`?ver=abiertos`): los turnos abiertos
+     de todas las sucursales del alcance, sin importar el periodo, con su acumulado (venta
+     cobrada, cuentas, ticket, apertura, duración, fondo) y liga al detalle. Usa
+     `GET /cortes/en-curso` tal cual.
+  3. **Filtro "Forma de pago" de Tickets**: filtraba por el ENUM del catálogo de la empresa, que
+     no tiene CRUD y está vacío en producción (todo pago = `otro`): "Efectivo" daba 0 tickets y
+     "Otro" los daba todos. Ahora el select ofrece los textos de SR del periodo
+     (`GET /ventas/formas-pago/textos`, nuevo) y filtra por `formaRaw` (nuevo, igualdad exacta).
+     Es la única pantalla con ese filtro (Resumen, Reportes y Análisis no lo tienen).
+  **Listo cuando:** CI verde; e2e de API reproduce el bug (catálogo vacío) y prueba `formaRaw` y
+  `/ventas/formas-pago/textos` contra cálculo a mano y por rol; tests web de la ruta, la
+  redirección, "Abiertos ahora" y el filtro; OpenAPI actualizado.
+
 ## UI-02 · Marca Yo Controlo e interfaz compacta
 
 - [ ] **UI-02 · Marca Yo Controlo e interfaz compacta** — pedida por Ricardo el 5-nov-2026 (fuera
