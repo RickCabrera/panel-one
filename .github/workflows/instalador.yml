@@ -1,58 +1,63 @@
 name: Instalador del agente
 
-# Arma Instalar-YoControlo.zip (el instalador de un clic, INST-01) con la URL de producción
-# embebida y lo publica como asset del release fijo `instalador`. Así la descarga tiene una URL
-# estable que el panel enseña en "Conectar sucursal":
+# Arma Instalar-YoControlo.zip (el instalador de un clic, INST-01/INST-02) con la URL de
+# producción embebida y lo publica como asset del release fijo `instalador`, para que la descarga
+# tenga una URL estable que el panel enseña en "Conectar sucursal":
 #
 #   https://github.com/<owner>/<repo>/releases/download/instalador/Instalar-YoControlo.zip
 #
-# Corre SOLO después de un CI verde en main (nunca publica código que no pasó el gate) o a mano.
-# La URL de la API es la de producción en Railway. Para cambiarla (p. ej. un dominio propio) se
-# define la variable del repo `API_URL_PUBLICA` (Settings › Secrets and variables › Actions ›
-# Variables), que tiene prioridad. No es un secreto: es la misma dirección que cualquier
-# restaurante ve. El paquete no lleva config.json, API keys ni contraseñas (lista cerrada en
-# agent/empaquetar-instalador.ps1).
+# DOS JOBS, A PROPÓSITO:
+# - `armar` corre con permisos de SOLO LECTURA y sin credenciales guardadas: compila el código
+#   (que en un PR es código sin revisar) y deja el zip como artifact.
+# - `publicar` NUNCA compila ni ejecuta código del repo: sólo baja el artifact y lo sube al
+#   release. Es el único con `contents: write`, y sólo corre para el commit que pasó el CI en un
+#   PUSH a main (workflow_run) o para main a mano (workflow_dispatch sobre refs/heads/main), y
+#   sólo si ese commit sigue siendo la punta de main (un CI viejo que termina tarde no pisa uno
+#   nuevo).
+#
+# La URL de la API es la de producción en Railway. Para cambiarla (un dominio propio) se define la
+# variable del repo `API_URL_PUBLICA` (Settings › Secrets and variables › Actions › Variables),
+# que tiene prioridad. No es un secreto: es la misma dirección que cualquier restaurante ve.
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
   workflow_dispatch:
-  # En un PR que toca el agente o este archivo, sólo ARMA y revisa el paquete (no publica): así
-  # un cambio que rompe el empaquetado se ve antes del merge.
+  # En un PR que toca el agente o este archivo sólo se ARMA y revisa el paquete: un cambio que
+  # rompe el empaquetado se ve antes del merge. Nunca publica.
   pull_request:
     paths:
       - 'agent/**'
       - '.github/workflows/instalador.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: instalador-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: true
 
-jobs:
-  publicar:
-    name: Armar y publicar
-    if: >-
-      github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
-    runs-on: ubuntu-latest
-    env:
-      API_URL_PUBLICA: ${{ vars.API_URL_PUBLICA || 'https://web-production-730b5.up.railway.app/api' }}
-      GH_TOKEN: ${{ github.token }}
-      SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
-    steps:
-      - name: Falta la URL de la API
-        if: env.API_URL_PUBLICA == ''
-        run: |
-          echo "::error::Define la variable del repo API_URL_PUBLICA (p. ej. https://DOMINIO/api)."
-          exit 1
+env:
+  API_URL_PUBLICA: ${{ vars.API_URL_PUBLICA || 'https://web-production-730b5.up.railway.app/api' }}
+  SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
 
+jobs:
+  armar:
+    name: Armar y revisar el paquete
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.SHA }}
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -63,24 +68,89 @@ jobs:
         shell: pwsh
         run: ./agent/empaquetar-instalador.ps1 -ApiUrl $env:API_URL_PUBLICA -Salida ./Instalar-YoControlo.zip
 
-      - name: Revisar el contenido del paquete
+      # Lista EXACTA: si sobra o falta un archivo, falla (no basta con buscar lo prohibido).
+      - name: Revisar el contenido exacto del paquete
+        shell: bash
         run: |
-          unzip -l Instalar-YoControlo.zip
-          # Nada fuera de la lista cerrada (defensa extra contra un config.json colado).
-          if unzip -l Instalar-YoControlo.zip | grep -Ei 'config\.json|\.env|\.key|\.pfx|cola\.db'; then
-            echo "::error::El paquete trae un archivo que no debe ir."; exit 1
+          esperado=$(printf '%s\n' \
+            Instalar-YoControlo.cmd \
+            LEEME.txt \
+            archivos/agente.exe \
+            archivos/crear-usuario-lector.ps1 \
+            archivos/crear-usuario-lector.sql \
+            archivos/funciones-instalador.ps1 \
+            archivos/instalador.json \
+            archivos/instalar-un-clic.ps1 \
+            archivos/instalar.ps1 | sort)
+          real=$(zipinfo -1 Instalar-YoControlo.zip | tr '\\' '/' | grep -v '/$' | sort)
+          if [ "$esperado" != "$real" ]; then
+            echo "::error::El paquete no trae exactamente los archivos esperados."
+            diff <(echo "$esperado") <(echo "$real") || true
+            exit 1
+          fi
+          url=$(unzip -p Instalar-YoControlo.zip 'archivos/instalador.json' | tr -d '\r' \
+            | sed -n 's/.*"apiUrl": *"\([^"]*\)".*/\1/p')
+          if [ "$url" != "${API_URL_PUBLICA%/}" ]; then
+            echo "::error::instalador.json trae '$url' y se esperaba '${API_URL_PUBLICA%/}'."; exit 1
           fi
           sha256sum Instalar-YoControlo.zip | tee Instalar-YoControlo.zip.sha256
 
-      - name: Publicar en el release `instalador`
-        if: github.event_name != 'pull_request'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador
+          path: |
+            Instalar-YoControlo.zip
+            Instalar-YoControlo.zip.sha256
+          retention-days: 7
+
+  publicar:
+    name: Publicar en el release `instalador`
+    needs: armar
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: instalador
+
+      - name: Sólo si el commit sigue siendo la punta de main
+        id: punta
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          notas="Instalador de un clic del agente Yo Controlo. Commit ${SHA}. Se reemplaza en cada CI verde de main."
-          if ! gh release view instalador >/dev/null 2>&1; then
-            gh release create instalador --title "Instalador del agente" --notes "$notas" \
-              --target "$SHA" --latest=false
+          punta=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+          if [ "$punta" != "$SHA" ]; then
+            echo "main ya va en $punta (este es $SHA): no se publica; lo hará la corrida del nuevo."
+            echo "publicar=no" >> "$GITHUB_OUTPUT"
           else
-            gh release edit instalador --notes "$notas"
+            echo "publicar=si" >> "$GITHUB_OUTPUT"
           fi
-          gh release upload instalador Instalar-YoControlo.zip Instalar-YoControlo.zip.sha256 --clobber
+
+      # Procedencia verificable (`gh attestation verify Instalar-YoControlo.zip -R <owner>/<repo>`):
+      # prueba que el zip salió de ESTE workflow y de este commit, aunque el exe no esté firmado.
+      - uses: actions/attest-build-provenance@v2
+        if: steps.punta.outputs.publicar == 'si'
+        with:
+          subject-path: Instalar-YoControlo.zip
+
+      - name: Subir al release
+        if: steps.punta.outputs.publicar == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          corto=${SHA:0:7}
+          notas="Instalador de un clic del agente Yo Controlo. Commit ${SHA}. Se reemplaza en cada CI verde de main; cada versión queda también como Instalar-YoControlo-<commit>.zip para regresar a una anterior."
+          if ! gh release view instalador -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create instalador -R "$GITHUB_REPOSITORY" --title "Instalador del agente" \
+              --notes "$notas" --target "$SHA" --latest=false
+          else
+            gh release edit instalador -R "$GITHUB_REPOSITORY" --notes "$notas"
+          fi
+          cp Instalar-YoControlo.zip "Instalar-YoControlo-${corto}.zip"
+          gh release upload instalador -R "$GITHUB_REPOSITORY" --clobber \
+            Instalar-YoControlo.zip Instalar-YoControlo.zip.sha256 "Instalar-YoControlo-${corto}.zip"
           echo "Descarga: https://github.com/${GITHUB_REPOSITORY}/releases/download/instalador/Instalar-YoControlo.zip"

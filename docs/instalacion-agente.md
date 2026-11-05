@@ -147,9 +147,14 @@ main** (o a mano: GitHub › Actions › *Instalador del agente* › *Run workfl
 1. `dotnet publish` del agente (win-x64, un solo `agente.exe`) y
    `agent/empaquetar-instalador.ps1 -ApiUrl <API_URL_PUBLICA>`: la dirección del panel va
    embebida en `archivos\instalador.json`.
-2. Revisa que el paquete no traiga nada fuera de la lista cerrada (ni `config.json`, ni llaves).
-3. Lo sube, con su `.sha256`, al release fijo **`instalador`** del repo. La descarga queda en
-   una URL que no cambia:
+2. Revisa que el paquete traiga **exactamente** los archivos esperados (si sobra o falta uno,
+   falla) y que `instalador.json` traiga la URL correcta. Esto corre con permisos de solo
+   lectura; en los PRs que tocan el agente se arma y se revisa, pero nunca se publica.
+3. Un segundo paso, que no compila nada, lo sube con su `.sha256` y una prueba de procedencia
+   (`gh attestation verify Instalar-YoControlo.zip -R RickCabrera/panel-one`) al release fijo
+   **`instalador`**. Sólo publica el commit que pasó el CI en main y sólo si sigue siendo la punta
+   de main. Cada versión queda también como `Instalar-YoControlo-<commit>.zip`, para regresar a
+   una anterior. La descarga queda en una URL que no cambia:
    `https://github.com/RickCabrera/panel-one/releases/download/instalador/Instalar-YoControlo.zip`
 
 Para que el panel la enseñe, en Railway (servicio **api**) va

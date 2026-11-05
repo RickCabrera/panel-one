@@ -2971,6 +2971,9 @@ enlazan sin reconstruir el web (con `VITE_URL_INSTALADOR_AGENTE` de respaldo).
 **Listo cuando:** CI verde; el workflow publica el `.zip` en el release `instalador`; con
 `AGENTE_URL_DESCARGA` puesta en Railway, el diálogo "Conectar sucursal" enlaza la descarga; el
 `.zip` descargado instala en la PC de Ricardo sin preguntar la dirección del panel.
+**Decisión abierta:** el `agente.exe` va SIN firma Authenticode en un repo público (SmartScreen
+avisa "editor desconocido"). Hoy lo cubre la prueba de procedencia del workflow; la firma de código
+va con el canal de versiones (F2-143).
 
 ---
 
