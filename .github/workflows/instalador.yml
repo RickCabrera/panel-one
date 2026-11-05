@@ -7,8 +7,9 @@ name: Instalador del agente
 #   https://github.com/<owner>/<repo>/releases/download/instalador/Instalar-YoControlo.zip
 #
 # Corre SOLO después de un CI verde en main (nunca publica código que no pasó el gate) o a mano.
-# La URL de la API sale de la variable del repo `API_URL_PUBLICA` (Settings › Secrets and
-# variables › Actions › Variables). No es un secreto: es la misma dirección que cualquier
+# La URL de la API es la de producción en Railway. Para cambiarla (p. ej. un dominio propio) se
+# define la variable del repo `API_URL_PUBLICA` (Settings › Secrets and variables › Actions ›
+# Variables), que tiene prioridad. No es un secreto: es la misma dirección que cualquier
 # restaurante ve. El paquete no lleva config.json, API keys ni contraseñas (lista cerrada en
 # agent/empaquetar-instalador.ps1).
 on:
@@ -31,7 +32,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     env:
-      API_URL_PUBLICA: ${{ vars.API_URL_PUBLICA }}
+      API_URL_PUBLICA: ${{ vars.API_URL_PUBLICA || 'https://web-production-730b5.up.railway.app/api' }}
       GH_TOKEN: ${{ github.token }}
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:

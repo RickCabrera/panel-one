@@ -154,9 +154,10 @@ main** (o a mano: GitHub › Actions › *Instalador del agente* › *Run workfl
 
 Para que el panel la enseñe, en Railway (servicio **api**) va
 `AGENTE_URL_DESCARGA=<esa URL>`; el web la lee de `GET /sistema` al cargar, sin reconstruir.
-La dirección que se embebe sale de la variable del repo **`API_URL_PUBLICA`** (GitHub › Settings ›
-Secrets and variables › Actions › *Variables*), p. ej. `https://DOMINIO/api`. Si cambia el dominio
-(un dominio propio), se cambia esa variable y se corre el workflow a mano: los restaurantes ya
+La dirección que se embebe es la de producción en Railway
+(`https://web-production-730b5.up.railway.app/api`, escrita en el workflow). Si cambia el dominio
+(un dominio propio), se define la variable del repo **`API_URL_PUBLICA`** (GitHub › Settings ›
+Secrets and variables › Actions › *Variables*), que tiene prioridad, y se corre el workflow a mano: los restaurantes ya
 instalados no se tocan (su `config.json` conserva la dirección con la que se instalaron).
 
 ## Instalación avanzada (manual, para soporte)

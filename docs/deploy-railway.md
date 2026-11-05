@@ -200,8 +200,10 @@ Lo mismo, automatizado, corre en el CI (job `docker`, `infra/humo-railway.sh`).
 
 ## 7. Conectar el agente de un restaurante
 
-1. **Una vez por despliegue**: en GitHub, la variable del repo `API_URL_PUBLICA=https://DOMINIO/api`
-   (con `/api`: el agente entra por el mismo Caddy), y corre el workflow *Instalador del agente*.
+1. **Una vez por despliegue**: la dirección que se embebe en el instalador es
+   `https://DOMINIO/api` (con `/api`: el agente entra por el mismo Caddy). El workflow
+   *Instalador del agente* trae la de Railway; con otro dominio, define la variable del repo
+   `API_URL_PUBLICA` y córrelo a mano.
    En el servicio **api**, `AGENTE_URL_DESCARGA` con la URL del release `instalador` (ver
    `docs/instalacion-agente.md` › "De dónde sale el paquete").
 2. **Por restaurante**: alta de la empresa y la sucursal; en la sucursal, **Conectar sucursal** ›
