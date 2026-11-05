@@ -2,6 +2,7 @@ import { useAlcance } from '../filtros/alcance';
 import { horaEn } from '../filtros/periodo';
 import { usePeriodo } from '../filtros/usePeriodo';
 import type { Filtro } from '../paginas/inicio/consultas';
+import { Latido } from '../paginas/inicio/Sparkline';
 import { useConReloj, useMonitorMesas } from '../paginas/mesas/consultas';
 import { codificar, decodificar, operacionDe, textoSucursales } from './operacion';
 
@@ -74,7 +75,11 @@ export function OperacionEnVivo({ compacto = false }: { compacto?: boolean }) {
       title={texto}
       className={`flex min-w-0 items-center gap-2 text-xs leading-tight ${compacto ? 'shrink-0' : ''}`}
     >
-      <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${punto}`} />
+      {/* UI-05: en vivo y al día, el punto late; con demora o apagado, quieto. */}
+      <Latido
+        color={punto}
+        vivo={operacion.estado === 'en-vivo' && operacion.frescura === 'fresca'}
+      />
       {compacto ? (
         <span aria-hidden="true" className="min-w-0 whitespace-nowrap">
           <span className="block font-medium text-tinta">{corto[0]}</span>

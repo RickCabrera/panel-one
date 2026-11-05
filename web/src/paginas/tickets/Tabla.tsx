@@ -85,11 +85,11 @@ export function TablaTickets({
   return (
     // La tabla desborda DENTRO de su caja: la página nunca tiene scroll horizontal.
     <div
-      className={`min-w-0 overflow-x-auto rounded-lg border border-linea shadow-sm ${atenuada ? 'bg-realce' : 'bg-superficie'}`}
+      className={`min-w-0 overflow-x-auto rounded-2xl border border-linea-suave shadow-tarjeta ${atenuada ? 'bg-realce' : 'bg-superficie'}`}
       aria-busy={atenuada}
     >
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-linea bg-fondo text-xs text-tinta-suave uppercase">
+        <thead className="border-b border-linea bg-fondo/70 text-xs text-tinta-suave">
           <tr>
             <th scope="col" className={CELDA}>
               <span className="sr-only">Detalle</span>
@@ -138,7 +138,7 @@ export function TablaTickets({
                   <td className={`${CELDA} font-medium whitespace-nowrap`}>
                     {t.folio}
                     {t.cancelado && (
-                      <span className="ml-2 rounded bg-realce-fuerte px-1.5 py-0.5 text-xs font-normal text-tinta-suave">
+                      <span className="ml-2 rounded-full bg-realce-fuerte px-2 py-0.5 text-xs font-medium text-tinta-suave">
                         Cancelado
                       </span>
                     )}
@@ -163,7 +163,7 @@ export function TablaTickets({
                     {pesos(t.propina)}
                   </td>
                   <td
-                    className={`${CELDA} text-right whitespace-nowrap tabular-nums ${t.cancelado ? 'line-through' : ''}`}
+                    className={`${CELDA} text-right font-semibold whitespace-nowrap tabular-nums ${t.cancelado ? 'line-through' : 'text-tinta'}`}
                   >
                     {pesos(t.total)}
                   </td>
@@ -231,7 +231,7 @@ function ListaTickets({
           <select
             value={orden.orden}
             onChange={(e) => onOrdenar(siguienteOrden(orden, e.target.value as Orden))}
-            className="h-10 min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 text-sm font-medium text-tinta"
+            className="h-10 min-w-0 rounded-lg border border-linea-fuerte bg-superficie px-2.5 text-sm font-medium text-tinta shadow-xs"
           >
             {(Object.keys(NOMBRE_ORDEN) as Orden[]).map((o) => (
               <option key={o} value={o}>
@@ -248,13 +248,13 @@ function ListaTickets({
               ? 'Orden ascendente; cambiar a descendente'
               : 'Orden descendente; cambiar a ascendente'
           }
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-linea-fuerte bg-superficie text-tinta-suave"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-linea-fuerte bg-superficie text-tinta-suave shadow-xs"
         >
           <Sentido aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>
       <ul
-        className={`divide-y divide-linea-suave overflow-hidden rounded-lg border border-linea shadow-sm ${atenuada ? 'bg-realce' : 'bg-superficie'}`}
+        className={`divide-y divide-linea-suave overflow-hidden rounded-2xl border border-linea-suave shadow-tarjeta ${atenuada ? 'bg-realce' : 'bg-superficie'}`}
       >
         {tickets.map((t) => {
           const abierto = abiertos.has(t.id);
@@ -281,7 +281,7 @@ function ListaTickets({
                 // descripción (el `aria-label` solo los tapaba).
                 aria-describedby={`resumen-${t.id}`}
                 onClick={() => onAlternar(t.id)}
-                className="flex min-h-14 w-full min-w-0 items-center gap-3 px-3 py-2.5 text-left hover:bg-realce"
+                className="flex min-h-14 w-full min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-realce"
               >
                 <span id={`resumen-${t.id}`} className="min-w-0 flex-1">
                   <span className="flex min-w-0 items-center gap-2">
@@ -289,7 +289,7 @@ function ListaTickets({
                       {t.folio}
                     </span>
                     {t.cancelado && (
-                      <span className="rounded bg-realce-fuerte px-1.5 py-0.5 text-xs text-tinta-suave">
+                      <span className="rounded-full bg-realce-fuerte px-2 py-0.5 text-xs font-medium text-tinta-suave">
                         Cancelado
                       </span>
                     )}
@@ -353,7 +353,7 @@ function Encabezado({
       <button
         type="button"
         onClick={() => onOrdenar(siguienteOrden(orden, columna))}
-        className="inline-flex items-center gap-1 rounded uppercase hover:text-tinta-medio"
+        className="inline-flex items-center gap-1 rounded font-medium hover:text-tinta"
       >
         {texto}
         <span aria-hidden="true" className={activo ? '' : 'invisible'}>

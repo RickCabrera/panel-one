@@ -27,7 +27,8 @@ import { usePeriodo } from '../filtros/usePeriodo';
 import { useEsMovil } from '../layout/useEsMovil';
 import { useAnalisis } from './analisis/consultas';
 import type { Filtro } from './inicio/consultas';
-import { Esqueleto, Vacio } from './inicio/Tarjeta';
+import { BOTON_SECUNDARIO, CAMPO } from './botones';
+import { EstadoVacio, EsqueletoFilas } from './inicio/Tarjeta';
 import {
   parametrosDe,
   POR_PAGINA,
@@ -56,8 +57,7 @@ function horaEn(zona: string, instante: string): string {
   }).format(new Date(instante));
 }
 
-const BOTON =
-  'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
+const BOTON = BOTON_SECUNDARIO;
 
 function mensajeDe(error: unknown): string {
   if (error instanceof ErrorApi || error instanceof ErrorCsv || error instanceof ErrorExport) {
@@ -167,7 +167,7 @@ function BuscadorFolio({ folio, onBuscar }: { folio: string; onBuscar: (folio: s
           maxLength={MAX_LARGO_FOLIO}
           onChange={(e) => setTexto(e.target.value)}
           placeholder="Empieza con…"
-          className="w-36 min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 py-1 text-sm focus:border-acento-borde focus:outline-none"
+          className={`${CAMPO} w-36`}
         />
       </label>
       <button type="submit" className={BOTON}>
@@ -400,22 +400,25 @@ export function Tickets() {
             No se pudieron cargar los tickets. {mensajeDe(consulta.error)}
           </p>
         ) : !datos ? (
-          <Esqueleto lineas={6} />
+          <EsqueletoFilas filas={8} />
         ) : datos.total === 0 ? (
-          <Vacio>
+          <EstadoVacio
+            titulo={
+              conFiltros
+                ? 'Ningún ticket del periodo cumple los filtros.'
+                : folio
+                  ? `Ningún ticket del periodo tiene un folio que empiece con "${folio}".`
+                  : 'No hay tickets en este periodo.'
+            }
+          >
             {conFiltros ? (
-              <>
-                <span className="block">Ningún ticket del periodo cumple los filtros.</span>
-                <button type="button" className={`${BOTON} mt-2`} onClick={limpiarTodo}>
-                  Quitar filtros
-                </button>
-              </>
-            ) : folio ? (
-              `Ningún ticket del periodo tiene un folio que empiece con "${folio}".`
-            ) : (
-              'No hay tickets en este periodo.'
+              <button type="button" className={`${BOTON} mt-3`} onClick={limpiarTodo}>
+                Quitar filtros
+              </button>
+            ) : folio ? null : (
+              'Cuando se cierre una cuenta en el periodo elegido, aparece aquí.'
             )}
-          </Vacio>
+          </EstadoVacio>
         ) : datos.items.length === 0 ? (
           <div className="py-6 text-center text-sm text-tinta-tenue">
             <p>Esta página ya no tiene tickets.</p>

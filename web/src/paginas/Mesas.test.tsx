@@ -187,6 +187,25 @@ describe('Monitor de mesas: KPIs y grid', () => {
     expect(tarjetaMesa('Mesa 12 · Centro')).not.toHaveTextContent('partidas más');
   });
 
+  it('en rojo, además del color, un icono de alerta y la palabra «Atención»; en los demás, no', async () => {
+    apiMesas(() => json(200, [centro()]));
+    montar(`/mesas?empresa=${A}`);
+    await screen.findByTestId('kpi-mesas');
+
+    const aviso = within(tarjetaMesa('Mesa 3 · Centro')).getByTestId('mesa-atencion');
+    expect(aviso).toHaveTextContent('Atención');
+    expect(aviso.querySelector('svg')).not.toBeNull();
+    // El lector de pantalla ya lo oye en la píldora de minutos: no se repite.
+    expect(aviso).toHaveAttribute('aria-hidden', 'true');
+    expect(within(tarjetaMesa('Mesa 3 · Centro')).getByTestId('mesa-minutos')).toHaveTextContent(
+      'requiere atención',
+    );
+
+    for (const otra of ['Mesa 7 · Centro', 'Mesa 10 · Centro', 'Mesa 12 · Centro']) {
+      expect(within(tarjetaMesa(otra)).queryByTestId('mesa-atencion')).not.toBeInTheDocument();
+    }
+  });
+
   it('con una sucursal elegida, las tarjetas no repiten el nombre de la sucursal', async () => {
     apiMesas((l: Llamada) => {
       expect(l.query.get('sucursalId')).toBe(SUCURSAL_A1.id);

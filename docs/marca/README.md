@@ -98,10 +98,40 @@ marca. Únicos ajustes: el ámbar del semáforo y de la serie 3 en claro bajó a
 anterior quedaba en 2.9:1 sobre el fondo lavanda), y la serie 2 pasó de índigo a verde azulado
 (`#0D8A7F` claro, `#2DD4BF` oscuro) para no confundirse con el violeta de la serie 1.
 
+### Hero y profundidad (UI-05, v3)
+
+El hero del Inicio (la venta del periodo), el MRR de Plataforma y el fondo del login son
+**siempre** el morado de marca con un degradado hacia el violeta, como las secciones moradas de
+la landing. Sus tokens no siguen al tema de las superficies; `paleta.test.ts` mide su texto
+contra los **dos** extremos del degradado (así cualquier punto intermedio pasa).
+
+| Token | Claro | Oscuro | Uso |
+| --- | --- | --- | --- |
+| hero → hero-fin | `#2C1533` → `#4A2470` | `#3D1C4F` → `#241029` | El degradado (en oscuro sube un escalón para no perderse contra las tarjetas). |
+| hero-borde | `#2C1533` | `#5A3570` | Contorno (en oscuro es lo que lo separa del fondo). |
+| hero-tinta / hero-tenue | `#F6EEE6` / `#D3C0D9` | igual | Texto y texto secundario sobre el hero. |
+| hero-cifra | `#EFD9B6` | igual | La cifra grande y la línea de la gráfica: el arena, un punto más claro. |
+| hero-sube / hero-baja | `#8EE6B4` / `#FFB4AC` | igual | El cambio contra la base (siempre con flecha y signo en el texto). |
+| hero-rejilla | `#FFFFFF1F` | igual | Rejilla de la gráfica dentro del hero. |
+| brillo | `#6D3FC02E` | `#926FD040` | Halo violeta: hover de tarjetas, foco de campos. |
+| resalte | `#FFFFFF` | `#FFFFFF14` | El filo de luz de 1 px arriba de cada tarjeta. |
+
+Sombras (`index.css`): `shadow-tarjeta` (filo de luz + contacto + sombra larga y difusa),
+`shadow-tarjeta-alta` (al pasar: la difusa se tiñe de violeta) y `shadow-hero`. Radios: tarjetas
+`rounded-2xl`, controles `rounded-lg`, insignias `rounded-full`.
+
+Movimiento, siempre con `motion-safe:` (o `prefiereMovimiento()` en JS): las tarjetas del Inicio
+aparecen una tras otra al abrir (un solo momento), el punto del «en vivo» late, los esqueletos
+destellan y las cifras cuentan del valor anterior al nuevo al refrescarse (en `bigint`, nunca
+float; la primera vez se ven tal cual).
+
 ## Tipografía
 
-- **Outfit** 600/700 para títulos (`h1`–`h3`, `font-titulo`).
-- **Inter** 400–700 para todo lo demás, con cifras tabulares en las tablas.
+- **Lilita One** (la display de la landing) sólo para el `h1` de cada vista (UI-05). Trae un
+  solo peso: `font-synthesis: none` evita las negritas falsas.
+- **Outfit** 600/700 para subtítulos (`h2`, `h3`, `font-titulo`) y el número de mesa.
+- **Inter** 400–700 para todo lo demás. Las cifras de dinero grandes (KPI, hero) van en Inter
+  semibold con cifras tabulares y `tracking-tight`: no bailan cuando cuentan.
 
-Ambas empaquetadas con `@fontsource` (sólo el subconjunto latin y esos pesos; ver
+Las tres empaquetadas con `@fontsource` (sólo el subconjunto latin y esos pesos; ver
 `web/src/main.tsx`): la CSP del sitio es `font-src 'self'`.

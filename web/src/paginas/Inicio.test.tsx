@@ -627,8 +627,17 @@ describe('refresco', () => {
         '/ventas/formas-pago',
         '/mesas/abiertas',
       ]) {
-        expect(pedidas(api, ruta), ruta).toHaveLength(2);
+        // UI-05: con "Hoy" también se pide la base de la comparación del hero (otro día): aquí
+        // se cuentan sólo las de hoy.
+        expect(
+          pedidas(api, ruta).filter((l) => l.query.get('desde') !== '2026-09-13'),
+          ruta,
+        ).toHaveLength(2);
       }
+      // Y la base también se refresca.
+      expect(
+        pedidas(api, '/ventas/resumen').filter((l) => l.query.get('desde') === '2026-09-13'),
+      ).toHaveLength(2);
     });
   });
 
@@ -662,5 +671,97 @@ describe('refresco', () => {
     await waitFor(() => expect(pedidas(api, '/mesas/abiertas')).toHaveLength(4));
     expect(pedidas(api, '/ventas/resumen')).toHaveLength(1);
     expect(pedidas(api, '/ventas/por-hora')).toHaveLength(1);
+  });
+});
+
+describe('hero: comparación contra el mismo día de la semana pasada (UI-05)', () => {
+  it('con "Hoy" pide la base a la misma altura y dice cuánto cambió, con signo y la base nombrada', async () => {
+    const api = apiDashboard({
+      'GET /ventas/resumen': (l: Llamada) =>
+        json(
+          200,
+          l.query.get('alturaAl')
+            ? resumen({ venta: '10000.00', cuentas: 30 })
+            : resumen({ venta: '15234.50' }),
+        ),
+    });
+    montar(`/?empresa=${A}`);
+
+    const delta = await screen.findByTestId('venta-total-delta');
+    expect(delta).toHaveTextContent('+52.3 % (+$5,234.50)');
+    expect(delta).toHaveTextContent('vs el mismo día de la semana pasada a esta hora');
+    // La base: el 13 (7 días antes del "hoy" de CDMX), cortada a la misma hora.
+    const base = pedidas(api, '/ventas/resumen').find((l) => l.query.get('alturaAl') !== null)!;
+    expect(base.query.get('desde')).toBe('2026-09-13');
+    expect(base.query.get('hasta')).toBe('2026-09-13');
+    expect(base.query.get('empresaId')).toBe(A);
+    // El importe del hero sigue siendo el de siempre.
+    expect(screen.getByTestId('venta-total')).toHaveTextContent('$15,234.50');
+  });
+
+  it('a la baja: flecha hacia abajo, tono de baja y el signo menos escrito', async () => {
+    apiDashboard({
+      'GET /ventas/resumen': (l: Llamada) =>
+        json(
+          200,
+          l.query.get('alturaAl')
+            ? resumen({ venta: '20000.00', cuentas: 50 })
+            : resumen({ venta: '15234.50' }),
+        ),
+    });
+    montar(`/?empresa=${A}`);
+
+    const delta = await screen.findByTestId('venta-total-delta');
+    expect(delta).toHaveTextContent('-23.8 % (-$4,765.50)');
+    expect(delta).toHaveTextContent('vs el mismo día de la semana pasada a esta hora');
+    const flecha = delta.querySelector('svg');
+    expect(flecha).toHaveAttribute('data-flecha', 'abajo');
+    expect(flecha?.parentElement).toHaveClass('text-hero-baja');
+    expect(flecha?.parentElement).not.toHaveClass('text-hero-sube');
+  });
+
+  it('sin cambio: "0.0 %" sin signo, flecha de lado y sin tono de sube ni de baja', async () => {
+    apiDashboard({
+      'GET /ventas/resumen': (l: Llamada) =>
+        json(
+          200,
+          l.query.get('alturaAl')
+            ? resumen({ venta: '15234.50', cuentas: 40 })
+            : resumen({ venta: '15234.50' }),
+        ),
+    });
+    montar(`/?empresa=${A}`);
+
+    const delta = await screen.findByTestId('venta-total-delta');
+    expect(delta).toHaveTextContent('0.0 % ($0.00)');
+    expect(delta).not.toHaveTextContent('+');
+    expect(delta).not.toHaveTextContent('-');
+    const flecha = delta.querySelector('svg');
+    expect(flecha).toHaveAttribute('data-flecha', 'lado');
+    expect(flecha?.parentElement).toHaveClass('text-hero-tinta');
+    expect(flecha?.parentElement).not.toHaveClass('text-hero-baja');
+    expect(flecha?.parentElement).not.toHaveClass('text-hero-sube');
+  });
+
+  it('una base sin ventas no da porcentaje: "—" y el porqué', async () => {
+    apiDashboard({
+      'GET /ventas/resumen': (l: Llamada) =>
+        json(200, l.query.get('alturaAl') ? resumen({ venta: '0.00', cuentas: 0 }) : resumen()),
+    });
+    montar(`/?empresa=${A}`);
+    const delta = await screen.findByTestId('venta-total-delta');
+    expect(delta).toHaveTextContent('—');
+    expect(delta).toHaveTextContent('sin ventas en el mismo día de la semana pasada a esta hora');
+    expect(delta).not.toHaveTextContent('%');
+  });
+
+  it('con otro periodo no se compara ni se pide una base', async () => {
+    const api = apiDashboard();
+    montar(`/?empresa=${A}&periodo=mes`);
+    await screen.findByTestId('venta-total');
+    expect(screen.queryByTestId('venta-total-delta')).not.toBeInTheDocument();
+    expect(pedidas(api, '/ventas/resumen').every((l) => l.query.get('alturaAl') === null)).toBe(
+      true,
+    );
   });
 });

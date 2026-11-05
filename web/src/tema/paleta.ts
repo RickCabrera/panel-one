@@ -97,6 +97,22 @@ const CLARO = {
   'lateral-tenue': '#c3afc8',
   // El arena del logo: la marca sobre morado y el acento secundario (detalles, no texto largo).
   arena: '#e3cba8',
+  // UI-05 (v3): el «hero» del Inicio y del login. Es SIEMPRE el morado de marca con un
+  // degradado hacia el violeta, como las secciones moradas de la landing; su texto es claro y
+  // la cifra principal va en arena. Sus tokens no siguen al tema de las superficies.
+  hero: '#2c1533',
+  'hero-fin': '#4a2470',
+  'hero-borde': '#2c1533',
+  'hero-tinta': '#f6eee6',
+  'hero-tenue': '#d3c0d9',
+  'hero-cifra': '#efd9b6',
+  'hero-sube': '#8ee6b4',
+  'hero-baja': '#ffb4ac',
+  'hero-rejilla': '#ffffff1f',
+  // Brillo violeta (con alfa) para el hover y el foco de las tarjetas y el halo del «en vivo».
+  brillo: '#6d3fc02e',
+  // El filo de luz arriba de cada tarjeta (sombra interior de 1 px, con alfa en oscuro).
+  resalte: '#ffffff',
 } as const;
 
 export type Token = keyof typeof CLARO;
@@ -143,6 +159,18 @@ const OSCURO: Record<Token, string> = {
   'lateral-tinta': '#f4ece4',
   'lateral-tenue': '#c3afc8',
   arena: '#e3cba8',
+  // En oscuro el hero sube un escalón y lleva borde: si no, se pierde contra las tarjetas.
+  hero: '#3d1c4f',
+  'hero-fin': '#241029',
+  'hero-borde': '#5a3570',
+  'hero-tinta': '#f6eee6',
+  'hero-tenue': '#d3c0d9',
+  'hero-cifra': '#efd9b6',
+  'hero-sube': '#8ee6b4',
+  'hero-baja': '#ffb4ac',
+  'hero-rejilla': '#ffffff1f',
+  brillo: '#926fd040',
+  resalte: '#ffffff14',
 };
 
 export const PALETA: Record<Tema, Record<Token, string>> = { claro: CLARO, oscuro: OSCURO };

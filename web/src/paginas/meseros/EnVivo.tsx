@@ -1,14 +1,18 @@
+import { Radio } from 'lucide-react';
+
 import { formatearPesos, pesos } from '../../dinero/dinero';
 import { horaEn } from '../../filtros/periodo';
 import type { Filtro } from '../inicio/consultas';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from '../inicio/Tarjeta';
 import { useAhora } from '../mesas/consultas';
 import { textoModo } from '../mesas/textos';
+import { BarraRelativa, Lugar } from './Barra';
 import { armarTablero, useMeserosEnVivo } from './enVivo';
+import { maximosPorSucursal } from './maximos';
 
-const TH = 'px-2 py-1 font-medium';
-const TD = 'px-2 py-2';
-const NUM = 'px-2 py-2 text-right tabular-nums whitespace-nowrap';
+const TH = 'px-3 py-2 font-medium';
+const TD = 'px-3 py-2.5';
+const NUM = 'px-3 py-2.5 text-right tabular-nums whitespace-nowrap';
 
 /**
  * "En vivo" de Meseros (MVP): cuánto lleva cada mesero HOY, cobrado + en curso, y su lugar.
@@ -26,7 +30,7 @@ export function MeserosEnVivoTarjeta({
 }) {
   const { consulta, enVivo } = useMeserosEnVivo(filtro, dia);
   return (
-    <Tarjeta titulo="En vivo · hoy">
+    <Tarjeta titulo="En vivo · hoy" icono={Radio}>
       <p
         className="mb-2 text-xs text-tinta-tenue"
         data-testid="en-vivo-modo"
@@ -52,28 +56,42 @@ function Tablero({
 }) {
   const ahora = useAhora();
   const t = armarTablero(r, respuestaAt, ahora);
+  const maximos = maximosPorSucursal(
+    t.filas,
+    (f) => f.sucursalId,
+    (f) => f.total,
+  );
   return (
     <>
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="en-vivo-totales">
-        <div>
+      <dl
+        className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-linea-suave bg-linea-suave sm:grid-cols-4"
+        data-testid="en-vivo-totales"
+      >
+        <div className="bg-superficie px-3 py-2.5">
           <dt className="text-xs text-tinta-suave">Cobrado hoy</dt>
-          <dd className="text-lg font-semibold tabular-nums" data-testid="en-vivo-cobrado">
+          <dd
+            className="text-xl font-semibold tracking-tight tabular-nums"
+            data-testid="en-vivo-cobrado"
+          >
             {formatearPesos(t.cobrado)}
           </dd>
         </div>
-        <div>
+        <div className="bg-superficie px-3 py-2.5">
           <dt className="text-xs text-tinta-suave">En curso (mesas abiertas)</dt>
-          <dd className="text-lg font-semibold tabular-nums" data-testid="en-vivo-en-curso">
+          <dd
+            className="text-xl font-semibold tracking-tight tabular-nums"
+            data-testid="en-vivo-en-curso"
+          >
             {formatearPesos(t.enCurso)}
           </dd>
         </div>
-        <div>
+        <div className="bg-superficie px-3 py-2.5">
           <dt className="text-xs text-tinta-suave">Mesas abiertas</dt>
-          <dd className="text-lg font-semibold tabular-nums">{t.mesasAbiertas}</dd>
+          <dd className="text-xl font-semibold tracking-tight tabular-nums">{t.mesasAbiertas}</dd>
         </div>
-        <div>
+        <div className="bg-superficie px-3 py-2.5">
           <dt className="text-xs text-tinta-suave">Cuentas cobradas</dt>
-          <dd className="text-lg font-semibold tabular-nums">{t.cuentas}</dd>
+          <dd className="text-xl font-semibold tracking-tight tabular-nums">{t.cuentas}</dd>
         </div>
       </dl>
       {t.desconectadas.length > 0 && (
@@ -92,7 +110,7 @@ function Tablero({
       ) : (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-max text-sm" data-testid="tabla-en-vivo">
-            <thead className="text-left text-xs text-tinta-suave">
+            <thead className="border-b border-linea text-left text-xs text-tinta-suave">
               <tr>
                 <th className={TH}>Lugar</th>
                 <th className={TH}>Mesero</th>
@@ -105,10 +123,16 @@ function Tablero({
                 <th className={`${TH} text-right`}>Total</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-linea">
+            <tbody className="divide-y divide-linea-suave">
               {t.filas.map((f) => (
                 <tr key={`${f.sucursalId}|${f.mesero ?? ''}`} data-testid="fila-en-vivo">
-                  <td className={NUM}>{f.posicion ?? '—'}</td>
+                  <td className={TD}>
+                    {f.posicion === null ? (
+                      '—'
+                    ) : (
+                      <Lugar primero={f.posicion === 1}>{f.posicion}</Lugar>
+                    )}
+                  </td>
                   <td className={`${TD} ${f.mesero === null ? 'italic text-tinta-tenue' : ''}`}>
                     {f.mesero ?? 'Sin mesero'}
                   </td>
@@ -126,8 +150,10 @@ function Tablero({
                           f.mesasSinTotal > 0 ? ` (${f.mesasSinTotal} sin total)` : ''
                         }`}
                   </td>
-                  <td className={`${NUM} font-medium`} data-testid="en-vivo-fila-total">
-                    {formatearPesos(f.total)}
+                  <td className={`${NUM} font-semibold`} data-testid="en-vivo-fila-total">
+                    <BarraRelativa parte={f.total} maximo={maximos.get(f.sucursalId) ?? 0n}>
+                      {formatearPesos(f.total)}
+                    </BarraRelativa>
                   </td>
                 </tr>
               ))}

@@ -1,3 +1,4 @@
+import { CalendarRange, Trophy, UserRound } from 'lucide-react';
 import { useState } from 'react';
 
 import { useFiltroAlcance } from '../alertas/consultas';
@@ -9,7 +10,7 @@ import type {
 } from '../api/tipos';
 import { useAlcance } from '../filtros/alcance';
 import { usePeriodo } from '../filtros/usePeriodo';
-import { pesos } from '../dinero/dinero';
+import { aCentavos, pesos } from '../dinero/dinero';
 import { BotonCsv } from './analisis/Bloques';
 import { paginar } from './analisis/reglas';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './inicio/Tarjeta';
@@ -28,13 +29,15 @@ import {
 } from './meseros/reglas';
 import { fechaHoraEn, fechaParaTabla } from './tickets/formato';
 import { Vista } from './Vista';
+import { BOTON_SECUNDARIO } from './botones';
+import { BarraRelativa, Lugar } from './meseros/Barra';
+import { maximosPorSucursal } from './meseros/maximos';
 
 const ZONA_POR_DEFECTO = 'America/Mexico_City';
-const TH = 'px-2 py-1 font-medium';
-const TD = 'px-2 py-2';
-const NUM = 'px-2 py-2 text-right tabular-nums whitespace-nowrap';
-const BOTON =
-  'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
+const TH = 'px-3 py-2 font-medium';
+const TD = 'px-3 py-2.5';
+const NUM = 'px-3 py-2.5 text-right tabular-nums whitespace-nowrap';
+const BOTON = BOTON_SECUNDARIO;
 
 const importe = (v: string | null) => (v === null ? '—' : pesos(v));
 const minutos = (v: string | null) => (v === null ? '—' : `${v} min`);
@@ -75,7 +78,7 @@ export function Meseros() {
         <MeserosEnVivoTarjeta filtro={filtro} dia={hoy} zona={zona} />
       </div>
       {rango === null ? (
-        <Tarjeta titulo="Rendimiento">
+        <Tarjeta titulo="Rendimiento" icono={Trophy}>
           <Vacio>Elige un periodo válido para ver el rendimiento de los meseros.</Vacio>
         </Tarjeta>
       ) : (
@@ -85,7 +88,7 @@ export function Meseros() {
             return (
               <>
                 <Avisos r={r} />
-                <Tarjeta titulo="Rendimiento del periodo" className="mt-4">
+                <Tarjeta titulo="Rendimiento del periodo" icono={Trophy} className="mt-4">
                   {r.filas.length > 0 && (
                     <div className="mb-2 flex justify-end">
                       <BotonCsv
@@ -134,7 +137,7 @@ function Avisos({ r }: { r: RendimientoMeseros }) {
   const sinCatalogo = r.sucursales.filter((s) => !s.catalogoSincronizado);
   const ok = cuadra(r);
   return (
-    <Tarjeta titulo="Periodo">
+    <Tarjeta titulo="Periodo" icono={CalendarRange}>
       <dl
         className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr_auto_1fr]"
         data-testid="meseros-totales"
@@ -193,11 +196,16 @@ function Tabla({
   elegir: (llave: string) => void;
 }) {
   const p = paginar(r.filas, pagina);
+  const maximos = maximosPorSucursal(
+    r.filas,
+    (f) => f.sucursalId,
+    (f) => aCentavos(f.venta),
+  );
   return (
     <>
       <div className="overflow-x-auto">
         <table className="w-full min-w-max text-sm" data-testid="tabla-meseros">
-          <thead className="text-left text-xs text-tinta-suave">
+          <thead className="border-b border-linea text-left text-xs text-tinta-suave">
             <tr>
               <th className={TH}>Posición</th>
               <th className={TH}>Clave</th>
@@ -214,7 +222,7 @@ function Tabla({
               <th className={`${TH} text-right`}>Cancelaciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-linea">
+          <tbody className="divide-y divide-linea-suave">
             {p.filas.map((f) => {
               const llave = llaveFila(f);
               const de = sucursalDe(r, f.sucursalId)?.meserosEnRanking ?? 0;
@@ -224,7 +232,13 @@ function Tabla({
                   className={elegida === llave ? 'bg-realce' : undefined}
                   data-testid="fila-mesero"
                 >
-                  <td className={NUM}>{posicionTexto(f.posicion, de) ?? '—'}</td>
+                  <td className={`${TD} whitespace-nowrap`}>
+                    {f.posicion === null ? (
+                      '—'
+                    ) : (
+                      <Lugar primero={f.posicion === 1}>{posicionTexto(f.posicion, de)}</Lugar>
+                    )}
+                  </td>
                   <td className={`${TD} text-tinta-medio`}>{f.catalogo?.clave ?? '—'}</td>
                   <td className={TD}>
                     <button
@@ -237,8 +251,13 @@ function Tabla({
                   </td>
                   <td className={TD}>{f.sucursal}</td>
                   <td className={TD}>{estadoFila(f)}</td>
-                  <td className={NUM} data-testid="mesero-venta">
-                    {pesos(f.venta)}
+                  <td className={`${NUM} font-semibold`} data-testid="mesero-venta">
+                    <BarraRelativa
+                      parte={aCentavos(f.venta)}
+                      maximo={maximos.get(f.sucursalId) ?? 0n}
+                    >
+                      {pesos(f.venta)}
+                    </BarraRelativa>
                   </td>
                   <td className={NUM}>{f.cuentas}</td>
                   <td className={NUM}>{importe(f.ticketPromedio)}</td>
@@ -339,7 +358,7 @@ function Ficha({
   const p = s?.promedio;
   const vistoAt = f.catalogo ? fechaHoraEn(zona, f.catalogo.vistoAt) : null;
   return (
-    <Tarjeta titulo="Ficha del mesero" className="mt-4">
+    <Tarjeta titulo="Ficha del mesero" icono={UserRound} className="mt-4">
       <div className="text-sm" data-testid="ficha-mesero">
         <div className="flex flex-wrap items-baseline gap-x-3">
           <h3 className="text-base font-semibold">{nombreFila(f)}</h3>

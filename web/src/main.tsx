@@ -2,13 +2,15 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 // UI-02: fuentes empaquetadas (la CSP no deja traerlas de fuera). Sólo latin y los pesos que
-// se usan: Inter 400 a 700 para datos y Outfit 600/700 para títulos.
+// se usan: Inter 400 a 700 para datos, Outfit 600/700 para subtítulos y Lilita One para el h1.
 import '@fontsource/inter/latin-400.css';
 import '@fontsource/inter/latin-500.css';
 import '@fontsource/inter/latin-600.css';
 import '@fontsource/inter/latin-700.css';
 import '@fontsource/outfit/latin-600.css';
 import '@fontsource/outfit/latin-700.css';
+// UI-05: la display de la marca (la de la landing), sólo para el título de cada vista.
+import '@fontsource/lilita-one/latin-400.css';
 
 import App from './App';
 import './index.css';

@@ -54,6 +54,11 @@ const PAREJAS: [Cualquiera, Cualquiera][] = [
   ['lateral-tenue', 'lateral'],
   ['lateral-tenue', 'lateral-realce'],
   ['arena', 'lateral'],
+  // UI-05: el hero (Inicio y login) es morado de marca con degradado: su texto se mide contra
+  // los DOS extremos del degradado, así cualquier punto intermedio también pasa.
+  ...(['hero-tinta', 'hero-tenue', 'hero-cifra', 'hero-sube', 'hero-baja'] as const).flatMap(
+    (t) => [[t, 'hero'] as [Cualquiera, Cualquiera], [t, 'hero-fin'] as [Cualquiera, Cualquiera]],
+  ),
 ];
 
 /** Lo que no es texto pero da información: ≥ 3:1 contra la superficie (WCAG 1.4.11). */
@@ -104,6 +109,20 @@ describe.each(TEMAS)('paleta, tema %s', (tema) => {
   // carril (WCAG 1.4.11). El relleno solo no basta: en oscuro el violeta queda en ~2.2:1.
   it('lo elegido de un control segmentado se ve contra su carril: acento-borde ≥ 3:1 sobre realce', () => {
     expect(contraste(c['acento-borde'], c.realce)).toBeGreaterThanOrEqual(3);
+  });
+
+  // UI-05: la línea de la gráfica por hora dentro del hero es arena; el halo del «en vivo» y
+  // el semáforo de antigüedad usan los mismos tokens de siempre.
+  it('la línea de la gráfica del hero (arena) se ve contra los dos extremos del degradado: ≥ 3:1', () => {
+    expect(contraste(c['hero-cifra'], c.hero)).toBeGreaterThanOrEqual(3);
+    expect(contraste(c['hero-cifra'], c['hero-fin'])).toBeGreaterThanOrEqual(3);
+  });
+
+  // El hero se distingue del fondo de la vista: por luminancia en claro y, en oscuro, porque
+  // trae su borde propio, que tiene que verse contra el fondo (≥ 1.5:1, es un contorno, no dato).
+  it('el hero se distingue del fondo de la vista', () => {
+    const borde = Math.max(contraste(c.hero, c.fondo), contraste(c['hero-borde'], c.fondo));
+    expect(borde).toBeGreaterThanOrEqual(1.5);
   });
 
   it.each(GRAFICOS)('%s se ve contra la superficie y el fondo: ≥ 3:1', (token) => {

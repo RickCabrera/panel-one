@@ -10,11 +10,11 @@ import {
   type FiltrosTickets,
 } from '../../filtros/tickets';
 import { errorDe, ETIQUETA_CANCELADAS } from './reglasFiltros';
+import { BOTON_PRIMARIO, BOTON_SECUNDARIO, CAMPO as CAMPO_BASE } from '../botones';
+import { SUPERFICIE_TARJETA } from '../inicio/Tarjeta';
 
-const CAMPO =
-  'w-full min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 py-1 text-sm focus:border-acento-borde focus:outline-none';
-const BOTON =
-  'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
+const CAMPO = CAMPO_BASE;
+const BOTON = BOTON_SECUNDARIO;
 
 /**
  * Los filtros de Tickets (F2-222). Se editan en un borrador y se aplican juntos con "Aplicar":
@@ -75,7 +75,7 @@ export function FiltrosTicketsForm({
     <form
       aria-label="Filtros de tickets"
       onSubmit={enviar}
-      className="grid min-w-0 grid-cols-1 gap-3 rounded-lg border border-linea bg-superficie p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-4"
+      className={`grid min-w-0 grid-cols-1 gap-3 ${SUPERFICIE_TARJETA} p-4 sm:grid-cols-2 lg:grid-cols-4`}
     >
       <div className="flex min-w-0 flex-col gap-1 text-sm">
         <label htmlFor={`${id}-c1`}>Mesero</label>
@@ -197,7 +197,7 @@ export function FiltrosTicketsForm({
         />
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
-        <button type="submit" className={BOTON}>
+        <button type="submit" className={BOTON_PRIMARIO}>
           Aplicar filtros
         </button>
         <button
