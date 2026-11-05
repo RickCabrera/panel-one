@@ -162,6 +162,26 @@ describe('Turnos (MVP; UI-01: antes Cortes)', () => {
     expect(screen.queryByText(/^Cortes/)).not.toBeInTheDocument();
   });
 
+  it('el selector de periodo de la cabecera sale en Turnos y "Del periodo" lo respeta', async () => {
+    const llamadas = api();
+    montar(RUTA);
+    await filas();
+    const grupo = screen.getByRole('group', { name: 'Periodo' });
+    expect(within(grupo).getByRole('button', { name: 'Hoy' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    const usuarioEvt = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await usuarioEvt.click(within(grupo).getByRole('button', { name: 'Este mes' }));
+    await filas();
+    const ultima = llamadas.llamadas.filter((l) => l.ruta === '/cortes').at(-1)!;
+    // Octubre de 2026 en la zona del panel, hasta hoy.
+    expect(ultima.query.get('desde')).toBe('2026-10-01');
+    expect(ultima.query.get('hasta')).toBe('2026-10-22');
+    expect(ubicacion().searchParams.get('periodo')).toBe('mes');
+  });
+
   it('la lista: turno abierto y cerrado, horas en la zona de la sucursal y la venta', async () => {
     api();
     montar(RUTA);

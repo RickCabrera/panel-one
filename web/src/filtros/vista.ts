@@ -36,6 +36,9 @@ export const VISTAS_CON_PERIODO: readonly string[] = [
   '/comparativos',
   '/analisis',
   '/tickets',
+  // MVP/UI-01: "Del periodo" de Turnos es el periodo de la cabecera. Faltaba aquí y el
+  // selector no salía en /turnos (la vista usaba el periodo de la URL sin dejar cambiarlo).
+  '/turnos',
   '/reportes',
   // F2-232: la lista de clientes es del periodo.
   '/clientes',
