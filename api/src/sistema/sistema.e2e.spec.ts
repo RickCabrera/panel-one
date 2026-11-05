@@ -39,16 +39,16 @@ describe('GET /sistema (e2e, F2-202)', () => {
     else process.env.MODO_DEMO = original;
   });
 
-  it('sin token y sin MODO_DEMO → 200 { modoDemo: false, colorAcento: null }, y nada más', async () => {
+  it('sin token y sin MODO_DEMO → 200 { modoDemo: false, colorAcento: null, descargaAgente: null }, y nada más', async () => {
     const app = await crearApp(undefined);
     const r = await request(app.getHttpServer()).get('/sistema').expect(200);
-    expect(r.body).toStrictEqual({ modoDemo: false, colorAcento: null });
+    expect(r.body).toStrictEqual({ modoDemo: false, colorAcento: null, descargaAgente: null });
   });
 
-  it('con MODO_DEMO=1 → { modoDemo: true, colorAcento: null }', async () => {
+  it('con MODO_DEMO=1 → { modoDemo: true, colorAcento: null, descargaAgente: null }', async () => {
     const app = await crearApp('1');
     const r = await request(app.getHttpServer()).get('/sistema').expect(200);
-    expect(r.body).toStrictEqual({ modoDemo: true, colorAcento: null });
+    expect(r.body).toStrictEqual({ modoDemo: true, colorAcento: null, descargaAgente: null });
   });
 
   it('un token inválido no cambia nada: la ruta no depende de quién pregunta', async () => {
@@ -57,7 +57,24 @@ describe('GET /sistema (e2e, F2-202)', () => {
       .get('/sistema')
       .set('Authorization', 'Bearer basura')
       .expect(200);
-    expect(r.body).toStrictEqual({ modoDemo: false, colorAcento: null });
+    expect(r.body).toStrictEqual({ modoDemo: false, colorAcento: null, descargaAgente: null });
+  });
+
+  it('INST-02: con AGENTE_URL_DESCARGA sale la descarga del instalador, tal cual', async () => {
+    const antes = process.env.AGENTE_URL_DESCARGA;
+    process.env.AGENTE_URL_DESCARGA = 'https://descargas.monitor.test/Instalar-YoControlo.zip';
+    try {
+      const app = await crearApp(undefined);
+      const r = await request(app.getHttpServer()).get('/sistema').expect(200);
+      expect(r.body).toStrictEqual({
+        modoDemo: false,
+        colorAcento: null,
+        descargaAgente: 'https://descargas.monitor.test/Instalar-YoControlo.zip',
+      });
+    } finally {
+      if (antes === undefined) delete process.env.AGENTE_URL_DESCARGA;
+      else process.env.AGENTE_URL_DESCARGA = antes;
+    }
   });
 
   it('membresías: el color global guardado sale tal cual (la clave, nunca un hex)', async () => {
@@ -67,6 +84,6 @@ describe('GET /sistema (e2e, F2-202)', () => {
     });
     const app = await crearApp(undefined);
     const r = await request(app.getHttpServer()).get('/sistema').expect(200);
-    expect(r.body).toStrictEqual({ modoDemo: false, colorAcento: 'morado' });
+    expect(r.body).toStrictEqual({ modoDemo: false, colorAcento: 'morado', descargaAgente: null });
   });
 });

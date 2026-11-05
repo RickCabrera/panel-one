@@ -200,11 +200,16 @@ Lo mismo, automatizado, corre en el CI (job `docker`, `infra/humo-railway.sh`).
 
 ## 7. Conectar el agente de un restaurante
 
-1. En el panel: alta de la empresa y la sucursal; copia la **API key** de la sucursal (se
-   muestra una vez).
-2. En la PC del restaurante, el instalador del agente pide la dirección del panel: pon
-   **`https://DOMINIO/api`** (con `/api`: el agente entra por el mismo Caddy). En
-   `config.json` queda `"apiUrl": "https://DOMINIO/api"`.
+1. **Una vez por despliegue**: la dirección que se embebe en el instalador es
+   `https://DOMINIO/api` (con `/api`: el agente entra por el mismo Caddy). El workflow
+   *Instalador del agente* trae la de Railway; con otro dominio, define la variable del repo
+   `API_URL_PUBLICA` y córrelo a mano.
+   En el servicio **api**, `AGENTE_URL_DESCARGA` con la URL del release `instalador` (ver
+   `docs/instalacion-agente.md` › "De dónde sale el paquete").
+2. **Por restaurante**: alta de la empresa y la sucursal; en la sucursal, **Conectar sucursal** ›
+   código; en la PC del restaurante, descargar el `.zip` del enlace, doble clic en
+   `Instalar-YoControlo` y pegar el código. En `config.json` queda
+   `"apiUrl": "https://DOMINIO/api"`.
 3. `agente test` debe dar OK en la API (`GET /api/agente/yo`). El rate limit de los agentes
    es por sucursal (120/min), no por IP: varios restaurantes detrás del mismo internet no se
    estorban.

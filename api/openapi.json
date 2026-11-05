@@ -4322,7 +4322,7 @@
     },
     "/sistema": {
       "get": {
-        "description": "Pública (sin token): la marca de \"Datos de ejemplo\" tiene que verse también en el login. No expone nada de ninguna empresa. El color de interfaz es el GLOBAL de la plataforma.",
+        "description": "Pública (sin token): la marca de \"Datos de ejemplo\" tiene que verse también en el login. No expone nada de ninguna empresa. El color de interfaz es el GLOBAL de la plataforma, y la descarga del instalador del agente es la misma para todos.",
         "operationId": "SistemaController_sistema",
         "parameters": [],
         "responses": {
@@ -19723,11 +19723,18 @@
             ],
             "nullable": true,
             "description": "Membresías: el color de interfaz que eligió la plataforma para TODOS los clientes (Plataforma › Ajustes). Nulo = el del build (`VITE_COLOR_ACENTO`)."
+          },
+          "descargaAgente": {
+            "type": "string",
+            "nullable": true,
+            "description": "INST-02: de dónde se baja el instalador de un clic del agente (`AGENTE_URL_DESCARGA`, https). Es la misma para todos los clientes. Nulo = no está configurada y la interfaz dice que lo pidan a soporte.",
+            "example": "https://github.com/RickCabrera/panel-one/releases/download/instalador/Instalar-YoControlo.zip"
           }
         },
         "required": [
           "modoDemo",
-          "colorAcento"
+          "colorAcento",
+          "descargaAgente"
         ]
       },
       "SaludDto": {

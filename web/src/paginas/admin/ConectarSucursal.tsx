@@ -4,7 +4,8 @@ import type { CodigoEnlaceEmitido, Sucursal } from '../../api/tipos';
 import { api, useAccion } from './consultas';
 import { Dialogo } from './Dialogo';
 import { CLASE_BOTON, CLASE_PRIMARIO } from './estilos';
-import { formatoRestante, segundosRestantes, URL_INSTALADOR } from './reglasEnlace';
+import { formatoRestante, segundosRestantes } from './reglasEnlace';
+import { useUrlInstalador } from './urlInstalador';
 
 /**
  * "Conectar sucursal" (instalador de un clic): genera el código de enlace y explica los 3 pasos.
@@ -22,6 +23,7 @@ export function ConectarSucursal({
   onCerrar: () => void;
 }) {
   const accion = useAccion();
+  const urlInstalador = useUrlInstalador();
   const [emitido, setEmitido] = useState<CodigoEnlaceEmitido | null>(null);
   const [ahora, setAhora] = useState(() => Date.now());
 
@@ -86,11 +88,11 @@ export function ConectarSucursal({
               <li>
                 <strong>Descarga el instalador</strong> en la PC donde está el SQL Server de
                 SoftRestaurant
-                {URL_INSTALADOR ? (
+                {urlInstalador ? (
                   <>
                     {' '}
                     (
-                    <a className="text-acento-texto underline" href={URL_INSTALADOR}>
+                    <a className="text-acento-texto underline" href={urlInstalador}>
                       Instalar-YoControlo.zip
                     </a>
                     )
