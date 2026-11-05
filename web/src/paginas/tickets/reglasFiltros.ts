@@ -4,7 +4,6 @@ import {
   type Canceladas,
   type FiltrosTickets,
 } from '../../filtros/tickets';
-import { etiquetaForma } from '../inicio/formasPago';
 
 /** Reglas del panel de filtros de Tickets (F2-222), fuera del componente para probarlas solas. */
 
@@ -21,7 +20,7 @@ export function activos(
   const lista: Array<{ llave: keyof FiltrosTickets; texto: string }> = [];
   if (filtros.mesero) lista.push({ llave: 'mesero', texto: `Mesero: ${filtros.mesero}` });
   if (filtros.mesa) lista.push({ llave: 'mesa', texto: `Mesa: ${filtros.mesa}` });
-  if (filtros.forma) lista.push({ llave: 'forma', texto: `Pago: ${etiquetaForma(filtros.forma)}` });
+  if (filtros.formaRaw) lista.push({ llave: 'formaRaw', texto: `Pago: ${filtros.formaRaw}` });
   if (filtros.importeMin)
     lista.push({ llave: 'importeMin', texto: `Desde $${filtros.importeMin}` });
   if (filtros.importeMax)

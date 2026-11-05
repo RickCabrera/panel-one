@@ -19,6 +19,7 @@ import {
   type FormasPago,
   type ProductoTop,
   type Resumen,
+  type TextoFormaPago,
   type VentaDia,
   type VentaHora,
   type VentaSucursal,
@@ -39,6 +40,7 @@ import {
   POR_PAGINA_DEFAULT,
   ProductoTopDto,
   ResumenDto,
+  TextoFormaPagoDto,
   TicketsQueryDto,
   TopProductosQueryDto,
   VentaDiaDto,
@@ -177,6 +179,25 @@ export class VentasController {
   ): Promise<FormasPago> {
     return this.cache.obtener(scope, 'formas-pago', parametros(q), () =>
       this.agregados.formasPago(scope, filtroDe(q)),
+    );
+  }
+
+  @Get('formas-pago/textos')
+  @ApiOperation({
+    summary:
+      'Textos de forma de pago de SR cobrados en el periodo (opciones del filtro de Tickets).',
+    description:
+      'UI-01: cada `formaRaw` distinto de los pagos de cuentas no canceladas del rango, con su ' +
+      'forma del catálogo (o `otro`), su monto y cuántas cuentas lo usan. Orden: monto desc, ' +
+      'luego texto. Cache de 15 s por usuario-alcance y filtro.',
+  })
+  @ApiOkResponse({ type: [TextoFormaPagoDto] })
+  textosFormaPago(
+    @EmpresaScopeActual() scope: EmpresaScope,
+    @Query() q: FiltroVentasQueryDto,
+  ): Promise<TextoFormaPago[]> {
+    return this.cache.obtener(scope, 'formas-pago-textos', parametros(q), () =>
+      this.agregados.textosFormaPago(scope, filtroDe(q)),
     );
   }
 
@@ -320,7 +341,7 @@ export class VentasController {
     summary: 'Tickets del rango, paginados, con partidas y pagos (la fila expandible).',
     description:
       'Tickets = cuentas no canceladas cerradas en el rango + cancelados del rango (flag ' +
-      '`cancelado`, no suman). Filtros (F2-222) combinables con AND: mesero, mesa, forma, ' +
+      '`cancelado`, no suman). Filtros (F2-222) combinables con AND: mesero, mesa, forma, formaRaw (UI-01), ' +
       'importeMin/importeMax, canceladas, producto, clienteId (F2-232) y folio; `total` es siempre ' +
       'el del filtro ' +
       'completo. Orden por `orden`/`dir`. Sin cache.',
@@ -338,6 +359,7 @@ export class VentasController {
       mesero: q.mesero,
       mesa: q.mesa,
       forma: q.forma,
+      formaRaw: q.formaRaw,
       importeMin: q.importeMin,
       importeMax: q.importeMax,
       canceladas: q.canceladas,

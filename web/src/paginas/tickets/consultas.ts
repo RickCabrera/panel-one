@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 import { pedir } from '../../api/cliente';
-import type { FormaPago, PaginaTickets } from '../../api/tipos';
+import type { PaginaTickets, TextoFormaPago } from '../../api/tipos';
 import type { Rango } from '../../filtros/periodo';
 import {
   ORDEN_DEFAULT,
@@ -30,7 +30,8 @@ export interface ParametrosTickets {
   folio: string | undefined;
   mesero: string | undefined;
   mesa: string | undefined;
-  forma: FormaPago | undefined;
+  /** UI-01: el texto de SR (`pagos[].formaRaw`), igualdad exacta. */
+  formaRaw: string | undefined;
   importeMin: string | undefined;
   importeMax: string | undefined;
   canceladas: Exclude<Canceladas, 'incluir'> | undefined;
@@ -57,7 +58,7 @@ export function parametrosDe(
     folio: folio || undefined,
     mesero: filtros.mesero || undefined,
     mesa: filtros.mesa || undefined,
-    forma: filtros.forma || undefined,
+    formaRaw: filtros.formaRaw || undefined,
     importeMin: filtros.importeMin || undefined,
     importeMax: filtros.importeMax || undefined,
     canceladas: filtros.canceladas === 'incluir' ? undefined : filtros.canceladas,
@@ -77,7 +78,7 @@ const PARTES: ReadonlyArray<keyof ParametrosTickets> = [
   'folio',
   'mesero',
   'mesa',
-  'forma',
+  'formaRaw',
   'importeMin',
   'importeMax',
   'canceladas',
@@ -138,4 +139,33 @@ export function useTickets(p: ParametrosTickets | null, pagina: number) {
   }, [llaveSiguiente, haySiguiente, queryClient]);
 
   return consulta;
+}
+
+/**
+ * UI-01: los textos de forma de pago de SR cobrados en el alcance y periodo
+ * (`GET /ventas/formas-pago/textos`): las opciones del filtro "Forma de pago". Son los mismos
+ * textos que enseña la columna de la tabla, así que lo que se elige siempre puede coincidir.
+ */
+export function useTextosFormaPago(filtro: Filtro | null, rango: Rango | null) {
+  return useQuery({
+    queryKey: [
+      'ventas',
+      'formas-pago-textos',
+      filtro?.empresaId ?? null,
+      filtro?.sucursalId ?? null,
+      rango?.desde ?? null,
+      rango?.hasta ?? null,
+    ],
+    queryFn: ({ signal }) =>
+      pedir<TextoFormaPago[]>('/ventas/formas-pago/textos', {
+        query: {
+          empresaId: filtro!.empresaId,
+          sucursalId: filtro!.sucursalId,
+          desde: rango!.desde,
+          hasta: rango!.hasta,
+        },
+        signal,
+      }),
+    enabled: filtro !== null && rango !== null,
+  });
 }

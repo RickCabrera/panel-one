@@ -63,6 +63,18 @@ export interface FormasPago {
   sinCatalogo: Array<{ formaRaw: string; monto: string }>;
 }
 
+/** UI-01: un texto de forma de pago de SR visto en el periodo. */
+export interface TextoFormaPago {
+  /** Tal como viene de SR (`formasdepago.descripcion`). */
+  formaRaw: string;
+  /** La del catálogo de la empresa; sin entrada, `otro`. */
+  forma: FormaPago;
+  /** Σ de los pagos con ese texto (sin propina ni cambio). */
+  monto: string;
+  /** Cuentas no canceladas con al menos un pago con ese texto. */
+  cuentas: number;
+}
+
 export interface ProductoTop {
   producto: string;
   /** Suma de `partidas.total`: ANTES del descuento del cheque; no cuadra con la venta. */
@@ -274,6 +286,38 @@ export class AgregadosVentasService {
       formas: FORMAS.map((forma) => ({ forma, monto: pesos(totales.get(forma)!) })),
       sinCatalogo: sinCatalogo.map((s) => ({ formaRaw: s.formaRaw, monto: pesos(s.monto) })),
     };
+  }
+
+  /**
+   * UI-01: los TEXTOS de forma de pago de SR (`forma_raw`) cobrados en el periodo, con su forma
+   * del catálogo (o `otro`) y su monto. Son las opciones del filtro "Forma de pago" de Tickets,
+   * que filtra por el texto (`formaRaw`) y no por el ENUM: con el catálogo vacío (sin CRUD,
+   * esquema-sr.md §4) todo pago es `otro` y un filtro por ENUM no distingue nada.
+   *
+   * Sobre `pagos_ventas` (no canceladas del rango, como `formasPago`): un texto que sólo aparece
+   * en pagos de cuentas canceladas no sale como opción. Orden: monto desc y luego texto en code
+   * points (`ucs_basic`), para que no dependa del locale de la base.
+   */
+  async textosFormaPago(scope: EmpresaScope, filtro: FiltroVentas): Promise<TextoFormaPago[]> {
+    const q = await this.consulta(scope, filtro);
+    const filas = await q.consultar<{
+      forma_raw: string;
+      forma: string | null;
+      monto: unknown;
+      cuentas: number;
+    }>(Prisma.sql`SELECT p.forma_raw, cf.forma, COALESCE(sum(p.monto), 0) AS monto,
+        count(DISTINCT p.cheque_id)::int AS cuentas
+      FROM pagos_ventas p
+      LEFT JOIN catalogo_formas cf ON cf.empresa_id = p.empresa_id AND cf.forma_raw = p.forma_raw
+      GROUP BY p.forma_raw, cf.forma
+      ORDER BY monto DESC, p.forma_raw COLLATE ucs_basic`);
+    return filas.map((f) => {
+      const forma = (f.forma ?? FormaPago.otro) as FormaPago;
+      if (!FORMAS.includes(forma)) {
+        throw new Error(`Forma de pago desconocida en el catálogo: ${forma}`);
+      }
+      return { formaRaw: f.forma_raw, forma, monto: pesos(dec(f.monto)), cuentas: f.cuentas };
+    });
   }
 
   /**

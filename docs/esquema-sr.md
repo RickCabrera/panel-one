@@ -629,6 +629,16 @@ descubre nada de SR: son supuestos del modelo, sin validar, y se revisan en F1-0
 - ⚠️ **SUPUESTO — la forma de pago de un filtro es la del CATÁLOGO de la empresa** (texto sin
   catálogo → `otro`), el mismo criterio que `pagos[].forma` del detalle, **no** la columna
   `cheque_pagos.forma` guardada en la ingesta. Si las dos difieren, manda el catálogo.
+- ✅ **UI-01 (5-nov-2026) — el filtro `forma` (ENUM) no sirve mientras el catálogo esté vacío.**
+  `formas_pago_catalogo` no tiene CRUD (§4) y en producción nadie lo ha dado de alta: todo pago es
+  `otro`, así que `forma=efectivo` da 0 tickets y `forma=otro` los da todos, mientras la tabla
+  enseña el texto de SR (`EFECTIVO`, `VISA`). Por eso el filtro del panel es ahora **`formaRaw`**:
+  igualdad EXACTA con `cheque_pagos.forma_raw` (= `formasdepago.descripcion`, sensible a mayúsculas
+  y espacios, sin catálogo), con las opciones de `GET /ventas/formas-pago/textos` (los textos
+  cobrados en el periodo, de `pagos_ventas`: un texto que sólo sale en cuentas canceladas no es
+  opción, aunque se puede escribir en la URL). `forma` sigue en la API para cuando haya catálogo.
+  Si `descripcion` resulta ser un `CHAR` relleno de espacios, el web NO recorta `?pago=` para que
+  siga coincidiendo.
 - ⚠️ **SUPUESTO — el filtro de producto busca en el NOMBRE de la partida** (`strpos(lower(…))`):
   contiene, sin mayúsculas, **sin ignorar acentos** ("jamon" no encuentra "Jamón"). Si SR guarda
   nombres con y sin acento para el mismo producto, el filtro los separa; `unaccent` necesitaría
@@ -1130,6 +1140,9 @@ usa ningún agregado.
 - El catálogo todavía no tiene CRUD. F1-060 (administración) no lo incluyó porque su texto en
   el backlog no lo pide: queda como decisión abierta para Ricardo (ver `docs/nocturno-log.md`,
   entrada de F1-060). Mientras tanto se da de alta directo en la base.
+  **Consecuencia vista (UI-01):** sin catálogo, todo lo que deriva el ENUM (dona de Inicio,
+  "Cobrado por forma de pago" de un turno, el filtro viejo de Tickets) cae en `otro`. El filtro de
+  Tickets ya no depende de él (§2, filtros de F2-222); los desgloses siguen esperando el catálogo.
 
 **Cuentas con pago mixto:** ✅ una fila por forma, cada una con su importe (efectivo 100 + VISA
 175 = una cuenta de 275). Un pago capturado en una forma y corregido antes de aceptar no deja

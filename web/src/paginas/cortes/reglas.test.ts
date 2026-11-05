@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { duracionTurno, momento, nombreCorte, sentidoDiferencia } from './reglas';
+import {
+  duracionTurno,
+  elegirTurno,
+  leerTurno,
+  leerVista,
+  momento,
+  nombreCorte,
+  queryDeTurnos,
+  sentidoDiferencia,
+} from './reglas';
 
 describe('cortes: reglas', () => {
   it('momento: en la zona de la sucursal, no en UTC', () => {
@@ -30,5 +39,35 @@ describe('cortes: reglas', () => {
     expect(sentidoDiferencia('0.00')).toBe('cuadra');
     expect(sentidoDiferencia(null)).toBeNull();
     expect(sentidoDiferencia('abc')).toBeNull();
+  });
+});
+
+describe('turnos en la URL (UI-01)', () => {
+  const p = (q: string) => new URLSearchParams(q);
+
+  it('leerTurno: ?turno= manda; el ?corte= viejo sólo si no hay uno nuevo', () => {
+    expect(leerTurno(p('turno=a'))).toBe('a');
+    expect(leerTurno(p('corte=b'))).toBe('b');
+    expect(leerTurno(p('corte=b&turno=a'))).toBe('a');
+    expect(leerTurno(p('empresa=e'))).toBeNull();
+  });
+
+  it('elegirTurno: escribe ?turno=, borra el viejo ?corte= y respeta lo demás', () => {
+    expect(elegirTurno(p('empresa=e&corte=b'), 'a').toString()).toBe('empresa=e&turno=a');
+    expect(elegirTurno(p('empresa=e&turno=a&corte=b'), null).toString()).toBe('empresa=e');
+  });
+
+  it('queryDeTurnos: el query de /cortes tal cual, con corte → turno', () => {
+    expect(queryDeTurnos(p('empresa=e&periodo=hoy&corte=b')).toString()).toBe(
+      'empresa=e&periodo=hoy&turno=b',
+    );
+    expect(queryDeTurnos(p('turno=a&corte=b')).toString()).toBe('turno=a');
+    expect(queryDeTurnos(p('')).toString()).toBe('');
+  });
+
+  it('leerVista: sólo ?ver=abiertos cambia la vista; lo demás es "del periodo"', () => {
+    expect(leerVista(p('ver=abiertos'))).toBe('abiertos');
+    expect(leerVista(p(''))).toBe('periodo');
+    expect(leerVista(p('ver=todo'))).toBe('periodo');
   });
 });
