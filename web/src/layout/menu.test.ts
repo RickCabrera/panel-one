@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  barraMovilPara,
   entradaActiva,
+  paraHojaMas,
   guardarColapsadas,
   leerColapsadas,
   searchDestino,
   SECCIONES,
+  seccionesMasPara,
   seccionesPara,
   SIN_TAREA,
   type EntradaMenu,
@@ -238,5 +241,73 @@ describe('colapso recordado por usuario', () => {
     });
     expect(() => guardarColapsadas('u1', ['catalogos'])).not.toThrow();
     expect(leerColapsadas('u1')).toEqual([]);
+  });
+});
+
+describe('UI-04 · la barra inferior del celular sale de este mapa', () => {
+  it('Inicio, Mesas, Turnos y Tickets, en ese orden, para los tres roles', () => {
+    for (const rol of ['admin_global', 'admin_empresa', 'visor'] as const) {
+      expect(barraMovilPara(rol).map((e) => [e.id, e.movil!.corto, e.destino!.ruta])).toEqual([
+        ['principal.inicio', 'Inicio', '/'],
+        ['ventas.mesas', 'Mesas', '/mesas'],
+        ['ventas.cortes', 'Turnos', '/turnos'],
+        ['ventas.tickets', 'Tickets', '/tickets'],
+      ]);
+    }
+  });
+
+  it('posiciones 1 a 4 sin repetir, sólo en entradas con destino, etiquetas cortas', () => {
+    const enBarra = todas().filter((e) => e.movil);
+    expect(enBarra.map((e) => e.movil!.barra).sort()).toEqual([1, 2, 3, 4]);
+    for (const e of enBarra) {
+      expect([e.id, Boolean(e.destino), e.movil!.corto.length <= 8]).toEqual([e.id, true, true]);
+    }
+  });
+
+  it('«Más» trae todo lo demás que el rol ve, sin repetir lo de la barra', () => {
+    for (const rol of ['admin_global', 'admin_empresa', 'visor'] as const) {
+      const barra = barraMovilPara(rol).map((e) => e.id);
+      const mas = seccionesMasPara(rol).flatMap((s) => s.entradas.map((e) => e.id));
+      const todasDelRol = seccionesPara(rol).flatMap((s) => s.entradas.map((e) => e.id));
+      expect(mas.filter((id) => barra.includes(id))).toEqual([]);
+      expect([...barra, ...mas].sort()).toEqual([...todasDelRol].sort());
+    }
+  });
+
+  it('el visor no ve Administración en «Más»; admin_empresa la ve sin Empresas', () => {
+    const titulos = (rol: 'visor' | 'admin_empresa') => seccionesMasPara(rol).map((s) => s.titulo);
+    expect(titulos('visor')).not.toContain('Administración');
+    const admin = seccionesMasPara('admin_empresa').find((s) => s.id === 'administracion')!;
+    expect(admin.entradas.map((e) => e.texto)).not.toContain('Empresas');
+    // Principal se queda con Comparativos: Inicio ya está en la barra.
+    expect(seccionesMasPara('visor')[0].entradas.map((e) => e.texto)).toEqual(['Comparativos']);
+  });
+
+  it('la hoja omite las entradas pendientes (sin destino) y las secciones que quedan vacías', () => {
+    const icono = porId('principal.inicio').icono;
+    const pendiente = { tarea: 'X-1', razon: 'Todavía no existe' };
+    const hoja = paraHojaMas([
+      {
+        id: 'a',
+        titulo: 'Con mezcla',
+        entradas: [
+          { id: 'a.ok', texto: 'Navega', icono, destino: { ruta: '/x' } },
+          { id: 'a.pronto', texto: 'Pronto', icono, pendiente },
+          {
+            id: 'a.barra',
+            texto: 'En barra',
+            icono,
+            destino: { ruta: '/' },
+            movil: { barra: 1, corto: 'B' },
+          },
+        ],
+      },
+      {
+        id: 'b',
+        titulo: 'Sólo pendientes',
+        entradas: [{ id: 'b.p', texto: 'P', icono, pendiente }],
+      },
+    ]);
+    expect(hoja.map((s) => [s.id, s.entradas.map((e) => e.id)])).toEqual([['a', ['a.ok']]]);
   });
 });

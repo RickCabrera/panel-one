@@ -3071,6 +3071,28 @@ plan dentro del mensaje; sin scroll horizontal a 360 px.
   `ANDROID_KEYSTORE_*` (`movil/README.md`). Las descargas del panel (CSV, PDF/XML) no bajan dentro
   de la app: el WebView no tiene gestor de descargas (MOV-02, si se quiere).
 
+## UI-04 · Versión móvil del panel (barra inferior)
+
+- [ ] **UI-04 · Versión móvil del panel (barra inferior)** — pedida por Ricardo el 5-nov-2026
+  (fuera de la cola; rama `feat/version-movil`). Sólo /web, sin cambiar endpoints ni datos. El
+  panel también es la app Android (Capacitor carga el panel remoto en un WebView).
+  En anchos < `md` (≤ 767 px) el armazón cambia (se decide con `matchMedia`, no sólo con clases,
+  para no montar dos menús): **barra de navegación inferior** con Inicio, Mesas, Turnos, Tickets
+  (campo `movil` de `menu.ts`, con test) y **Más**, que abre una hoja inferior accesible
+  (`role=dialog`, foco atrapado, Escape/velo/arrastre/«Cerrar») con el resto del menú por
+  secciones y permisos, tema, Mi cuenta, Plataforma (sólo admin_global) y Salir; respeta
+  `env(safe-area-inset-*)` (`viewport-fit=cover`). **Cabecera compacta** de un renglón: isotipo,
+  empresa/sucursal (abre una hoja con los selectores), operación en vivo y campana. Periodo en
+  rejilla de cinco celdas (ninguna etiqueta se corta). Tickets y Turnos en tarjetas en el
+  celular (Turnos también en tableta, de dos en dos), filtros de Tickets plegables, Monitor de
+  mesas a dos columnas, Inicio a dos columnas en tableta, los modales (`Dialogo`, detalle de
+  mesa) como hojas inferiores. Desde `md`, el lateral y la cabecera de siempre. De paso del
+  revisor: `/turnos` entra en `VISTAS_CON_PERIODO` (el selector de periodo no salía en Turnos).
+  **Listo cuando:** CI verde; tests de la barra visible en móvil y oculta en escritorio, destinos
+  por rol, hoja «Más» con teclado y foco, entradas de la barra en el router; sin scroll
+  horizontal de página a 360 px; `check:bundle` y `check:pwa` en verde; capturas a 360, 390,
+  768 y 1440 en los dos temas revisadas.
+
 ## Decisiones abiertas para Ricardo
 
 No son código hasta que se decidan. Cada una dice dónde está documentada; al decidir, se

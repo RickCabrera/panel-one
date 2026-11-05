@@ -103,6 +103,20 @@
   --shadow-lg: 0 4px 8px var(--sombra), 0 16px 36px -10px var(--sombra);
 }
 
+/* UI-04: las hojas inferiores del celular suben desde abajo (sólo con `motion-safe:`). */
+@theme {
+  --animate-hoja: hoja-sube 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  @keyframes hoja-sube {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: none;
+    }
+  }
+}
+
 :root {
   font-family: var(--font-sans);
   font-size: 100%;

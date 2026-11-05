@@ -216,7 +216,7 @@ function Contenido({
       );
     }
     return (
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, i) => (
           <Esqueleto key={i} />
         ))}

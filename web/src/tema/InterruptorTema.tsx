@@ -10,7 +10,7 @@ const OPCIONES: { valor: PreferenciaTema; nombre: string; Icono: LucideIcon }[] 
 ];
 
 /** Claro / oscuro / sistema, en la cabecera (F2-211). Sólo iconos: cabe a 390 px. */
-export function InterruptorTema() {
+export function InterruptorTema({ amplio = false }: { amplio?: boolean }) {
   const { preferencia, elegir } = useTema();
   return (
     <div
@@ -28,9 +28,10 @@ export function InterruptorTema() {
             aria-pressed={activo}
             title={nombre}
             onClick={() => elegir(valor)}
-            className={`rounded-md p-1 ${activo ? 'bg-acento text-sobre-acento shadow-xs ring-1 ring-acento-borde ring-inset' : 'text-tinta-suave hover:text-tinta'}`}
+            // UI-04: en la hoja «Más» del celular, cada botón da 44 px de área táctil.
+            className={`rounded-md ${amplio ? 'flex h-11 w-11 items-center justify-center' : 'p-1'} ${activo ? 'bg-acento text-sobre-acento shadow-xs ring-1 ring-acento-borde ring-inset' : 'text-tinta-suave hover:text-tinta'}`}
           >
-            <Icono aria-hidden="true" className="h-4 w-4" />
+            <Icono aria-hidden="true" className={amplio ? 'h-5 w-5' : 'h-4 w-4'} />
           </button>
         );
       })}

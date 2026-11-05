@@ -1,65 +1,39 @@
-import { LayoutPanelTop, LogOut, Menu, UserRound, X } from 'lucide-react';
+import { LayoutPanelTop, LogOut, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 
 import { useAuth, useUsuario } from '../auth/contexto';
 import { NOMBRE_ROL } from '../auth/roles';
 import { SelectorAlcance } from '../filtros/SelectorAlcance';
-import { SelectorPeriodo } from '../filtros/SelectorPeriodo';
-import { usePeriodo } from '../filtros/usePeriodo';
 import { queryVista, usaPeriodo } from '../filtros/vista';
-import { Isotipo } from '../marca/Marca';
 import { InterruptorTema } from '../tema/InterruptorTema';
 import { Campana } from './Campana';
+import { iniciales } from './iniciales';
 import { OperacionEnVivo } from './OperacionEnVivo';
-
-/** El único selector de periodo del panel (F2-212); lo leen todas las vistas con periodo. */
-function PeriodoGlobal() {
-  const { periodo, rango, cambiarPeriodo } = usePeriodo();
-  return <SelectorPeriodo periodo={periodo} rangoActual={rango} onCambiar={cambiarPeriodo} />;
-}
+import { PeriodoGlobal } from './PeriodoGlobal';
+import { MEDIA_HASTA_LG, useMedia } from './useEsMovil';
 
 /** Botón fantasma de la cabecera: icono siempre, texto desde `xl` (el nombre accesible no cambia). */
 const BOTON_CABECERA =
   'inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium text-tinta-medio hover:bg-realce hover:text-tinta disabled:opacity-60';
 const TEXTO_BOTON = 'sr-only xl:not-sr-only';
 
-/** Las iniciales del nombre, para el avatar (dos letras como mucho). */
-function iniciales(nombre: string): string {
-  const partes = nombre.trim().split(/\s+/).filter(Boolean);
-  return (
-    (partes[0]?.[0] ?? '') + (partes.length > 1 ? (partes.at(-1)?.[0] ?? '') : '')
-  ).toUpperCase();
-}
-
-export function Topbar({ menuAbierto, onMenu }: { menuAbierto: boolean; onMenu: () => void }) {
+/** La cabecera desde `md` (UI-04: en el celular es `CabeceraMovil`). */
+export function Topbar() {
   const usuario = useUsuario();
   const { cerrarSesion } = useAuth();
   const [parametros] = useSearchParams();
   const { pathname } = useLocation();
   // Mientras sale (el POST de logout puede tardar), un segundo clic no manda otro.
   const [saliendo, setSaliendo] = useState(false);
+  // UI-04: en tableta (md a lg) la operación en vivo va en dos renglones cortos y le deja
+  // espacio a la empresa y la sucursal.
+  const tableta = useMedia(MEDIA_HASTA_LG);
 
   return (
-    <header className="print:hidden sticky top-0 z-10 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-linea bg-superficie/95 px-4 py-2 backdrop-blur md:px-6">
-      <button
-        type="button"
-        className="rounded-md p-1.5 text-tinta-medio hover:bg-realce md:hidden"
-        aria-label={menuAbierto ? 'Cerrar menú' : 'Abrir menú'}
-        aria-expanded={menuAbierto}
-        aria-controls="menu-principal"
-        onClick={onMenu}
-      >
-        {menuAbierto ? (
-          <X aria-hidden="true" className="h-5 w-5" />
-        ) : (
-          <Menu aria-hidden="true" className="h-5 w-5" />
-        )}
-      </button>
-      {/* En el teléfono el lateral está cerrado: la marca se asoma aquí. */}
-      <Isotipo className="h-7 w-7 md:hidden" />
-      <OperacionEnVivo />
-      <div className="order-3 w-full min-w-0 md:order-none md:w-auto md:flex-1">
+    <header className="print:hidden sticky top-0 z-10 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-linea bg-superficie/95 px-6 py-2 backdrop-blur">
+      <OperacionEnVivo compacto={tableta} />
+      <div className="min-w-0 flex-1">
         <SelectorAlcance />
       </div>
       <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5">

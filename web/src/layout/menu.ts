@@ -67,6 +67,12 @@ export interface EntradaMenu {
   pendiente?: Pendiente;
   /** Sin `roles` la ve todo el que entra. Ocultar por permiso no es ocultar lo pendiente. */
   roles?: readonly Rol[];
+  /**
+   * UI-04: la entrada es un destino de la barra inferior del celular, en la posición `orden`
+   * (1 a 4, de izquierda a derecha) y con la etiqueta `corto` (cabe en 1/5 de 360 px). Las
+   * demás van en la hoja «Más», con su sección. Sólo una entrada `destino` puede ir aquí.
+   */
+  movil?: { barra: 1 | 2 | 3 | 4; corto: string };
 }
 
 export interface SeccionMenu {
@@ -96,7 +102,13 @@ export const SECCIONES: readonly SeccionMenu[] = [
     id: 'principal',
     titulo: 'Principal',
     entradas: [
-      { id: 'principal.inicio', texto: 'Inicio', icono: House, destino: { ruta: '/' } },
+      {
+        id: 'principal.inicio',
+        texto: 'Inicio',
+        icono: House,
+        destino: { ruta: '/' },
+        movil: { barra: 1, corto: 'Inicio' },
+      },
       {
         id: 'principal.comparativos',
         texto: 'Comparativos',
@@ -115,15 +127,28 @@ export const SECCIONES: readonly SeccionMenu[] = [
         icono: LayoutDashboard,
         destino: { ruta: '/resumen' },
       },
-      { id: 'ventas.tickets', texto: 'Tickets', icono: Receipt, destino: { ruta: '/tickets' } },
+      {
+        id: 'ventas.tickets',
+        texto: 'Tickets',
+        icono: Receipt,
+        destino: { ruta: '/tickets' },
+        movil: { barra: 4, corto: 'Tickets' },
+      },
       // MVP: los turnos de SR (cortes de caja) y lo cobrado en cada uno. UI-01: en la interfaz se
       // llaman "Turnos" y viven en `/turnos` (`/cortes` redirige). El id se queda: es interno.
-      { id: 'ventas.cortes', texto: 'Turnos', icono: Calculator, destino: { ruta: '/turnos' } },
+      {
+        id: 'ventas.cortes',
+        texto: 'Turnos',
+        icono: Calculator,
+        destino: { ruta: '/turnos' },
+        movil: { barra: 3, corto: 'Turnos' },
+      },
       {
         id: 'ventas.mesas',
         texto: 'Monitor de mesas',
         icono: LayoutGrid,
         destino: { ruta: '/mesas' },
+        movil: { barra: 2, corto: 'Mesas' },
       },
       {
         id: 'ventas.analisis',
@@ -288,6 +313,36 @@ export function seccionesPara(rol: Rol): SeccionMenu[] {
     ...s,
     entradas: s.entradas.filter((e) => !e.roles || e.roles.includes(rol)),
   })).filter((s) => s.entradas.length > 0);
+}
+
+/**
+ * UI-04: los destinos de la barra inferior del celular que ve un rol, en su orden. Salen de
+ * `SECCIONES` (el campo `movil`), no de una lista aparte: si una entrada cambia de ruta o de
+ * permisos, la barra la sigue.
+ */
+export function barraMovilPara(rol: Rol): EntradaMenu[] {
+  return seccionesPara(rol)
+    .flatMap((s) => s.entradas)
+    .filter((e) => e.movil && e.destino)
+    .sort((a, b) => a.movil!.barra - b.movil!.barra);
+}
+
+/**
+ * UI-04: lo que va en la hoja «Más» a partir de unas secciones: sin lo que ya está en la barra
+ * y, a propósito, SIN las entradas pendientes (sin `destino`). En el lateral una pendiente se ve
+ * como «Pronto» con su razón; en la hoja del celular sería un botón que no hace nada en un
+ * espacio escaso. Hoy no hay ninguna (`SIN_TAREA` y el mapa real), pero si vuelve a haber, no
+ * sale aquí. Secciones que quedan vacías, fuera.
+ */
+export function paraHojaMas(secciones: readonly SeccionMenu[]): SeccionMenu[] {
+  return secciones
+    .map((s) => ({ ...s, entradas: s.entradas.filter((e) => !e.movil && e.destino) }))
+    .filter((s) => s.entradas.length > 0);
+}
+
+/** UI-04: la hoja «Más» de un rol (sus secciones, por `paraHojaMas`). */
+export function seccionesMasPara(rol: Rol): SeccionMenu[] {
+  return paraHojaMas(seccionesPara(rol));
 }
 
 /** `?empresa=&sucursal=` que ya trae el enlace, más la pestaña de Administración si aplica. */

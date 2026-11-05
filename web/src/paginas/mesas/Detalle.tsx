@@ -72,7 +72,8 @@ export function DetalleMesa({
   return (
     <div
       data-testid="detalle-fondo"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-velo p-2 sm:p-4"
+      // UI-04: en el celular es una hoja inferior a todo lo ancho; desde md, centrado.
+      className="fixed inset-0 z-50 flex items-end justify-center bg-velo md:items-center md:p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCerrar();
       }}
@@ -86,7 +87,7 @@ export function DetalleMesa({
         // del modal y Escape/Tab lo siguen escuchando.
         tabIndex={-1}
         onKeyDown={teclado}
-        className="flex max-h-full w-full max-w-2xl min-w-0 flex-col rounded-lg bg-superficie shadow-xl outline-none"
+        className="flex max-h-[92dvh] w-full min-w-0 flex-col rounded-t-2xl bg-superficie pb-[env(safe-area-inset-bottom)] shadow-xl outline-none motion-safe:animate-hoja md:max-h-full md:max-w-2xl md:rounded-lg md:pb-0 md:motion-safe:animate-none"
       >
         <div className="flex items-start justify-between gap-3 border-b border-linea p-4">
           <h2 id="detalle-mesa-titulo" className="min-w-0 text-lg font-semibold break-words">
