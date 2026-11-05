@@ -1,6 +1,7 @@
 import type { PlantillaCorreo } from '../adaptadores/correo/puerto';
 import { fechaLocal, instanteDesdeLocal } from '../comun/fechas';
 import { escaparHtml } from '../reportes/formato';
+import { COLOR_CORREO_POR_DEFECTO } from './entrega';
 
 /**
  * Control de folios del PAC (F2-110), PURO: de los paquetes comprados y los timbres contados, cuánto
@@ -242,7 +243,7 @@ function envolver(titulo: string, parrafos: readonly string[]): string {
     '<!doctype html><html lang="es"><body style="margin:0;padding:0;background:#f9fafb;' +
     'font-family:Arial,Helvetica,sans-serif;color:#111827;">' +
     '<div style="max-width:560px;margin:0 auto;background:#ffffff;">' +
-    '<div style="background:#0f766e;color:#ffffff;padding:16px 20px;font-size:18px;' +
+    `<div style="background:${COLOR_CORREO_POR_DEFECTO};color:#ffffff;padding:16px 20px;font-size:18px;` +
     `font-weight:600;">${escaparHtml(titulo)}</div>` +
     '<div style="padding:20px;font-size:14px;line-height:1.5;">' +
     parrafos.map((p) => `<p style="margin:0 0 12px;">${escaparHtml(p)}</p>`).join('') +

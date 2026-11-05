@@ -58,8 +58,8 @@ están al final de `backlog.md`, en "RONDA 3".
   Ningún log lo registraba completo → **F3-002**.
 - **Revisión visual en navegador real:** sólo F2-203, F2-210, F2-211 y F2-212 se midieron en
   Chrome y a 390 px. Todo lo construido después se verificó con tests, no a ojo → **F3-019**.
-- **Cuatro entradas del menú siguen deshabilitadas sin tarea** (`SIN_TAREA` en
-  `web/src/layout/menu.ts`): Empresas, Sucursales, Insumos, Grupos de insumos → **D-01**.
+- **Las cuatro entradas del menú sin tarea** (Empresas, Sucursales, Insumos, Grupos de insumos)
+  **salieron del menú** en UI-02 (D-01 decidida el 5-nov-2026); `SIN_TAREA` quedó vacío.
 - **El agente lee todo dentro del ciclo del heartbeat.** Con SQL o API lentos, el peor caso
   teórico ya ronda 8–9 min sin heartbeat (esquema-sr §11) → **F3-003**.
 - **El saldo de folios recorre toda la historia de timbres bajo el candado global** en cada
@@ -122,7 +122,7 @@ están al final de `backlog.md`, en "RONDA 3".
 | Tarea | Capacidad | Estado | Dónde | Nota / qué falta y en qué tarea |
 |---|---|---|---|---|
 | **F2-210** | Seis secciones con sus entradas | Construido | `web/src/layout/menu.ts` | Se agregaron "Movimientos y kardex" y "Áreas y canales". |
-| **F2-210** | Entradas sin módulo deshabilitadas con razón | Construido | `web/src/layout/menu.ts` | Quedan 4 `SIN_TAREA` (ver D-01). → decisión D-01 |
+| **F2-210** | Entradas sin módulo deshabilitadas con razón | Construido | `web/src/layout/menu.ts` | UI-02 quitó las 4 `SIN_TAREA` (D-01 decidida); el mecanismo de pendientes sigue para la próxima. |
 | **F2-210** | Secciones colapsables recordadas por usuario | Construido | `web/src/layout/menu.ts` | localStorage por usuario. |
 | **F2-210** | Riel de iconos, teclado, 390 px | Construido | `web/src/layout/menu.ts` | En riel, teclado no ve la razón . → F3-020 |
 | **F2-211** | Claro/oscuro/sistema en cabecera | Construido | `web/src/tema/InterruptorTema.tsx` | — |
@@ -222,7 +222,7 @@ están al final de `backlog.md`, en "RONDA 3".
 | **F2-120** | Lectura desde SR | Esperando validación diurna | `agent/src/ArkonAgente/Catalogos` | F2-241 (ver abajo); validar F2-192. |
 | **F2-120** | Forzado espera los once catálogos | Supuesto provisional | `api/src/ingesta/dto/catalogos.dto.ts` | Decisión abierta (nota F2-240). |
 | **F2-120** | Presentaciones y productos-receta | NO construido | `api/src/ingesta/dto/catalogos.dto.ts` | ALCANCE; esquema-sr §9. → F3-025 |
-| **F2-120** | Vista web de Insumos / Grupos de insumos | NO construido | `api/src/ingesta/dto/catalogos.dto.ts` | Entradas `SIN_TAREA` en `menu.ts`; decide F2-250. → decisión D-01 |
+| **F2-120** | Vista web de Insumos / Grupos de insumos | NO construido | `api/src/ingesta/dto/catalogos.dto.ts` | Sin entrada en el menú desde UI-02 (D-01: se quitaron); si se quiere, se escribe como tarea. |
 | **F2-121** | KPIs, tabla con semáforo, filtros, búsqueda | Contra seed | `web/src/paginas/Existencias.tsx` | — |
 | **F2-121** | Mín/máx editables sin escribir a SR | Construido | `web/src/paginas/Existencias.tsx` | — |
 | **F2-121** | Alerta `bajo_minimo` | Construido | `web/src/paginas/Existencias.tsx` | Alerta "sin lectura" abierta sin plazo (F2-193). |

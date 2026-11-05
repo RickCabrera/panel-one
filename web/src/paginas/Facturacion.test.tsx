@@ -371,7 +371,8 @@ describe('portal de autofactura (F2-103)', () => {
       ),
     );
     const put = falsa.llamadas.find((l) => l.metodo === 'PUT');
-    expect(put?.cuerpo).toEqual({ slug: 'demo-centro', color: '#0f766e', activo: true });
+    // El color sugerido es el acento de fábrica: el violeta de Yo Controlo desde UI-02.
+    expect(put?.cuerpo).toEqual({ slug: 'demo-centro', color: '#6d3fc0', activo: true });
     expect(
       falsa.llamadas.find((l) => l.ruta === '/facturacion/portales')?.query.get('empresaId'),
     ).toBe(A);

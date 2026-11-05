@@ -17,7 +17,7 @@ class ClienteQueCaptura implements ClienteHttp {
   }
 }
 
-const REMITENTE = { email: 'facturas@ejemplo.test', nombre: 'Monitor SoftRestaurant' };
+const REMITENTE = { email: 'facturas@ejemplo.test', nombre: 'Yo Controlo' };
 const PLANTILLA: PlantillaCorreo = {
   nombre: 'factura-emitida',
   asunto: 'Tu factura A-1024',

@@ -56,16 +56,61 @@
   --color-acento-borde: var(--acento-borde);
   --color-sobre-acento: var(--sobre-acento);
   --color-serie-1: var(--serie-1);
+  --color-sombra: var(--sombra);
+  --color-lateral: var(--lateral);
+  --color-lateral-borde: var(--lateral-borde);
+  --color-lateral-realce: var(--lateral-realce);
+  --color-lateral-tinta: var(--lateral-tinta);
+  --color-lateral-tenue: var(--lateral-tenue);
+  --color-arena: var(--arena);
+}
+
+/*
+ * Tipografía, tamaños, radios y sombras (UI-02, marca Yo Controlo). Más compacto que el de
+ * fábrica de Tailwind: el panel es de datos y se lee de un vistazo. Outfit (la del logo) para
+ * títulos; Inter para todo lo demás, con cifras tabulares en las tablas. Las fuentes van
+ * empaquetadas (@fontsource, sólo latin y los pesos usados: ver main.tsx): la CSP es
+ * `font-src 'self'`.
+ */
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-titulo: 'Outfit', 'Inter', system-ui, sans-serif;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.4rem;
+  --text-lg: 1.0625rem;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.6rem;
+  --text-2xl: 1.4375rem;
+  --text-2xl--line-height: 1.8rem;
+  --text-3xl: 1.75rem;
+  --text-3xl--line-height: 2.1rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+/* Sombras suaves, teñidas del morado de marca (el token `sombra` de paleta.ts). */
+@theme inline {
+  --shadow-xs: 0 1px 1px var(--sombra);
+  --shadow-sm: 0 1px 2px var(--sombra), 0 2px 6px -2px var(--sombra);
+  --shadow: 0 1px 3px var(--sombra), 0 4px 12px -4px var(--sombra);
+  --shadow-md: 0 2px 4px var(--sombra), 0 8px 20px -6px var(--sombra);
+  --shadow-lg: 0 4px 8px var(--sombra), 0 16px 36px -10px var(--sombra);
 }
 
 :root {
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+  font-family: var(--font-sans);
+  font-size: 100%;
   line-height: 1.5;
+  /* Inter: la «l» con cola y el cero sin barra; se lee mejor en cifras y nombres. */
+  font-feature-settings: 'cv11', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  scrollbar-color: var(--linea-fuerte) transparent;
 }
 
 body {
@@ -74,6 +119,33 @@ body {
   /* El texto que no lleva clase hereda de aquí: también tiene que seguir al tema. */
   color: var(--tinta);
   background-color: var(--fondo);
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-titulo);
+    letter-spacing: -0.01em;
+  }
+
+  /* Tablas más limpias: cifras alineadas, encabezado discreto y fila resaltada al pasar. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  thead th {
+    font-size: var(--text-xs);
+    font-weight: 600;
+  }
+  tbody tr:hover {
+    background-color: var(--realce);
+  }
+
+  /* Un foco visible y coherente para todo lo que no trae el suyo. */
+  :focus-visible {
+    outline: 2px solid var(--acento-borde);
+    outline-offset: 2px;
+  }
 }
 
 /*

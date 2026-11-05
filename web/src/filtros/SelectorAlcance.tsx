@@ -1,7 +1,7 @@
 import { useAlcance } from './alcance';
 
 const CLASE_SELECT =
-  'w-full min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 py-1.5 text-sm focus:border-acento-borde focus:outline-none sm:w-auto sm:max-w-56';
+  'w-full min-w-0 rounded-md border border-linea-fuerte bg-superficie px-2 py-1 text-sm font-medium shadow-xs focus:border-acento-borde focus:outline-none sm:w-auto sm:max-w-56';
 
 function etiqueta(nombre: string, activo: boolean): string {
   // Las inactivas se muestran: ocultarlas rompería el deep-link al histórico de

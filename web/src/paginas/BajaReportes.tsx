@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 
 import { ErrorApi, pedir } from '../api/cliente';
 import type { BajaReportes as RespuestaBaja, TipoReporte } from '../api/tipos';
-import { Logo, NOMBRE_PRODUCTO } from '../marca/Marca';
+import { Logotipo } from '../marca/Marca';
 import { CLASE_PRIMARIO } from './admin/estilos';
 
 /**
@@ -108,10 +108,9 @@ export function BajaReportes() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-fondo p-4">
-      <section className="w-full max-w-md rounded-lg border border-linea bg-superficie p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <Logo />
-          <span className="font-semibold">{NOMBRE_PRODUCTO}</span>
+      <section className="w-full max-w-md rounded-xl border border-linea bg-superficie p-6 shadow-sm">
+        <div className="mb-4">
+          <Logotipo className="h-6" />
         </div>
         <h1 className="mb-2 text-lg font-semibold">Reportes por correo</h1>
         {cuerpo}

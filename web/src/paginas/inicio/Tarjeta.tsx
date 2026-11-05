@@ -14,10 +14,10 @@ export function Tarjeta({
   return (
     <section
       aria-label={titulo}
-      className={`min-w-0 rounded-lg border border-linea bg-superficie p-4 shadow-sm ${className}`}
+      className={`min-w-0 rounded-xl border border-linea-suave bg-superficie p-4 shadow-sm ${className}`}
     >
-      <h2 className="text-sm font-medium text-tinta-suave">{titulo}</h2>
-      <div className="mt-2">{children}</div>
+      <h2 className="font-sans text-sm font-medium text-tinta-suave">{titulo}</h2>
+      <div className="mt-1.5">{children}</div>
     </section>
   );
 }
@@ -25,18 +25,23 @@ export function Tarjeta({
 /** Placeholder mientras carga: bloques grises del tamaño aproximado del contenido. */
 export function Esqueleto({ lineas = 2, grafica = false }: { lineas?: number; grafica?: boolean }) {
   return (
-    <div aria-busy="true" aria-label="Cargando" data-testid="esqueleto" className="animate-pulse">
-      <div className="h-8 w-40 rounded bg-realce-fuerte" />
+    <div
+      aria-busy="true"
+      aria-label="Cargando"
+      data-testid="esqueleto"
+      className="animate-pulse motion-reduce:animate-none"
+    >
+      <div className="h-7 w-36 rounded-md bg-realce-fuerte" />
       {Array.from({ length: lineas }, (_, i) => (
-        <div key={i} className="mt-2 h-4 w-28 rounded bg-realce-fuerte" />
+        <div key={i} className="mt-2 h-3.5 w-28 rounded-md bg-realce" />
       ))}
-      {grafica && <div className="mt-4 h-48 w-full rounded bg-realce" />}
+      {grafica && <div className="mt-4 h-48 w-full rounded-lg bg-realce" />}
     </div>
   );
 }
 
 export function Vacio({ children }: { children: ReactNode }) {
-  return <p className="py-6 text-center text-sm text-tinta-tenue">{children}</p>;
+  return <p className="py-5 text-center text-sm text-tinta-tenue">{children}</p>;
 }
 
 export function ErrorTarjeta({ error }: { error: unknown }) {

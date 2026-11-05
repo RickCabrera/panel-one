@@ -1,6 +1,15 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+// UI-02: fuentes empaquetadas (la CSP no deja traerlas de fuera). Sólo latin y los pesos que
+// se usan: Inter 400 a 700 para datos y Outfit 600/700 para títulos.
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-600.css';
+import '@fontsource/inter/latin-700.css';
+import '@fontsource/outfit/latin-600.css';
+import '@fontsource/outfit/latin-700.css';
+
 import App from './App';
 import './index.css';
 import { registrarServiceWorker } from './pwa/registrar';

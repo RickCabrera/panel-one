@@ -2,10 +2,14 @@ import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router';
 
 import { useAuth, useUsuario } from '../../auth/contexto';
-import { Logo, NOMBRE_PRODUCTO } from '../../marca/Marca';
+import { Logotipo } from '../../marca/Marca';
 import { useTema } from '../../tema/contexto';
-import { C } from './estilos';
 import { SECCIONES_PLATAFORMA } from './secciones';
+
+/** Foco en arena: sobre el morado del lateral el violeta del acento no se ve (UI-02). */
+const FOCO_LATERAL =
+  'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-arena';
+const BOTON_LATERAL = `rounded-md border border-lateral-borde px-3 py-1.5 text-sm font-medium text-lateral-tinta hover:bg-lateral-realce disabled:opacity-50 ${FOCO_LATERAL}`;
 
 /**
  * El área de administración de la plataforma (back office de membresías), con su propia barra
@@ -26,24 +30,25 @@ export function LayoutPlataforma() {
 
 function BarraLateral() {
   return (
-    <aside className="flex shrink-0 flex-col border-b border-linea bg-superficie md:sticky md:top-0 md:h-screen md:w-60 md:border-r md:border-b-0">
-      <div className="px-5 pt-5 pb-3">
-        <Link to="/plataforma" className="inline-flex items-center gap-2 text-acento-texto">
-          <Logo className="h-8 w-8 shrink-0" />
-          <span className="text-lg font-bold text-tinta">{NOMBRE_PRODUCTO}</span>
+    <aside className="flex shrink-0 flex-col border-b border-lateral-borde bg-lateral text-lateral-tinta md:sticky md:top-0 md:h-screen md:w-60 md:border-r md:border-b-0">
+      <div className="px-5 pt-5 pb-4">
+        <Link to="/plataforma" className={`inline-block rounded ${FOCO_LATERAL}`}>
+          <Logotipo variante="oscuro" className="h-8" />
         </Link>
-        <p className="mt-1 text-sm text-tinta-suave">Administración</p>
+        <p className="mt-2 text-xs font-semibold text-lateral-tenue">Administración</p>
       </div>
-      <nav aria-label="Plataforma" className="min-w-0 overflow-x-auto px-3 md:flex-1">
-        <ul className="flex gap-1 md:flex-col">
+      <nav aria-label="Plataforma" className="min-w-0 overflow-x-auto px-2 pb-2 md:flex-1">
+        <ul className="flex gap-1 md:flex-col md:gap-px">
           {SECCIONES_PLATAFORMA.map(({ ruta, texto, icono: Icono, exacta }) => (
             <li key={ruta}>
               <NavLink
                 to={ruta}
                 end={exacta}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap ${
-                    isActive ? 'bg-acento text-sobre-acento' : 'text-tinta-medio hover:bg-realce'
+                  `relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap ${FOCO_LATERAL} ${
+                    isActive
+                      ? 'bg-acento text-sobre-acento shadow-sm md:before:absolute md:before:inset-y-1.5 md:before:-left-2 md:before:w-1 md:before:rounded-r-full md:before:bg-arena'
+                      : 'text-lateral-tinta hover:bg-lateral-realce'
                   }`
                 }
               >
@@ -67,10 +72,10 @@ function PieUsuario() {
   const oscuro = tema === 'oscuro';
 
   return (
-    <div className="space-y-3 border-t border-linea px-5 py-4">
+    <div className="space-y-3 border-t border-lateral-borde px-5 py-4">
       <div className="min-w-0 leading-tight">
         <div className="truncate text-sm font-semibold">{usuario.nombre}</div>
-        <div className="truncate text-xs text-tinta-tenue">{usuario.email}</div>
+        <div className="truncate text-xs text-lateral-tenue">{usuario.email}</div>
       </div>
       <label className="flex items-center justify-between gap-3 text-sm">
         <span>Tema oscuro</span>
@@ -80,19 +85,19 @@ function PieUsuario() {
           aria-checked={oscuro}
           aria-label="Tema oscuro"
           onClick={() => elegir(oscuro ? 'claro' : 'oscuro')}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-            oscuro ? 'bg-acento' : 'bg-realce-fuerte'
+          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${FOCO_LATERAL} ${
+            oscuro ? 'bg-acento' : 'bg-lateral-realce ring-1 ring-lateral-tenue ring-inset'
           }`}
         >
           <span
             aria-hidden="true"
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-superficie shadow transition-all ${
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-lateral-tinta shadow transition-all ${
               oscuro ? 'left-[22px]' : 'left-0.5'
             }`}
           />
         </button>
       </label>
-      <Link to="/" className={`${C.secundario} block text-center`}>
+      <Link to="/" className={`${BOTON_LATERAL} block text-center`}>
         Ir al panel
       </Link>
       <button
@@ -102,7 +107,7 @@ function PieUsuario() {
           setSaliendo(true);
           void cerrarSesion();
         }}
-        className={`${C.secundario} w-full`}
+        className={`${BOTON_LATERAL} w-full`}
       >
         Cerrar sesión
       </button>

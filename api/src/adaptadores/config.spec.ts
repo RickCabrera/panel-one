@@ -117,7 +117,7 @@ describe('Configuración de adaptadores (F2-202)', () => {
         correo: {
           impl: 'brevo',
           apiKey: 'api-key-sintetica',
-          remitente: { email: 'facturas@ejemplo.test', nombre: 'Monitor SoftRestaurant' },
+          remitente: { email: 'facturas@ejemplo.test', nombre: 'Yo Controlo' },
         },
         archivos: {
           impl: 'disco',

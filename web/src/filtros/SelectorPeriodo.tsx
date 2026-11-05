@@ -26,7 +26,11 @@ export function SelectorPeriodo({
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <div role="group" aria-label="Periodo" className="flex flex-wrap gap-1">
+      <div
+        role="group"
+        aria-label="Periodo"
+        className="inline-flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-lg bg-realce p-0.5 whitespace-nowrap [scrollbar-width:none]"
+      >
         {TIPOS_PERIODO.map(({ tipo, nombre }) => {
           const activo = periodo.tipo === tipo;
           return (
@@ -44,8 +48,8 @@ export function SelectorPeriodo({
               }}
               className={
                 activo
-                  ? 'rounded-md border border-acento bg-acento px-3 py-1 text-sm text-sobre-acento'
-                  : 'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm hover:bg-realce'
+                  ? 'shrink-0 rounded-md bg-acento px-2.5 py-1 text-sm font-medium text-sobre-acento shadow-xs ring-1 ring-acento-borde ring-inset'
+                  : 'shrink-0 rounded-md px-2.5 py-1 text-sm font-medium text-tinta-suave hover:bg-superficie hover:text-tinta'
               }
             >
               {nombre}

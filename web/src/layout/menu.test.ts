@@ -11,23 +11,31 @@ import {
   type EntradaMenu,
 } from './menu';
 
-// El mapa del producto de F2-210: nombres y orden EXACTOS de la ficha del backlog.
+// El mapa del producto de F2-210, compactado en UI-02 (5-nov-2026): sin las cuatro entradas
+// «Pronto» sin tarea (D-01), sin la sección Canales de una sola entrada (Ventas por canal vive en
+// Ventas y dirección) y con «Comensales» en vez de «Clientes» (los clientes del POS).
 const FICHA: [string, string[]][] = [
-  ['Principal', ['Inicio', 'Empresas', 'Sucursales', 'Comparativos']],
+  ['Principal', ['Inicio', 'Comparativos']],
   // MVP: los turnos de SR junto a Tickets; UI-01: se llaman "Turnos" (antes "Cortes").
   [
     'Ventas y dirección',
-    ['Resumen', 'Tickets', 'Turnos', 'Monitor de mesas', 'Análisis', 'Reportes'],
+    [
+      'Resumen',
+      'Tickets',
+      'Turnos',
+      'Monitor de mesas',
+      'Análisis',
+      'Ventas por canal',
+      'Reportes',
+    ],
   ],
   [
     'Catálogos',
     [
       'Productos',
       'Orquestador de menú',
-      'Grupos de insumos',
-      'Insumos',
       'Meseros',
-      'Clientes',
+      'Comensales',
       // F2-233: el mapeo área → canal vive en su propia vista de catálogo.
       'Áreas y canales',
     ],
@@ -46,7 +54,6 @@ const FICHA: [string, string[]][] = [
       'Traspasos',
     ],
   ],
-  ['Canales', ['Ventas por canal']],
   ['Administración', ['Sucursales', 'Usuarios', 'Agentes', 'Empresas', 'Facturación']],
 ];
 
@@ -58,7 +65,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('las seis secciones de la ficha', () => {
+describe('las cinco secciones del mapa (UI-02)', () => {
   it('en orden, con sus nombres y sus entradas exactas', () => {
     expect(SECCIONES.map((s) => [s.titulo, s.entradas.map((e) => e.texto)])).toEqual(FICHA);
   });
@@ -79,12 +86,8 @@ describe('las seis secciones de la ficha', () => {
       .filter((e) => e.pendiente && !e.pendiente.tarea)
       .map((e) => e.id);
     expect(sinTarea).toEqual([...SIN_TAREA]);
-    expect(SIN_TAREA).toEqual([
-      'principal.empresas',
-      'principal.sucursales',
-      'catalogos.grupos-insumos',
-      'catalogos.insumos',
-    ]);
+    // UI-02 (D-01): las cuatro que había salieron del menú; no queda ninguna.
+    expect(SIN_TAREA).toEqual([]);
     for (const e of todas()) {
       if (!e.pendiente) continue;
       expect(e.pendiente.razon.trim()).not.toBe('');
@@ -107,8 +110,9 @@ describe('las seis secciones de la ficha', () => {
     expect(porId('catalogos.orquestador').destino).toEqual({ ruta: '/menu' });
     // F2-231 construyó Meseros: ya navega.
     expect(porId('catalogos.meseros').destino).toEqual({ ruta: '/meseros' });
-    // F2-232 construyó Clientes: ya navega.
+    // F2-232 construyó Clientes (hoy «Comensales», UI-02): ya navega, a la misma ruta.
     expect(porId('catalogos.clientes').destino).toEqual({ ruta: '/clientes' });
+    expect(porId('catalogos.clientes').texto).toBe('Comensales');
     // F2-233 construyó Áreas y canales: navega.
     expect(porId('catalogos.areas').destino).toEqual({ ruta: '/areas' });
     // F2-121 construyó Existencias: navega.
@@ -131,6 +135,8 @@ describe('las seis secciones de la ficha', () => {
     expect(porId('canales.ventas').destino).toEqual({ ruta: '/canales' });
     expect(porId('canales.ventas').pendiente).toBeUndefined();
     expect(todas().filter((e) => e.pendiente?.tarea)).toEqual([]);
+    // UI-02: ninguna entrada del menú queda sin navegar.
+    expect(todas().filter((e) => e.pendiente)).toEqual([]);
     // F2-100 construyó los datos fiscales de Facturación: navega (sólo administradores).
     expect(porId('administracion.facturacion').destino).toEqual({ ruta: '/facturacion' });
   });
@@ -153,11 +159,14 @@ describe('seccionesPara (permiso, no "pendiente")', () => {
     ]);
   });
 
-  it('el visor no ve la sección Administración; las pendientes de las demás, sí', () => {
+  it('el visor no ve la sección Administración; de las demás ve todo lo que no pide rol', () => {
     const visor = seccionesPara('visor');
-    expect(visor.map((s) => s.titulo)).toEqual(FICHA.slice(0, 5).map(([t]) => t));
-    expect(visor.flatMap((s) => s.entradas).filter((e) => e.pendiente).length).toBe(
-      todas().filter((e) => e.pendiente && !e.roles).length,
+    expect(visor.map((s) => s.titulo)).toEqual(FICHA.slice(0, 4).map(([t]) => t));
+    // El filtro es por permiso, nada más: cada entrada sin `roles` le llega, en el mismo orden.
+    expect(visor.flatMap((s) => s.entradas.map((e) => e.id))).toEqual(
+      todas()
+        .filter((e) => !e.roles)
+        .map((e) => e.id),
     );
   });
 });
@@ -213,6 +222,11 @@ describe('colapso recordado por usuario', () => {
     expect(leerColapsadas('u1')).toEqual([]);
     window.localStorage.setItem('monitor.menu.colapsadas.u1', '["catalogos",7,"inventada"]');
     expect(leerColapsadas('u1')).toEqual(['catalogos']);
+  });
+
+  it('UI-02: una sección que ya no existe (Canales) recordada como colapsada se ignora', () => {
+    window.localStorage.setItem('monitor.menu.colapsadas.u1', '["canales","inventario"]');
+    expect(leerColapsadas('u1')).toEqual(['inventario']);
   });
 
   it('un storage que lanza (modo privado, bloqueado) deja el menú abierto sin tronar', () => {

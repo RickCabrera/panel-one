@@ -1,6 +1,5 @@
 import {
   ArrowLeftRight,
-  Boxes,
   Building2,
   Calculator,
   ChartColumn,
@@ -12,7 +11,6 @@ import {
   History,
   GitCompareArrows,
   House,
-  Layers,
   LayoutDashboard,
   LayoutGrid,
   MapPinned,
@@ -77,30 +75,21 @@ export interface SeccionMenu {
   entradas: readonly EntradaMenu[];
 }
 
-// DECISION ABIERTA (F2-250): ninguna tarea del backlog construye estas vistas. "Empresas" y
-// "Sucursales" de Principal son de consulta (la gestión está en Administración), y las de
-// insumos no las pinta F2-120, que sólo sincroniza el catálogo. Salen deshabilitadas sin
-// inventarles destino, y la cosecha de F2-250 decide si llevan tarea o salen del menú.
-const SIN_TAREA_CONSULTA: Pendiente = {
-  razon: 'Vista de consulta sin tarea asignada todavía; se decide en el cierre de la Ronda 2.',
-};
-const SIN_TAREA_INSUMOS: Pendiente = {
-  razon:
-    'Vista sin tarea asignada todavía: F2-120 sólo sincroniza el catálogo; se decide en el cierre de la Ronda 2.',
-};
-
-/** Las únicas entradas pendientes sin tarea. El test obliga a que no crezca a escondidas. */
-export const SIN_TAREA: readonly string[] = [
-  'principal.empresas',
-  'principal.sucursales',
-  'catalogos.grupos-insumos',
-  'catalogos.insumos',
-];
+/**
+ * Las entradas pendientes sin tarea. UI-02 (D-01, decidida por Ricardo el 5-nov-2026) quitó
+ * las cuatro que había (Empresas y Sucursales de Principal, Grupos de insumos e Insumos): no
+ * llevaban a ninguna vista y sólo hacían ruido. Una entrada pendiente nueva tiene que nombrar
+ * su tarea; el test obliga a que esta lista no crezca a escondidas.
+ */
+export const SIN_TAREA: readonly string[] = [];
 
 /**
- * El mapa del producto (F2-210), en el orden y con los nombres de la ficha. Cuando una tarea
- * construye su módulo, su entrada cambia `pendiente` por `destino` (el test de rutas obliga a
- * que la ruta exista).
+ * El mapa del producto (F2-210, compactado en UI-02). Cuando una tarea construye su módulo,
+ * su entrada cambia `pendiente` por `destino` (el test de rutas obliga a que la ruta exista).
+ *
+ * UI-02 quitó lo que no llevaba a nada (las cuatro «Pronto» de SIN_TAREA, incluida la
+ * «Sucursales» de Principal, que repetía la de Administración) y mudó «Ventas por canal» a
+ * Ventas y dirección: una sección de una sola entrada era puro encabezado.
  */
 export const SECCIONES: readonly SeccionMenu[] = [
   {
@@ -108,18 +97,6 @@ export const SECCIONES: readonly SeccionMenu[] = [
     titulo: 'Principal',
     entradas: [
       { id: 'principal.inicio', texto: 'Inicio', icono: House, destino: { ruta: '/' } },
-      {
-        id: 'principal.empresas',
-        texto: 'Empresas',
-        icono: Building2,
-        pendiente: SIN_TAREA_CONSULTA,
-      },
-      {
-        id: 'principal.sucursales',
-        texto: 'Sucursales',
-        icono: Store,
-        pendiente: SIN_TAREA_CONSULTA,
-      },
       {
         id: 'principal.comparativos',
         texto: 'Comparativos',
@@ -155,6 +132,12 @@ export const SECCIONES: readonly SeccionMenu[] = [
         destino: { ruta: '/analisis' },
       },
       {
+        id: 'canales.ventas',
+        texto: 'Ventas por canal',
+        icono: Truck,
+        destino: { ruta: '/canales' },
+      },
+      {
         id: 'ventas.reportes',
         texto: 'Reportes',
         icono: FileText,
@@ -179,26 +162,16 @@ export const SECCIONES: readonly SeccionMenu[] = [
         destino: { ruta: '/menu' },
       },
       {
-        id: 'catalogos.grupos-insumos',
-        texto: 'Grupos de insumos',
-        icono: Layers,
-        pendiente: SIN_TAREA_INSUMOS,
-      },
-      {
-        id: 'catalogos.insumos',
-        texto: 'Insumos',
-        icono: Boxes,
-        pendiente: SIN_TAREA_INSUMOS,
-      },
-      {
         id: 'catalogos.meseros',
         texto: 'Meseros',
         icono: UserRound,
         destino: { ruta: '/meseros' },
       },
       {
+        // UI-02: los clientes del POS son «Comensales», para no confundirlos con los clientes
+        // de la plataforma (/plataforma/clientes). La ruta sigue siendo /clientes.
         id: 'catalogos.clientes',
-        texto: 'Clientes',
+        texto: 'Comensales',
         icono: Contact,
         destino: { ruta: '/clientes' },
       },
@@ -261,18 +234,6 @@ export const SECCIONES: readonly SeccionMenu[] = [
         texto: 'Traspasos',
         icono: ArrowLeftRight,
         destino: { ruta: '/traspasos' },
-      },
-    ],
-  },
-  {
-    id: 'canales',
-    titulo: 'Canales',
-    entradas: [
-      {
-        id: 'canales.ventas',
-        texto: 'Ventas por canal',
-        icono: Truck,
-        destino: { ruta: '/canales' },
       },
     ],
   },

@@ -97,6 +97,7 @@ describe('estrategia por petición', () => {
     ['/', 'GET', 'navigate', 'armazon'],
     ['/assets/index-abc.js', 'GET', 'cors', 'cache-primero'],
     ['/iconos/icono-192.png', 'GET', 'no-cors', 'cache-primero'],
+    ['/marca/isotipo-oscuro.svg', 'GET', 'no-cors', 'cache-primero'],
     ['/manifest.webmanifest', 'GET', 'cors', 'cache-primero'],
     ['/archivos/factura.pdf', 'GET', 'cors', 'ignorar'],
     ['/assets/index-abc.js', 'POST', 'cors', 'ignorar'],
@@ -219,7 +220,7 @@ describe('manejadores', () => {
 
   it('push ilegible o vacío: igual muestra un aviso genérico (Chrome lo exige)', async () => {
     for (const texto of [null, 'no es json', '[]', '{"titulo": 3}']) {
-      expect(notificacionDePush(texto).titulo).toBe('Monitor SoftRestaurant');
+      expect(notificacionDePush(texto).titulo).toBe('Yo Controlo');
     }
   });
 

@@ -17,7 +17,7 @@ import {
 } from '../test/apiFalsa';
 import { CLAVE_SISTEMA, PREFIJO_TITULO_DEMO, TEXTO_MARCA_DEMO } from './sistema';
 
-const TITULO = 'Monitor SoftRestaurant';
+const TITULO = 'Yo Controlo';
 
 /** API falsa: `/sistema` dice si hay modo demo; `cookieViva` = hay sesión que refrescar. */
 function api({ modoDemo, cookieViva }: { modoDemo: boolean | null; cookieViva: boolean }) {

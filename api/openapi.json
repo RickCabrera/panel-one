@@ -15665,8 +15665,8 @@
     }
   },
   "info": {
-    "title": "Monitor SoftRestaurant API",
-    "description": "Contrato de la API del monitor. Fuente única: el frontend construye contra este documento. Lo genera `npm run openapi` en /api a partir de los decoradores.",
+    "title": "Yo Controlo API",
+    "description": "Contrato de la API de Yo Controlo. Fuente única: el frontend construye contra este documento. Lo genera `npm run openapi` en /api a partir de los decoradores.",
     "version": "0.0.1",
     "contact": {}
   },
