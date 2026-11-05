@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { formatearPesos } from '../../dinero/dinero';
 import type { ModificadorMesa, PartidaMesa } from './mesa';
@@ -69,7 +70,8 @@ export function DetalleMesa({
     }
   }
 
-  return (
+  // UI-06: en un portal a <body> (ver `Dialogo`): ningún ancestro de vidrio lo encierra.
+  return createPortal(
     <div
       data-testid="detalle-fondo"
       // UI-04: en el celular es una hoja inferior a todo lo ancho; desde md, centrado.
@@ -113,7 +115,8 @@ export function DetalleMesa({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

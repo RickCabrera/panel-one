@@ -174,7 +174,7 @@ en «Clásico» las clases `vidrio*` y `resplandor` no pintan nada. No hay compo
 | hero-tenue | `#CDC0D6` | igual | (tinta, cifra, sube y baja: los del Clásico) |
 | vidrio | `#FFFFFFB8` | `#16121EBF` | Tarjetas, hero, paneles, filtros; también `vidrio-falso`. |
 | vidrio-fuerte | `#FFFFFFEB` | `#16121EEB` | Modales y hojas. |
-| vidrio-barra | `#0B0910E6` | igual | Cabecera y barra de abajo (siempre negro). |
+| vidrio-barra | `#16121EF2` | igual | Cabecera y barra de abajo (siempre negro; la superficie oscura al 95 %). |
 | vidrio-borde | `#15111C14` | `#FFFFFF17` | El filo de 1 px (en claro, oscuro: uno claro no se ve). |
 | vidrio-brillo | `#FFFFFFCC` | `#FFFFFF12` | El brillo arriba (degradado de 3 rem). |
 | resplandor | `#6D3FC024` | `#6D3FC040` | Los dos halos violeta fijos detrás del contenido. |
@@ -187,27 +187,36 @@ transparentes que nada pinta. Los estados, el semáforo y las series no cambian 
 
 | Clase | Dónde | Qué hace |
 | --- | --- | --- |
-| `vidrio` | Tarjetas del Inicio y de Mesas (`SUPERFICIE_TARJETA`), filtros de Tickets, tarjeta del login | Fondo `vidrio`, `backdrop-filter: blur(18px) saturate(140%)`, borde `vidrio-borde`, brillo arriba. |
+| `vidrio` | Tarjetas del Inicio y de Mesas (`SUPERFICIE_TARJETA`), filtros de Tickets, tarjeta del login | `--superficie` → `vidrio`, `--linea` / `--linea-suave` → `vidrio-borde`, `backdrop-filter: blur(18px) saturate(140%)`, brillo arriba. |
 | `vidrio-hero` | Hero del Inicio y MRR de Plataforma | Sólo el desenfoque: el fondo es el degradado translúcido `hero` → `hero-fin`. |
-| `vidrio-fuerte` | Modales (`Dialogo`, detalle de mesa) y hojas del celular | Como `vidrio` pero casi opaco: detrás puede haber cualquier cosa. |
-| `vidrio-barra` | Cabecera, cabecera del celular y barra de abajo | Negro casi opaco con desenfoque. |
-| `vidrio-falso` | Cada mesa, cada turno, la tabla de Tickets | El fondo translúcido y el brillo, **sin** desenfoque, y sin tocar el borde (el de las mesas es el semáforo). |
+| `vidrio-fuerte` | Modales (`Dialogo`, detalle de mesa) y hojas del celular | Como `vidrio` pero casi opaco (`vidrio-fuerte`): detrás puede haber cualquier cosa. |
+| `vidrio-barra` | Cabecera, cabecera del celular y barra de abajo | Desenfoque; en la barra de abajo `--lateral` → `vidrio-barra` (la cabecera ya es `bg-superficie/95` en la zona oscura: lo mismo). |
+| `vidrio-falso` | Cada mesa, cada turno, la tabla de Tickets, el esqueleto de la rejilla de Mesas, una tarjeta por categoría del Menú (`<Tarjeta repetida>` / `SUPERFICIE_TARJETA_REPETIDA`) | El fondo translúcido y el brillo, **sin** desenfoque. |
 | `resplandor` | El armazón del panel, de Plataforma y el login | Un `::before` fijo con dos `radial-gradient` violeta. |
 
+- **Por variables, no por colores.** Las reglas del vidrio van con `:where([data-estilo='noche'])`
+  (especificidad 0,1,0) y **nunca** escriben `background-color` ni `border-color`: cambian las
+  variables que ya usan las utilidades del elemento (`bg-superficie`, `border-linea-suave`...).
+  Así una utilidad semántica puesta encima (`bg-peligro-fondo/40` y `border-peligro-borde` en la
+  tarjeta de «Atención requerida» de Mesas) sigue ganando igual que en «Clásico».
+  `tema/css.node.test.ts` lo comprueba.
 - **Discreto y legible.** `paleta.test.ts` compone cada vidrio sobre lo que puede quedar detrás
   (el fondo con y sin resplandor; para modales, de blanco a negro puros; para las barras, una
-  tarjeta blanca) y mide el texto, el tenue, las cifras, el sube/baja y los bordes contra el
-  **peor** resultado.
-- **Nunca vidrio sobre vidrio.** Un `vidrio-falso` dentro de un `vidrio` vuelve a la superficie
-  opaca (los turnos dentro de «Turnos del periodo»).
+  tarjeta blanca; para el login, lateral + hero + resplandor) y mide el texto, el tenue, las
+  cifras, el sube/baja y los bordes contra el **peor** resultado. El `saturate(140%)` no se
+  modela: cambia el contraste en menos de 0.15.
+- **Nunca vidrio sobre vidrio.** Los hijos de un vidrio vuelven a lo opaco (`--superficie-opaca`,
+  la del tema o la de la zona oscura), y un `vidrio-falso` dentro de un `vidrio` también (los
+  turnos dentro de «Turnos del periodo»).
 - **Rendimiento.** Nada de `backdrop-filter` en lo que se repite: en un celular de gama baja,
   decenas de capas desenfocadas hacen tartamudear el scroll. Ahí va `vidrio-falso`.
 - **Fallbacks.** Sin `backdrop-filter` (`@supports not`) o con `prefers-reduced-transparency:
-  reduce`, el fondo es sólido: `superficie` en tarjetas y modales, `lateral` en las barras y el
-  hero.
-- Un `backdrop-filter` vuelve al elemento el contenedor de sus hijos `fixed`: nada con
-  `position: fixed` va dentro de un `vidrio` (las hojas van en portal; los modales no viven
-  dentro de tarjetas).
+  reduce`, el fondo es sólido: la superficie opaca en tarjetas y modales, el negro en la barra de
+  abajo, y sin desenfoque. El hero ya es casi opaco (94–96 %).
+- **Modales en portal.** Un `backdrop-filter` vuelve al elemento el contenedor de sus hijos
+  `fixed` y un contexto de apilamiento. Por eso `Dialogo`, el detalle de mesa y `HojaInferior`
+  se montan con `createPortal` en `<body>`: los diálogos de Facturación se abren desde dentro de
+  la tarjeta «Facturas emitidas» y sin portal sólo cubrían la tarjeta.
 
 ## Tipografía
 

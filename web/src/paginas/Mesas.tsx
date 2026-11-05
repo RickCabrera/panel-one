@@ -6,7 +6,13 @@ import { ErrorApi } from '../api/cliente';
 import { useAlcance } from '../filtros/alcance';
 import { horaEn, zonaDelPanel } from '../filtros/periodo';
 import { BOTON_SECUNDARIO, BOTON_SEGMENTO, SEGMENTO_LIBRE } from './botones';
-import { BLOQUE_ESQUELETO, EstadoVacio, Esqueleto, SUPERFICIE_TARJETA } from './inicio/Tarjeta';
+import {
+  BLOQUE_ESQUELETO,
+  EstadoVacio,
+  Esqueleto,
+  SUPERFICIE_TARJETA,
+  SUPERFICIE_TARJETA_REPETIDA,
+} from './inicio/Tarjeta';
 import type { Filtro } from './inicio/consultas';
 import { useMonitorMesas } from './mesas/consultas';
 import { DetalleMesa } from './mesas/Detalle';
@@ -230,7 +236,7 @@ function Contenido({
         </div>
         <div className="mt-6 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">
           {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className={`${SUPERFICIE_TARJETA} h-36 p-3.5`}>
+            <div key={i} className={`${SUPERFICIE_TARJETA_REPETIDA} h-36 p-3.5`}>
               <div className="flex justify-between gap-2">
                 <div className={`h-6 w-10 ${BLOQUE_ESQUELETO}`} />
                 <div className={`h-6 w-20 ${BLOQUE_ESQUELETO}`} />

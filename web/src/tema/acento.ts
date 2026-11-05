@@ -39,13 +39,13 @@ export const ACENTO_DESPLIEGUE = leerAcento(
 );
 
 /**
- * Los tokens del acento para un tema (y un estilo de marca, UI-06: por omisión el «Clásico»).
- * `acento` debe venir ya validado (`leerAcento`).
+ * Los tokens del acento para un tema y un estilo de marca (UI-06): se ajustan contra las
+ * superficies de ESE estilo. `acento` debe venir ya validado (`leerAcento`).
  */
 export function derivarAcento(
   acento: string,
   tema: Tema,
-  estilo: Estilo = 'clasico',
+  estilo: Estilo,
 ): Record<TokenAcento, string> {
   const base = normalizarHex(acento);
   const fondos = SUPERFICIES.map((s) => PALETAS[estilo][tema][s]);

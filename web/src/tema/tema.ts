@@ -168,9 +168,12 @@ export function zonaOscura(
 ): Record<string, string> | undefined {
   if (estilo !== 'noche' || tema === 'oscuro') return undefined;
   const variables: Record<string, string> = { colorScheme: 'dark' };
-  for (const [token, valor] of Object.entries(coloresDe('oscuro', acento, estilo))) {
-    variables[`--${token}`] = valor;
-  }
+  const colores = coloresDe('oscuro', acento, estilo);
+  for (const [token, valor] of Object.entries(colores)) variables[`--${token}`] = valor;
+  // Lo opaco a lo que vuelven los hijos de un vidrio (index.css) también es el de la zona.
+  variables['--superficie-opaca'] = colores.superficie;
+  variables['--linea-suave-opaca'] = colores['linea-suave'];
+  variables['--linea-opaca'] = colores.linea;
   return variables;
 }
 

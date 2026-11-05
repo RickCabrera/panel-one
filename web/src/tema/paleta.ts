@@ -237,9 +237,10 @@ const NOCHE_COMUN = {
   'hero-sube': '#8ee6b4',
   'hero-baja': '#ffb4ac',
   'hero-rejilla': '#ffffff1a',
-  // La barra de arriba y la de abajo: vidrio negro, casi opaco (por debajo pasan tarjetas blancas
-  // en claro y el texto claro de la barra tiene que seguir leyéndose).
-  'vidrio-barra': '#0b0910e6',
+  // La barra de abajo: vidrio negro, casi opaco (por debajo pasan tarjetas blancas en claro y el
+  // texto claro de la barra tiene que seguir leyéndose). Es la superficie oscura al 95 %: lo
+  // mismo que pinta la cabecera con `bg-superficie/95` dentro de la zona oscura.
+  'vidrio-barra': '#16121ef2',
   'muestra-noche': '#08070b',
   'muestra-clasico': '#2c1533',
 } as const;

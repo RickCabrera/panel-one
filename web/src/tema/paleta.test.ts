@@ -212,8 +212,6 @@ describe.each(COMBINACIONES)('paleta, estilo %s, tema %s', (estilo, tema) => {
  */
 describe.each(TEMAS)('vidrio de «Noche», tema %s', (tema) => {
   const c = colores('noche', tema);
-  const claro = colores('noche', 'claro');
-  const oscuro = colores('noche', 'oscuro');
 
   // Tarjetas, paneles, filtros (y `vidrio-falso`: mesas, turnos, la tabla de Tickets): van sobre
   // la página, nunca sobre otro vidrio.
@@ -235,7 +233,21 @@ describe.each(TEMAS)('vidrio de «Noche», tema %s', (tema) => {
     }
   });
 
-  // La barra de arriba (zona oscura: tokens de NOCHE oscuro) y la de abajo (tokens `lateral-*`):
+});
+
+/*
+ * Lo que es negro en los dos temas (las barras, el lateral, el hero, el login) usa los tokens de
+ * NOCHE oscuro (la zona oscura) o los `lateral-*` / `hero-*`, que valen lo mismo en claro y en
+ * oscuro: se mide una sola vez.
+ *
+ * El `saturate(140%)` del `backdrop-filter` no se modela: sobre estos fondos casi grises cambia
+ * el contraste en menos de 0.15, y todos los casos pasan con más holgura que eso.
+ */
+describe('marcos negros de «Noche» (en los dos temas)', () => {
+  const claro = colores('noche', 'claro');
+  const oscuro = colores('noche', 'oscuro');
+
+  // La cabecera (zona oscura, `bg-superficie/95` = `vidrio-barra`) y la de abajo (`vidrio-barra`):
   // vidrio negro con el contenido de la página pasando por debajo. En claro, lo más claro que
   // pasa es una tarjeta blanca: el peor caso es blanco puro.
   const barra = sobre(oscuro['vidrio-barra'], [
@@ -264,4 +276,32 @@ describe.each(TEMAS)('vidrio de «Noche», tema %s', (tema) => {
       expect(contraste(fondo, '#000000')).toBeLessThan(1.6);
     }
   });
+
+  // El login: la tarjeta de vidrio (zona oscura) sobre el fondo del login, que es `bg-lateral`
+  // con el degradado translúcido del hero encima, el resplandor (y el ojo arena al 7 %) encima
+  // de eso. Se compone cada capa en cada extremo del degradado y se mide el peor.
+  const detrasDelLogin = [oscuro.hero, oscuro['hero-fin']].flatMap((h) => {
+    const base = componer(h, oscuro.lateral);
+    const conResplandor = componer(oscuro.resplandor, base);
+    return [base, conResplandor, componer('#e3cba812', conResplandor)];
+  });
+  const tarjetaLogin = sobre(oscuro.vidrio, detrasDelLogin);
+
+  it.each(TEXTOS)(
+    'texto %s sobre la tarjeta del login (vidrio sobre lateral + hero + resplandor): ≥ 4.5:1',
+    (texto) => {
+      for (const fondo of tarjetaLogin) {
+        expect(contraste(oscuro[texto], fondo)).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
+
+  it.each<Cualquiera>(['hero-tinta', 'hero-tenue'])(
+    'texto %s fuera de la tarjeta del login: ≥ 4.5:1',
+    (texto) => {
+      for (const fondo of detrasDelLogin) {
+        expect(contraste(oscuro[texto], fondo)).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
 });

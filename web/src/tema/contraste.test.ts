@@ -82,7 +82,13 @@ describe('componer', () => {
     expect(componer('#123456ff', '#ffffff')).toBe('#123456');
   });
 
-  it('a la mitad, es la mezcla de los dos', () => {
+  it('a la mitad, es la mezcla de los dos (valores literales)', () => {
+    // 0x80 = 128/255 de negro sobre blanco: 255 × (1 − 128/255) = 127 → #7f7f7f.
+    expect(componer('#00000080', '#ffffff')).toBe('#7f7f7f');
+    // 0x40 = 64/255 de rojo sobre negro: 255 × 64/255 = 64 → #400000.
+    expect(componer('#ff000040', '#000000')).toBe('#400000');
+    // Mayúsculas y 6 dígitos sobre otro color: el de arriba, tal cual.
+    expect(componer('#ABCDEF', '#000000')).toBe('#abcdef');
     expect(componer('#00000080', '#ffffff')).toBe(mezclar('#ffffff', '#000000', 128 / 255));
   });
 
