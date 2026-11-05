@@ -86,10 +86,16 @@ describe('la landing en /landing/ del dominio del panel (LAND-01)', () => {
   const panel = bloque(conf, '\n:{$PORT:8080} {');
   const ruta = bloque(snip, '(landing_ruta)');
 
-  it('el panel la importa ANTES de la SPA, sin variable nueva', () => {
+  // Lo que decide que la SPA no la alcance es la especificidad del matcher (`handle_path
+  // /landing/*` contra el `handle` sin matcher del `spa`), no el orden del import: Caddy ordena
+  // los `handle` por especificidad. Se exige además el orden para que el Caddyfile se lea como
+  // se evalúa, y que el matcher siga siendo de ruta (si fuera un `handle` sin matcher, empataría
+  // con el de la SPA y entonces sí mandaría el orden).
+  it('el handle_path /landing/* gana a la SPA por especificidad del matcher, sin variable nueva', () => {
     const iLanding = panel.indexOf('import landing_ruta /srv/landing');
     expect(iLanding).toBeGreaterThan(0);
     expect(iLanding).toBeLessThan(panel.indexOf('import spa /srv/web'));
+    expect(ruta).toMatch(/handle_path \/landing\/\* \{/);
     expect(ruta).not.toMatch(/\{\$/);
   });
 

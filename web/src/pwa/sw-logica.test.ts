@@ -107,6 +107,9 @@ describe('estrategia por petición', () => {
     ['/landing/?plan=completo', 'GET', 'navigate', 'ignorar'],
     ['/landing/assets/index-abc.js', 'GET', 'cors', 'ignorar'],
     ['/landing/og.png', 'GET', 'no-cors', 'ignorar'],
+    // Caddy no distingue mayúsculas en `path`: el service worker tampoco.
+    ['/LANDING/', 'GET', 'navigate', 'ignorar'],
+    ['/Landing', 'GET', 'navigate', 'ignorar'],
     // Sólo el prefijo exacto: una ruta del panel que empiece igual sigue siendo del panel.
     ['/landings', 'GET', 'navigate', 'armazon'],
   ])('%s %s (%s) → %s', (ruta, method, mode, esperada) => {

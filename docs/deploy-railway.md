@@ -46,6 +46,12 @@ Por qué así:
   (mismo origen) y «Entrar al panel» lleva a `/login`. El logo del login enlaza a `/landing`.
   El service worker del panel no toca `/landing` (ni armazón ni caché): sin red, la landing no
   se disfraza de panel.
+  **Ojo: en el dominio del panel la landing comparte ORIGEN con la SPA.** Hoy no carga nada de
+  terceros y la CSP no lo permitiría, pero cualquier script de terceros que se le agregue (por
+  ejemplo, analítica) correría con el origen del panel: podría leer su almacenamiento, llamar a
+  su `/api` con la sesión del usuario y registrar o tocar su service worker. Por eso, en cuanto
+  haya dominio, la landing se mueve a `LANDING_HOST` (su propio origen), y nada de terceros se
+  le agrega antes de eso.
 - **Una réplica por servicio** (`numReplicas: 1`). La API trae programadores internos
   (alertas, reportes, folios, conciliación, push): con dos réplicas cada uno corre dos veces,
   y el socket necesitaría sesiones pegajosas. Escalar es vertical (más CPU/RAM al servicio).
