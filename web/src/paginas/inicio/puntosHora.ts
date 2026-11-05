@@ -53,12 +53,21 @@ export const SERIES_FORMA: readonly (Token | TokenAcento)[] = [
 
 /**
  * El ticket promedio de cada hora (Σ venta / cuentas de esa hora), en centavos `bigint`; sólo
- * para dibujar la tendencia (`paraGrafica`). Horas sin cuentas o ilegibles: hueco.
+ * para dibujar la tendencia (`paraGrafica`). Va de la primera a la última hora con cuentas; en
+ * medio, una hora sin cuentas (o que falta) o con importe ilegible es `null`: hueco, la línea se
+ * corta ahí y no se inventa un cero. Las horas vacías antes de la primera y después de la última
+ * no se dibujan.
  */
 export function ticketPorHora(filas: readonly VentaHora[]): (number | null)[] {
-  const conCuentas = [...filas].sort((a, b) => a.hora - b.hora).filter((f) => f.cuentas > 0);
-  return conCuentas.map((f) => {
-    const c = aCentavos(f.venta);
-    return c === null ? null : paraGrafica(c / BigInt(f.cuentas));
+  const conCuentas = filas.filter((f) => f.cuentas > 0);
+  if (conCuentas.length === 0) return [];
+  const horas = conCuentas.map((f) => f.hora);
+  const primera = Math.min(...horas);
+  const ultima = Math.max(...horas);
+  return Array.from({ length: ultima - primera + 1 }, (_, i) => {
+    const fila = conCuentas.find((f) => f.hora === primera + i);
+    if (!fila) return null;
+    const c = aCentavos(fila.venta);
+    return c === null ? null : paraGrafica(c / BigInt(fila.cuentas));
   });
 }

@@ -86,7 +86,11 @@ function CambioHero({ d, base, testId }: { d: Delta; base: string; testId: strin
       <span
         className={`inline-flex items-center gap-1 rounded-full bg-hero-tinta/10 py-0.5 pr-2.5 pl-1.5 font-semibold tabular-nums ring-1 ring-hero-tinta/15 ring-inset ${color}`}
       >
-        <Flecha aria-hidden="true" className="h-4 w-4" />
+        <Flecha
+          aria-hidden="true"
+          className="h-4 w-4"
+          data-flecha={sube ? 'arriba' : baja ? 'abajo' : 'lado'}
+        />
         {d.porcentaje} ({diferenciaEnPesos(d.diferencia)})
       </span>
       <span className="text-hero-tenue">vs {base}</span>

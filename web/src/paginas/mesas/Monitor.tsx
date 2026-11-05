@@ -3,7 +3,7 @@ import { memo, useMemo, type ReactNode } from 'react';
 import type { MesasSucursal } from '../../api/tipos';
 import { formatearPesos } from '../../dinero/dinero';
 import { horaEn } from '../../filtros/periodo';
-import { AlarmClock, CircleDollarSign, Printer, Wifi } from 'lucide-react';
+import { AlarmClock, CircleDollarSign, Printer, TriangleAlert, Wifi } from 'lucide-react';
 
 import { EstadoVacio, SUPERFICIE_TARJETA, Tarjeta } from '../inicio/Tarjeta';
 import { edadLegible } from '../inicio/ventaEnVivo';
@@ -401,6 +401,19 @@ const TarjetaMesa = memo(function TarjetaMesa({ mesa, conSucursal, onAbrir }: Pr
           {minutos === null ? 'Tiempo: sin dato' : `${minutos} min`}
           <span className="sr-only"> · {TEXTO_SEMAFORO[color]}</span>
         </p>
+        {/* En rojo, además del color, un icono y la palabra: el estado no depende sólo del color
+            (WCAG 1.4.1). Para el lector de pantalla ya lo dice la píldora ("requiere atención"),
+            así que esto no se repite. */}
+        {color === 'rojo' && (
+          <span
+            aria-hidden="true"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-peligro-borde bg-peligro-fondo px-2 py-0.5 text-xs font-semibold text-peligro"
+            data-testid="mesa-atencion"
+          >
+            <TriangleAlert className="h-3.5 w-3.5" />
+            Atención
+          </span>
+        )}
         <p className="min-w-0 truncate text-sm text-tinta-suave">
           {mesa.mesero ?? 'Mesero: sin dato'}
         </p>

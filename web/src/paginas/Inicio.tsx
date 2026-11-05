@@ -23,7 +23,10 @@ import { Vista } from './Vista';
 
 /**
  * UI-05: las tarjetas aparecen una tras otra al abrir el Panel (un solo momento orquestado; con
- * «reducir movimiento», nada). El retraso va por clase: la CSP no deja estilos en línea.
+ * «reducir movimiento», nada). El retraso va por clase, una por posición: es estático y así queda
+ * en la hoja de estilos. (No es por la CSP: `style={{}}` de React se aplica por el CSSOM y eso sí
+ * funciona con `style-src 'self'`; lo que la CSP no permite son `<style>` o atributos `style` en
+ * el HTML que manda el servidor.)
  */
 const APARECER = [
   'motion-safe:animate-aparecer',

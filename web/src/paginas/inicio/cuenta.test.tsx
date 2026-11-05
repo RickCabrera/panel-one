@@ -1,5 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { formatearPesos } from '../../dinero/dinero';
 import { CifraAnimada } from './CifraAnimada';
@@ -21,7 +21,17 @@ describe('intermedio (UI-05): el conteo es en bigint, sin float', () => {
 });
 
 describe('CifraAnimada', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // La restauración va aquí y no al final del test: si un `expect` falla, el mock de
+  // `matchMedia` no queda puesto para los que siguen. El original se toma en cada test (el
+  // falso de `test-setup.ts` se instala por test, no al recolectar).
+  let matchMediaOriginal: typeof window.matchMedia;
+  beforeEach(() => {
+    matchMediaOriginal = window.matchMedia;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.matchMedia = matchMediaOriginal;
+  });
 
   it('sin movimiento permitido (o sin matchMedia), cambia de golpe al valor nuevo', () => {
     const { rerender } = render(
@@ -48,9 +58,8 @@ describe('CifraAnimada', () => {
     const cuadros: FrameRequestCallback[] = [];
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => cuadros.push(cb));
     vi.stubGlobal('cancelAnimationFrame', () => {});
-    const original = window.matchMedia;
     window.matchMedia = ((q: string) => ({
-      ...original(q),
+      ...matchMediaOriginal(q),
       matches: q === '(prefers-reduced-motion: no-preference)',
     })) as typeof window.matchMedia;
     const inicio = performance.now();
@@ -69,7 +78,6 @@ describe('CifraAnimada', () => {
     expect(screen.getByTestId('c')).toHaveTextContent('$100.00');
     await act(async () => cuadros.shift()?.(inicio + 10_000));
     expect(screen.getByTestId('c')).toHaveTextContent('$200.00');
-    window.matchMedia = original;
   });
 });
 

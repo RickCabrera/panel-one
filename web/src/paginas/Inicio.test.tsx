@@ -699,6 +699,50 @@ describe('hero: comparación contra el mismo día de la semana pasada (UI-05)', 
     expect(screen.getByTestId('venta-total')).toHaveTextContent('$15,234.50');
   });
 
+  it('a la baja: flecha hacia abajo, tono de baja y el signo menos escrito', async () => {
+    apiDashboard({
+      'GET /ventas/resumen': (l: Llamada) =>
+        json(
+          200,
+          l.query.get('alturaAl')
+            ? resumen({ venta: '20000.00', cuentas: 50 })
+            : resumen({ venta: '15234.50' }),
+        ),
+    });
+    montar(`/?empresa=${A}`);
+
+    const delta = await screen.findByTestId('venta-total-delta');
+    expect(delta).toHaveTextContent('-23.8 % (-$4,765.50)');
+    expect(delta).toHaveTextContent('vs el mismo día de la semana pasada a esta hora');
+    const flecha = delta.querySelector('svg');
+    expect(flecha).toHaveAttribute('data-flecha', 'abajo');
+    expect(flecha?.parentElement).toHaveClass('text-hero-baja');
+    expect(flecha?.parentElement).not.toHaveClass('text-hero-sube');
+  });
+
+  it('sin cambio: "0.0 %" sin signo, flecha de lado y sin tono de sube ni de baja', async () => {
+    apiDashboard({
+      'GET /ventas/resumen': (l: Llamada) =>
+        json(
+          200,
+          l.query.get('alturaAl')
+            ? resumen({ venta: '15234.50', cuentas: 40 })
+            : resumen({ venta: '15234.50' }),
+        ),
+    });
+    montar(`/?empresa=${A}`);
+
+    const delta = await screen.findByTestId('venta-total-delta');
+    expect(delta).toHaveTextContent('0.0 % ($0.00)');
+    expect(delta).not.toHaveTextContent('+');
+    expect(delta).not.toHaveTextContent('-');
+    const flecha = delta.querySelector('svg');
+    expect(flecha).toHaveAttribute('data-flecha', 'lado');
+    expect(flecha?.parentElement).toHaveClass('text-hero-tinta');
+    expect(flecha?.parentElement).not.toHaveClass('text-hero-baja');
+    expect(flecha?.parentElement).not.toHaveClass('text-hero-sube');
+  });
+
   it('una base sin ventas no da porcentaje: "—" y el porqué', async () => {
     apiDashboard({
       'GET /ventas/resumen': (l: Llamada) =>

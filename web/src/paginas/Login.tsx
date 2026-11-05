@@ -5,7 +5,7 @@ import { ErrorApi } from '../api/cliente';
 import { useAuth } from '../auth/contexto';
 import { destinoSeguro } from '../auth/siguiente';
 import { Isotipo, Logotipo } from '../marca/Marca';
-import { CAMPO } from './botones';
+import { BOTON_PRIMARIO, CAMPO } from './botones';
 import { PantallaCarga } from './PantallaCarga';
 
 function mensajeDeError(error: unknown): string {
@@ -118,7 +118,10 @@ export function Login() {
         <button
           type="submit"
           disabled={enviando}
-          className="mt-6 w-full rounded-lg bg-acento px-3 py-2.5 text-sm font-semibold text-sobre-acento shadow-sm transition-[filter,box-shadow] duration-150 hover:shadow-tarjeta-alta hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-borde active:translate-y-px disabled:opacity-60"
+          // El primario de siempre; lo propio del Login (ancho completo, más alto, sin borde, su
+          // sombra y su opacidad al enviar) va con `!` para ganarle a la clase base sin depender
+          // del orden de la hoja de estilos.
+          className={`${BOTON_PRIMARIO} mt-6 w-full border-0! py-2.5! shadow-sm! disabled:opacity-60!`}
         >
           {enviando ? 'Entrando…' : 'Entrar'}
         </button>
