@@ -1,3 +1,4 @@
+import { Calculator, Clock3, FileText } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -28,17 +29,14 @@ import {
 } from './cortes/reglas';
 import { useAhora } from './mesas/consultas';
 import { Esqueleto, SegunEstado, Tarjeta, Vacio } from './inicio/Tarjeta';
+import { BOTON_SECUNDARIO, CARRIL_SEGMENTOS, OPCION_CARRIL } from './botones';
+import { Latido } from './inicio/Sparkline';
 import { Vista } from './Vista';
 
-const TH = 'px-2 py-1 font-medium';
-const TD = 'px-2 py-2';
-const NUM = 'px-2 py-2 text-right tabular-nums whitespace-nowrap';
-const BOTON =
-  'rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50';
-const SEGMENTO =
-  'px-3 py-1 text-sm first:rounded-l-md last:rounded-r-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-acento-borde';
-const SEGMENTO_ACTIVO = 'bg-realce font-medium text-tinta';
-const SEGMENTO_INACTIVO = 'bg-superficie text-tinta-medio hover:bg-realce';
+const TH = 'px-3 py-2 font-medium';
+const TD = 'px-3 py-2.5';
+const NUM = 'px-3 py-2.5 text-right tabular-nums whitespace-nowrap';
+const BOTON = BOTON_SECUNDARIO;
 
 const importe = (v: string | null) => (v === null ? '—' : pesos(v));
 
@@ -85,11 +83,7 @@ export function Turnos() {
         la cuenta se cuenta en el turno donde se pagó, como en el Corte X del POS. Un turno abierto
         es el acumulado en curso.
       </p>
-      <div
-        role="group"
-        aria-label="Qué turnos ver"
-        className="mb-4 inline-flex divide-x divide-linea-fuerte rounded-md border border-linea-fuerte"
-      >
+      <div role="group" aria-label="Qué turnos ver" className={`mb-4 ${CARRIL_SEGMENTOS}`}>
         {(
           [
             ['periodo', 'Del periodo'],
@@ -101,7 +95,7 @@ export function Turnos() {
             type="button"
             aria-pressed={vista === valor}
             onClick={() => cambiarVista(valor)}
-            className={`${SEGMENTO} ${vista === valor ? SEGMENTO_ACTIVO : SEGMENTO_INACTIVO}`}
+            className={OPCION_CARRIL}
           >
             {texto}
           </button>
@@ -133,13 +127,13 @@ function TurnosDelPeriodo({
   const lista = useCortes(filtro, rango);
   if (rango === null) {
     return (
-      <Tarjeta titulo="Turnos del periodo">
+      <Tarjeta titulo="Turnos del periodo" icono={Calculator}>
         <Vacio>Elige un periodo válido para ver los turnos.</Vacio>
       </Tarjeta>
     );
   }
   return (
-    <Tarjeta titulo="Turnos del periodo">
+    <Tarjeta titulo="Turnos del periodo" icono={Calculator}>
       <SegunEstado consulta={lista} esqueleto={<Esqueleto lineas={5} />}>
         {(r) =>
           r.cortes.length === 0 ? (
@@ -177,7 +171,7 @@ function TurnosAbiertos({
 }) {
   const consulta = useCortesEnCurso(filtro);
   return (
-    <Tarjeta titulo="Turnos abiertos ahora">
+    <Tarjeta titulo="Turnos abiertos ahora" icono={Clock3}>
       <SegunEstado consulta={consulta} esqueleto={<Esqueleto lineas={3} />}>
         {(turnos) =>
           turnos.length === 0 ? (
@@ -219,7 +213,7 @@ function ListaDeCortes({
       {conTarjetas ? (
         // UI-04: en el celular, una tarjeta por turno con la venta a la vista (en la tabla
         // quedaba fuera de la pantalla, a la derecha).
-        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2" data-testid="tabla-cortes">
+        <ul className="grid grid-cols-1 gap-2.5 md:grid-cols-2" data-testid="tabla-cortes">
           {cortes.map((c) => (
             <TarjetaCorte
               key={c.id}
@@ -268,7 +262,11 @@ function ListaDeCortes({
                   </td>
                   <td className={`${TD} whitespace-nowrap`}>
                     {c.cierreAt === null ? (
-                      <span className="font-medium text-exito" data-testid="corte-abierto">
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-full bg-exito-fondo px-2 py-0.5 text-xs font-semibold text-exito"
+                        data-testid="corte-abierto"
+                      >
+                        <Latido />
                         Abierto
                       </span>
                     ) : (
@@ -277,7 +275,7 @@ function ListaDeCortes({
                   </td>
                   <td className={TD}>{duracionTurno(c.aperturaAt, c.cierreAt, ahora)}</td>
                   <td className={NUM}>{pesos(c.fondo)}</td>
-                  <td className={NUM} data-testid="corte-venta">
+                  <td className={`${NUM} font-semibold`} data-testid="corte-venta">
                     {pesos(c.venta)}
                     {c.posiblementeIncompleto && (
                       <span
@@ -337,8 +335,10 @@ function TarjetaCorte({
         aria-pressed={elegido}
         aria-labelledby={idNombre}
         aria-describedby={idDatos}
-        className={`block w-full min-w-0 rounded-lg border px-3 py-2.5 text-left ${
-          elegido ? 'border-acento-borde bg-realce' : 'border-linea bg-superficie hover:bg-realce'
+        className={`block w-full min-w-0 rounded-xl border px-3.5 py-3 text-left shadow-tarjeta transition-[background-color,box-shadow] duration-150 ${
+          elegido
+            ? 'border-acento-borde bg-realce'
+            : 'border-linea-suave bg-superficie hover:shadow-tarjeta-alta'
         }`}
       >
         <span className="flex min-w-0 items-baseline gap-2">
@@ -347,9 +347,10 @@ function TarjetaCorte({
           </span>
           {c.cierreAt === null && (
             <span
-              className="shrink-0 rounded-full bg-exito-fondo px-2 text-xs font-medium text-exito"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-exito-fondo px-2 py-0.5 text-xs font-semibold text-exito"
               data-testid="corte-abierto"
             >
+              <Latido />
               Abierto
             </span>
           )}
@@ -357,7 +358,10 @@ function TarjetaCorte({
         <span id={idDatos} className="block">
           <span className="mt-0.5 flex min-w-0 items-baseline gap-2">
             <span className="min-w-0 flex-1 truncate text-xs text-tinta-suave">{c.sucursal}</span>
-            <span className="shrink-0 text-lg font-semibold tabular-nums" data-testid="corte-venta">
+            <span
+              className="shrink-0 text-xl font-semibold tracking-tight tabular-nums"
+              data-testid="corte-venta"
+            >
               <span className="sr-only">Venta </span>
               {pesos(c.venta)}
               {c.posiblementeIncompleto && (
@@ -380,7 +384,7 @@ function TarjetaCorte({
               </>
             )}
           </span>
-          <span className="mt-1.5 grid grid-cols-3 gap-2 border-t border-linea-suave pt-1.5 text-xs">
+          <span className="mt-2.5 grid grid-cols-3 gap-2 border-t border-linea-suave pt-2 text-xs">
             <span>
               <span className="block text-tinta-tenue">Cuentas</span>
               <span className="tabular-nums">{c.cuentas}</span>
@@ -411,7 +415,7 @@ function Detalle({ id, onCerrar }: { id: string; onCerrar: () => void }) {
   }, [id, esMovil]);
   return (
     <div ref={caja} className="scroll-mt-20">
-      <Tarjeta titulo="Detalle del turno" className="mt-4">
+      <Tarjeta titulo="Detalle del turno" icono={FileText} className="mt-4">
         <SegunEstado consulta={consulta} esqueleto={<Esqueleto lineas={6} />}>
           {(d) => <ContenidoDetalle d={d} onCerrar={onCerrar} />}
         </SegunEstado>
@@ -424,7 +428,7 @@ function Cifra({ etiqueta, valor, testId }: { etiqueta: string; valor: string; t
   return (
     <div>
       <dt className="text-xs text-tinta-suave">{etiqueta}</dt>
-      <dd className="text-lg font-semibold tabular-nums" data-testid={testId}>
+      <dd className="text-xl font-semibold tracking-tight tabular-nums" data-testid={testId}>
         {valor}
       </dd>
     </div>

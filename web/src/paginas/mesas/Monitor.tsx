@@ -3,7 +3,9 @@ import { memo, useMemo, type ReactNode } from 'react';
 import type { MesasSucursal } from '../../api/tipos';
 import { formatearPesos } from '../../dinero/dinero';
 import { horaEn } from '../../filtros/periodo';
-import { Tarjeta } from '../inicio/Tarjeta';
+import { AlarmClock, CircleDollarSign, Printer, Wifi } from 'lucide-react';
+
+import { EstadoVacio, SUPERFICIE_TARJETA, Tarjeta } from '../inicio/Tarjeta';
 import { edadLegible } from '../inicio/ventaEnVivo';
 import { useConReloj } from './consultas';
 import { filtrarMesas, ordenarMesas, type EstadoMesas, type OrdenMesas } from './orden';
@@ -38,7 +40,10 @@ export interface Respuesta {
 
 function Cifra({ testId, children }: { testId: string; children: ReactNode }) {
   return (
-    <p data-testid={testId} className="text-2xl font-semibold tabular-nums text-tinta">
+    <p
+      data-testid={testId}
+      className="text-3xl font-semibold tracking-tight tabular-nums text-tinta"
+    >
       {children}
     </p>
   );
@@ -62,7 +67,9 @@ function useAtencion(mesas: readonly MesaViva[]): number {
 }
 
 function textoSinHora(n: number): string {
-  return n === 1 ? '1 mesa sin hora de apertura legible.' : `${n} mesas sin hora de apertura legible.`;
+  return n === 1
+    ? '1 mesa sin hora de apertura legible.'
+    : `${n} mesas sin hora de apertura legible.`;
 }
 
 export function TarjetasKpi({
@@ -82,7 +89,7 @@ export function TarjetasKpi({
     monitor.excluidas.length > 0 ? `Sin contar: ${monitor.excluidas.join(', ')}.` : null;
   return (
     <div className="grid min-w-0 grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-      <Tarjeta titulo="Mesas abiertas">
+      <Tarjeta titulo="Mesas abiertas" icono={CircleDollarSign} iconoEnCelular={false}>
         <Cifra testId="kpi-mesas">{monitor.mesas.length}</Cifra>
         <p className="text-sm text-tinta-tenue">
           En curso:{' '}
@@ -97,7 +104,7 @@ export function TarjetasKpi({
         )}
         {sinContar && <p className="mt-1 text-xs text-aviso">{sinContar}</p>}
       </Tarjeta>
-      <Tarjeta titulo="Cuentas sin imprimir">
+      <Tarjeta titulo="Cuentas sin imprimir" icono={Printer} iconoEnCelular={false}>
         <Cifra testId="kpi-sin-imprimir">
           {monitor.sinImprimir === null ? 'Sin dato' : monitor.sinImprimir}
         </Cifra>
@@ -139,16 +146,28 @@ function KpiAtencion({
       type="button"
       aria-pressed={activo}
       onClick={onClick}
-      title={activo ? 'Quitar el filtro de atención' : 'Mostrar sólo las mesas que requieren atención'}
-      className={`min-w-0 rounded-lg border bg-superficie p-4 text-left shadow-sm hover:bg-realce focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-borde ${
-        atencion > 0 ? 'border-2 border-peligro-borde' : 'border-linea'
+      title={
+        activo ? 'Quitar el filtro de atención' : 'Mostrar sólo las mesas que requieren atención'
+      }
+      className={`min-w-0 ${SUPERFICIE_TARJETA} p-4 text-left transition-[box-shadow,background-color] duration-150 hover:shadow-tarjeta-alta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-borde md:p-5 ${
+        atencion > 0 ? 'border-2 border-peligro-borde bg-peligro-fondo/40' : ''
       } ${activo ? 'ring-2 ring-acento-borde' : ''}`}
     >
-      <span className="block text-sm font-medium text-tinta-suave">Atención requerida</span>
-      <span className="mt-2 block">
+      <span className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className={`hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:flex ${
+            atencion > 0 ? 'bg-peligro-fondo text-peligro' : 'bg-realce text-acento-texto'
+          }`}
+        >
+          <AlarmClock aria-hidden="true" className="h-4 w-4" />
+        </span>
+        <span className="block text-sm font-medium text-tinta-suave">Atención requerida</span>
+      </span>
+      <span className="mt-2.5 block">
         <span
           data-testid="kpi-atencion"
-          className={`block text-2xl font-semibold tabular-nums ${atencion > 0 ? 'text-peligro' : 'text-tinta'}`}
+          className={`block text-3xl font-semibold tracking-tight tabular-nums ${atencion > 0 ? 'text-peligro' : 'text-tinta'}`}
         >
           {atencion}
         </span>
@@ -183,7 +202,7 @@ function useUltimaLectura(respuesta: Respuesta) {
 function UltimaLectura({ respuesta, zona }: { respuesta: Respuesta; zona: string }) {
   const lectura = useUltimaLectura(respuesta);
   return (
-    <Tarjeta titulo="Última lectura">
+    <Tarjeta titulo="Última lectura" icono={Wifi} iconoEnCelular={false}>
       {lectura === null ? (
         <Cifra testId="kpi-lectura">—</Cifra>
       ) : (
@@ -191,7 +210,7 @@ function UltimaLectura({ respuesta, zona }: { respuesta: Respuesta; zona: string
           <p
             data-testid="kpi-lectura"
             data-frescura={lectura.frescura}
-            className={`text-2xl font-semibold tabular-nums ${COLOR_FRESCURA[lectura.frescura]}`}
+            className={`text-3xl font-semibold tracking-tight tabular-nums ${COLOR_FRESCURA[lectura.frescura]}`}
           >
             {horaEn(zona, lectura.recibidoAt)}
           </p>
@@ -327,16 +346,30 @@ function useMinutos(mesa: MesaViva) {
   return { minutos, semaforo: semaforo(minutos) };
 }
 
+/** El punto de color del tiempo abierta (UI-05): el mismo semáforo que el borde. */
+const PUNTO: Record<Semaforo, string> = {
+  ok: 'bg-semaforo-ok',
+  alerta: 'bg-semaforo-alerta',
+  rojo: 'bg-semaforo-rojo',
+  'sin-dato': 'bg-semaforo-sin-dato',
+};
+
+/** A partir de cuántos minutos la barra de antigüedad va llena (el rojo empieza en 61). */
+const MINUTOS_BARRA_LLENA = 90;
+
 const TarjetaMesa = memo(function TarjetaMesa({ mesa, conSucursal, onAbrir }: PropsTarjeta) {
   const { minutos, semaforo: color } = useMinutos(mesa);
   const partidas = mesa.partidas ?? [];
   const resto = partidas.length - PARTIDAS_VISIBLES;
   const nombre = nombreMesa(mesa, conSucursal);
+  // La barra de abajo crece con el tiempo abierta (decorativa: los minutos van escritos).
+  const llenado =
+    minutos === null ? 0 : Math.min(100, Math.max(4, (minutos / MINUTOS_BARRA_LLENA) * 100));
   return (
     <li
       aria-label={nombre}
       data-semaforo={color}
-      className={`relative min-w-0 rounded-lg border-2 bg-superficie p-3 shadow-sm hover:bg-fondo ${BORDE[color]}`}
+      className={`group relative min-w-0 overflow-hidden rounded-xl border-2 bg-superficie p-3.5 pb-4 shadow-tarjeta transition-[box-shadow,transform] duration-150 hover:shadow-tarjeta-alta motion-safe:hover:-translate-y-0.5 ${BORDE[color]}`}
     >
       {/* Botón "estirado" sobre toda la tarjeta: un <button> no puede contener la
           lista de partidas, así que no envuelve el contenido. */}
@@ -345,25 +378,38 @@ const TarjetaMesa = memo(function TarjetaMesa({ mesa, conSucursal, onAbrir }: Pr
           type="button"
           aria-label={`Ver consumo de ${nombre}`}
           onClick={(e) => onAbrir(mesa, e.currentTarget)}
-          className="absolute inset-0 z-10 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-borde"
+          className="absolute inset-0 z-10 rounded-lg focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-acento-borde"
         />
       )}
-      <div className="flex items-baseline justify-between gap-2">
-        <h3 className="truncate text-lg font-semibold">{mesa.mesa ?? 'Sin dato'}</h3>
-        <span className="shrink-0 font-semibold tabular-nums" data-testid="mesa-total">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="truncate font-titulo text-xl leading-tight font-bold text-tinta">
+          {mesa.mesa ?? 'Sin dato'}
+        </h3>
+        <span
+          className="shrink-0 text-base font-semibold tracking-tight tabular-nums text-tinta"
+          data-testid="mesa-total"
+        >
           {mesa.total === null ? 'Sin dato' : formatearPesos(mesa.total)}
         </span>
       </div>
-      {conSucursal && <p className="truncate text-xs text-tinta-tenue">{mesa.sucursal}</p>}
-      <p className="truncate text-sm text-tinta-suave">{mesa.mesero ?? 'Mesero: sin dato'}</p>
-      <p className="text-sm" data-testid="mesa-minutos">
-        {minutos === null ? 'Tiempo: sin dato' : `${minutos} min`}
-        <span className="sr-only"> · {TEXTO_SEMAFORO[color]}</span>
-      </p>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <p
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-realce px-2 py-0.5 text-xs font-semibold tabular-nums text-tinta-medio"
+          data-testid="mesa-minutos"
+        >
+          <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PUNTO[color]}`} />
+          {minutos === null ? 'Tiempo: sin dato' : `${minutos} min`}
+          <span className="sr-only"> · {TEXTO_SEMAFORO[color]}</span>
+        </p>
+        <p className="min-w-0 truncate text-sm text-tinta-suave">
+          {mesa.mesero ?? 'Mesero: sin dato'}
+        </p>
+      </div>
+      {conSucursal && <p className="mt-0.5 truncate text-xs text-tinta-tenue">{mesa.sucursal}</p>}
       {mesa.partidas === null ? (
-        <p className="mt-2 text-xs text-tinta-tenue">Partidas: sin dato</p>
+        <p className="mt-2.5 text-xs text-tinta-tenue">Partidas: sin dato</p>
       ) : (
-        <ul className="mt-2 space-y-0.5 text-xs text-tinta-medio">
+        <ul className="mt-2.5 space-y-0.5 border-t border-linea-suave pt-2 text-xs text-tinta-medio">
           {partidas.slice(0, PARTIDAS_VISIBLES).map((p, i) => (
             <li key={i} className="truncate">
               {p.cantidad === null ? '' : `${p.cantidad} × `}
@@ -378,6 +424,12 @@ const TarjetaMesa = memo(function TarjetaMesa({ mesa, conSucursal, onAbrir }: Pr
           {partidas.length === 0 && <li className="text-tinta-tenue">Sin partidas</li>}
         </ul>
       )}
+      <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-realce">
+        <span
+          className={`block h-full rounded-r-full ${PUNTO[color]}`}
+          style={{ width: `${llenado}%` }}
+        />
+      </span>
     </li>
   );
 }, mismaTarjeta);
@@ -450,13 +502,10 @@ export function GridMesas({
   );
 
   if (visibles.length === 0) {
-    return (
-      <p
-        className={`py-6 text-center text-tinta-tenue ${variante === 'pared' ? '' : 'text-sm'}`}
-      >
-        {vacio(mesas, estado, sinHora)}
-      </p>
-    );
+    if (variante === 'pared') {
+      return <p className="py-6 text-center text-tinta-tenue">{vacio(mesas, estado, sinHora)}</p>;
+    }
+    return <EstadoVacio titulo={vacio(mesas, estado, sinHora)} />;
   }
   const Tarjeta = variante === 'pared' ? TarjetaPared : TarjetaMesa;
   return (

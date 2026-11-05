@@ -50,3 +50,15 @@ export const SERIES_FORMA: readonly (Token | TokenAcento)[] = [
   'serie-3',
   'serie-4',
 ];
+
+/**
+ * El ticket promedio de cada hora (Σ venta / cuentas de esa hora), en centavos `bigint`; sólo
+ * para dibujar la tendencia (`paraGrafica`). Horas sin cuentas o ilegibles: hueco.
+ */
+export function ticketPorHora(filas: readonly VentaHora[]): (number | null)[] {
+  const conCuentas = [...filas].sort((a, b) => a.hora - b.hora).filter((f) => f.cuentas > 0);
+  return conCuentas.map((f) => {
+    const c = aCentavos(f.venta);
+    return c === null ? null : paraGrafica(c / BigInt(f.cuentas));
+  });
+}
