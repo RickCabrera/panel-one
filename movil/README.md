@@ -106,7 +106,7 @@ Además de la llave:
 - Play pide **AAB**, no APK: agregar `./gradlew bundleRelease` y firmar el `.aab` con la llave de
   *upload* (con Play App Signing, la llave de arriba sirve como llave de upload).
 - Cuenta de desarrollador de Google Play (pago único), ficha de la tienda (capturas, ícono de
-  512×512 —`recursos/isotipo-app.svg`—, descripción), política de privacidad pública y el
+  512×512 —`docs/marca/isotipo-app.svg`—, descripción), política de privacidad pública y el
   formulario de *Seguridad de los datos*.
 - Una app que sólo envuelve un sitio web puede ser rechazada por "funcionalidad mínima"
   (política de *webview spam*): conviene llegar con algo nativo (push FCM, por ejemplo).
@@ -143,7 +143,7 @@ npx cap open android      # (opcional) abre Android Studio
 - **Otro panel** (un dominio propio, o uno de pruebas): `YC_URL_PANEL=https://panel.ejemplo.mx
   npx cap sync android`. Sólo https, sin ruta (la cookie y `/api` viven en la raíz del origen);
   `url-panel.cjs` lo valida. En el CI es la variable del repo `YC_URL_PANEL`.
-- **Íconos y splash**: se generan desde `recursos/*.svg` con `npm run iconos` (rasteriza con
+- **Íconos y splash**: se generan desde `docs/marca/isotipo-*.svg` (la marca, UI-02) con `npm run iconos` (rasteriza con
   Playwright, que no es dependencia de `/movil`) y los PNG se versionan en
   `android/app/src/main/res`.
 - **versionCode** = `YC_VERSION_CODE` (en el CI, el número de corrida de `apk.yml`); versionName

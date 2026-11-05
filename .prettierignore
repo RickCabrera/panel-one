@@ -31,9 +31,8 @@ docs/
 api/openapi.json
 
 # App Android (MOV-01): el proyecto nativo lo genera `npx cap add android` y lo formatea
-# Android Studio; los SVG de la marca y los node_modules de /movil tampoco son nuestros.
+# Android Studio; los node_modules de /movil tampoco son nuestros.
 movil/android/
-movil/recursos/
 movil/node_modules/
 # La pantalla de respaldo lleva el isotipo en línea (un path de 33 KB en una sola línea).
 movil/www/index.html

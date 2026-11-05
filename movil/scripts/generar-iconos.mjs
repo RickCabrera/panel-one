@@ -1,4 +1,4 @@
-// Genera los íconos y el splash de Android desde el isotipo de la marca (movil/recursos/*.svg).
+// Genera los íconos y el splash de Android desde el isotipo de la marca (docs/marca/*.svg, UI-02).
 //
 //   node scripts/generar-iconos.mjs        (o `npm run iconos`)
 //
@@ -34,11 +34,11 @@ try {
 }
 
 // El ojo (arena) sin fondo, con su viewBox ajustado. Se quita el <title> para el raster.
-const ojo = readFileSync(join(raiz, 'recursos/isotipo-oscuro.svg'), 'utf8').replace(
+const ojo = readFileSync(join(raiz, '../docs/marca/isotipo-oscuro.svg'), 'utf8').replace(
   /<title>.*?<\/title>/,
   '',
 );
-const app = readFileSync(join(raiz, 'recursos/isotipo-app.svg'), 'utf8').replace(
+const app = readFileSync(join(raiz, '../docs/marca/isotipo-app.svg'), 'utf8').replace(
   /<title>.*?<\/title>/,
   '',
 );
