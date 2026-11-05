@@ -153,8 +153,9 @@ main** (o a mano: GitHub › Actions › *Instalador del agente* › *Run workfl
 3. Un segundo paso, que no compila nada, lo sube con su `.sha256` y una prueba de procedencia
    (`gh attestation verify Instalar-YoControlo.zip -R RickCabrera/panel-one`) al release fijo
    **`instalador`**. Sólo publica el commit que pasó el CI en main y sólo si sigue siendo la punta
-   de main. Cada versión queda también como `Instalar-YoControlo-<commit>.zip`, para regresar a
-   una anterior. La descarga queda en una URL que no cambia:
+   de main. Las 5 versiones más recientes quedan también como `Instalar-YoControlo-<commit>.zip`,
+   para regresar a una anterior (el `.sha256` es del archivo con el nombre fijo; el tag
+   `instalador` se queda en el commit de la primera publicación: el commit real va en las notas). La descarga queda en una URL que no cambia:
    `https://github.com/RickCabrera/panel-one/releases/download/instalador/Instalar-YoControlo.zip`
 
 Para que el panel la enseñe, en Railway (servicio **api**) va

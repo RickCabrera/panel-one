@@ -36,7 +36,9 @@ permissions:
 
 concurrency:
   group: instalador-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
-  cancel-in-progress: true
+  # En main no se cancela: cortar `publicar` a mitad de la subida dejaría el .zip y el .sha256 de
+  # commits distintos. La comprobación de la punta de main ya evita que uno viejo pise uno nuevo.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   API_URL_PUBLICA: ${{ vars.API_URL_PUBLICA || 'https://web-production-730b5.up.railway.app/api' }}
@@ -153,4 +155,11 @@ jobs:
           cp Instalar-YoControlo.zip "Instalar-YoControlo-${corto}.zip"
           gh release upload instalador -R "$GITHUB_REPOSITORY" --clobber \
             Instalar-YoControlo.zip Instalar-YoControlo.zip.sha256 "Instalar-YoControlo-${corto}.zip"
+          # Historial acotado: sólo las 5 copias versionadas más recientes.
+          gh release view instalador -R "$GITHUB_REPOSITORY" --json assets \
+            --jq '[.assets[] | select(.name | test("^Instalar-YoControlo-[0-9a-f]{7}\\.zip$"))]
+                  | sort_by(.createdAt) | reverse | .[5:] | .[].name' \
+            | while read -r viejo; do
+                gh release delete-asset instalador "$viejo" -R "$GITHUB_REPOSITORY" --yes
+              done
           echo "Descarga: https://github.com/${GITHUB_REPOSITORY}/releases/download/instalador/Instalar-YoControlo.zip"
