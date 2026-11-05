@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { EstadoMembresia, EstadoPagoMes } from '../../api/tipos';
+import { Isotipo } from '../../marca/Marca';
 import { CHIP_ESTADO, CHIP_PAGO, C } from './estilos';
 import { TEXTO_ESTADO, TEXTO_PAGO } from './formato';
 
@@ -48,7 +49,29 @@ export function ErrorCarga({ que }: { que: string }) {
   );
 }
 
-export function Tarjeta({ valor, etiqueta }: { valor: ReactNode; etiqueta: string }) {
+export function Tarjeta({
+  valor,
+  etiqueta,
+  destacada = false,
+}: {
+  valor: ReactNode;
+  etiqueta: string;
+  /** UI-05: la cifra principal del tablero, sobre el morado de la marca (como el hero del Inicio). */
+  destacada?: boolean;
+}) {
+  if (destacada) {
+    return (
+      <div className="relative isolate overflow-hidden rounded-2xl border border-hero-borde bg-linear-135 from-hero to-hero-fin p-4 text-hero-tinta shadow-hero sm:p-5">
+        <Isotipo
+          variante="oscuro"
+          decorativo
+          className="pointer-events-none absolute -top-8 -right-8 -z-10 h-40 w-40 opacity-[0.08]"
+        />
+        <div className={`${C.numero} text-hero-cifra`}>{valor}</div>
+        <div className="mt-1 text-sm text-hero-tenue">{etiqueta}</div>
+      </div>
+    );
+  }
   return (
     <div className={C.tarjetaPad}>
       <div className={C.numero}>{valor}</div>

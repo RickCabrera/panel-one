@@ -27,7 +27,11 @@ export function Tablero() {
       ) : (
         <>
           <section aria-label="Ingresos" className="grid gap-3 sm:grid-cols-2">
-            <Tarjeta valor={pesos(metricas.data.mrr)} etiqueta="Ingreso mensual recurrente (MRR)" />
+            <Tarjeta
+              destacada
+              valor={pesos(metricas.data.mrr)}
+              etiqueta="Ingreso mensual recurrente (MRR)"
+            />
             <Tarjeta valor={pesos(metricas.data.ingresosMes)} etiqueta="Cobrado este mes" />
           </section>
           <section

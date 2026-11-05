@@ -3110,6 +3110,32 @@ guardia del Caddyfile y `check:landing` (rutas relativas) cubren `/landing`.
   horizontal de página a 360 px; `check:bundle` y `check:pwa` en verde; capturas a 360, 390,
   768 y 1440 en los dos temas revisadas.
 
+## UI-05 · Pulido visual del panel (v3)
+
+- [ ] **UI-05 · Pulido visual del panel (v3)** — pedida por Ricardo el 5-nov-2026 (fuera de la
+  cola; rama `feat/ui-v3`). Sólo /web/src (no la landing), sin cambiar datos, endpoints ni
+  contratos. Lenguaje visual con identidad propia, el tono de la landing: título de cada vista en
+  la display de la marca (Lilita One, un solo peso y sin negritas sintéticas), cifras grandes
+  tabulares, tarjetas con filo de luz y sombra larga (`shadow-tarjeta`), radios y espaciados
+  consistentes, iconos lucide junto al título de cada tarjeta, botones y campos en un solo lugar
+  (`paginas/botones.ts`). Tokens nuevos en `tema/paleta.ts` (hero, hero-fin, hero-borde,
+  hero-tinta, hero-tenue, hero-cifra, hero-sube, hero-baja, hero-rejilla, brillo, resalte), con
+  sus pruebas de contraste. **Inicio:** hero morado con la venta grande en arena, comparación con
+  "Hoy" contra el mismo día de la semana pasada a esta hora (la misma consulta y llave que la
+  base del Resumen, F2-220), flecha y signo en texto, gráfica por hora en área con degradado
+  dentro del hero; formas de pago a su lado con la dona redondeada y lo pagado al centro; KPI
+  con mini-sparkline (ticket por hora, SVG a mano); "Venta en vivo" y "Turno en curso" con el
+  punto que late. Cifras que cuentan al cambiar (en `bigint`, sin float) y tarjetas que aparecen
+  al abrir, todo apagado con «reducir movimiento». **Mesas:** tarjetas con jerarquía (mesa e
+  importe arriba, píldora de minutos con el color del semáforo, barra de antigüedad), esqueleto
+  con forma de salón. **Turnos/Tickets/Meseros:** control segmentado sobre carril, "Abierto" con
+  latido, tabla de tickets en tarjeta con esqueleto de filas, ranking de meseros con insignia de
+  lugar y barra relativa al mejor de su sucursal. Estados vacíos con el ojo de la marca.
+  **Login y Plataforma:** fondo morado con el ojo enorme y apagado; MRR destacado.
+  **Listo cuando:** CI verde; `check:bundle` ≤ 400 kB y `check:pwa` verdes; tests de paleta
+  extendidos a los tokens nuevos; capturas antes/después a 390 y 1440 en los dos temas
+  revisadas.
+
 ## Decisiones abiertas para Ricardo
 
 No son código hasta que se decidan. Cada una dice dónde está documentada; al decidir, se

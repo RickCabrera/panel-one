@@ -63,6 +63,17 @@
   --color-lateral-tinta: var(--lateral-tinta);
   --color-lateral-tenue: var(--lateral-tenue);
   --color-arena: var(--arena);
+  --color-hero: var(--hero);
+  --color-hero-fin: var(--hero-fin);
+  --color-hero-borde: var(--hero-borde);
+  --color-hero-tinta: var(--hero-tinta);
+  --color-hero-tenue: var(--hero-tenue);
+  --color-hero-cifra: var(--hero-cifra);
+  --color-hero-sube: var(--hero-sube);
+  --color-hero-baja: var(--hero-baja);
+  --color-hero-rejilla: var(--hero-rejilla);
+  --color-brillo: var(--brillo);
+  --color-resalte: var(--resalte);
 }
 
 /*
@@ -75,6 +86,9 @@
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-titulo: 'Outfit', 'Inter', system-ui, sans-serif;
+  /* UI-05: la display de la marca (la de la landing) para el título de cada vista. Un solo
+     peso (400): nunca en negritas sintéticas (ver `h1` abajo). */
+  --font-display: 'Lilita One', 'Outfit', system-ui, sans-serif;
   --text-xs: 0.75rem;
   --text-xs--line-height: 1rem;
   --text-sm: 0.8125rem;
@@ -89,9 +103,15 @@
   --text-2xl--line-height: 1.8rem;
   --text-3xl: 1.75rem;
   --text-3xl--line-height: 2.1rem;
+  /* UI-05: cifras de dinero grandes (KPI y hero). */
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
 }
 
 /* Sombras suaves, teñidas del morado de marca (el token `sombra` de paleta.ts). */
@@ -101,11 +121,54 @@
   --shadow: 0 1px 3px var(--sombra), 0 4px 12px -4px var(--sombra);
   --shadow-md: 0 2px 4px var(--sombra), 0 8px 20px -6px var(--sombra);
   --shadow-lg: 0 4px 8px var(--sombra), 0 16px 36px -10px var(--sombra);
+  /* UI-05: la tarjeta del panel. Un filo de luz arriba (resalte), una sombra corta de contacto
+     y una larga y difusa: profundidad sin «flotar». Al pasar, la difusa se tiñe de violeta. */
+  --shadow-tarjeta:
+    inset 0 1px 0 var(--resalte), 0 1px 2px var(--sombra), 0 10px 28px -16px var(--sombra);
+  --shadow-tarjeta-alta:
+    inset 0 1px 0 var(--resalte), 0 1px 2px var(--sombra), 0 16px 36px -14px var(--brillo);
+  --shadow-hero: 0 2px 4px var(--sombra), 0 24px 48px -20px var(--hero-fin);
 }
 
 /* UI-04: las hojas inferiores del celular suben desde abajo (sólo con `motion-safe:`). */
 @theme {
   --animate-hoja: hoja-sube 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* UI-05: las tarjetas del Inicio aparecen una tras otra al abrir (una sola vez), el punto del
+     «en vivo» late y los esqueletos brillan. Todo con `motion-safe:`: con «reducir movimiento»
+     no se mueve nada. */
+  --animate-aparecer: aparecer 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-latido: latido 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-destello: destello 1.6s ease-in-out infinite;
+
+  @keyframes aparecer {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes latido {
+    0% {
+      transform: scale(1);
+      opacity: 0.7;
+    }
+    80%,
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
+  }
+  @keyframes destello {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: -100% 0;
+    }
+  }
 
   @keyframes hoja-sube {
     from {
@@ -141,6 +204,15 @@ body {
   h3 {
     font-family: var(--font-titulo);
     letter-spacing: -0.01em;
+  }
+
+  /* UI-05: el título de cada vista va en la display de la marca. Lilita One trae un solo peso:
+     `font-synthesis: none` evita que un `font-semibold` la engorde con negritas falsas. */
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-synthesis: none;
+    letter-spacing: 0.005em;
   }
 
   /* Tablas más limpias: cifras alineadas, encabezado discreto y fila resaltada al pasar. */

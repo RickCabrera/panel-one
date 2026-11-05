@@ -1,10 +1,12 @@
+import { MonitorUp, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { ErrorApi } from '../api/cliente';
 import { useAlcance } from '../filtros/alcance';
 import { horaEn, zonaDelPanel } from '../filtros/periodo';
-import { Esqueleto } from './inicio/Tarjeta';
+import { BOTON_SECUNDARIO, BOTON_SEGMENTO, SEGMENTO_LIBRE } from './botones';
+import { BLOQUE_ESQUELETO, EstadoVacio, Esqueleto, SUPERFICIE_TARJETA } from './inicio/Tarjeta';
 import type { Filtro } from './inicio/consultas';
 import { useMonitorMesas } from './mesas/consultas';
 import { DetalleMesa } from './mesas/Detalle';
@@ -80,42 +82,47 @@ export function Mesas() {
   };
 
   return (
-    <Vista titulo="Monitor de Mesas">
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-3 text-sm text-tinta-tenue">
-        <span
-          data-testid="consultado"
-          data-modo={enVivo ? 'en-vivo' : 'polling'}
-          className="flex items-center gap-2"
-        >
+    <Vista
+      titulo="Monitor de Mesas"
+      acciones={
+        <>
           <span
-            aria-hidden="true"
-            className={`inline-block h-2 w-2 rounded-full ${
-              consulta.isFetching ? 'animate-pulse bg-info' : 'bg-linea-fuerte'
-            }`}
-          />
-          {consulta.isFetching
-            ? 'Actualizando…'
-            : consulta.dataUpdatedAt > 0
-              ? `Consultado ${horaEn(zona, consulta.dataUpdatedAt)} · ${textoModo(enVivo)}`
-              : 'Sin consultar todavía'}
-        </span>
-        <button
-          type="button"
-          onClick={() => void consulta.refetch()}
-          disabled={filtro === null || consulta.isFetching}
-          className="rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce disabled:opacity-50"
-        >
-          Refrescar
-        </button>
-        <Link
-          to={enlaceMesas('/mesas/pared', parametros, criterio)}
-          onClick={pedirPantallaCompleta}
-          className="rounded-md border border-linea-fuerte bg-superficie px-3 py-1 text-sm text-tinta-medio hover:bg-realce"
-        >
-          Vista de pared
-        </Link>
-      </div>
-
+            data-testid="consultado"
+            data-modo={enVivo ? 'en-vivo' : 'polling'}
+            className="flex items-center gap-2 text-sm text-tinta-tenue"
+          >
+            <span
+              aria-hidden="true"
+              className={`inline-block h-2 w-2 rounded-full ${
+                consulta.isFetching ? 'motion-safe:animate-pulse bg-info' : 'bg-linea-fuerte'
+              }`}
+            />
+            {consulta.isFetching
+              ? 'Actualizando…'
+              : consulta.dataUpdatedAt > 0
+                ? `Consultado ${horaEn(zona, consulta.dataUpdatedAt)} · ${textoModo(enVivo)}`
+                : 'Sin consultar todavía'}
+          </span>
+          <button
+            type="button"
+            onClick={() => void consulta.refetch()}
+            disabled={filtro === null || consulta.isFetching}
+            className={BOTON_SECUNDARIO}
+          >
+            <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
+            Refrescar
+          </button>
+          <Link
+            to={enlaceMesas('/mesas/pared', parametros, criterio)}
+            onClick={pedirPantallaCompleta}
+            className={BOTON_SECUNDARIO}
+          >
+            <MonitorUp aria-hidden="true" className="h-3.5 w-3.5" />
+            Vista de pared
+          </Link>
+        </>
+      }
+    >
       <Controles criterio={criterio} elegir={elegir} />
 
       <div ref={contenido} tabIndex={-1} className="outline-none">
@@ -146,7 +153,7 @@ function Controles({
   elegir: (cambio: Partial<CriterioMesas>) => void;
 }) {
   return (
-    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3 text-sm">
+    <div className="flex min-w-0 flex-wrap items-center gap-3 text-sm">
       <label className="flex items-center gap-2 text-tinta-medio">
         Ordenar por
         <select
@@ -155,7 +162,7 @@ function Controles({
             const orden = leerOrden(e.target.value);
             if (orden) elegir({ orden });
           }}
-          className="rounded-md border border-linea-fuerte bg-superficie px-2 py-1 text-tinta"
+          className="rounded-lg border border-linea-fuerte bg-superficie px-2.5 py-1.5 text-tinta shadow-xs"
         >
           {ORDENES.map((o) => (
             <option key={o} value={o}>
@@ -171,11 +178,7 @@ function Controles({
             type="button"
             aria-pressed={criterio.estado === e}
             onClick={() => elegir({ estado: e })}
-            className={`rounded-md border px-3 py-1 ${
-              criterio.estado === e
-                ? 'border-acento-borde bg-realce-fuerte font-medium text-tinta'
-                : 'border-linea-fuerte bg-superficie text-tinta-medio hover:bg-realce'
-            }`}
+            className={`${BOTON_SEGMENTO} ${SEGMENTO_LIBRE}`}
           >
             {TEXTO_ESTADO[e]}
           </button>
@@ -215,11 +218,29 @@ function Contenido({
         </p>
       );
     }
+    // UI-05: el esqueleto con la forma de lo que viene: cuatro KPI y el salón de mesas.
     return (
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        {Array.from({ length: 4 }, (_, i) => (
-          <Esqueleto key={i} />
-        ))}
+      <div aria-busy="true" aria-label="Cargando" data-testid="esqueleto-mesas">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className={`${SUPERFICIE_TARJETA} p-4 md:p-5`}>
+              <Esqueleto lineas={1} />
+            </div>
+          ))}
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className={`${SUPERFICIE_TARJETA} h-36 p-3.5`}>
+              <div className="flex justify-between gap-2">
+                <div className={`h-6 w-10 ${BLOQUE_ESQUELETO}`} />
+                <div className={`h-6 w-20 ${BLOQUE_ESQUELETO}`} />
+              </div>
+              <div className={`mt-3 h-5 w-16 rounded-full ${BLOQUE_ESQUELETO}`} />
+              <div className={`mt-3 h-3 w-3/4 ${BLOQUE_ESQUELETO}`} />
+              <div className={`mt-2 h-3 w-1/2 ${BLOQUE_ESQUELETO}`} />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -235,11 +256,16 @@ function Contenido({
       )}
       <Avisos respuesta={respuesta} zona={zona} />
       {monitor.conectadas === 0 ? (
-        <p data-testid="sin-vivo" className="mt-6 text-center text-sm text-tinta-tenue">
-          {monitor.estados.length === 0
-            ? 'No hay sucursales en este alcance.'
-            : TEXTO_NADIE_EN_VIVO}
-        </p>
+        <div className="mt-6">
+          <EstadoVacio
+            testId="sin-vivo"
+            titulo={
+              monitor.estados.length === 0
+                ? 'No hay sucursales en este alcance.'
+                : TEXTO_NADIE_EN_VIVO
+            }
+          />
+        </div>
       ) : (
         <>
           <div className="mt-4">
