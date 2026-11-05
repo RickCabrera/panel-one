@@ -50,27 +50,48 @@ datos. Nada de esto toca SoftRestaurant.
 ## 3. Landing — `web/landing/` → `web/dist-landing/`
 
 - Build **aparte** de la SPA (`vite.landing.config.ts`): HTML + CSS a mano + un módulo chico para
-  el formulario (`src/landing/`). No entra al precache de la PWA ni al tope de `check:bundle`.
+  el formulario, los planes y la demo animada (`src/landing/`). No entra al precache de la PWA ni al tope de `check:bundle`.
   `npm run build` construye las dos. Local: `npm run dev:landing` (puerto 5174, con proxy a
   `/api`).
-- Secciones: propuesta de valor, qué ves (con dos **ilustraciones SVG** del panel y del monitor de
-  mesas, marcadas como "Ilustración con datos de demostración": no son capturas reales), cómo
-  funciona, precios, preguntas frecuentes y contacto.
-- **Precios: DECISION PROVISIONAL.** No hay precios definidos en ningún documento. La tabla dice
-  qué incluye cada plan y que se cobra por sucursal al mes; la cifra dice "Precio por confirmar".
-  Decisión abierta para Ricardo (un test lo fija: no se publica una cifra inventada).
+- **Marca Yo Controlo (UI-03):** logo en `web/landing/marca/` (copias propias de la landing; el
+  panel lleva las suyas en `web/public/marca/`), paleta morado #2C1533 / arena #E3CBA8 / violeta
+  #6D3FC0, Lilita One para títulos y Atkinson Hyperlegible para texto, empaquetadas desde
+  `@fontsource` (la CSP dice `font-src 'self'`). Los SVG del logo se adelgazaron (de ~93 kB a
+  ~6 kB) con una simplificación Douglas-Peucker de 0.4 unidades sobre el trazo original.
+- Secciones: hero con demo animada (el ojo del logo vigila la caja: caen tickets y sube la venta
+  del día; la pupila sigue al puntero y parpadea; quieto con `prefers-reduced-motion`), qué ves
+  (beneficios + **ilustraciones HTML/CSS** del celular y del monitor de mesas), "tu caja sigue
+  igual" (solo lectura, sin internet, sin luz), cómo funciona en 3 pasos, planes, preguntas
+  frecuentes y contacto. Las ilustraciones van `aria-hidden` y con el pie "Ilustración con datos de
+  demostración": no son capturas reales.
+- **Planes sin precio (UI-03):** Esencial (1 sucursal), Completo (hasta 5, propuesta) y Cadena
+  (ilimitadas); cada uno dice "Cotiza" y su botón "Quiero este plan" lleva al formulario con el
+  plan preseleccionado (`?plan=completo#contacto`, funciona sin JS). La cifra y el tope de
+  sucursales los decide Ricardo (D-07); un test y `check:landing` fijan que no se publica una cifra.
+  Lo que no está listo de verdad no se promete (revisión de UI-03): la facturación CFDI dice
+  "próximamente" (PAC real pendiente, F2-190) y el código en el ticket depende de la versión de
+  SR; la utilidad dice "estimada" (sin captura de compras); los tickets se exportan a CSV.
+- **Accesibilidad de la demo:** el hero lleva el pie "Ilustración con datos de demostración" y un
+  botón "Pausar animación" (WCAG 2.2.2) que sólo aparece si la demo se mueve; los tres "Quiero este
+  plan" se nombran distinto para lectores de pantalla.
 - `URL_PANEL` (al construir): a dónde lleva "Entrar al panel". Por defecto `/login`.
+- `URL_SITIO` (al construir, UI-03): el origen público (`https://…`) para la `og:image` absoluta
+  (`og.png`, 1200×630). Sin ella queda `/og.png`, que algunos lectores de Open Graph no toman.
 - **Formulario de contacto** → `POST /api/publico/contacto` (público, 3/min y 20/h por IP con dos
   throttlers propios). Sale por el `PuertoCorreo` (Brevo real / falso) al buzón de
   `CONTACTO_DESTINO`, con todo lo del visitante escapado (y sin saltos de línea en el asunto). No
   se guarda nada en nuestra base. El campo `sitio` es una trampa para bots: con algo, 202 y no sale
-  nada. Sin `CONTACTO_DESTINO`: fuera de producción, `contacto@monitor.local`; en producción, 503
+  nada. El plan elegido (UI-03) no es un campo del contrato (`ContactoDto` rechaza campos
+  desconocidos): viaja como primera línea del mensaje, "Plan de interés: Completo.", y el tope de
+  2000 caracteres cuenta los dos. Sin `CONTACTO_DESTINO`: fuera de producción, `contacto@monitor.local`; en producción, 503
   (DECISION PROVISIONAL: no tumbar el arranque del api por la landing).
 
 ### Cómo se mide
 
 - `npm run check:landing` (CI): lang, título, description, viewport, un `<h1>`, labels, títulos de
-  las ilustraciones, secciones del AC, `robots.txt`, nada de otro origen y peso < 40 kB gzip.
+  las ilustraciones, secciones, `robots.txt`, nada de otro origen, Open Graph con `og.png` de
+  1200×630 (< 120 kB), planes sin cifras, ningún `style=""` (la CSP lo bloquearía) y peso < 75 kB
+  gzip sin `og.png` (UI-03 lo subió de 40: ~44 kB son las fuentes, que no comprimen).
 - `npm run lighthouse:landing` (LOCAL, necesita Chrome y red para bajar `lighthouse@13.5.0`):
   levanta `vite preview` del build y exige > 90 en las cuatro categorías. Resultado del 23/09/2026
   en la máquina de desarrollo, perfil móvil: **Performance 100 · Accessibility 100 · Best
