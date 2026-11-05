@@ -146,7 +146,25 @@ function New-CadenaConexion {
     # Autenticación SQL a propósito, nunca Integrated Security (ver agent/README.md).
     # TrustServerCertificate: el SQL Express del POS trae certificado autofirmado
     # (docs/esquema-sr.md §11).
-    return "Server=$Servidor;Database=$Base;User ID=$Usuario;Password=$Password;TrustServerCertificate=True"
+    $partes = @(
+        "Server=$(Format-ValorCadena $Servidor)",
+        "Database=$(Format-ValorCadena $Base)",
+        "User ID=$(Format-ValorCadena $Usuario)",
+        "Password=$(Format-ValorCadena $Password)",
+        'TrustServerCertificate=True'
+    )
+    return ($partes -join ';')
+}
+
+# Un valor de la cadena de conexión con las reglas de comillas de ADO.NET. Sin esto, una
+# contraseña que EMPIEZA con '=' ("Password==abc") se lee como la llave "Password=abc" y el
+# agente no arranca ("Keyword not supported"); un ';' la cortaría. New-PasswordLector puede
+# generar '=' en cualquier posición, así que pasaba en ~1 de cada 70 instalaciones.
+function Format-ValorCadena {
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Valor)
+
+    if ($Valor -notmatch '[;=''"{}]' -and $Valor -eq $Valor.Trim()) { return $Valor }
+    return '"' + $Valor.Replace('"', '""') + '"'
 }
 
 # Texto JSON de una cadena. A mano y no con ConvertTo-Json: 5.1 y 7 escapan distinto, y
