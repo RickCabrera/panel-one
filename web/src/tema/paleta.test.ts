@@ -54,8 +54,6 @@ const PAREJAS: [Cualquiera, Cualquiera][] = [
   ['lateral-tenue', 'lateral'],
   ['lateral-tenue', 'lateral-realce'],
   ['arena', 'lateral'],
-  // El ítem activo del lateral: texto sobre el relleno del acento.
-  ['sobre-acento', 'acento'],
 ];
 
 /** Lo que no es texto pero da información: ≥ 3:1 contra la superficie (WCAG 1.4.11). */
@@ -99,6 +97,13 @@ describe.each(TEMAS)('paleta, tema %s', (tema) => {
 
   it.each(PAREJAS)('texto %s sobre %s: ≥ 4.5:1', (texto, fondo) => {
     expect(contraste(c[texto], c[fondo])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // UI-02: los controles segmentados (periodo, tema, pestañas de Administración) van sobre un
+  // carril `realce`; lo elegido se marca con el borde del acento, que tiene que verse contra ese
+  // carril (WCAG 1.4.11). El relleno solo no basta: en oscuro el violeta queda en ~2.2:1.
+  it('lo elegido de un control segmentado se ve contra su carril: acento-borde ≥ 3:1 sobre realce', () => {
+    expect(contraste(c['acento-borde'], c.realce)).toBeGreaterThanOrEqual(3);
   });
 
   it.each(GRAFICOS)('%s se ve contra la superficie y el fondo: ≥ 3:1', (token) => {

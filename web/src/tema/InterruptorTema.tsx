@@ -28,7 +28,7 @@ export function InterruptorTema() {
             aria-pressed={activo}
             title={nombre}
             onClick={() => elegir(valor)}
-            className={`rounded-md p-1 ${activo ? 'bg-superficie text-acento-texto shadow-xs' : 'text-tinta-suave hover:text-tinta'}`}
+            className={`rounded-md p-1 ${activo ? 'bg-acento text-sobre-acento shadow-xs ring-1 ring-acento-borde ring-inset' : 'text-tinta-suave hover:text-tinta'}`}
           >
             <Icono aria-hidden="true" className="h-4 w-4" />
           </button>

@@ -82,7 +82,7 @@ export function Administracion() {
             onClick={() => elegir(p)}
             className={`shrink-0 rounded-md px-3 py-1 text-sm font-medium ${
               p === actual
-                ? 'bg-acento text-sobre-acento shadow-xs'
+                ? 'bg-acento text-sobre-acento shadow-xs ring-1 ring-acento-borde ring-inset'
                 : 'text-tinta-suave hover:bg-superficie hover:text-tinta'
             }`}
           >

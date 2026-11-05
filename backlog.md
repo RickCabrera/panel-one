@@ -3004,7 +3004,11 @@ va con el canal de versiones (F2-143).
   morado, Outfit + Inter empaquetadas. Menú compactado (decide D-01, que sale de las decisiones
   abiertas): fuera las cuatro entradas «Pronto»
   sin tarea, «Ventas por canal» pasa a Ventas y dirección, y «Clientes» (los del POS) se llama
-  «Comensales». Detalle de colores en `docs/marca/README.md`.
+  «Comensales». Administración › Sucursales sin sucursales muestra un estado vacío que dice qué
+  hacer («Conecta tu primera sucursal», con un botón que lleva al alta), y Administración ›
+  Empresas avisa con un enlace que las altas con plan y pagos van en Plataforma › Clientes. El
+  color de la franja de los correos por defecto (factura, cancelación, folios) pasa al violeta.
+  Detalle de colores en `docs/marca/README.md`.
   **Listo cuando:** CI verde; ningún texto visible dice «Monitor SoftRestaurant»; la paleta pasa
   `paleta.test.ts` (WCAG AA) en los dos temas; un usuario de restaurante no ve entradas que no
   navegan; los tests que buscaban los textos viejos buscan los nuevos, sin borrar ni saltar ninguno.

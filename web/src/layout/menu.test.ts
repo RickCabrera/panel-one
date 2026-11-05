@@ -159,11 +159,14 @@ describe('seccionesPara (permiso, no "pendiente")', () => {
     ]);
   });
 
-  it('el visor no ve la sección Administración; las pendientes de las demás, sí', () => {
+  it('el visor no ve la sección Administración; de las demás ve todo lo que no pide rol', () => {
     const visor = seccionesPara('visor');
     expect(visor.map((s) => s.titulo)).toEqual(FICHA.slice(0, 4).map(([t]) => t));
-    expect(visor.flatMap((s) => s.entradas).filter((e) => e.pendiente).length).toBe(
-      todas().filter((e) => e.pendiente && !e.roles).length,
+    // El filtro es por permiso, nada más: cada entrada sin `roles` le llega, en el mismo orden.
+    expect(visor.flatMap((s) => s.entradas.map((e) => e.id))).toEqual(
+      todas()
+        .filter((e) => !e.roles)
+        .map((e) => e.id),
     );
   });
 });

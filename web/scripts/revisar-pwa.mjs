@@ -98,7 +98,9 @@ if (!existsSync(rutaSw)) {
     const precache = new Set(JSON.parse(m[0]));
     const delBuild = archivos(DIST)
       .map((r) => `/${relative(DIST, r).split('\\').join('/')}`)
-      .filter((f) => f !== '/sw.js' && !f.endsWith('.map'));
+      // El respaldo `.woff` de las fuentes no va al precache (pwa-plugin.ts, `fueraDelPrecache`):
+      // todo navegador con service worker usa el `.woff2`.
+      .filter((f) => f !== '/sw.js' && !f.endsWith('.map') && !/\.woff$/.test(f));
     for (const f of delBuild) if (!precache.has(f)) falla(`${f} no está en el precache.`);
     for (const f of precache)
       if (!delBuild.includes(f)) falla(`El precache pide ${f}, que no existe.`);

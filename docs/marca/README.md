@@ -19,6 +19,7 @@ Cada SVG trae sus trazos con `class="letras"`, `"ojo"` y `"pupila"`.
 | `yocontrolo-claro.svg` | Letras morado de marca y ojo violeta, sobre fondos claros (README, documentos). |
 | `isotipo-oscuro.svg` / `isotipo-claro.svg` | Sólo el ojo-C, sin fondo. El riel de iconos del lateral, la pantalla de carga y la cabecera en el teléfono. |
 | `isotipo-app.svg` | Ícono cuadrado: el ojo arena sobre morado. Es el favicon y la base de los íconos de la PWA. |
+| `simplificar.py` | Cómo se aligeraron las copias de `web/public/marca/` (de ~93 kB a ~5 kB): aplana cada trazo y le aplica Douglas-Peucker con tolerancia 0.4 del viewBox, sin cambio visible. Los SVG de esta carpeta son la fuente a precisión completa. `python3 simplificar.py entrada.svg salida.svg`. |
 | `trazar.py`, `vector.py` | Cómo se vectorizó el logo desde la imagen original (OpenCV + potrace). El PNG original de 2.6 MB no está en el repo. |
 | `preview.png` | Los logos sobre sus fondos, para verlos de un vistazo. |
 
@@ -50,12 +51,14 @@ dos temas. Valores finales:
 | --- | --- | --- |
 | Morado de marca | `#2C1533` | Barra lateral (en los dos temas), cabecera del login, ícono, `theme-color`, texto principal en claro. |
 | Arena | `#E3CBA8` | El logo sobre morado; acento secundario (muesca del ítem activo, foco sobre el lateral, avatar). |
-| Violeta interactivo | `#6D3FC0` | Primario: botones, ítem activo, enlaces, interruptores. Acento de fábrica (`ACENTO_POR_DEFECTO`) y la clave `morado` de Plataforma › Ajustes. Hover: `brightness-110` (≈ `#7E52D1`). |
+| Violeta interactivo | `#6D3FC0` | Primario: botones, ítem activo, enlaces, interruptores; franja de los correos por defecto (factura, cancelación, folios). Acento de fábrica (`ACENTO_POR_DEFECTO`) y la clave `morado` de Plataforma › Ajustes. Hover: `brightness-110` (≈ `#7E52D1`). |
 
 Por qué `#6D3FC0` y no otro: con texto blanco da **6.7:1**, y como texto pasa 4.5:1 sobre todas
 las superficies claras sin ajuste. Sobre el morado `#2C1533` el relleno queda en 2.5:1, así que
 el ítem activo del lateral lleva además una muesca arena (y el foco del lateral es arena) para
-no depender sólo de ese relleno. En oscuro, el texto y los bordes del acento se aclaran solos
+no depender sólo de ese relleno. Por lo mismo, lo elegido en los controles segmentados (periodo,
+tema, pestañas) lleva el borde del acento, que da ≥ 3:1 contra su carril en los dos temas
+(`paleta.test.ts`). En oscuro, el texto y los bordes del acento se aclaran solos
 (`derivarAcento`): enlaces `#AF95DC`, bordes y serie 1 de las gráficas `#926FD0`.
 
 ### Tema claro

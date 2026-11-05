@@ -48,7 +48,7 @@ export function SelectorPeriodo({
               }}
               className={
                 activo
-                  ? 'shrink-0 rounded-md bg-acento px-2.5 py-1 text-sm font-medium text-sobre-acento shadow-xs'
+                  ? 'shrink-0 rounded-md bg-acento px-2.5 py-1 text-sm font-medium text-sobre-acento shadow-xs ring-1 ring-acento-borde ring-inset'
                   : 'shrink-0 rounded-md px-2.5 py-1 text-sm font-medium text-tinta-suave hover:bg-superficie hover:text-tinta'
               }
             >
