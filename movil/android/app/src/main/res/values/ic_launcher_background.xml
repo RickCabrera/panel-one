@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Colores de la marca Yo Controlo. -->
+    <color name="ic_launcher_background">#2C1533</color>
+    <color name="yc_morado">#2C1533</color>
+    <color name="yc_arena">#E3CBA8</color>
+    <color name="colorPrimary">#2C1533</color>
+    <color name="colorPrimaryDark">#2C1533</color>
+    <color name="colorAccent">#E3CBA8</color>
+</resources>

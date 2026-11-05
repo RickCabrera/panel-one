@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Yo Controlo</string>
+    <string name="title_activity_main">Yo Controlo</string>
+    <string name="package_name">mx.yocontrolo.app</string>
+    <string name="custom_url_scheme">mx.yocontrolo.app</string>
+</resources>

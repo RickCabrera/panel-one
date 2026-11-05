@@ -50,6 +50,10 @@ config.json
 *.key
 *.cer
 *.pfx
+# Llaves de firma de la app Android (MOV-01): van como secrets del CI, nunca al repo.
+*.jks
+*.keystore
+*.p12
 secrets/
 .ssh/
 

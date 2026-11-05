@@ -3034,6 +3034,28 @@ va con el canal de versiones (F2-143).
   `paleta.test.ts` (WCAG AA) en los dos temas; un usuario de restaurante no ve entradas que no
   navegan; los tests que buscaban los textos viejos buscan los nuevos, sin borrar ni saltar ninguno.
 
+## MOV-01 · App Android (APK) con Capacitor
+
+- [ ] **MOV-01 · App Android (APK) con Capacitor** — pedida por Ricardo el 5-nov-2026 (fuera de
+  la cola; rama `feat/apk-android`). Carpeta `/movil` fuera de los workspaces de npm: Capacitor 8
+  con `server.url` al panel de producción (la app carga el panel en su WebView: mismo origen,
+  así la cookie SameSite=Strict, el `/api` relativo y la CSP funcionan sin CORS ni cambios en la
+  API), appId `mx.yocontrolo.app`, "Yo Controlo", ícono adaptativo y splash con la marca, Atrás
+  navega el historial del panel y sólo sale en la raíz, enlaces de otros dominios/mailto/tel al
+  navegador del sistema, pantalla "Sin conexión" con Reintentar si la carga falla. Sin plugins
+  extra. El workflow `apk.yml` (mismo esquema que `instalador.yml`) arma y prueba el APK en cada
+  PR que toca la app y lo publica en el release fijo `android` tras CI verde en main.
+  **Listo cuando:** CI verde (incluido el job `armar` del APK); el release `android` tiene
+  `YoControlo.apk` + `.sha256` con prueba de procedencia; el APK se instala en un Android de
+  Ricardo, abre el panel con su sesión, Atrás regresa y sale en la raíz, un enlace a GitHub abre
+  el navegador y, en modo avión en la primera apertura, se ve "Sin conexión" (después, el
+  service worker de la PWA sirve el armazón del panel, como en el navegador).
+  **Decisión abierta:** hoy se publica el APK de **debug** (sin secrets de firma en el repo): la
+  llave cambia en cada corrida y una actualización pide desinstalar la anterior. Siguiente paso:
+  crear la llave de release y cargar los secrets `ANDROID_KEYSTORE_*` (`movil/README.md`). Las
+  descargas del panel (CSV, PDF/XML) no bajan dentro de la app: el WebView no tiene gestor de
+  descargas (MOV-02, si se quiere).
+
 ## Decisiones abiertas para Ricardo
 
 No son código hasta que se decidan. Cada una dice dónde está documentada; al decidir, se

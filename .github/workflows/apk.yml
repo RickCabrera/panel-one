@@ -1,0 +1,265 @@
+name: App Android (APK)
+
+# Arma la app Android de Yo Controlo (movil/, Capacitor) y la publica como asset del release fijo
+# `android`, para que la descarga tenga una URL estable:
+#
+#   https://github.com/<owner>/<repo>/releases/download/android/YoControlo.apk
+#
+# Mismo esquema de seguridad que instalador.yml. DOS JOBS, A PROPÓSITO:
+# - `armar` corre con permisos de SOLO LECTURA, sin credenciales guardadas y SIN secretos: compila
+#   el código (que en un PR es código sin revisar), corre las pruebas y deja como artifact el APK de
+#   debug y el de release SIN FIRMAR.
+# - `publicar` NUNCA compila ni ejecuta código del repo (ni siquiera hace checkout): baja el
+#   artifact, lo firma con apksigner del SDK del runner si existen los secrets de la llave de
+#   release, y lo sube al release. Es el único con `contents: write` y el único que ve la llave, y
+#   sólo corre para el commit que pasó el CI en un PUSH a main (workflow_run) o para main a mano
+#   (workflow_dispatch sobre refs/heads/main), y sólo si ese commit sigue siendo la punta de main.
+#
+# FIRMA (ver movil/README.md):
+# - Con los secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS y
+#   ANDROID_KEY_PASSWORD: se publica el release firmado con esa llave (la misma siempre: cada APK se
+#   instala encima del anterior).
+# - Sin ellos: se publica el APK de DEBUG, firmado con la llave de debug que el runner genera en
+#   cada corrida. Se instala por sideload, pero dos APK de corridas distintas tienen firmas
+#   distintas: para actualizar hay que desinstalar el anterior. Por eso sólo se republica cuando
+#   cambia la app (movil/ o este archivo), no en cada push a main.
+#
+# La URL del panel es la de producción en Railway. Para un dominio propio se define la variable del
+# repo `YC_URL_PANEL` (Settings › Secrets and variables › Actions › Variables). No es un secreto.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+  # En un PR que toca la app o este archivo sólo se ARMA y revisa el APK. Nunca publica.
+  pull_request:
+    paths:
+      - 'movil/**'
+      - '.github/workflows/apk.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  # En main no se cancela: cortar `publicar` a mitad de la subida dejaría el .apk y el .sha256 de
+  # commits distintos. La comprobación de la punta de main ya evita que uno viejo pise uno nuevo.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  YC_URL_PANEL: ${{ vars.YC_URL_PANEL || 'https://web-production-730b5.up.railway.app' }}
+  SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  armar:
+    name: Armar y revisar el APK
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # versionCode = número de corrida de este workflow: siempre crece, así cada APK se instala
+      # encima del anterior (con la misma firma).
+      YC_VERSION_CODE: ${{ github.run_number }}
+    defaults:
+      run:
+        working-directory: movil
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+
+      # El gradle-wrapper.jar es un binario versionado que corre en el runner: se comprueba contra
+      # los checksums oficiales de Gradle antes de ejecutarlo.
+      - uses: gradle/actions/wrapper-validation@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            movil/android/**/*.gradle*
+            movil/android/gradle/wrapper/gradle-wrapper.properties
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: movil/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+
+      # Copia www/ y escribe capacitor.config.json (con server.url) dentro del proyecto Android.
+      - run: npx cap sync android
+
+      - name: La app apunta al panel esperado
+        run: |
+          node -e '
+            const c = require("./android/app/src/main/assets/capacitor.config.json");
+            const { resolverUrlPanel } = require("./url-panel.cjs");
+            const esperado = resolverUrlPanel(process.env.YC_URL_PANEL);
+            const host = new URL(esperado).host;
+            const ok = c.appId === "mx.yocontrolo.app" && c.appName === "Yo Controlo" &&
+              c.server.url === esperado && c.server.cleartext === false &&
+              c.server.androidScheme === "https" &&
+              JSON.stringify(c.server.allowNavigation) === JSON.stringify([host]);
+            console.log(JSON.stringify(c.server, null, 2));
+            if (!ok) { console.error("::error::capacitor.config.json no es el esperado"); process.exit(1); }
+          '
+
+      - name: Pruebas, APK de debug y release sin firmar
+        working-directory: movil/android
+        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug assembleRelease
+
+      - name: Revisar el APK (paquete, versión, nombre, íconos, firma)
+        working-directory: movil/android/app/build/outputs/apk
+        run: |
+          bt="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          echo "build-tools: $bt"
+          for apk in debug/app-debug.apk release/app-release-unsigned.apk; do
+            echo "== $apk ($(du -h "$apk" | cut -f1))"
+            "$bt/aapt2" dump badging "$apk" > badging.txt
+            grep -E "^(package|application-label|application-icon|application:|sdkVersion|targetSdkVersion|uses-permission)" badging.txt
+            grep -q "^package: name='mx.yocontrolo.app' versionCode='${YC_VERSION_CODE}' " badging.txt \
+              || { echo "::error::$apk: paquete o versionCode inesperado"; exit 1; }
+            grep -q "^application-label:'Yo Controlo'$" badging.txt \
+              || { echo "::error::$apk: el nombre visible no es 'Yo Controlo'"; exit 1; }
+            # Única permisión: INTERNET. Un plugin que meta otra se ve aquí.
+            perms=$(grep '^uses-permission:' badging.txt | grep -v "name='android.permission.INTERNET'" \
+              | grep -v "name='mx.yocontrolo.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'" || true)
+            if [ -n "$perms" ]; then echo "::error::$apk pide permisos de más:"; echo "$perms"; exit 1; fi
+          done
+          "$bt/apksigner" verify --print-certs debug/app-debug.apk
+          mkdir -p "$GITHUB_WORKSPACE/salida"
+          cp debug/app-debug.apk "$GITHUB_WORKSPACE/salida/YoControlo-debug.apk"
+          cp release/app-release-unsigned.apk "$GITHUB_WORKSPACE/salida/YoControlo-release-sin-firma.apk"
+          # Datos (no código) para `publicar`: versión y la huella de lo que define la app, para no
+          # republicar un APK idéntico (con debug, cada corrida trae otra firma).
+          cd "$GITHUB_WORKSPACE"
+          {
+            echo "version_code=${YC_VERSION_CODE}"
+            echo "huella=$(git rev-parse HEAD:movil)-$(git rev-parse HEAD:.github/workflows/apk.yml)"
+          } > salida/datos.txt
+          cat salida/datos.txt
+          ls -la salida
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: salida/
+          retention-days: 7
+
+  publicar:
+    name: Publicar en el release `android`
+    needs: armar
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+
+      - name: Sólo si el commit sigue siendo la punta de main y la app cambió
+        id: punta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          punta=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+          if [ "$punta" != "$SHA" ]; then
+            echo "main ya va en $punta (este es $SHA): no se publica; lo hará la corrida del nuevo."
+            echo "publicar=no" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          huella=$(sed -n 's/^huella=\([0-9a-f-]*\)$/\1/p' datos.txt)
+          publicada=$(gh release view android -R "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null \
+            | sed -n 's/.*huella: `\([0-9a-f-]*\)`.*/\1/p' | head -1 || true)
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ] && [ -n "$huella" ] && [ "$huella" = "$publicada" ]; then
+            echo "La app no cambió desde el APK publicado (huella $huella): no se republica."
+            echo "publicar=no" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "publicar=si" >> "$GITHUB_OUTPUT"
+
+      # La llave de release sólo existe aquí, en un job que no ejecuta código del repo. Los cuatro
+      # secrets o ninguno: una configuración a medias falla en vez de caer en silencio a debug.
+      - name: Firmar (release si hay llave; si no, el APK de debug)
+        id: firma
+        if: steps.punta.outputs.publicar == 'si'
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          bt="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          n=0; for v in "$KS_B64" "$KS_PASS" "$KEY_ALIAS" "$KEY_PASS"; do [ -n "$v" ] && n=$((n+1)); done
+          if [ "$n" = 4 ]; then
+            ks="$RUNNER_TEMP/yocontrolo.jks"
+            trap 'rm -f "$ks"' EXIT
+            printf '%s' "$KS_B64" | base64 -d > "$ks"
+            "$bt/zipalign" -p -f 4 YoControlo-release-sin-firma.apk alineado.apk
+            "$bt/apksigner" sign --ks "$ks" --ks-pass env:KS_PASS --ks-key-alias "$KEY_ALIAS" \
+              --key-pass env:KEY_PASS --out YoControlo.apk alineado.apk
+            echo "tipo=release" >> "$GITHUB_OUTPUT"
+          elif [ "$n" = 0 ]; then
+            cp YoControlo-debug.apk YoControlo.apk
+            echo "tipo=debug" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Faltan secrets de la llave de Android ($n de 4). Ver movil/README.md."; exit 1
+          fi
+          "$bt/apksigner" verify --print-certs YoControlo.apk
+          sha256sum YoControlo.apk | tee YoControlo.apk.sha256
+
+      # Procedencia verificable (`gh attestation verify YoControlo.apk -R <owner>/<repo>`): prueba
+      # que el APK salió de ESTE workflow y de este commit.
+      - uses: actions/attest-build-provenance@v2
+        if: steps.punta.outputs.publicar == 'si'
+        with:
+          subject-path: YoControlo.apk
+
+      - name: Subir al release
+        if: steps.punta.outputs.publicar == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TIPO: ${{ steps.firma.outputs.tipo }}
+        run: |
+          corto=${SHA:0:7}
+          version=$(sed -n 's/^version_code=\([0-9]*\)$/\1/p' datos.txt)
+          huella=$(sed -n 's/^huella=\([0-9a-f-]*\)$/\1/p' datos.txt)
+          if [ "$TIPO" = debug ]; then
+            aviso="Firmado con una llave de DEBUG (cambia en cada versión): para actualizar, desinstala la anterior primero."
+          else
+            aviso="Firmado con la llave de release de Yo Controlo: se instala encima de la versión anterior."
+          fi
+          notas=$(printf '%s\n\n%s\n\n%s\n\n%s' \
+            "App Android de Yo Controlo (carga el panel en línea). Descarga: YoControlo.apk" \
+            "$aviso" \
+            "Commit ${SHA} · versionCode ${version} · firma ${TIPO}" \
+            "huella: \`${huella}\`")
+          if ! gh release view android -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create android -R "$GITHUB_REPOSITORY" --title "App Android" \
+              --notes "$notas" --target "$SHA" --latest=false
+          else
+            gh release edit android -R "$GITHUB_REPOSITORY" --notes "$notas"
+          fi
+          cp YoControlo.apk "YoControlo-${corto}.apk"
+          gh release upload android -R "$GITHUB_REPOSITORY" --clobber \
+            YoControlo.apk YoControlo.apk.sha256 "YoControlo-${corto}.apk"
+          # Historial acotado: sólo las 5 copias versionadas más recientes.
+          gh release view android -R "$GITHUB_REPOSITORY" --json assets \
+            --jq '[.assets[] | select(.name | test("^YoControlo-[0-9a-f]{7}\\.apk$"))]
+                  | sort_by(.createdAt) | reverse | .[5:] | .[].name' \
+            | while read -r viejo; do
+                gh release delete-asset android "$viejo" -R "$GITHUB_REPOSITORY" --yes
+              done
+          echo "Descarga: https://github.com/${GITHUB_REPOSITORY}/releases/download/android/YoControlo.apk"
