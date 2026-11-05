@@ -18,23 +18,31 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+  # En un PR que toca el agente o este archivo, sólo ARMA y revisa el paquete (no publica): así
+  # un cambio que rompe el empaquetado se ve antes del merge.
+  pull_request:
+    paths:
+      - 'agent/**'
+      - '.github/workflows/instalador.yml'
 
 permissions:
   contents: write
 
 concurrency:
-  group: instalador
+  group: instalador-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: true
 
 jobs:
   publicar:
     name: Armar y publicar
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    if: >-
+      github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     env:
       API_URL_PUBLICA: ${{ vars.API_URL_PUBLICA || 'https://web-production-730b5.up.railway.app/api' }}
       GH_TOKEN: ${{ github.token }}
-      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Falta la URL de la API
         if: env.API_URL_PUBLICA == ''
@@ -65,6 +73,7 @@ jobs:
           sha256sum Instalar-YoControlo.zip | tee Instalar-YoControlo.zip.sha256
 
       - name: Publicar en el release `instalador`
+        if: github.event_name != 'pull_request'
         run: |
           notas="Instalador de un clic del agente Yo Controlo. Commit ${SHA}. Se reemplaza en cada CI verde de main."
           if ! gh release view instalador >/dev/null 2>&1; then
