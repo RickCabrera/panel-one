@@ -137,7 +137,7 @@ export function mensajeCierreDia(
 
 export const MENSAJE_PRUEBA: MensajePush = {
   titulo: 'Notificación de prueba',
-  cuerpo: 'Si ves esto, las notificaciones del monitor llegan a este dispositivo.',
+  cuerpo: 'Si ves esto, las notificaciones de Yo Controlo llegan a este dispositivo.',
   url: '/cuenta',
   etiqueta: 'prueba',
 };

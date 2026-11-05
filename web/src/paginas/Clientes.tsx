@@ -65,15 +65,17 @@ export function Clientes() {
   };
 
   return (
-    <Vista titulo="Clientes">
+    // UI-02: «Comensales» en pantalla (los clientes del POS), para no confundirlos con los
+    // clientes de la plataforma. La ruta y el código siguen diciendo `clientes`.
+    <Vista titulo="Comensales">
       <p className="mb-4 text-sm text-tinta-tenue">
-        Los clientes que registra el POS de cada sucursal y lo que se sabe de ellos por sus
+        Los comensales que registra el POS de cada sucursal y lo que se sabe de ellos por sus
         cuentas del periodo. Una visita es una cuenta cobrada con ese cliente; las canceladas se
         muestran aparte y no suman a su venta.
       </p>
       {rango === null || filtro === null ? (
-        <Tarjeta titulo="Clientes">
-          <Vacio>Elige un periodo válido para ver a los clientes.</Vacio>
+        <Tarjeta titulo="Comensales">
+          <Vacio>Elige un periodo válido para ver a los comensales.</Vacio>
         </Tarjeta>
       ) : (
         <SegunEstado consulta={consulta} esqueleto={<Esqueleto lineas={6} />}>
@@ -81,7 +83,7 @@ export function Clientes() {
             const v = vacio(r);
             if (v.tipo === 'sin-clientes') {
               return (
-                <Tarjeta titulo="Clientes">
+                <Tarjeta titulo="Comensales">
                   <div className="space-y-2 text-sm" data-testid="clientes-vacio">
                     <p>{v.porque}</p>
                     <p className="text-tinta-medio">{v.falta}</p>
@@ -92,7 +94,7 @@ export function Clientes() {
             return (
               <>
                 <Periodo r={r} />
-                <Tarjeta titulo="Clientes del periodo" className="mt-4">
+                <Tarjeta titulo="Comensales del periodo" className="mt-4">
                   <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                     <Busqueda inicial={q} buscar={buscar} />
                     <Exportar

@@ -16,7 +16,7 @@ export function InterruptorTema() {
     <div
       role="group"
       aria-label="Tema"
-      className="flex shrink-0 rounded-md border border-linea-fuerte p-0.5"
+      className="flex shrink-0 gap-0.5 rounded-lg bg-realce p-0.5"
     >
       {OPCIONES.map(({ valor, nombre, Icono }) => {
         const activo = valor === preferencia;
@@ -28,7 +28,7 @@ export function InterruptorTema() {
             aria-pressed={activo}
             title={nombre}
             onClick={() => elegir(valor)}
-            className={`rounded p-1 ${activo ? 'bg-acento text-sobre-acento' : 'text-tinta-suave hover:bg-realce'}`}
+            className={`rounded-md p-1 ${activo ? 'bg-superficie text-acento-texto shadow-xs' : 'text-tinta-suave hover:text-tinta'}`}
           >
             <Icono aria-hidden="true" className="h-4 w-4" />
           </button>

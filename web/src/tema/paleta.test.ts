@@ -47,6 +47,15 @@ const PAREJAS: [Cualquiera, Cualquiera][] = [
   ['exito', 'exito-fondo'],
   ['sobre-acento', 'acento'],
   ['sobre-peligro', 'peligro-fuerte'],
+  // UI-02: la barra lateral es del morado de marca en los dos temas. Su texto, el tenue (los
+  // encabezados de sección) y el arena del logo, sobre el fondo y sobre el realce (hover).
+  ['lateral-tinta', 'lateral'],
+  ['lateral-tinta', 'lateral-realce'],
+  ['lateral-tenue', 'lateral'],
+  ['lateral-tenue', 'lateral-realce'],
+  ['arena', 'lateral'],
+  // El ítem activo del lateral: texto sobre el relleno del acento.
+  ['sobre-acento', 'acento'],
 ];
 
 /** Lo que no es texto pero da información: ≥ 3:1 contra la superficie (WCAG 1.4.11). */

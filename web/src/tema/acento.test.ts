@@ -48,9 +48,12 @@ describe.each<Tema>(['claro', 'oscuro'])('derivarAcento, tema %s', (tema) => {
 
 it('un acento que ya pasa no se toca; uno que no, se ajusta lo justo', () => {
   expect(derivarAcento('#0b5750', 'claro')['acento-texto']).toBe('#0b5750');
-  // El de fábrica queda en 4.44:1 sobre `realce-fuerte`: un paso de 5 % hacia negro.
-  const ajustado = derivarAcento(ACENTO_POR_DEFECTO, 'claro')['acento-texto'];
-  expect(ajustado).not.toBe(ACENTO_POR_DEFECTO);
-  expect(contraste(ACENTO_POR_DEFECTO, PALETA.claro['realce-fuerte'])).toBeLessThan(4.5);
+  // UI-02: el de fábrica (violeta de Yo Controlo) ya pasa en claro y no se toca.
+  expect(derivarAcento(ACENTO_POR_DEFECTO, 'claro')['acento-texto']).toBe(ACENTO_POR_DEFECTO);
+  // El verde azulado de antes queda en 4.18:1 sobre `realce-fuerte`: un paso de 5 % hacia negro.
+  const VERDE_AZULADO = '#0f766e';
+  const ajustado = derivarAcento(VERDE_AZULADO, 'claro')['acento-texto'];
+  expect(ajustado).not.toBe(VERDE_AZULADO);
+  expect(contraste(VERDE_AZULADO, PALETA.claro['realce-fuerte'])).toBeLessThan(4.5);
   expect(ajustado).toBe('#0e7069');
 });

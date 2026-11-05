@@ -13,9 +13,9 @@ export const RUTA_OPENAPI = join(__dirname, '..', '..', 'openapi.json');
 
 export function construirDocumento(app: INestApplication): OpenAPIObject {
   const config = new DocumentBuilder()
-    .setTitle('Monitor SoftRestaurant API')
+    .setTitle('Yo Controlo API')
     .setDescription(
-      'Contrato de la API del monitor. Fuente única: el frontend construye contra este ' +
+      'Contrato de la API de Yo Controlo. Fuente única: el frontend construye contra este ' +
         'documento. Lo genera `npm run openapi` en /api a partir de los decoradores.',
     )
     .setVersion('0.0.1')

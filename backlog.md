@@ -2991,13 +2991,29 @@ va con el canal de versiones (F2-143).
   plan da 409 (admin_global puede forzarlo, con bitácora); `/usuarios` ya no crea ni da de baja
   admin_global; todo con e2e de rol y OpenAPI actualizado. Detalle en `docs/plataforma.md`.
 
+## UI-02 · Marca Yo Controlo e interfaz compacta
+
+- [ ] **UI-02 · Marca Yo Controlo e interfaz compacta** — pedida por Ricardo el 5-nov-2026 (fuera
+  de la cola; rama `feat/marca-yo-controlo`). Sólo /web y textos de marca de /api; la landing
+  pública va aparte.
+  El producto pasa a llamarse **Yo Controlo** (título, manifest, login, laterales del panel y de
+  /plataforma, remitente de correo por defecto, título del contrato OpenAPI, README; el agente
+  sigue siendo `ArkonAgente`). Logo en SVG (`docs/marca/`, copia en `web/public/marca/`), favicon
+  e íconos de la PWA desde el isotipo. Paleta morada (morado de marca `#2C1533`, arena `#E3CBA8`,
+  violeta interactivo `#6D3FC0` como acento de fábrica y como la clave `morado`), tema oscuro
+  morado, Outfit + Inter empaquetadas. Menú compactado (decide D-01, que sale de las decisiones
+  abiertas): fuera las cuatro entradas «Pronto»
+  sin tarea, «Ventas por canal» pasa a Ventas y dirección, y «Clientes» (los del POS) se llama
+  «Comensales». Detalle de colores en `docs/marca/README.md`.
+  **Listo cuando:** CI verde; ningún texto visible dice «Monitor SoftRestaurant»; la paleta pasa
+  `paleta.test.ts` (WCAG AA) en los dos temas; un usuario de restaurante no ve entradas que no
+  navegan; los tests que buscaban los textos viejos buscan los nuevos, sin borrar ni saltar ninguno.
+
 ## Decisiones abiertas para Ricardo
 
 No son código hasta que se decidan. Cada una dice dónde está documentada; al decidir, se
 escribe como tarea (o se descarta) y se borra de aquí.
 
-- **D-01 · Cuatro entradas del menú sin tarea** (Empresas, Sucursales, Insumos, Grupos de
-  insumos; `SIN_TAREA` en `web/src/layout/menu.ts`): ¿vistas de consulta propias o se quitan?
 - **D-02 · Saldo de folios bajo en la campana.** Las alertas son por empresa y las ven los
   clientes; el saldo es de la plataforma. Hoy avisa por correo al admin_global. ¿Centro de
   alertas de plataforma (sólo admin_global)? Si sí, entra en F3-016. Esquema-sr §2 "Control de

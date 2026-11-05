@@ -604,17 +604,24 @@ describe('Ajustes y bitácora', () => {
     const radios = (await screen.findAllByRole('radio')).map((r) => r.textContent);
     expect(radios).toEqual([
       'Naranja',
-      'Morado',
+      // UI-02: la clave `morado` es el violeta de la marca.
+      'Morado Yo Controlo',
       'Azul eléctrico',
       'Verde azulado',
       'Ámbar dorado',
       'Magenta',
       'Rojo',
     ]);
-    await usuarioEv.click(screen.getByRole('radio', { name: 'Morado' }));
-    expect(screen.getByRole('radio', { name: 'Morado' })).toHaveAttribute('aria-checked', 'true');
+    await usuarioEv.click(screen.getByRole('radio', { name: 'Magenta' }));
+    expect(screen.getByRole('radio', { name: 'Magenta' })).toHaveAttribute('aria-checked', 'true');
     // La vista previa usa el color elegido sólo dentro de su recuadro.
-    expect(screen.getByTestId('vista-previa').style.getPropertyValue('--acento')).toBe('#7c3aed');
+    expect(screen.getByTestId('vista-previa').style.getPropertyValue('--acento')).toBe('#db2777');
+    await usuarioEv.click(screen.getByRole('radio', { name: 'Morado Yo Controlo' }));
+    expect(screen.getByRole('radio', { name: 'Morado Yo Controlo' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByTestId('vista-previa').style.getPropertyValue('--acento')).toBe('#6d3fc0');
     const sistemaAntes = falsa.contar('GET', '/sistema');
     await usuarioEv.click(screen.getByRole('button', { name: 'Guardar color' }));
     expect(await screen.findByText('Color guardado.')).toBeInTheDocument();

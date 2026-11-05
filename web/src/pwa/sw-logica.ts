@@ -55,6 +55,8 @@ export function estrategia(p: PeticionSW, origen: string): Estrategia {
   if (
     url.pathname.startsWith('/assets/') ||
     url.pathname.startsWith('/iconos/') ||
+    // UI-02: el logotipo y el isotipo de Yo Controlo (login y barra lateral sin red).
+    url.pathname.startsWith('/marca/') ||
     url.pathname === '/manifest.webmanifest' ||
     url.pathname === '/favicon.svg'
   ) {
@@ -91,7 +93,7 @@ export function notificacionDePush(texto: string | null): {
   }
   const cadena = (v: unknown, def: string) => (typeof v === 'string' && v !== '' ? v : def);
   return {
-    titulo: cadena(m.titulo, 'Monitor SoftRestaurant'),
+    titulo: cadena(m.titulo, 'Yo Controlo'),
     opciones: {
       body: cadena(m.cuerpo, 'Tienes un aviso nuevo. Ábrelo para verlo.'),
       tag: cadena(m.etiqueta, 'aviso'),
