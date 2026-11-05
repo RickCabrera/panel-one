@@ -6,6 +6,7 @@ import { SelectorAlcance } from '../filtros/SelectorAlcance';
 import { useAlcance } from '../filtros/alcance';
 import { usaPeriodo } from '../filtros/vista';
 import { Isotipo } from '../marca/Marca';
+import { useTema } from '../tema/contexto';
 import { Campana } from './Campana';
 import { HojaInferior } from './HojaInferior';
 import { OperacionEnVivo } from './OperacionEnVivo';
@@ -19,18 +20,26 @@ import { PeriodoGlobal } from './PeriodoGlobal';
  */
 export function CabeceraMovil() {
   const { pathname } = useLocation();
+  // UI-06: en «Noche» la cabecera y la franja del periodo son negras en los dos temas (ver Topbar).
+  const { estilo, zonaOscura } = useTema();
   return (
     <>
-      <header className="print:hidden sticky top-0 z-20 border-b border-linea bg-superficie/95 pt-[env(safe-area-inset-top)] backdrop-blur">
+      <header
+        style={zonaOscura}
+        className="print:hidden sticky top-0 z-20 border-b border-linea bg-superficie/95 pt-[env(safe-area-inset-top)] text-tinta backdrop-blur vidrio-barra"
+      >
         <div className="flex h-14 min-w-0 items-center gap-2.5 px-4">
-          <Isotipo className="h-8 w-8 shrink-0" />
+          <Isotipo variante={estilo === 'noche' ? 'oscuro' : 'auto'} className="h-8 w-8 shrink-0" />
           <BotonAlcance />
           <OperacionEnVivo compacto />
           <Campana />
         </div>
       </header>
       {usaPeriodo(pathname) && (
-        <div className="print:hidden min-w-0 border-b border-linea-suave bg-superficie px-4 py-2">
+        <div
+          style={zonaOscura}
+          className="print:hidden min-w-0 border-b border-linea-suave bg-superficie px-4 py-2 text-tinta vidrio-barra"
+        >
           <PeriodoGlobal />
         </div>
       )}

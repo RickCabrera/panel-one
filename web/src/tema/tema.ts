@@ -8,7 +8,15 @@
  * cambies la forma de aplicarlo sin mirar `seguridad/csp.test.ts`.
  */
 import { derivarAcento } from './acento';
-import { PALETA, type Tema } from './paleta';
+import {
+  ESTILO_POR_DEFECTO,
+  ESTILOS,
+  PALETAS,
+  type Estilo,
+  type Tema,
+  type Token,
+  type TokenAcento,
+} from './paleta';
 
 export type PreferenciaTema = Tema | 'sistema';
 
@@ -35,14 +43,24 @@ function esPreferencia(valor: unknown): valor is PreferenciaTema {
   return typeof valor === 'string' && (PREFERENCIAS as readonly string[]).includes(valor);
 }
 
-function leerClave(clave: string): PreferenciaTema | null {
+function leerValor<T>(clave: string, valido: (v: unknown) => v is T): T | null {
   try {
     const valor = window.localStorage.getItem(clave);
-    return esPreferencia(valor) ? valor : null;
+    return valido(valor) ? valor : null;
   } catch {
     return null;
   }
 }
+
+function escribir(claves: string[], valor: string): void {
+  try {
+    for (const clave of claves) window.localStorage.setItem(clave, valor);
+  } catch {
+    // Sin storage (modo privado, cuota): la elección vale para esta visita y ya.
+  }
+}
+
+const leerClave = (clave: string) => leerValor(clave, esPreferencia);
 
 /** La del usuario; si no tiene, la última de este navegador; si no, `sistema`. */
 export function leerPreferencia(usuarioId?: string): PreferenciaTema {
@@ -54,13 +72,34 @@ export function leerPreferencia(usuarioId?: string): PreferenciaTema {
 }
 
 export function guardarPreferencia(preferencia: PreferenciaTema, usuarioId?: string): void {
-  try {
-    if (usuarioId !== undefined)
-      window.localStorage.setItem(clavePreferencia(usuarioId), preferencia);
-    window.localStorage.setItem(CLAVE_ULTIMO, preferencia);
-  } catch {
-    // Sin storage (modo privado, cuota): el tema vale para esta visita y ya.
-  }
+  const claves = usuarioId === undefined ? [] : [clavePreferencia(usuarioId)];
+  escribir([...claves, CLAVE_ULTIMO], preferencia);
+}
+
+/*
+ * UI-06: el ESTILO de la marca («Noche» o «Clásico») se guarda igual que el tema: por usuario y
+ * por navegador (`monitor.estilo.<id>` y `monitor.estilo.ultimo`), en localStorage y sin API. Sin
+ * nada guardado (o con basura), «Noche».
+ */
+export const CLAVE_ESTILO_ULTIMO = 'monitor.estilo.ultimo';
+export const claveEstilo = (usuarioId: string) => `monitor.estilo.${usuarioId}`;
+
+function esEstilo(valor: unknown): valor is Estilo {
+  return typeof valor === 'string' && (ESTILOS as readonly string[]).includes(valor);
+}
+
+/** El del usuario; si no tiene, el último de este navegador; si no, «Noche». */
+export function leerEstilo(usuarioId?: string): Estilo {
+  return (
+    (usuarioId === undefined ? null : leerValor(claveEstilo(usuarioId), esEstilo)) ??
+    leerValor(CLAVE_ESTILO_ULTIMO, esEstilo) ??
+    ESTILO_POR_DEFECTO
+  );
+}
+
+export function guardarEstilo(estilo: Estilo, usuarioId?: string): void {
+  const claves = usuarioId === undefined ? [] : [claveEstilo(usuarioId)];
+  escribir([...claves, CLAVE_ESTILO_ULTIMO], estilo);
 }
 
 /** ¿El sistema operativo pide oscuro? Sin `matchMedia` (navegadores viejos): no. */
@@ -82,26 +121,71 @@ export function resolverTema(preferencia: PreferenciaTema, oscuro: boolean): Tem
   return preferencia;
 }
 
-/** Pone el tema en `raiz`: variables de la paleta, del acento, `data-tema` y `color-scheme`. */
+/** Todos los colores de un estilo y un tema: la paleta más los derivados del acento. */
+export function coloresDe(
+  tema: Tema,
+  acento: string,
+  estilo: Estilo,
+): Record<Token | TokenAcento, string> {
+  return { ...PALETAS[estilo][tema], ...derivarAcento(acento, tema, estilo) };
+}
+
+/**
+ * Pone el tema en `raiz`: variables de la paleta del estilo, del acento, `data-tema`,
+ * `data-estilo` (UI-06: las reglas del vidrio y del resplandor de index.css sólo aplican con
+ * `noche`) y `color-scheme`. También el `theme-color` (la barra del navegador del celular): el
+ * color del lateral, negro en «Noche» y morado en «Clásico».
+ */
 export function aplicarTema(
   tema: Tema,
   acento: string,
   raiz: HTMLElement = document.documentElement,
+  estilo: Estilo = ESTILO_POR_DEFECTO,
 ): void {
-  const valores = { ...PALETA[tema], ...derivarAcento(acento, tema) };
+  const valores = coloresDe(tema, acento, estilo);
   for (const [token, valor] of Object.entries(valores)) raiz.style.setProperty(`--${token}`, valor);
   raiz.style.setProperty('color-scheme', tema === 'oscuro' ? 'dark' : 'light');
   raiz.dataset.tema = tema;
+  raiz.dataset.estilo = estilo;
+  // `content` de un <meta> no es estilo: la CSP no lo toca.
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', valores.lateral);
+}
+
+/**
+ * UI-06 · la «zona oscura»: en «Noche» con tema claro, los marcos negros (la barra de arriba, la
+ * cabecera del celular, el login) llevan dentro controles comunes (selectores, campana, tema...)
+ * que pintan con `bg-realce`, `text-tinta`... Esta función devuelve las variables de la paleta
+ * OSCURA de «Noche» para ponerlas como `style` del marco (React las pone por CSSOM, que la CSP
+ * permite): todo lo de adentro se ve como en oscuro sin tocar un solo componente. Fuera de
+ * «Noche» o en tema oscuro no hace falta: `undefined`.
+ */
+export function zonaOscura(
+  tema: Tema,
+  acento: string,
+  estilo: Estilo,
+): Record<string, string> | undefined {
+  if (estilo !== 'noche' || tema === 'oscuro') return undefined;
+  const variables: Record<string, string> = { colorScheme: 'dark' };
+  const colores = coloresDe('oscuro', acento, estilo);
+  for (const [token, valor] of Object.entries(colores)) variables[`--${token}`] = valor;
+  // Lo opaco a lo que vuelven los hijos de un vidrio (index.css) también es el de la zona.
+  variables['--superficie-opaca'] = colores.superficie;
+  variables['--linea-suave-opaca'] = colores['linea-suave'];
+  variables['--linea-opaca'] = colores.linea;
+  return variables;
 }
 
 /**
  * Arranque, desde `main.tsx` ANTES del primer render: aplica la última preferencia de
- * este navegador. `main.tsx` es un módulo diferido y la CSP no deja scripts inline,
+ * este navegador (tema y estilo). `main.tsx` es un módulo diferido y la CSP no deja scripts inline,
  * así que con "oscuro" elegido y el sistema en claro puede verse un destello blanco
  * mientras baja el JS. Devuelve el tema aplicado.
  */
 export function iniciarTema(acento: string, raiz: HTMLElement = document.documentElement): Tema {
   const tema = resolverTema(leerPreferencia(), sistemaOscuro());
-  aplicarTema(tema, acento, raiz);
+  // UI-06: el estilo también, en el mismo paso: sin destello de «Clásico» a «Noche».
+  aplicarTema(tema, acento, raiz, leerEstilo());
   return tema;
 }

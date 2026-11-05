@@ -11,9 +11,17 @@ export type Icono = LucideIcon;
  * UI-05 (v3): la superficie de una tarjeta, en UN lugar. Borde suave, radio grande, el filo de
  * luz arriba y una sombra larga y difusa (`shadow-tarjeta`, ver index.css). La usan las
  * tarjetas de todo el panel, así que cambiar aquí cambia todas.
+ *
+ * UI-06: en el estilo «Noche» es de vidrio (`vidrio`: translúcida, con desenfoque); en «Clásico»
+ * esa clase no pinta nada. Son tarjetas que se cuentan con los dedos: lo que se repite muchas
+ * veces (cada mesa, cada turno) usa `vidrio-falso`, sin desenfoque.
  */
 export const SUPERFICIE_TARJETA =
-  'rounded-2xl border border-linea-suave bg-superficie shadow-tarjeta';
+  'rounded-2xl border border-linea-suave bg-superficie shadow-tarjeta vidrio';
+
+/** La misma tarjeta para lo que se repite (esqueletos de rejilla, una por categoría): sin blur. */
+export const SUPERFICIE_TARJETA_REPETIDA =
+  'rounded-2xl border border-linea-suave bg-superficie shadow-tarjeta vidrio-falso';
 
 export function Tarjeta({
   titulo,
@@ -22,6 +30,7 @@ export function Tarjeta({
   icono: IconoTitulo,
   accion,
   iconoEnCelular = true,
+  repetida = false,
 }: {
   titulo: string;
   children: ReactNode;
@@ -32,11 +41,16 @@ export function Tarjeta({
   accion?: ReactNode;
   /** En rejillas de dos columnas en el celular, el icono le quita al título su renglón. */
   iconoEnCelular?: boolean;
+  /**
+   * UI-06: una tarjeta que se repite muchas veces (una por categoría, por sucursal...): vidrio
+   * falso, sin desenfoque, para que el scroll no tartamudee en un celular de gama baja.
+   */
+  repetida?: boolean;
 }) {
   return (
     <section
       aria-label={titulo}
-      className={`min-w-0 ${SUPERFICIE_TARJETA} p-4 md:p-5 ${className}`}
+      className={`min-w-0 ${repetida ? SUPERFICIE_TARJETA_REPETIDA : SUPERFICIE_TARJETA} p-4 md:p-5 ${className}`}
     >
       <div className="flex min-w-0 items-center gap-2">
         {IconoTitulo && (

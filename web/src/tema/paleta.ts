@@ -3,10 +3,11 @@
  * La regla de lint de `eslint.config.mjs` prohíbe hex y clases de la paleta de
  * Tailwind (`text-slate-500`, `bg-white`...) en todo `src/` salvo este archivo.
  *
- * Cada token tiene un valor por tema. `aplicarTema()` (tema.ts) los pone como
+ * Cada token tiene un valor por ESTILO de marca (UI-06: «Noche», el de por defecto, y
+ * «Clásico», la v3) y por tema (claro u oscuro). `aplicarTema()` (tema.ts) los pone como
  * variables CSS en `:root` (`--fondo`, `--tinta`...) e `index.css` las expone a
- * Tailwind como `bg-fondo`, `text-tinta`, `border-linea`... Cambiar de tema es cambiar
- * los valores, no los componentes.
+ * Tailwind como `bg-fondo`, `text-tinta`, `border-linea`... Cambiar de tema o de estilo es
+ * cambiar los valores, no los componentes.
  *
  * `paleta.test.ts` mide el contraste de cada pareja texto/fondo en los dos temas:
  * si cambias un valor y baja de 4.5:1, el test truena.
@@ -45,6 +46,20 @@ export const BLANCO = '#ffffff';
 export const NEGRO = '#000000';
 
 export type Tema = 'claro' | 'oscuro';
+
+/**
+ * UI-06: el estilo de la marca. Se combina con el tema (claro / oscuro / sistema):
+ * - `noche`: negro con morado y vidrio (el de por defecto). En claro sólo se aclaran el fondo del
+ *   contenido y las tarjetas; el lateral, la barra de arriba, la de abajo, el hero y el login
+ *   siguen negros.
+ * - `clasico`: la v3 (UI-05), el morado de marca, sin cambios.
+ */
+export type Estilo = 'noche' | 'clasico';
+export const ESTILOS: readonly Estilo[] = ['noche', 'clasico'];
+export const ESTILO_POR_DEFECTO: Estilo = 'noche';
+
+/** El negro de la marca (UI-06): el lateral de «Noche» y la muestra del selector de estilo. */
+export const NEGRO_MARCA = '#08070b';
 
 const CLARO = {
   // Superficies: lavanda muy clara y blanco, con un tinte del morado de marca.
@@ -113,6 +128,18 @@ const CLARO = {
   brillo: '#6d3fc02e',
   // El filo de luz arriba de cada tarjeta (sombra interior de 1 px, con alfa en oscuro).
   resalte: '#ffffff',
+  // UI-06: el vidrio de «Noche» (ver index.css, `.vidrio*`). En «Clásico» las clases de vidrio no
+  // pintan nada (sus reglas sólo aplican con `data-estilo="noche"`); estos valores son los de una
+  // superficie opaca por si algo los lee.
+  vidrio: '#ffffff',
+  'vidrio-fuerte': '#ffffff',
+  'vidrio-barra': '#ffffff',
+  'vidrio-borde': '#f1edf7',
+  'vidrio-brillo': '#ffffff00',
+  resplandor: '#ffffff00',
+  // Las muestras del selector de estilo: el color de cada estilo, igual en todos.
+  'muestra-noche': '#08070b',
+  'muestra-clasico': '#2c1533',
 } as const;
 
 export type Token = keyof typeof CLARO;
@@ -171,9 +198,118 @@ const OSCURO: Record<Token, string> = {
   'hero-rejilla': '#ffffff1f',
   brillo: '#926fd040',
   resalte: '#ffffff14',
+  vidrio: '#2c1533',
+  'vidrio-fuerte': '#2c1533',
+  'vidrio-barra': '#2c1533',
+  'vidrio-borde': '#34193d',
+  'vidrio-brillo': '#ffffff00',
+  resplandor: '#ffffff00',
+  'muestra-noche': '#08070b',
+  'muestra-clasico': '#2c1533',
 };
 
-export const PALETA: Record<Tema, Record<Token, string>> = { claro: CLARO, oscuro: OSCURO };
+/*
+ * UI-06 · «Noche»: negro con morado. Los estados, el semáforo y las series no cambian (son
+ * semánticos); cambian las superficies, la tinta, el lateral, el hero y el vidrio.
+ *
+ * Lo que va en NEGRO en los dos temas (el lateral, la barra de arriba, la de abajo del celular,
+ * el hero del Inicio y el login) usa los tokens `lateral-*` y `hero-*`, que valen lo mismo en
+ * claro y en oscuro, o la «zona oscura» (`zonaOscura` en tema.ts), que dentro de un marco negro
+ * pone los valores de NOCHE_OSCURO aunque el tema sea claro.
+ *
+ * Los tokens con alfa (`vidrio*`, `hero`, `hero-fin`, `resplandor`) se miden en paleta.test.ts
+ * contra el color que resulta al componerlos sobre el peor fondo que puede quedar detrás.
+ */
+const NOCHE_COMUN = {
+  lateral: NEGRO_MARCA,
+  'lateral-borde': '#1d1926',
+  'lateral-realce': '#191522',
+  'lateral-tinta': '#f4ece4',
+  'lateral-tenue': '#b5abc4',
+  // El hero: casi negro con un fondo violeta que sube desde la esquina; translúcido para que el
+  // resplandor de atrás se adivine (vidrio), pero lo bastante opaco para verse negro en claro.
+  hero: '#1f1535f0',
+  'hero-fin': '#08070bf5',
+  'hero-borde': '#ffffff1f',
+  'hero-tinta': '#f6eee6',
+  'hero-tenue': '#cdc0d6',
+  'hero-cifra': '#efd9b6',
+  'hero-sube': '#8ee6b4',
+  'hero-baja': '#ffb4ac',
+  'hero-rejilla': '#ffffff1a',
+  // La barra de abajo: vidrio negro, casi opaco (por debajo pasan tarjetas blancas en claro y el
+  // texto claro de la barra tiene que seguir leyéndose). Es la superficie oscura al 95 %: lo
+  // mismo que pinta la cabecera con `bg-superficie/95` dentro de la zona oscura.
+  'vidrio-barra': '#16121ef2',
+  'muestra-noche': '#08070b',
+  'muestra-clasico': '#2c1533',
+} as const;
+
+const NOCHE_CLARO: Record<Token, string> = {
+  ...CLARO,
+  // El contenido se aclara (un gris lavanda muy suave, no blanco puro) y la tinta es casi negra.
+  fondo: '#f3f1f6',
+  superficie: '#ffffff',
+  realce: '#eeebf3',
+  'realce-fuerte': '#e2dee9',
+  'linea-suave': '#ebe8f0',
+  linea: '#e0dce7',
+  'linea-fuerte': '#c8c2d3',
+  tinta: '#15111c',
+  'tinta-medio': '#2b2534',
+  'tinta-suave': '#463f51',
+  'tinta-tenue': '#5a5265',
+  rejilla: '#e2dee9',
+  velo: '#08070b99',
+  sombra: '#15111c1f',
+  ...NOCHE_COMUN,
+  brillo: '#6d3fc02e',
+  resalte: '#ffffff',
+  // Vidrio claro: blanco translúcido; el borde es una línea oscura muy tenue (una clara no se ve
+  // sobre el fondo claro) y el brillo de arriba, blanco.
+  vidrio: '#ffffffb8',
+  'vidrio-fuerte': '#ffffffeb',
+  'vidrio-borde': '#15111c14',
+  'vidrio-brillo': '#ffffffcc',
+  resplandor: '#6d3fc024',
+};
+
+const NOCHE_OSCURO: Record<Token, string> = {
+  ...OSCURO,
+  // Casi negro con un tinte violeta mínimo (no gris, no azul marino).
+  fondo: '#0b0910',
+  superficie: '#16121e',
+  realce: '#1f1a29',
+  'realce-fuerte': '#2a2436',
+  'linea-suave': '#1e1a27',
+  linea: '#2a2436',
+  'linea-fuerte': '#433b52',
+  tinta: '#f5f2f8',
+  'tinta-medio': '#e7e2ee',
+  'tinta-suave': '#cdc6d9',
+  'tinta-tenue': '#aba2bc',
+  rejilla: '#221d2c',
+  velo: '#000000b3',
+  sombra: '#00000080',
+  ...NOCHE_COMUN,
+  brillo: '#926fd040',
+  resalte: '#ffffff17',
+  // Vidrio oscuro: la superficie translúcida, borde claro de 1 px con poca opacidad y un brillo
+  // blanco muy tenue arriba.
+  vidrio: '#16121ebf',
+  'vidrio-fuerte': '#16121eeb',
+  'vidrio-borde': '#ffffff17',
+  'vidrio-brillo': '#ffffff12',
+  resplandor: '#6d3fc040',
+};
+
+export const PALETAS: Record<Estilo, Record<Tema, Record<Token, string>>> = {
+  noche: { claro: NOCHE_CLARO, oscuro: NOCHE_OSCURO },
+  clasico: { claro: CLARO, oscuro: OSCURO },
+};
+
+/** La paleta del estilo «Clásico» (la v3), la de antes de UI-06. */
+export const PALETA: Record<Tema, Record<Token, string>> = PALETAS.clasico;
 
 export const TOKENS = Object.keys(CLARO) as Token[];
 

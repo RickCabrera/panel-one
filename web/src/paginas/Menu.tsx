@@ -173,7 +173,12 @@ export function Menu() {
                 </Tarjeta>
               ) : (
                 categorias.map((c) => (
-                  <Tarjeta key={c.grupo ?? ''} titulo={c.grupo ?? 'Sin grupo'} className="mt-4">
+                  <Tarjeta
+                    key={c.grupo ?? ''}
+                    titulo={c.grupo ?? 'Sin grupo'}
+                    className="mt-4"
+                    repetida
+                  >
                     <div className="overflow-x-auto">
                       <table
                         className="w-full min-w-0 text-left text-sm"

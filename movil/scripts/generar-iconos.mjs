@@ -8,19 +8,21 @@
 // (`npm i -g playwright && npx playwright install chromium`).
 //
 // Qué produce:
-//   mipmap-*/ic_launcher.png             ícono clásico (Android 7.x): el cuadrado morado redondeado
+//   mipmap-*/ic_launcher.png             ícono clásico (Android 7.x): el cuadrado negro redondeado
 //   mipmap-*/ic_launcher_round.png       ícono redondo (launchers que lo piden)
 //   mipmap-*/ic_launcher_foreground.png  primer plano del ícono adaptativo (Android 8+): el ojo sobre
 //                                        transparente, dentro de la zona segura de 66/108
-//   drawable*/splash.png                 splash de Android < 12: morado con el ojo al centro
-// El fondo del ícono adaptativo es el color @color/ic_launcher_background (#2C1533), no un PNG.
+//   drawable*/splash.png                 splash de Android < 12: negro con el ojo al centro
+// El fondo del ícono adaptativo es el color @color/ic_launcher_background (#000000), no un PNG.
+// UI-06: el ícono es el logo negro que mandó Ricardo (`isotipo-app-negro.svg`: el ojo arena sobre
+// un cuadrado redondeado negro), el del estilo «Noche» que el panel trae por defecto.
 import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const MORADO = '#2C1533';
+const NEGRO = '#000000';
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const res = join(raiz, 'android/app/src/main/res');
 
@@ -38,7 +40,7 @@ const ojo = readFileSync(join(raiz, '../docs/marca/isotipo-oscuro.svg'), 'utf8')
   /<title>.*?<\/title>/,
   '',
 );
-const app = readFileSync(join(raiz, '../docs/marca/isotipo-app.svg'), 'utf8').replace(
+const app = readFileSync(join(raiz, '../docs/marca/isotipo-app-negro.svg'), 'utf8').replace(
   /<title>.*?<\/title>/,
   '',
 );
@@ -71,11 +73,11 @@ async function png(ruta, w, h, opciones) {
 for (const [d, f] of Object.entries(densidades)) {
   const legado = Math.round(48 * f);
   const adaptativo = Math.round(108 * f);
-  // Clásico: el isotipo-app completo (cuadrado morado redondeado con el ojo), a sangre.
+  // Clásico: el isotipo-app-negro completo (cuadrado negro redondeado con el ojo), a sangre.
   await png(join(res, `mipmap-${d}/ic_launcher.png`), legado, legado, { svg: app, alto: 1 });
-  // Redondo: círculo morado con el ojo al 56 %.
+  // Redondo: círculo negro con el ojo al 56 %.
   await png(join(res, `mipmap-${d}/ic_launcher_round.png`), legado, legado, {
-    fondo: MORADO,
+    fondo: NEGRO,
     svg: ojo,
     alto: 0.56,
     radio: '50%',
@@ -104,7 +106,7 @@ const splash = {
   'drawable-land-xxxhdpi': [1920, 1280],
 };
 for (const [carpeta, [w, h]] of Object.entries(splash)) {
-  await png(join(res, `${carpeta}/splash.png`), w, h, { fondo: MORADO, svg: ojo, alto: 0.3 });
+  await png(join(res, `${carpeta}/splash.png`), w, h, { fondo: NEGRO, svg: ojo, alto: 0.3 });
 }
 
 await navegador.close();

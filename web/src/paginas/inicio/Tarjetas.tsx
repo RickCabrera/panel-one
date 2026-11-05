@@ -126,7 +126,7 @@ export function TarjetaVentaTotal({
   return (
     <section
       aria-label="Venta total"
-      className={`relative isolate min-w-0 overflow-hidden rounded-2xl border border-hero-borde bg-linear-135 from-hero to-hero-fin p-5 text-hero-tinta shadow-hero md:p-6 ${className}`}
+      className={`relative isolate min-w-0 overflow-hidden rounded-2xl border border-hero-borde bg-linear-135 from-hero to-hero-fin p-5 text-hero-tinta shadow-hero vidrio-hero md:p-6 ${className}`}
     >
       {/* El ojo de la marca, enorme y apagado, vigilando la venta. Decorativo. */}
       <Isotipo

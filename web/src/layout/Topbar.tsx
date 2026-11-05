@@ -6,6 +6,8 @@ import { useAuth, useUsuario } from '../auth/contexto';
 import { NOMBRE_ROL } from '../auth/roles';
 import { SelectorAlcance } from '../filtros/SelectorAlcance';
 import { queryVista, usaPeriodo } from '../filtros/vista';
+import { useTema } from '../tema/contexto';
+import { InterruptorEstilo } from '../tema/InterruptorEstilo';
 import { InterruptorTema } from '../tema/InterruptorTema';
 import { Campana } from './Campana';
 import { iniciales } from './iniciales';
@@ -29,9 +31,15 @@ export function Topbar() {
   // UI-04: en tableta (md a lg) la operación en vivo va en dos renglones cortos y le deja
   // espacio a la empresa y la sucursal.
   const tableta = useMedia(MEDIA_HASTA_LG);
+  // UI-06: en «Noche» la cabecera es negra en los dos temas (vidrio negro, `vidrio-barra`), y en
+  // claro lleva dentro la paleta oscura (`zonaOscura`) para que sus controles se lean.
+  const { zonaOscura } = useTema();
 
   return (
-    <header className="print:hidden sticky top-0 z-10 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-linea bg-superficie/95 px-6 py-2 backdrop-blur">
+    <header
+      style={zonaOscura}
+      className="print:hidden sticky top-0 z-10 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-linea bg-superficie/95 px-6 py-2 text-tinta backdrop-blur vidrio-barra"
+    >
       <OperacionEnVivo compacto={tableta} />
       <div className="min-w-0 flex-1">
         <SelectorAlcance />
@@ -39,6 +47,7 @@ export function Topbar() {
       <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5">
         <Campana />
         <InterruptorTema />
+        <InterruptorEstilo />
         <span aria-hidden="true" className="mx-1 hidden h-6 w-px bg-linea sm:block" />
         <div className="flex min-w-0 items-center gap-2">
           <span

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { formatearPesos } from '../../dinero/dinero';
 import type { ModificadorMesa, PartidaMesa } from './mesa';
@@ -69,7 +70,8 @@ export function DetalleMesa({
     }
   }
 
-  return (
+  // UI-06: en un portal a <body> (ver `Dialogo`): ningún ancestro de vidrio lo encierra.
+  return createPortal(
     <div
       data-testid="detalle-fondo"
       // UI-04: en el celular es una hoja inferior a todo lo ancho; desde md, centrado.
@@ -87,7 +89,7 @@ export function DetalleMesa({
         // del modal y Escape/Tab lo siguen escuchando.
         tabIndex={-1}
         onKeyDown={teclado}
-        className="flex max-h-[92dvh] w-full min-w-0 flex-col rounded-t-2xl bg-superficie pb-[env(safe-area-inset-bottom)] shadow-xl outline-none motion-safe:animate-hoja md:max-h-full md:max-w-2xl md:rounded-lg md:pb-0 md:motion-safe:animate-none"
+        className="flex max-h-[92dvh] w-full min-w-0 flex-col rounded-t-2xl bg-superficie vidrio-fuerte pb-[env(safe-area-inset-bottom)] shadow-xl outline-none motion-safe:animate-hoja md:max-h-full md:max-w-2xl md:rounded-lg md:pb-0 md:motion-safe:animate-none"
       >
         <div className="flex items-start justify-between gap-3 border-b border-linea p-4">
           <h2 id="detalle-mesa-titulo" className="min-w-0 text-lg font-semibold break-words">
@@ -113,7 +115,8 @@ export function DetalleMesa({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

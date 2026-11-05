@@ -61,7 +61,7 @@ export function Tarjeta({
 }) {
   if (destacada) {
     return (
-      <div className="relative isolate overflow-hidden rounded-2xl border border-hero-borde bg-linear-135 from-hero to-hero-fin p-4 text-hero-tinta shadow-hero sm:p-5">
+      <div className="relative isolate overflow-hidden rounded-2xl border border-hero-borde bg-linear-135 from-hero to-hero-fin p-4 text-hero-tinta shadow-hero vidrio-hero sm:p-5">
         <Isotipo
           variante="oscuro"
           decorativo

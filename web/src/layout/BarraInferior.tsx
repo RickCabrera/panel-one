@@ -5,6 +5,7 @@ import { Link, useLocation, useSearchParams } from 'react-router';
 import { useAuth, useUsuario } from '../auth/contexto';
 import { NOMBRE_ROL, ROLES_ADMIN } from '../auth/roles';
 import { queryVista } from '../filtros/vista';
+import { InterruptorEstilo } from '../tema/InterruptorEstilo';
 import { InterruptorTema } from '../tema/InterruptorTema';
 import { textoAgentesCaidos, useAgentesCaidos } from './agentesCaidos';
 import { HojaInferior } from './HojaInferior';
@@ -20,7 +21,8 @@ import {
 /*
  * UI-04: la navegación del celular. Cuatro destinos de `menu.ts` (`movil.barra`) y «Más», que
  * abre una hoja con el resto del menú (las mismas secciones y los mismos permisos) y las
- * acciones de cuenta. Es del morado de marca en los dos temas, como el lateral: el ítem activo
+ * acciones de cuenta. Es del color del lateral en los dos temas (morado en «Clásico»; vidrio negro
+ * en «Noche», UI-06): el ítem activo
  * lleva el relleno violeta del acento y una muesca arena arriba (el violeta solo casi no se
  * distingue sobre morado). Cada destino mide ≥ 56 px de alto y 1/5 del ancho; el relleno de
  * abajo es `env(safe-area-inset-bottom)` (la barra de gestos del WebView y del iPhone).
@@ -73,7 +75,7 @@ export function BarraInferior() {
     <>
       <nav
         aria-label="Principal"
-        className="print:hidden fixed inset-x-0 bottom-0 z-30 border-t border-lateral-borde bg-lateral pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-lateral-tinta"
+        className="print:hidden fixed inset-x-0 bottom-0 z-30 border-t border-lateral-borde bg-lateral vidrio-barra pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-lateral-tinta"
       >
         <ul className={`mx-auto flex max-w-xl items-stretch ${ALTO_BARRA}`}>
           {destinos.map((entrada) => (
@@ -246,6 +248,11 @@ function HojaMas({ alcance, onCerrar }: { alcance: string; onCerrar: () => void 
             <div className="truncate text-xs text-tinta-tenue">{NOMBRE_ROL[usuario.rol]}</div>
           </div>
           <InterruptorTema amplio />
+        </div>
+        {/* UI-06: el estilo de la marca, junto al tema. */}
+        <div className="mt-3 flex items-center justify-between gap-3 px-1">
+          <span className="text-sm font-medium text-tinta-suave">Estilo</span>
+          <InterruptorEstilo amplio />
         </div>
         <ul className="mt-3 space-y-0.5">
           <li>

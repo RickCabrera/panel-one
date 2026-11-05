@@ -3136,6 +3136,28 @@ guardia del Caddyfile y `check:landing` (rutas relativas) cubren `/landing`.
   extendidos a los tokens nuevos; capturas antes/después a 390 y 1440 en los dos temas
   revisadas.
 
+## UI-06 · Estilo Noche (negro + morado + vidrio)
+
+- [ ] **UI-06 · Estilo Noche (negro + morado + vidrio)** — pedida por Ricardo el 5-nov-2026
+  (fuera de la cola; rama `feat/ui-06-noche`). Sólo visual: mismas pantallas, datos y endpoints.
+  Dos estilos de marca que se combinan con claro/oscuro/sistema, por tokens (`data-estilo` en
+  `<html>` y `PALETAS[estilo][tema]` en `tema/paleta.ts`), sin duplicar componentes:
+  **«Noche»** (nuevo, por defecto): fondo casi negro, morado `#6D3FC0` de principal y arena en
+  cifras y logo, resplandor violeta fijo detrás del contenido (CSS puro); en claro sólo se aclaran
+  el contenido y las tarjetas, y siguen negros el lateral, la barra de arriba, la de abajo del
+  celular, el hero y el login (la «zona oscura»). Vidrio discreto (fondo translúcido, desenfoque,
+  borde fino y brillo arriba) en tarjetas, hero, paneles, modales y las dos barras; vidrio falso
+  (sin desenfoque) en lo repetido (mesas, turnos, tabla de Tickets); fondo sólido sin
+  `backdrop-filter` o con «reducir transparencia». **«Clásico»:** la v3 tal cual. Selector junto
+  al de tema (cabecera, hoja «Más» y lateral de Plataforma), en localStorage por usuario y por
+  navegador, aplicado antes del primer render. Logo negro: `isotipo-app-negro.svg` (el de
+  Ricardo) para favicon, íconos de la PWA y el ícono, splash y barras del APK.
+  **Listo cuando:** CI verde; `check:bundle` ≤ 400 kB y `check:pwa` verdes; `paleta.test.ts` mide
+  los dos estilos en los dos temas, con el vidrio compuesto sobre el peor fondo; tests del
+  selector y de su persistencia; capturas de Noche a 390 y 1440 en claro y oscuro (login, inicio,
+  mesas, turnos, tickets, meseros, plataforma) y de Clásico (inicio, 1440, claro) revisadas;
+  `docs/marca/README.md` con los dos estilos, los tokens nuevos y las reglas del vidrio.
+
 ## Decisiones abiertas para Ricardo
 
 No son código hasta que se decidan. Cada una dice dónde está documentada; al decidir, se

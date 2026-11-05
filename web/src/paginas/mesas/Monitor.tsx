@@ -149,9 +149,9 @@ function KpiAtencion({
       title={
         activo ? 'Quitar el filtro de atención' : 'Mostrar sólo las mesas que requieren atención'
       }
-      className={`min-w-0 ${SUPERFICIE_TARJETA} p-4 text-left transition-[box-shadow,background-color] duration-150 hover:shadow-tarjeta-alta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-borde md:p-5 ${
-        atencion > 0 ? 'border-2 border-peligro-borde bg-peligro-fondo/40' : ''
-      } ${activo ? 'ring-2 ring-acento-borde' : ''}`}
+      // Con mesas en atención, el fondo rojo REEMPLAZA a `bg-superficie` (no se suman: con las dos
+      // clases ganaba la superficie por el orden de la hoja y el aviso quedaba sólo en el borde).
+      className={`min-w-0 ${atencion > 0 ? SUPERFICIE_TARJETA.replace('bg-superficie', 'border-2 border-peligro-borde bg-peligro-fondo/40') : SUPERFICIE_TARJETA} p-4 text-left transition-[box-shadow,background-color] duration-150 hover:shadow-tarjeta-alta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento-borde md:p-5 ${activo ? 'ring-2 ring-acento-borde' : ''}`}
     >
       <span className="flex items-center gap-2">
         <span
@@ -369,7 +369,7 @@ const TarjetaMesa = memo(function TarjetaMesa({ mesa, conSucursal, onAbrir }: Pr
     <li
       aria-label={nombre}
       data-semaforo={color}
-      className={`group relative min-w-0 overflow-hidden rounded-xl border-2 bg-superficie p-3.5 pb-4 shadow-tarjeta transition-[box-shadow,transform] duration-150 hover:shadow-tarjeta-alta motion-safe:hover:-translate-y-0.5 ${BORDE[color]}`}
+      className={`group relative min-w-0 overflow-hidden rounded-xl border-2 bg-superficie p-3.5 pb-4 shadow-tarjeta vidrio-falso transition-[box-shadow,transform] duration-150 hover:shadow-tarjeta-alta motion-safe:hover:-translate-y-0.5 ${BORDE[color]}`}
     >
       {/* Botón "estirado" sobre toda la tarjeta: un <button> no puede contener la
           lista de partidas, así que no envuelve el contenido. */}

@@ -789,6 +789,10 @@ describe('F2-223: orden y filtro, en la URL y recordados', () => {
     const kpiBoton = await screen.findByRole('button', { name: /Atención requerida/ });
     expect(kpiBoton).toHaveAttribute('aria-pressed', 'false');
     expect(kpi('kpi-atencion')).toHaveTextContent('1');
+    // UI-06: el aviso rojo es el fondo Y el borde; el fondo rojo reemplaza a la superficie (con
+    // las dos clases, la superficie ganaba por el orden de la hoja).
+    expect(kpiBoton).toHaveClass('bg-peligro-fondo/40', 'border-peligro-borde');
+    expect(kpiBoton).not.toHaveClass('bg-superficie');
 
     await userEvent.click(kpiBoton);
     expect(ordenGrid()).toEqual(['Mesa 3']);

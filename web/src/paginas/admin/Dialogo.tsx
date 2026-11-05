@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 const ENFOCABLES =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])';
@@ -60,7 +61,11 @@ export function Dialogo({
     }
   }
 
-  return (
+  // UI-06: en un portal a <body>, como `HojaInferior`. Un ancestro con `backdrop-filter` (las
+  // tarjetas de vidrio del estilo «Noche») se vuelve el contenedor de todo `fixed` y un contexto
+  // de apilamiento: montado dentro de una tarjeta (Facturación), el velo y el diálogo sólo
+  // cubrían la tarjeta.
+  return createPortal(
     <div
       // UI-04: en el celular es una hoja inferior a todo lo ancho; desde md, centrado.
       className="fixed inset-0 z-50 flex items-end justify-center bg-velo md:items-center md:p-4"
@@ -75,13 +80,14 @@ export function Dialogo({
         aria-labelledby={idTitulo}
         tabIndex={-1}
         onKeyDown={teclado}
-        className="flex max-h-[92dvh] w-full min-w-0 flex-col overflow-y-auto rounded-t-2xl bg-superficie p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl outline-none motion-safe:animate-hoja md:max-h-full md:max-w-lg md:rounded-lg md:pb-4 md:motion-safe:animate-none"
+        className="flex max-h-[92dvh] w-full min-w-0 flex-col overflow-y-auto rounded-t-2xl bg-superficie vidrio-fuerte p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-xl outline-none motion-safe:animate-hoja md:max-h-full md:max-w-lg md:rounded-lg md:pb-4 md:motion-safe:animate-none"
       >
         <h2 id={idTitulo} className="text-lg font-semibold break-words">
           {titulo}
         </h2>
         <div className="mt-3 min-w-0">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

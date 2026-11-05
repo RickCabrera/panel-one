@@ -283,6 +283,8 @@ describe('Plataforma: sólo admin_global', () => {
     expect(screen.getByText('Administración')).toBeInTheDocument();
     expect(screen.getByText(YO.email)).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Tema oscuro' })).toBeInTheDocument();
+    // UI-06: el estilo de la marca, junto al tema.
+    expect(screen.getByRole('group', { name: 'Estilo' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeInTheDocument();
     // Tablero con las métricas (dinero exacto desde el texto de la API).
     expect(await screen.findByText('$1,497.00')).toBeInTheDocument();

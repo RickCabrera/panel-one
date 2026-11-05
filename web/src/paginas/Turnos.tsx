@@ -338,7 +338,7 @@ function TarjetaCorte({
         className={`block w-full min-w-0 rounded-xl border px-3.5 py-3 text-left shadow-tarjeta transition-[background-color,box-shadow] duration-150 ${
           elegido
             ? 'border-acento-borde bg-realce'
-            : 'border-linea-suave bg-superficie hover:shadow-tarjeta-alta'
+            : 'border-linea-suave bg-superficie vidrio-falso hover:shadow-tarjeta-alta'
         }`}
       >
         <span className="flex min-w-0 items-baseline gap-2">

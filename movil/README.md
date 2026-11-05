@@ -33,7 +33,7 @@ panel de producción (`server.url` en `capacitor.config.ts`).
   respaldo es para cuando no hay nada que mostrar (la primera vez, o un error del servidor en la
   carga de la página).
 - **Plugins:** ninguno además de `@capacitor/core` y `@capacitor/android`. `SystemBars` (barra de
-  estado con íconos claros sobre el morado) viene dentro de `@capacitor/android`. Permiso único:
+  estado con íconos claros sobre el negro) viene dentro de `@capacitor/android`. Permiso único:
   `INTERNET` (el CI falla si aparece otro).
 - **Sin respaldo:** `allowBackup="false"` y `dataExtractionRules` que excluyen todo (Android 12+
   también en la transferencia entre teléfonos): la sesión del panel no sale del teléfono. Sin el
@@ -111,7 +111,7 @@ Además de la llave:
 - Play pide **AAB**, no APK: agregar `./gradlew bundleRelease` y firmar el `.aab` con la llave de
   *upload* (con Play App Signing, la llave de arriba sirve como llave de upload).
 - Cuenta de desarrollador de Google Play (pago único), ficha de la tienda (capturas, ícono de
-  512×512 —`docs/marca/isotipo-app.svg`—, descripción), política de privacidad pública y el
+  512×512 —`docs/marca/isotipo-app-negro.svg`—, descripción), política de privacidad pública y el
   formulario de *Seguridad de los datos*.
 - Una app que sólo envuelve un sitio web puede ser rechazada por "funcionalidad mínima"
   (política de *webview spam*): conviene llegar con algo nativo (push FCM, por ejemplo).

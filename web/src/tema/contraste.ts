@@ -48,6 +48,23 @@ export function mezclar(a: string, b: string, t: number): string {
 }
 
 /**
+ * UI-06: el color que se VE cuando `color` (hex de 6 dígitos, o de 8 con alfa: `#rrggbbaa`) se
+ * pinta encima de `fondo` (opaco). Es lo que se mide en el vidrio: el contraste de un texto sobre
+ * una superficie translúcida depende de lo que haya detrás.
+ */
+export function componer(color: string, fondo: string): string {
+  const limpio = color.trim().toLowerCase();
+  if (!/^#[0-9a-f]{8}$/.test(limpio)) return normalizarHex(limpio);
+  const alfa = parseInt(limpio.slice(7, 9), 16) / 255;
+  return mezclar(fondo, limpio.slice(0, 7), alfa);
+}
+
+/** ¿Trae alfa (`#rrggbbaa`)? */
+export function tieneAlfa(color: string): boolean {
+  return /^#[0-9a-f]{8}$/i.test(color.trim());
+}
+
+/**
  * El color `base` empujado hacia `destino` en pasos de 5 % hasta que tenga al menos
  * `minimo` de contraste contra TODOS los `fondos`. Si ni el destino puro alcanza,
  * devuelve el destino (el mejor posible).

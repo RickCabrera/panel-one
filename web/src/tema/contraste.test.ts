@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   ajustarContraste,
   comoDeuteranopia,
+  componer,
   contraste,
   diferencia,
   mezclar,
   normalizarHex,
+  tieneAlfa,
 } from './contraste';
 
 // Valores de referencia conocidos: si la aritmética se rompe, el test de la paleta
@@ -69,5 +71,29 @@ describe('mezclar y ajustarContraste', () => {
   it('expande los hex de 3 dígitos y rechaza lo que no es hex', () => {
     expect(normalizarHex('#ABC')).toBe('#aabbcc');
     expect(() => normalizarHex('red')).toThrow();
+  });
+});
+
+// UI-06: el vidrio. Componer un color con alfa sobre un fondo opaco.
+describe('componer', () => {
+  it('un color opaco tapa el fondo; uno transparente lo deja ver', () => {
+    expect(componer('#123456', '#ffffff')).toBe('#123456');
+    expect(componer('#12345600', '#ffffff')).toBe('#ffffff');
+    expect(componer('#123456ff', '#ffffff')).toBe('#123456');
+  });
+
+  it('a la mitad, es la mezcla de los dos (valores literales)', () => {
+    // 0x80 = 128/255 de negro sobre blanco: 255 × (1 − 128/255) = 127 → #7f7f7f.
+    expect(componer('#00000080', '#ffffff')).toBe('#7f7f7f');
+    // 0x40 = 64/255 de rojo sobre negro: 255 × 64/255 = 64 → #400000.
+    expect(componer('#ff000040', '#000000')).toBe('#400000');
+    // Mayúsculas y 6 dígitos sobre otro color: el de arriba, tal cual.
+    expect(componer('#ABCDEF', '#000000')).toBe('#abcdef');
+    expect(componer('#00000080', '#ffffff')).toBe(mezclar('#ffffff', '#000000', 128 / 255));
+  });
+
+  it('distingue los colores con alfa', () => {
+    expect(tieneAlfa('#ffffff1a')).toBe(true);
+    expect(tieneAlfa('#ffffff')).toBe(false);
   });
 });

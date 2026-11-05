@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet } from 'react-router';
 import { useAuth, useUsuario } from '../../auth/contexto';
 import { Logotipo } from '../../marca/Marca';
 import { useTema } from '../../tema/contexto';
+import { InterruptorEstilo } from '../../tema/InterruptorEstilo';
 import { SECCIONES_PLATAFORMA } from './secciones';
 
 /** Foco en arena: sobre el morado del lateral el violeta del acento no se ve (UI-02). */
@@ -19,7 +20,7 @@ const BOTON_LATERAL = `rounded-md border border-lateral-borde px-3 py-1.5 text-s
  */
 export function LayoutPlataforma() {
   return (
-    <div className="min-h-screen bg-fondo text-tinta md:flex">
+    <div className="resplandor min-h-screen bg-fondo text-tinta md:flex">
       <BarraLateral />
       <main className="min-w-0 flex-1">
         <Outlet />
@@ -97,6 +98,11 @@ function PieUsuario() {
           />
         </button>
       </label>
+      {/* UI-06: el estilo de la marca, junto al tema. */}
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span>Estilo</span>
+        <InterruptorEstilo />
+      </div>
       <Link to="/" className={`${BOTON_LATERAL} block text-center`}>
         Ir al panel
       </Link>

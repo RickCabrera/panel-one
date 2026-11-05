@@ -74,6 +74,14 @@
   --color-hero-rejilla: var(--hero-rejilla);
   --color-brillo: var(--brillo);
   --color-resalte: var(--resalte);
+  --color-vidrio: var(--vidrio);
+  --color-vidrio-fuerte: var(--vidrio-fuerte);
+  --color-vidrio-barra: var(--vidrio-barra);
+  --color-vidrio-borde: var(--vidrio-borde);
+  --color-vidrio-brillo: var(--vidrio-brillo);
+  --color-resplandor: var(--resplandor);
+  --color-muestra-noche: var(--muestra-noche);
+  --color-muestra-clasico: var(--muestra-clasico);
 }
 
 /*
@@ -231,6 +239,124 @@ body {
   :focus-visible {
     outline: 2px solid var(--acento-borde);
     outline-offset: 2px;
+  }
+}
+
+/*
+ * UI-06 · estilo «Noche»: vidrio y resplandor. TODO aquí cuelga de `:where([data-estilo='noche'])`
+ * (lo pone aplicarTema en <html>): en «Clásico» estas clases no pintan nada y la v3 se ve igual.
+ *
+ * El vidrio NO pinta colores directamente: cambia las VARIABLES que ya usan las utilidades del
+ * elemento (`--superficie`, `--linea-suave`, `--linea`, `--lateral`). Así `bg-superficie` se
+ * vuelve translúcido, pero una utilidad semántica que el componente pone encima
+ * (`bg-peligro-fondo/40`, `border-peligro-borde`: la tarjeta roja de «Atención requerida» en
+ * Mesas) sigue ganando como en «Clásico». Las reglas van con `:where()` (especificidad 0,1,0) y
+ * nunca escriben `background-color` ni `border-color`: no compiten con ninguna utilidad.
+ * `tema/css.node.test.ts` lo comprueba.
+ *
+ * Los hijos de un vidrio recuperan la superficie opaca (`--superficie-opaca`, que es la del tema
+ * o la de la zona oscura): nunca vidrio sobre vidrio.
+ *
+ * - `.vidrio`: tarjetas, hero, paneles y filtros que se cuentan con los dedos. Fondo translúcido,
+ *   desenfoque de lo de atrás, borde fino y un brillo arriba (un degradado que se apaga en los
+ *   primeros 3 rem).
+ * - `.vidrio-fuerte`: modales y hojas; casi opaco, porque detrás puede haber cualquier cosa.
+ * - `.vidrio-barra`: la cabecera (su `bg-superficie/95` ya es translúcido; aquí sólo el
+ *   desenfoque) y la barra de abajo del celular (`bg-lateral` → `vidrio-barra`).
+ * - `.vidrio-falso`: lo que se repite muchas veces (cada mesa, cada turno, la tabla de Tickets,
+ *   las categorías del menú): el mismo fondo translúcido y el brillo, SIN desenfoque. El
+ *   `backdrop-filter` en decenas de tarjetas es lo que hace tartamudear el scroll en un celular
+ *   de gama baja.
+ * - `.vidrio-hero`: el hero (su fondo son los tokens translúcidos `hero` → `hero-fin`): sólo el
+ *   desenfoque.
+ *
+ * Fallbacks: sin `backdrop-filter`, o con «reducir transparencia», el fondo es sólido.
+ */
+:root {
+  --superficie-opaca: var(--superficie);
+  --linea-suave-opaca: var(--linea-suave);
+  --linea-opaca: var(--linea);
+}
+
+@layer utilities {
+  :where([data-estilo='noche']) .vidrio,
+  :where([data-estilo='noche']) .vidrio-fuerte,
+  :where([data-estilo='noche']) .vidrio-barra,
+  :where([data-estilo='noche']) .vidrio-hero {
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+  }
+  :where([data-estilo='noche']) .vidrio,
+  :where([data-estilo='noche']) .vidrio-falso {
+    --superficie: var(--vidrio);
+    --linea-suave: var(--vidrio-borde);
+    --linea: var(--vidrio-borde);
+    background-image: linear-gradient(to bottom, var(--vidrio-brillo), transparent 3rem);
+  }
+  :where([data-estilo='noche']) .vidrio-fuerte {
+    --superficie: var(--vidrio-fuerte);
+    --linea-suave: var(--vidrio-borde);
+    --linea: var(--vidrio-borde);
+    background-image: linear-gradient(to bottom, var(--vidrio-brillo), transparent 3rem);
+  }
+  :where([data-estilo='noche']) .vidrio-barra {
+    --lateral: var(--vidrio-barra);
+  }
+  /* Lo de adentro de un vidrio vuelve a lo opaco (campos, menús, filas, insignias). */
+  :where([data-estilo='noche']) :where(.vidrio, .vidrio-falso, .vidrio-fuerte) > * {
+    --superficie: var(--superficie-opaca);
+    --linea-suave: var(--linea-suave-opaca);
+    --linea: var(--linea-opaca);
+  }
+  /* Nunca vidrio sobre vidrio: lo repetido DENTRO de una tarjeta de vidrio (los turnos dentro
+     de «Turnos del periodo») se queda opaco. */
+  :where([data-estilo='noche']) :where(.vidrio, .vidrio-fuerte) .vidrio-falso {
+    --superficie: var(--superficie-opaca);
+    background-image: none;
+  }
+
+  /* El resplandor de atrás: dos halos violeta, fijos, en un seudoelemento (CSS puro, sin
+     imágenes) para que el vidrio tenga algo que difuminar. No se mueve al hacer scroll. */
+  :where([data-estilo='noche']) .resplandor {
+    isolation: isolate;
+  }
+  :where([data-estilo='noche']) .resplandor::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(56rem 36rem at 88% -8%, var(--resplandor), transparent 70%),
+      radial-gradient(44rem 32rem at 8% 108%, var(--resplandor), transparent 70%);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    :where([data-estilo='noche']) .vidrio,
+    :where([data-estilo='noche']) .vidrio-fuerte {
+      --superficie: var(--superficie-opaca);
+    }
+    :where([data-estilo='noche']) .vidrio-barra {
+      --lateral: var(--muestra-noche);
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    :where([data-estilo='noche']) .vidrio,
+    :where([data-estilo='noche']) .vidrio-fuerte,
+    :where([data-estilo='noche']) .vidrio-falso {
+      --superficie: var(--superficie-opaca);
+    }
+    :where([data-estilo='noche']) .vidrio-barra {
+      --lateral: var(--muestra-noche);
+    }
+    :where([data-estilo='noche']) .vidrio,
+    :where([data-estilo='noche']) .vidrio-fuerte,
+    :where([data-estilo='noche']) .vidrio-barra,
+    :where([data-estilo='noche']) .vidrio-hero {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
   }
 }
 

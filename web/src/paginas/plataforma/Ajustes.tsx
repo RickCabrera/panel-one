@@ -35,14 +35,14 @@ export function Ajustes() {
 }
 
 function ColorInterfaz({ guardado }: { guardado: ColorAcento | null }) {
-  const { tema } = useTema();
+  const { tema, estilo } = useTema();
   const accion = useAccionPlataforma();
   const [elegido, setElegido] = useState<ColorAcento | null>(guardado);
   const [listo, setListo] = useState(false);
   const hex = elegido ? ACENTOS_PLATAFORMA[elegido].hex : ACENTO_DESPLIEGUE;
   // La vista previa redefine los tokens del acento SÓLO dentro de su recuadro.
   const variables = Object.fromEntries(
-    Object.entries(derivarAcento(hex, tema)).map(([token, valor]) => [`--${token}`, valor]),
+    Object.entries(derivarAcento(hex, tema, estilo)).map(([token, valor]) => [`--${token}`, valor]),
   ) as CSSProperties;
 
   async function guardar(color: ColorAcento | null) {
