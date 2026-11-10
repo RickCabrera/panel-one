@@ -3138,7 +3138,7 @@ guardia del Caddyfile y `check:landing` (rutas relativas) cubren `/landing`.
 
 ## UI-06 · Estilo Noche (negro + morado + vidrio)
 
-- [ ] **UI-06 · Estilo Noche (negro + morado + vidrio)** — pedida por Ricardo el 5-nov-2026
+- [x] **UI-06 · Estilo Noche (negro + morado + vidrio)** — pedida por Ricardo el 5-nov-2026
   (fuera de la cola; rama `feat/ui-06-noche`). Sólo visual: mismas pantallas, datos y endpoints.
   Dos estilos de marca que se combinan con claro/oscuro/sistema, por tokens (`data-estilo` en
   `<html>` y `PALETAS[estilo][tema]` en `tema/paleta.ts`), sin duplicar componentes:
