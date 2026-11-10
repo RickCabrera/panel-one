@@ -25,6 +25,10 @@ import {
   type Manejador,
 } from '../test/apiFalsa';
 
+// MVP: esta vista está oculta a los clientes (auth/mvp.ts). Aquí se prueba la vista en sí, con
+// los roles de cliente, así que se apaga el interruptor; lo oculto se prueba en auth/mvp.test.tsx.
+vi.mock('../auth/mvp', () => ({ OCULTAR_A_CLIENTES: false, veVistasOcultas: () => true }));
+
 // F2-124 en el web, contra el router y la app reales: lista (`/traspasos`), leídos de SR, alta
 // (`/traspasos/nuevo`) y detalle imprimible (`/traspasos/:id`). Datos escritos a mano.
 

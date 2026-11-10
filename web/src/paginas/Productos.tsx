@@ -6,6 +6,7 @@ import { useFiltroAlcance } from '../alertas/consultas';
 import { ErrorApi } from '../api/cliente';
 import type { DetalleProducto, SincronizacionSucursal } from '../api/tipos';
 import { useUsuario } from '../auth/contexto';
+import { veVistasOcultas } from '../auth/mvp';
 import { ROLES_ADMIN } from '../auth/roles';
 import { useAlcance } from '../filtros/alcance';
 import { queryVista } from '../filtros/vista';
@@ -45,6 +46,8 @@ export function Productos() {
   const usuario = useUsuario();
   const [parametros] = useSearchParams();
   const esAdmin = ROLES_ADMIN.includes(usuario.rol);
+  // MVP: el orquestador de menú sólo lo ve el equipo interno; al cliente no se le enlaza.
+  const veOrquestador = veVistasOcultas(usuario.rol);
   const [estado, setEstado] = useState<EstadoProductos>('todos');
   const [texto, setTexto] = useState('');
   const [q, setQ] = useState('');
@@ -81,15 +84,20 @@ export function Productos() {
     <Vista titulo="Productos">
       <p className="mb-4 text-sm text-tinta-tenue">
         El catálogo tal como lo tiene el POS de cada sucursal: nombre, grupo, precio y si sigue
-        vigente. Aquí no se cambia nada del POS; el precio se muestra como lo reporta el POS. Para
-        comparar precios entre sucursales, abre el{' '}
-        <Link
-          to={{ pathname: '/menu', search: queryVista(parametros) }}
-          className="text-acento-texto underline-offset-2 hover:underline"
-        >
-          orquestador de menú
-        </Link>
-        .
+        vigente. Aquí no se cambia nada del POS; el precio se muestra como lo reporta el POS.
+        {veOrquestador && (
+          <>
+            {' '}
+            Para comparar precios entre sucursales, abre el{' '}
+            <Link
+              to={{ pathname: '/menu', search: queryVista(parametros) }}
+              className="text-acento-texto underline-offset-2 hover:underline"
+            >
+              orquestador de menú
+            </Link>
+            .
+          </>
+        )}
       </p>
 
       <EstadoSincronizacion

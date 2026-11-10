@@ -19,6 +19,10 @@ import {
   type Manejador,
 } from '../test/apiFalsa';
 
+// MVP: esta vista está oculta a los clientes (auth/mvp.ts). Aquí se prueba la vista en sí, con
+// los roles de cliente, así que se apaga el interruptor; lo oculto se prueba en auth/mvp.test.tsx.
+vi.mock('../auth/mvp', () => ({ OCULTAR_A_CLIENTES: false, veVistasOcultas: () => true }));
+
 // F2-123 en el web: la captura de un conteo de 50 artículos (`/conteos/:id`) y su reporte. El AC:
 // "un conteo de 50 artículos se captura en móvil sin perder datos al bloquearse la pantalla". El
 // bloqueo se simula como lo vive la página: la petición falla (sin red) y la vista se desmonta; al

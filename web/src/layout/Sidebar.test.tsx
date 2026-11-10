@@ -231,13 +231,14 @@ describe('AC3 · teclado', () => {
 
 describe('AC4 · colapso recordado', () => {
   it('la sección colapsada sale del Tab y sigue colapsada al recargar; otro usuario no', async () => {
-    const ana = usuario('visor');
+    // admin_global: el equipo interno ve todas las secciones (las del MVP ocultas incluidas).
+    const ana = usuario('admin_global');
     api(ana);
     montar(`/cuenta?empresa=${A}`);
     let nav = await menu();
     const evt = userEvent.setup();
 
-    const catalogos = within(nav).getByRole('button', { name: 'Catálogos' });
+    const catalogos = within(nav).getByRole('button', { name: 'Áreas de consulta' });
     expect(catalogos).toHaveAttribute('aria-expanded', 'true');
     await evt.keyboard('{Tab}'); // da foco al documento antes de usar el teclado
     catalogos.focus();
@@ -254,7 +255,7 @@ describe('AC4 · colapso recordado', () => {
     api(ana);
     montar(`/cuenta?empresa=${A}`);
     nav = await menu();
-    expect(within(nav).getByRole('button', { name: 'Catálogos' })).toHaveAttribute(
+    expect(within(nav).getByRole('button', { name: 'Áreas de consulta' })).toHaveAttribute(
       'aria-expanded',
       'false',
     );
@@ -262,10 +263,10 @@ describe('AC4 · colapso recordado', () => {
 
     cleanup();
     terminarSesion('cerrada');
-    api({ ...usuario('visor', 'Beto'), id: '88888888-8888-4888-8888-888888888888' });
+    api({ ...usuario('admin_global', 'Beto'), id: '88888888-8888-4888-8888-888888888888' });
     montar(`/cuenta?empresa=${A}`);
     nav = await menu();
-    expect(within(nav).getByRole('button', { name: 'Catálogos' })).toHaveAttribute(
+    expect(within(nav).getByRole('button', { name: 'Áreas de consulta' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );

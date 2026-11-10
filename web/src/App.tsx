@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router';
 
 import { AuthProvider } from './auth/AuthProvider';
+import { SoloInterno } from './auth/SoloInterno';
 import { ROLES_ADMIN } from './auth/roles';
 import { RequiereRol, RutaProtegida } from './auth/RutaProtegida';
 import { crearQueryClient } from './consultas/queryClient';
@@ -135,25 +136,131 @@ export function Rutas() {
         <Route path="cortes" element={<RedirigirATurnos />} />
         <Route path="reportes" element={<Reportes />} />
         <Route path="alertas" element={<Alertas />} />
+        {/* MVP: lo que va en <SoloInterno> no lo ve ningún cliente (ver auth/mvp.ts). */}
         <Route path="productos" element={<Productos />} />
         {/* `/menu` y no `/productos/menu`: el menú lateral marcaría activas las dos. */}
-        <Route path="menu" element={<Menu />} />
+        <Route
+          path="menu"
+          element={
+            <SoloInterno>
+              <Menu />
+            </SoloInterno>
+          }
+        />
         <Route path="meseros" element={<Meseros />} />
-        <Route path="clientes" element={<Clientes />} />
-        <Route path="areas" element={<Areas />} />
+        <Route
+          path="clientes"
+          element={
+            <SoloInterno>
+              <Clientes />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="areas"
+          element={
+            <SoloInterno>
+              <Areas />
+            </SoloInterno>
+          }
+        />
         <Route path="canales" element={<Canales />} />
-        <Route path="existencias" element={<Existencias />} />
-        <Route path="movimientos" element={<Movimientos />} />
-        <Route path="conteos" element={<Conteos />} />
-        <Route path="conteos/ayuda" element={<AyudaConteos />} />
-        <Route path="conteos/:id" element={<ConteoCaptura />} />
-        <Route path="traspasos" element={<Traspasos />} />
-        <Route path="traspasos/nuevo" element={<TraspasoNuevo />} />
-        <Route path="traspasos/:id" element={<TraspasoDetalle />} />
-        <Route path="recetas" element={<Recetas />} />
-        <Route path="proyecciones" element={<Proyecciones />} />
-        <Route path="compras" element={<Compras />} />
-        <Route path="gastos" element={<Gastos />} />
+        <Route
+          path="existencias"
+          element={
+            <SoloInterno>
+              <Existencias />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="movimientos"
+          element={
+            <SoloInterno>
+              <Movimientos />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="conteos"
+          element={
+            <SoloInterno>
+              <Conteos />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="conteos/ayuda"
+          element={
+            <SoloInterno>
+              <AyudaConteos />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="conteos/:id"
+          element={
+            <SoloInterno>
+              <ConteoCaptura />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="traspasos"
+          element={
+            <SoloInterno>
+              <Traspasos />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="traspasos/nuevo"
+          element={
+            <SoloInterno>
+              <TraspasoNuevo />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="traspasos/:id"
+          element={
+            <SoloInterno>
+              <TraspasoDetalle />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="recetas"
+          element={
+            <SoloInterno>
+              <Recetas />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="proyecciones"
+          element={
+            <SoloInterno>
+              <Proyecciones />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="compras"
+          element={
+            <SoloInterno>
+              <Compras />
+            </SoloInterno>
+          }
+        />
+        <Route
+          path="gastos"
+          element={
+            <SoloInterno>
+              <Gastos />
+            </SoloInterno>
+          }
+        />
         <Route path="cuenta" element={<Cuenta />} />
         <Route
           path="facturacion"
