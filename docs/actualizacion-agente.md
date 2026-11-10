@@ -135,8 +135,10 @@ points: symlinks, junctions) en la carpeta, la solicitud y el preparado, y valid
   FIFO se detienen **los doce** catálogos (ventas, mesas y heartbeat siguen). Para destrabarlo sin
   volver a la versión nueva, con el servicio `ArkonAgente` **detenido**, purgar esos envíos del
   SQLite propio del agente (nunca de la base de SoftRestaurant):
-  `sqlite3 C:\ProgramData\ArkonAgente\cola.db "UPDATE catalogo_envios SET rechazado_at = strftime('%Y-%m-%dT%H:%M:%S','now') || '.0000000Z', motivo_rechazo = 'rollback PAG-01' WHERE catalogo = 'formas_pago' AND enviado_at IS NULL AND rechazado_at IS NULL;"`
-  (el formato de fecha es el de `ColaLocal.FormatoFecha`) y arrancar el servicio. Marcarlos rechazados en vez de borrarlos deja rastro, y la purga de 7 días
+  `sqlite3 C:\ProgramData\ArkonAgente\cola.db "UPDATE catalogo_envios SET rechazado_at = strftime('%Y-%m-%dT%H:%M:%S','now') || '.0000000Z', motivo_rechazo = 'rollback PAG-01' WHERE catalogo = 'formas_pago' AND enviado_at IS NULL AND rechazado_at IS NULL; UPDATE catalogo_estado SET hash = NULL WHERE catalogo = 'formas_pago';"`
+  (el formato de fecha es el de `ColaLocal.FormatoFecha`) y arrancar el servicio. Borrar el hash
+  es lo mismo que hace `Abandonar`: sin eso, al volver a la versión nueva la lectura diaria vería
+  "sin cambios" y no reenviaría el catálogo purgado. Marcarlos rechazados en vez de borrarlos deja rastro, y la purga de 7 días
   los quita. No se ha probado.
 
 ## Decisiones provisionales (nocturno)
