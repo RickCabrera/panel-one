@@ -17009,7 +17009,7 @@
             "description": "El texto con que la ingesta de cheques guarda `forma_raw` de los pagos (1–200): `formasdepago.descripcion` sin espacios a los lados, o el `idformadepago` si la descripción viene vacía. Match EXACTO con `forma_raw`: no se normaliza nada más."
           },
           "tipo": {
-            "type": "number",
+            "type": "integer",
             "nullable": true,
             "minimum": 1,
             "maximum": 4,

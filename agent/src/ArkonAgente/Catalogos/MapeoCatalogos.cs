@@ -419,7 +419,10 @@ internal static class MapeoCatalogos
     private static string? TextoForma(string? texto) =>
         string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
 
-    /// <summary><c>formasdepago.tipo</c>: 1 efectivo, 2 tarjeta, 3 vales, 4 otros (§4). Otro valor = nulo, con aviso.</summary>
+    /// <summary>
+    /// <c>formasdepago.tipo</c>: 1 efectivo, 2 tarjeta, 3 vales, 4 otros (§4). Otro valor, o uno que no es número,
+    /// = nulo, con aviso (nunca tumba la lectura).
+    /// </summary>
     private static int? TipoForma(object? valor, string id, List<string> avisos)
     {
         if (valor is null)
@@ -427,10 +430,20 @@ internal static class MapeoCatalogos
             return null;
         }
 
-        var numero = valor is bool b ? (b ? 1m : 0m) : Convert.ToDecimal(valor, CultureInfo.InvariantCulture);
-        if (numero >= 1m && numero <= 4m && numero == decimal.Truncate(numero))
+        decimal? numero;
+        try
         {
-            return (int)numero;
+            numero = valor is bool b ? (b ? 1m : 0m) : Convert.ToDecimal(valor, CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+        {
+            // Un tipo que ni es número no tumba el catálogo: esa forma viaja sin tipo, con aviso.
+            numero = null;
+        }
+
+        if (numero is { } n && n >= 1m && n <= 4m && n == decimal.Truncate(n))
+        {
+            return (int)n;
         }
 
         avisos.Add(

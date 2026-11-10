@@ -382,6 +382,20 @@ public class MapeoCatalogosTests
     }
 
     [Fact]
+    public void Un_tipo_que_no_es_numero_viaja_nulo_con_aviso_y_no_tumba_la_lectura()
+    {
+        var leido = Mapear(CatalogoPanel.FormasPago, FixturesSr.FormasPagoCon(
+            typeof(string), ("EF", "EFECTIVO", "efectivo"), ("X", "RARA", ""), ("VISA", "VISA", "2")));
+
+        Assert.Equal(3, leido.Total);
+        Assert.Equal(JsonValueKind.Null, Json(leido.Registros[0]).GetProperty("tipo").ValueKind);
+        Assert.Equal(JsonValueKind.Null, Json(leido.Registros[1]).GetProperty("tipo").ValueKind);
+        Assert.Equal(2, Json(leido.Registros[2]).GetProperty("tipo").GetInt32());
+        Assert.Equal(2, leido.Avisos.Count);
+        Assert.All(leido.Avisos, a => Assert.Contains("no es 1, 2, 3 ni 4", a));
+    }
+
+    [Fact]
     public void Una_forma_sin_clave_ni_descripcion_no_se_manda()
     {
         var leido = Mapear(CatalogoPanel.FormasPago, FixturesSr.FormasPago((null, null, 1), ("EF", "EFECTIVO", 1)));

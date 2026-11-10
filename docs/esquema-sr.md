@@ -377,17 +377,14 @@ turno, que es como arma SR su Corte X (`tempcheques` con `idturno = N`, abajo). 
   cuadrar peso a peso** con nuestro `NUMERIC(12,2)` por cuenta. ❓ **Decisión para Ricardo:**
   guardar esos componentes con 4 decimales o aceptar diferencias de centavos (ver §3, "precisión").
 
-- **Un centavo en los impuestos de UNA cuenta (2026-11-10, instalación real, turno 3 del
-  04/11/2026).** La Consulta de cuentas de SR muestra para el folio 29 «Impuestos $22.06» con
-  subtotal $479.93 y total $502.00; el panel muestra **$22.07**. Igual en el folio 25 (SR 19.31,
-  subtotal 1,200.68, total 1,220.00) y en el folio 24 (SR 36.55, subtotal 2,443.44, total
-  2,480.00). ✅ En los tres, lo que **SR muestra** suma un centavo MENOS que el total
-  (479.93 + 22.06 = 501.99), y lo que muestra el panel = total − subtotal: el total sí cuadra. Ojo:
-  el panel **no resta**; pinta `cheques.impuestos` = `totalimpuesto1` (4 decimales, §3) redondeado
-  a 2 **mitad lejos de cero** por la ingesta (§13). ⚠️ **SUPUESTO (no visto en la base):** esos
-  `totalimpuesto1` terminan en medio centavo (p. ej. 22.0650) y la pantalla de SR lo trunca (o
-  redondea a par), mientras que nosotros subimos. Para confirmarlo hay que leer `subtotal` y
-  `totalimpuesto1` a 4 decimales de esos folios. ❓ **Decisión para Ricardo:** copiar el redondeo
+- **Un centavo en los impuestos de UNA cuenta (PAG-01, instalación real).** En 3 cuentas, el
+  impuesto que muestra la Consulta de cuentas de SR + el subtotal que muestra = total − 0.01; el
+  panel muestra un impuesto un centavo mayor, que sí suma exacto al total. El total cuadra en las
+  tres. Ojo: el panel **no resta**; pinta `cheques.impuestos` = `totalimpuesto1` (4 decimales, §3)
+  redondeado a 2 **mitad lejos de cero** por la ingesta (§13). ⚠️ **SUPUESTO (no visto en la
+  base):** esos `totalimpuesto1` terminan en medio centavo (x.xx50) y la pantalla de SR lo trunca
+  (o redondea a par), mientras que nosotros subimos. Para confirmarlo hay que leer `subtotal` y
+  `totalimpuesto1` a 4 decimales de cuentas así. ❓ **Decisión para Ricardo:** copiar el redondeo
   de la pantalla de SR o quedarnos con el nuestro (que suma exacto al total). Es la misma familia
   que "El centavo de los impuestos", arriba.
 
@@ -1064,9 +1061,8 @@ costo, ninguno de $0.00 ni anidado). El caso de prueba con modificador **no se p
 producto no aparecía en el menú táctil. Se supone que un modificador vendido es una fila de
 `cheqdet` con `modificador = 1` justo después de su partida, pero nadie lo ha visto.
 
-**Modificadores vistos en pantalla (2026-11-10, instalación real, turno 3 del 04/11/2026).** En la
-**Consulta de cuentas** de SR, después de la partida «MICHELADA CON MARISCOS» aparecen partidas cuya
-descripción empieza con «>»: «>CERVEZA CORONA» $32, «>CERVEZA MODELO BOTE» $38 y «>CERVEZA SOL» $32.
+**Modificadores vistos en pantalla (PAG-01, instalación real).** En la **Consulta de cuentas** de
+SR se vio una partida padre seguida de partidas cuya descripción en pantalla empieza con «>».
 ✅ **Tienen precio propio y suman al total de la cuenta.** El panel ya las muestra con «+».
 ⚠️ **Lo que NO se vio:** el valor de la columna `cheqdet.modificador` de esas filas en la base, ni
 si el «>» es parte de `productos.descripcion` o lo pinta la pantalla de SR. Sólo se miró la
@@ -1149,7 +1145,7 @@ asigna **solo** desde PAG-01, por su `tipo` (ver "Cómo se clasifica sola", abaj
 
 **Cómo se clasifica sola (PAG-01, 2026-11-10).** Antes de PAG-01 el catálogo
 `formas_pago_catalogo` estaba vacío en producción (sin CRUD, se daba de alta a mano en la base) y
-todo caía en `otro`: en la instalación real, EFECTIVO $4,485 y VISA $2,262 salían como «Otro» en
+todo caía en `otro`: en la instalación real, el efectivo y la VISA salían como «Otro» en
 la dona de Inicio y en el «Cobrado por forma de pago» y el «Declarado vs cobrado» de Turnos. Ahora:
 
 - **El agente lee** `dbo.formasdepago` (`idformadepago`, `descripcion`, `tipo`) con
@@ -1160,7 +1156,11 @@ la dona de Inicio y en el «Cobrado por forma de pago» y el «Declarado vs cobr
 - **El texto es el de `forma_raw`.** El agente manda como `nombre` exactamente lo que la lectura de
   cheques guarda en `forma_raw`: la `descripcion` **sin espacios a los dos lados** (`Trim()`, no sólo
   a la derecha como el resto de los catálogos) o el `idformadepago` si la descripción viene vacía.
-  El match es exacto: otro recorte dejaría los pagos sin clasificar.
+  El match es exacto: otro recorte dejaría los pagos sin clasificar. ⚠️ **SUPUESTO (mayúsculas):**
+  con la descripción vacía se usa el `idformadepago` tal como lo devuelve `formasdepago`, y los
+  pagos usan el de `chequespagos`. SQL Server los une sin distinguir mayúsculas (collation CI), así
+  que si las dos tablas lo escriben con distinta capitalización (`Ef` vs `EF`), el texto no cuadra y
+  ese pago queda sin clasificar. No se ha visto una forma sin descripción.
 - **El API mapea** (`api/src/ingesta/formas-pago.ts#formaDeTipoSr`): 1 → `efectivo` (DOLARES
   incluido), 2 → `tarjeta`, 3 vales → `otro`, 4 otros/crédito → `otro`. Vales y crédito van a
   `otro` porque nuestro ENUM no los tiene y no son ni efectivo en caja ni cargo a tarjeta: meterlos
@@ -1180,8 +1180,8 @@ la dona de Inicio y en el «Cobrado por forma de pago» y el «Declarado vs cobr
   verdad, hace falta catálogo por sucursal (la decisión provisional de abajo sigue abierta).
 - **Sin `tipo`.** ⚠️ No se ha visto una instalación sin la columna. Si falta, SQL Server rechaza la
   consulta con el error 207 y el agente usa `sr_catalogo_formas_pago_sin_tipo.sql` (mismas
-  columnas, `tipo` nulo) y lo deja como Warning en su log; un `tipo` que no sea 1–4 también viaja
-  nulo, con aviso. El panel **no clasifica** una forma sin tipo: sigue contando como `otro` y
+  columnas, `tipo` nulo) y lo deja como Warning en su log; un `tipo` que no sea 1–4, o que ni
+  siquiera sea número, también viaja nulo, con aviso, sin tumbar la lectura del catálogo. El panel **no clasifica** una forma sin tipo: sigue contando como `otro` y
   saliendo en `sinCatalogo` («"Otro" incluye formas del POS sin catálogo…» en Inicio y Turnos),
   para que se vea qué falta.
 - **Nada se da de baja.** Una forma que desaparece del POS conserva su fila: quitarla
@@ -1193,9 +1193,10 @@ la dona de Inicio y en el «Cobrado por forma de pago» y el «Declarado vs cobr
   `scope/escritura-facturacion.ts`), así que las cuentas ingeridas antes del catálogo salen bien en
   cuanto llega, sin reingerir. Lo prueba `api/src/ingesta/formas-pago.e2e.spec.ts`.
 - ⚠️ **Rollback del agente.** Si una actualización del agente se revierte (F2-143) con un envío de
-  `formas_pago` todavía en su cola, la versión anterior no conoce ese catálogo y su carril de
-  catálogos se detiene al leerlo (ventas, mesas y heartbeat siguen). Se destraba al volver a la
-  versión nueva. No se probó.
+  `formas_pago` todavía en su cola, la versión anterior no conoce ese catálogo y, como la cola de
+  catálogos es FIFO, se detienen **los doce** catálogos (no sólo `formas_pago`): ventas, mesas y
+  heartbeat siguen. Se destraba al volver a la versión nueva o purgando esos envíos (paso en
+  `docs/actualizacion-agente.md`, "Rollback y formas de pago"). No se probó.
 
 **Dónde vive el mapeo (F1-032):** en la tabla `formas_pago_catalogo(empresa_id, forma_raw,
 forma)`, y se aplica **al leer**: el desglose por forma de pago hace `LEFT JOIN` del pago con el
@@ -3400,7 +3401,7 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 
 | Fecha | Versión SR | Restaurante / entorno | Qué se validó |
 |---|---|---|---|
-| 2026-11-10 | No se anotó | Instalación real. Sólo la pantalla **Consulta de cuentas** de SR del turno 3 del 04/11/2026, comparada a ojo con el panel; nada se leyó en la base y ningún dato del cliente entra al repo | Modificadores vendidos en pantalla (§3) y el centavo de diferencia en los impuestos de una cuenta (§2). Junto con PAG-01, que todo caía en «Otro» por el catálogo vacío (§4). **No** valida `cheqdet.modificador` ni los 4 decimales de `totalimpuesto1`. |
+| 2026-11-10 | No se anotó | Instalación real. Sólo la pantalla **Consulta de cuentas** de SR de un turno, comparada a ojo con el panel; nada se leyó en la base. **Ningún valor de negocio entra al repo**: ni folios, ni fechas de operación, ni productos, ni importes | Modificadores vendidos en pantalla (§3) y el centavo de diferencia en los impuestos de una cuenta (§2). Junto con PAG-01, que todo caía en «Otro» por el catálogo vacío (§4). **No** valida `cheqdet.modificador` ni los 4 decimales de `totalimpuesto1`. |
 | 2026-10-19 → 2026-10-22 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, empresa de demo). El POS se operó a mano con una hoja de casos: 23 cuentas en 2 turnos y un corte. Traza de Extended Events y lectura con `monitor_lector` (`db_datareader`). La hoja, la traza, los respaldos y las capturas quedan FUERA del repo | **F1-090**: cuentas cerradas y abiertas, partidas, pagos, cancelaciones, turnos y corte (§2–§5); el cuadre contra el Monitor de ventas y el Corte X de SR (§2); qué lee el Monitor de ventas (§2); `db_datareader` alcanza (§1). **No** valida: cancelación de cuenta cobrada, reapertura, modificadores vendidos, venta a domicilio ni el reinicio de `numcheque` (no se pudieron ejercitar, §2–§3). |
 | 2026-09-23 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, login sysadmin). Metadatos (`sys.columns`, `sys.indexes`, `sys.foreign_keys`, `sys.sql_modules`) y conteos; las 17 filas de `conceptos` y los 3 almacenes de demo; ningún valor de negocio al repo | Tablas de inventario (F2-241, §9, §10, §12): insumos, insumosdetalle, gruposi, almacen, proveedores, acumuladoinsumos y sus triggers, movsinv, conceptos, costos, compras, comprasmovtos, traspasosalmacen, presentaciones; que las 5 consultas `sr_catalogo_*` de inventario y `sr_existencias.sql` compilan y corren (0/0/0/3/0 filas y 3 almacenes vacíos). **No** valida valores ni signos (tablas vacías) ni qué costo usa SR: eso es F2-192/F2-193. |
 | 2026-09-23 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, login sysadmin). Metadatos (`sys.*`) y conteos agregados; ningún valor de negocio al repo | Tablas y columnas de catálogos: productos, productosdetalle, grupos, meseros, areasrestaurant, tiposervicio, clientes, estaciones y el señuelo `areas`; FKs reales; permisos por objeto de `diagnostico.sql`; que las 6 consultas `sr_catalogo_*.sql` compilan y devuelven 14/217/2/3/0/0 filas (F2-240, §6–§8, §11, §12). **No** valida el SENTIDO de las columnas de estado ni el cruce con cheques (sin FK): eso es F2-192. |

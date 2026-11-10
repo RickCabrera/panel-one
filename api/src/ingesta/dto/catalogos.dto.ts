@@ -244,7 +244,7 @@ export class RegistroFormaPagoDto {
   nombre!: string;
 
   @ApiPropertyOptional({
-    type: Number,
+    type: 'integer',
     nullable: true,
     minimum: 1,
     maximum: 4,

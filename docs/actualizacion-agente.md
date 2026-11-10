@@ -129,6 +129,15 @@ points: symlinks, junctions) en la carpeta, la solicitud y el preparado, y valid
   rechaza como inválidos (`reintentable: false`) y el agente los saca de la cola como rechazados. Un
   cheque rechazado es una venta que falta en el panel (el heartbeat lo reporta, pero no se reenvía
   solo).
+- **Rollback y formas de pago (PAG-01).** El paso 4.4 aparta eventos de `cola.db`, pero **no** el
+  carril de catálogos (`catalogo_envios`). Si se regresa a una versión anterior a PAG-01 con un
+  envío de `formas_pago` todavía pendiente, esa versión no conoce el catálogo, y como el carril es
+  FIFO se detienen **los doce** catálogos (ventas, mesas y heartbeat siguen). Para destrabarlo sin
+  volver a la versión nueva, con el servicio `ArkonAgente` **detenido**, purgar esos envíos del
+  SQLite propio del agente (nunca de la base de SoftRestaurant):
+  `sqlite3 C:\ProgramData\ArkonAgente\cola.db "UPDATE catalogo_envios SET rechazado_at = strftime('%Y-%m-%dT%H:%M:%S','now') || '.0000000Z', motivo_rechazo = 'rollback PAG-01' WHERE catalogo = 'formas_pago' AND enviado_at IS NULL AND rechazado_at IS NULL;"`
+  (el formato de fecha es el de `ColaLocal.FormatoFecha`) y arrancar el servicio. Marcarlos rechazados en vez de borrarlos deja rastro, y la purga de 7 días
+  los quita. No se ha probado.
 
 ## Decisiones provisionales (nocturno)
 

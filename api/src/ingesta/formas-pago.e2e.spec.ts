@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import { PrismaClient } from '@prisma/client';
+import { CatalogoSr, PrismaClient } from '@prisma/client';
 import request from 'supertest';
 
 import { crearFixtures, FX, limpiarFixtures, USUARIOS } from '../../test/fixtures-auth';
@@ -142,6 +142,24 @@ describe('Catálogo de formas de pago desde SR (e2e, PAG-01)', () => {
     });
   });
 
+  describe('carrera de creación sobre un catálogo vacío', () => {
+    it('A1 y A2 de la misma empresa a la vez: cero filas dobles y ningún 503', async () => {
+      expect(await foto(FX.empresaA)).toEqual([]);
+      const rs = await Promise.all(
+        [KEYS.a1, KEYS.a2, KEYS.a1, KEYS.a2].map((k) => pagina(k, CATALOGO_SR)),
+      );
+      expect(rs.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+      // Entre las cuatro respuestas se crean exactamente las 8 filas, una vez cada una.
+      expect(rs.reduce((n, r) => n + (r.body as { creados: number }).creados, 0)).toBe(8);
+      const filas = await foto(FX.empresaA);
+      expect(filas.map((f) => f.formaRaw)).toEqual(
+        CATALOGO_SR.map((r) => r.nombre as string).sort(),
+      );
+      // Vuelve a empezar vacío: lo que sigue es una línea de tiempo desde cero.
+      await prisma.formaPagoCatalogo.deleteMany({ where: { empresaId: FX.empresaA } });
+    });
+  });
+
   describe('venta con pagos de antes del catálogo: el histórico se reclasifica solo al leer', () => {
     const RANGO = { empresaId: FX.empresaA, desde: '2026-09-20', hasta: '2026-09-20' };
     const token = () =>
@@ -158,7 +176,7 @@ describe('Catálogo de formas de pago desde SR (e2e, PAG-01)', () => {
     const monto = (body: { formas: Array<{ forma: string; monto: string }> }, forma: string) =>
       body.formas.find((f) => f.forma === forma)?.monto;
 
-    it('sin catálogo, EFECTIVO $4,485 y VISA $2,262 caen en «otro» y salen en sinCatalogo', async () => {
+    it('sin catálogo, EFECTIVO y VISA (sintéticos) caen en «otro» y salen en sinCatalogo', async () => {
       const ev = await request(url)
         .post('/ingesta/eventos')
         .set('X-Api-Key', KEYS.a1)
@@ -172,18 +190,18 @@ describe('Catálogo de formas de pago desde SR (e2e, PAG-01)', () => {
                 folio: 'PAG01-1',
                 abiertoAt: '2026-09-20T19:00:00.000-06:00',
                 cerradoAt: '2026-09-20T20:00:00.000-06:00',
-                subtotal: '5816.38',
-                impuestos: '930.62',
+                subtotal: '1078.02',
+                impuestos: '172.48',
                 descuentos: '0',
                 propina: '0',
-                total: '6747.00',
+                total: '1250.50',
                 cancelado: false,
                 partidas: [
-                  { producto: 'Sintético', cantidad: '1', precioUnit: '6747.00', total: '6747.00' },
+                  { producto: 'Sintético', cantidad: '1', precioUnit: '1250.50', total: '1250.50' },
                 ],
                 pagos: [
-                  { formaRaw: 'EFECTIVO', monto: '4485.00' },
-                  { formaRaw: 'VISA', monto: '2262.00' },
+                  { formaRaw: 'EFECTIVO', monto: '1000.00' },
+                  { formaRaw: 'VISA', monto: '250.50' },
                 ],
               },
             },
@@ -194,7 +212,7 @@ describe('Catálogo de formas de pago desde SR (e2e, PAG-01)', () => {
 
       const r = await leer({});
       expect(r.status).toBe(200);
-      expect(monto(r.body, 'otro')).toBe('6747.00');
+      expect(monto(r.body, 'otro')).toBe('1250.50');
       expect(monto(r.body, 'efectivo')).toBe('0.00');
       expect(r.body.sinCatalogo.map((s: { formaRaw: string }) => s.formaRaw).sort()).toEqual([
         'EFECTIVO',
@@ -238,8 +256,8 @@ describe('Catálogo de formas de pago desde SR (e2e, PAG-01)', () => {
       // Otro filtro (por sucursal) = otra llave del cache de 15 s.
       const r = await leer({ sucursalId: FX.sucursalA1 });
       expect(r.status).toBe(200);
-      expect(monto(r.body, 'efectivo')).toBe('4485.00');
-      expect(monto(r.body, 'tarjeta')).toBe('2262.00');
+      expect(monto(r.body, 'efectivo')).toBe('1000.00');
+      expect(monto(r.body, 'tarjeta')).toBe('250.50');
       expect(monto(r.body, 'otro')).toBe('0.00');
       expect(r.body.sinCatalogo).toEqual([]);
     });
@@ -364,9 +382,45 @@ describe('Catálogo de formas de pago desde SR (e2e, PAG-01)', () => {
     });
   });
 
-  it('el forzado manual sigue contando los once catálogos espejo, no formas_pago', async () => {
-    const r = await request(url).get('/ingesta/catalogos/solicitud').set('X-Api-Key', KEYS.a1);
-    expect(r.status).toBe(200);
-    expect(r.body).toEqual({ solicitadaAt: null, pendiente: false });
+  it('una solicitud pendiente se resuelve con los once cierres espejo, sin formas_pago', async () => {
+    const solicitadaAt = new Date(Date.now() - 60_000);
+    await prisma.solicitudSincronizacion.create({
+      data: {
+        sucursalId: FX.sucursalA2,
+        empresaId: FX.empresaA,
+        solicitadaAt,
+        solicitadaPor: USUARIOS.adminEmpresaA.id,
+      },
+    });
+    const solicitud = () =>
+      request(url).get('/ingesta/catalogos/solicitud').set('X-Api-Key', KEYS.a2);
+    expect((await solicitud()).body).toEqual({
+      solicitadaAt: solicitadaAt.toISOString(),
+      pendiente: true,
+    });
+
+    // Sólo formas_pago no la resuelve: no cuenta para el forzado.
+    expect((await cierre(KEYS.a2, 0, 50)).status).toBe(200);
+    expect((await solicitud()).body.pendiente).toBe(true);
+
+    const espejos = Object.values(CatalogoSr);
+    expect(espejos).toHaveLength(11);
+    for (const [i, catalogo] of espejos.entries()) {
+      const r = await request(url)
+        .post('/ingesta/catalogos/cierre')
+        .set('X-Api-Key', KEYS.a2)
+        .send({
+          catalogo,
+          sincronizacionId: sinc(60 + i),
+          capturadoAt: new Date().toISOString(),
+          total: 0,
+          rechazados: 0,
+        });
+      expect(r.status).toBe(200);
+    }
+    expect((await solicitud()).body).toEqual({
+      solicitadaAt: solicitadaAt.toISOString(),
+      pendiente: false,
+    });
   });
 });

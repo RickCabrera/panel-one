@@ -429,7 +429,10 @@ clasifica solo el catálogo de formas de pago de la EMPRESA (la dona de Inicio y
 de Turnos dejan de caer en «Otro»). El `nombre` es el mismo texto que la lectura de cheques guarda
 en `formaRaw`. Si la base no tiene la columna `tipo`, el agente usa
 `sr_catalogo_formas_pago_sin_tipo.sql`, manda las formas sin tipo y lo avisa en el log. Detalle en
-`docs/esquema-sr.md` §4.
+`docs/esquema-sr.md` §4. **Orden de despliegue:** un agente con PAG-01 contra una API anterior recibe
+400 (`catalogo` desconocido) en cada envío de `formas_pago`: el log muestra un Error «El API respondió
+400 a una página de 'formas_pago'…» y el catálogo se relee cada 15 min. No daña nada ni frena los
+demás catálogos; se quita solo al desplegar la API nueva (que va primero).
 
 - **Cuándo.** La primera vez que arranca con SoftRestaurant detectado; después, una vez al día a
   partir de `horaSincronizacionCatalogos`; y cuando un admin pulsa "Pedir sincronización" en el

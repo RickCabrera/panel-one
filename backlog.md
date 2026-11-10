@@ -3164,7 +3164,7 @@ guardia del Caddyfile y `check:landing` (rutas relativas) cubren `/landing`.
   (fuera de la cola; rama `feat/pag-01-formas-pago`). /agent + /api + /docs. El catálogo
   `formas_pago_catalogo(empresa_id, forma_raw, forma)` está vacío en producción y la dona de
   Inicio, el «Cobrado por forma de pago» y el «Declarado vs cobrado» de Turnos meten todo en
-  `otro` (EFECTIVO $4,485 y VISA $2,262 salían como «Otro»). SR ya clasifica cada forma en
+  `otro` (el efectivo y la VISA salían como «Otro»). SR ya clasifica cada forma en
   `formasdepago.tipo` (1 efectivo, 2 tarjeta, 3 vales, 4 otros; `docs/esquema-sr.md` §4): el
   agente lee `dbo.formasdepago` (`WITH (NOLOCK)`, timeout corto; sin `tipo` en una instalación no
   truena: manda sin tipo y lo deja en el log) y lo manda como el catálogo `formas_pago` de
