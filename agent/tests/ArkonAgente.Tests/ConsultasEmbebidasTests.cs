@@ -35,7 +35,7 @@ public partial class ConsultasEmbebidasTests
                      "sr_catalogo_meseros", "sr_catalogo_areas", "sr_catalogo_canales", "sr_catalogo_clientes",
                      "sr_catalogo_unidades", "sr_catalogo_grupos_insumo", "sr_catalogo_insumos", "sr_catalogo_almacenes",
                      "sr_catalogo_proveedores", "sr_existencias", "sr_movimientos", "sr_compras", "sr_recetas",
-                     "sr_cheques", "sr_mesas_abiertas",
+                     "sr_cheques", "sr_mesas_abiertas", "sr_catalogo_formas_pago", "sr_catalogo_formas_pago_sin_tipo",
                  })
         {
             Assert.Contains(esperada, nombres);
@@ -184,6 +184,19 @@ public partial class ConsultasEmbebidasTests
         var insumos = SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_catalogo_insumos"));
         Assert.DoesNotContain("costo", insumos, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("*", insumos);
+    }
+
+    [Fact]
+    public void Las_formas_de_pago_leen_solo_clave_descripcion_y_tipo_y_el_respaldo_da_las_mismas_columnas()
+    {
+        // PAG-01: las dos consultas dan id, nombre y tipo (el respaldo, tipo NULL), de formasdepago y nada más.
+        var conTipo = Regex.Replace(SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_catalogo_formas_pago")), @"\s+", " ");
+        var sinTipo = Regex.Replace(SinComentariosNiTextos(ConsultasEmbebidas.Leer("sr_catalogo_formas_pago_sin_tipo")), @"\s+", " ");
+        Assert.Contains("SELECT f.idformadepago AS id, f.descripcion AS nombre, f.tipo AS tipo FROM dbo.formasdepago AS f WITH (NOLOCK)", conTipo);
+        Assert.Contains("SELECT f.idformadepago AS id, f.descripcion AS nombre, CAST(NULL AS int) AS tipo FROM dbo.formasdepago AS f WITH (NOLOCK)", sinTipo);
+        Assert.DoesNotContain("f.tipo", sinTipo);
+        Assert.DoesNotContain("*", conTipo);
+        Assert.DoesNotContain("*", sinTipo);
     }
 
     [Fact]

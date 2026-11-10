@@ -377,6 +377,17 @@ turno, que es como arma SR su Corte X (`tempcheques` con `idturno = N`, abajo). 
   cuadrar peso a peso** con nuestro `NUMERIC(12,2)` por cuenta. ❓ **Decisión para Ricardo:**
   guardar esos componentes con 4 decimales o aceptar diferencias de centavos (ver §3, "precisión").
 
+- **Un centavo en los impuestos de UNA cuenta (PAG-01, instalación real).** En 3 cuentas, el
+  impuesto que muestra la Consulta de cuentas de SR + el subtotal que muestra = total − 0.01; el
+  panel muestra un impuesto un centavo mayor, que sí suma exacto al total. El total cuadra en las
+  tres. Ojo: el panel **no resta**; pinta `cheques.impuestos` = `totalimpuesto1` (4 decimales, §3)
+  redondeado a 2 **mitad lejos de cero** por la ingesta (§13). ⚠️ **SUPUESTO (no visto en la
+  base):** esos `totalimpuesto1` terminan en medio centavo (x.xx50) y la pantalla de SR lo trunca
+  (o redondea a par), mientras que nosotros subimos. Para confirmarlo hay que leer `subtotal` y
+  `totalimpuesto1` a 4 decimales de cuentas así. ❓ **Decisión para Ricardo:** copiar el redondeo
+  de la pantalla de SR o quedarnos con el nuestro (que suma exacto al total). Es la misma familia
+  que "El centavo de los impuestos", arriba.
+
 - El desglose "Bebidas / Alimentos / Otros" del Monitor va **SIN IVA** aunque el encabezado diga
   "incluye impuestos": Bebidas + Alimentos + Otros + Impuestos = Venta total.
 - El Monitor de ventas **no tiene vista por mesero ni por forma de pago**; la forma de pago sale en
@@ -1050,6 +1061,14 @@ costo, ninguno de $0.00 ni anidado). El caso de prueba con modificador **no se p
 producto no aparecía en el menú táctil. Se supone que un modificador vendido es una fila de
 `cheqdet` con `modificador = 1` justo después de su partida, pero nadie lo ha visto.
 
+**Modificadores vistos en pantalla (PAG-01, instalación real).** En la **Consulta de cuentas** de
+SR se vio una partida padre seguida de partidas cuya descripción en pantalla empieza con «>».
+✅ **Tienen precio propio y suman al total de la cuenta.** El panel ya las muestra con «+».
+⚠️ **Lo que NO se vio:** el valor de la columna `cheqdet.modificador` de esas filas en la base, ni
+si el «>» es parte de `productos.descripcion` o lo pinta la pantalla de SR. Sólo se miró la
+pantalla. Sigue pendiente confirmar en la base que son filas con `modificador = 1` justo después
+de su partida (el supuesto del lector, §5).
+
 **Lo que el modelo de Postgres (F1-030, tabla `cheque_partidas`) ya supone de esta sección:**
 
 - ⚠️ **SUPUESTO — las cantidades pueden ser fraccionarias** (kg, litros). Por eso
@@ -1107,8 +1126,8 @@ Una cortesía total (cuenta en $0) **sí trae un pago**: una fila `EF` con `impo
 
 **Catálogo de formas de pago tal como las nombra esta instalación** (`formasdepago.descripcion`,
 el texto crudo que guardamos en `forma_raw`; 11 formas, todas visibles). Son los nombres **de
-fábrica** de esta SR de demo, no de un cliente; el mapeo a nuestro ENUM es la propuesta, ⚠️ no
-está dado de alta en ningún `formas_pago_catalogo`:
+fábrica** de esta SR de demo, no de un cliente. La columna "Nuestro ENUM" es lo que el panel les
+asigna **solo** desde PAG-01, por su `tipo` (ver "Cómo se clasifica sola", abajo):
 
 | `forma_raw` en SR | `idformadepago` · `tipo` · SAT | Nuestro ENUM | Estado |
 |---|---|---|---|
@@ -1123,6 +1142,61 @@ está dado de alta en ningún `formas_pago_catalogo`:
 
 `formasdepago.tipo` agrupa: 1 efectivo, 2 tarjeta, 3 vales, 4 otros (son las columnas
 `efectivo`/`tarjeta`/`vales`/`otros` de la cuenta). `idformapago_SAT` trae la clave `c_FormaPago`.
+
+**Cómo se clasifica sola (PAG-01, 2026-11-10).** Antes de PAG-01 el catálogo
+`formas_pago_catalogo` estaba vacío en producción (sin CRUD, se daba de alta a mano en la base) y
+todo caía en `otro`: en la instalación real, el efectivo y la VISA salían como «Otro» en
+la dona de Inicio y en el «Cobrado por forma de pago» y el «Declarado vs cobrado» de Turnos. Ahora:
+
+- **El agente lee** `dbo.formasdepago` (`idformadepago`, `descripcion`, `tipo`) con
+  `sr_catalogo_formas_pago.sql` (`WITH (NOLOCK)`, timeout corto) y lo manda como el catálogo
+  `formas_pago` del contrato de F2-230 (§13): misma frecuencia (al arrancar, diaria y forzada
+  desde el panel), misma cola y mismo SHA-256 para no reenviar lo que no cambió. `idformapago_SAT`
+  **no** se lee: el mapeo no la usa y no se ha visto si todas las versiones la tienen.
+- **El texto es el de `forma_raw`.** El agente manda como `nombre` exactamente lo que la lectura de
+  cheques guarda en `forma_raw`: la `descripcion` **sin espacios a los dos lados** (`Trim()`, no sólo
+  a la derecha como el resto de los catálogos) o el `idformadepago` si la descripción viene vacía.
+  El match es exacto: otro recorte dejaría los pagos sin clasificar. ⚠️ **SUPUESTO (mayúsculas):**
+  con la descripción vacía se usa el `idformadepago` tal como lo devuelve `formasdepago`, y los
+  pagos usan el de `chequespagos`. SQL Server los une sin distinguir mayúsculas (collation CI), así
+  que si las dos tablas lo escriben con distinta capitalización (`Ef` vs `EF`), el texto no cuadra y
+  ese pago queda sin clasificar. No se ha visto una forma sin descripción.
+- **El API mapea** (`api/src/ingesta/formas-pago.ts#formaDeTipoSr`): 1 → `efectivo` (DOLARES
+  incluido), 2 → `tarjeta`, 3 vales → `otro`, 4 otros/crédito → `otro`. Vales y crédito van a
+  `otro` porque nuestro ENUM no los tiene y no son ni efectivo en caja ni cargo a tarjeta: meterlos
+  ahí inflaría lo que el cajero debe entregar en el «Declarado vs cobrado» y daría una `c_FormaPago`
+  falsa en el CFDI (`otro` no se factura en línea, §2). **`transferencia` nunca se asigna sola**:
+  SR no tiene ese `tipo`; si un cliente cobra por transferencia, ese texto se clasifica a mano.
+- **Origen de cada fila** (`formas_pago_catalogo.origen`): `pos` = la sincronización (con
+  `sucursal_origen_id`, la sucursal cuyo POS la dio de alta, y `tipo_sr`); `manual` = una persona.
+  El default es `manual`: las filas que ya existían y toda alta directa en la base son de alguien.
+  **Una fila `manual` nunca la pisa la sincronización.**
+- **Dos sucursales, mismo texto, tipos distintos.** El catálogo sigue siendo por EMPRESA (abajo).
+  Si otra sucursal ya dio de alta el texto con otra forma, **no se elige**: se deja como está, sale
+  en `conflictos` de la respuesta y el API lo registra en su log (warn, con el texto y la
+  sucursal). Lo mismo si UN POS trae el mismo texto dos veces con tipos de distinta forma. Para
+  resolverlo, una persona vuelve la fila `manual`. Si es la misma sucursal la que cambió el tipo de
+  su forma, la fila se actualiza (su POS cambió de opinión). Si nombran IGUAL formas distintas de
+  verdad, hace falta catálogo por sucursal (la decisión provisional de abajo sigue abierta).
+- **Sin `tipo`.** ⚠️ No se ha visto una instalación sin la columna. Si falta, SQL Server rechaza la
+  consulta con el error 207 y el agente usa `sr_catalogo_formas_pago_sin_tipo.sql` (mismas
+  columnas, `tipo` nulo) y lo deja como Warning en su log; un `tipo` que no sea 1–4, o que ni
+  siquiera sea número, también viaja nulo, con aviso, sin tumbar la lectura del catálogo. El panel **no clasifica** una forma sin tipo: sigue contando como `otro` y
+  saliendo en `sinCatalogo` («"Otro" incluye formas del POS sin catálogo…» en Inicio y Turnos),
+  para que se vea qué falta.
+- **Nada se da de baja.** Una forma que desaparece del POS conserva su fila: quitarla
+  reclasificaría su histórico a `otro`, y otra sucursal puede seguir usándola. El cierre de
+  `formas_pago` sólo cuadra el sobre.
+- **El histórico se reclasifica solo** (verificado en PAG-01): el mapeo se aplica AL LEER en los
+  cuatro lugares que derivan el ENUM (`scope/consulta-ventas.ts` CTE `catalogo_formas`,
+  `cortes/cortes.service.ts`, `ventas/tickets.service.ts` y la forma dominante del CFDI en
+  `scope/escritura-facturacion.ts`), así que las cuentas ingeridas antes del catálogo salen bien en
+  cuanto llega, sin reingerir. Lo prueba `api/src/ingesta/formas-pago.e2e.spec.ts`.
+- ⚠️ **Rollback del agente.** Si una actualización del agente se revierte (F2-143) con un envío de
+  `formas_pago` todavía en su cola, la versión anterior no conoce ese catálogo y, como la cola de
+  catálogos es FIFO, se detienen **los doce** catálogos (no sólo `formas_pago`): ventas, mesas y
+  heartbeat siguen. Se destraba al volver a la versión nueva o purgando esos envíos (paso en
+  `docs/actualizacion-agente.md`, "Rollback y formas de pago"). No se probó.
 
 **Dónde vive el mapeo (F1-032):** en la tabla `formas_pago_catalogo(empresa_id, forma_raw,
 forma)`, y se aplica **al leer**: el desglose por forma de pago hace `LEFT JOIN` del pago con el
@@ -1139,10 +1213,12 @@ usa ningún agregado.
   **sintéticos**, no de SR. No los copies a la tabla de arriba como si fueran reales.
 - El catálogo todavía no tiene CRUD. F1-060 (administración) no lo incluyó porque su texto en
   el backlog no lo pide: queda como decisión abierta para Ricardo (ver `docs/nocturno-log.md`,
-  entrada de F1-060). Mientras tanto se da de alta directo en la base.
+  entrada de F1-060). Desde PAG-01 se llena solo con el `tipo` de SR; lo que haya que corregir a
+  mano se da de alta directo en la base (queda `manual` y la sincronización no lo toca).
   **Consecuencia vista (UI-01):** sin catálogo, todo lo que deriva el ENUM (dona de Inicio,
   "Cobrado por forma de pago" de un turno, el filtro viejo de Tickets) cae en `otro`. El filtro de
-  Tickets ya no depende de él (§2, filtros de F2-222); los desgloses siguen esperando el catálogo.
+  Tickets ya no depende de él (§2, filtros de F2-222); los desgloses dejan de caer en `otro` en
+  cuanto el agente de la sucursal manda su catálogo (PAG-01).
 - ⚠️ **SUPUESTO (UI-01) — `formasdepago.descripcion` es `varchar` de 80 caracteres o menos y
   SIN relleno de espacios.** No se ha visto su tipo en el `INFORMATION_SCHEMA` de una instalación
   real. De él dependen el `MaxLength(80)` de `formaRaw` en `GET /ventas/tickets` (un texto más largo
@@ -1169,9 +1245,10 @@ falta separar el ENUM (o mapear `forma_raw` directo a `c_FormaPago`).
 **Lo que el modelo de Postgres (F1-030, tabla `cheque_pagos`) ya supone de esta sección:**
 un cheque puede tener varios pagos, uno por fila. `forma_raw` guarda siempre el texto crudo
 de SR, y `forma` es el ENUM `forma_pago` (`efectivo/tarjeta/transferencia/otro`) que se
-deriva de ese texto con el catálogo de F1-032. ⚠️ **SUPUESTO:** que SR nombra la forma de
-pago con un texto que se puede mapear. Mientras no haya catálogo, la ingesta (F1-031) guarda
-`forma = otro` en todos los pagos (DECISION PROVISIONAL, ver §13).
+deriva de ese texto con el catálogo de F1-032. ✅ SR nombra la forma con un texto que se puede
+mapear (`descripcion`) y además la clasifica (`tipo`, PAG-01). La ingesta (F1-031) sigue guardando
+`forma = otro` en todos los pagos (DECISION PROVISIONAL, ver §13): esa columna no la usa ningún
+agregado, que derivan el ENUM al leer con el catálogo.
 
 ---
 
@@ -2803,7 +2880,9 @@ en una PC de restaurante; sólo con piezas falsas en los tests):
   (`api/src/ingesta/normalizar.ts#derivarFormaPago`). Sin catálogo de ninguna instalación
   (§4), adivinar por el texto metería errores silenciosos en el desglose. El texto crudo
   queda en `forma_raw`. F1-032 deriva el ENUM **al leer** con el catálogo
-  `formas_pago_catalogo` (§4); la columna `forma` guardada no la usa ningún agregado.
+  `formas_pago_catalogo` (§4); la columna `forma` guardada no la usa ningún agregado. Desde
+  PAG-01 ese catálogo lo llena el agente con `formasdepago.tipo` (catálogo `formas_pago`, abajo),
+  no la ingesta de cheques.
 - ⚠️ **SUPUESTO — la forma de una mesa en el snapshot todavía no se conoce** (§5, F1-023
   bloqueada por F1-090). El API sólo exige `mesas: object[]` y guarda `{ mesas }` en el
   `payload` tal cual, sin validar lo de adentro. F1-050 fijó la forma **provisional** que lee
@@ -2885,6 +2964,21 @@ que cumplir al leer SR:
 - Respuestas: 401/429/503/otros 5xx → reintento con backoff propio (no frena cheques ni heartbeat);
   400/409/413/500 o un 2xx ilegible → se abandona esa sincronización, se borra el hash del catálogo
   y se relee a los 15 min, no antes.
+
+**El catálogo `formas_pago` (PAG-01)** viaja por el mismo sobre (`catalogo: "formas_pago"`, enum
+`CatalogoIngesta` del contrato = los once de `CatalogoSr` + `formas_pago`), pero **no es un espejo**:
+llena `formas_pago_catalogo` de la EMPRESA (§4, "Cómo se clasifica sola"). Diferencias con los once:
+
+- Registro `RegistroFormaPagoDto`: `{ origenSrId (idformadepago), nombre (= forma_raw), tipo }`.
+  **`tipo` es entero 1–4 o nulo; cualquier otra cosa es 400 para la página entera** (el agente nunca
+  la manda: un tipo fuera de rango viaja nulo). Los demás errores de un registro se rechazan solos.
+- Llave: `(empresa, nombre)` exacto, no `(sucursal, origenSrId)`. Página bajo
+  `pg_advisory_xact_lock` de la EMPRESA: dos sucursales a la vez van en serie.
+- La respuesta trae además `manuales`, `conflictos` y `sinTipo`. Sin `vistoAt`, sin `obsoletos`.
+- El cierre no da de baja nada: `aplicado=true`, `desactivados=0`, `activos` = filas del catálogo
+  de la empresa. No entra al forzado manual (`GET /solicitud` sigue esperando los once): un agente
+  viejo que no lo manda no deja la solicitud pendiente para siempre.
+- Idempotente como los demás: el mismo catálogo tres veces deja la base igual, `updated_at` incluido.
 
 ### Contrato de existencias (F2-121): `POST /ingesta/existencias`
 
@@ -3307,6 +3401,7 @@ este archivo. Quien agregue o quite una marca **actualiza esta tabla en el mismo
 
 | Fecha | Versión SR | Restaurante / entorno | Qué se validó |
 |---|---|---|---|
+| 2026-11-10 | No se anotó | Instalación real. Sólo la pantalla **Consulta de cuentas** de SR de un turno, comparada a ojo con el panel; nada se leyó en la base. **Ningún valor de negocio entra al repo**: ni folios, ni fechas de operación, ni productos, ni importes | Modificadores vendidos en pantalla (§3) y el centavo de diferencia en los impuestos de una cuenta (§2). Junto con PAG-01, que todo caía en «Otro» por el catálogo vacío (§4). **No** valida `cheqdet.modificador` ni los 4 decimales de `totalimpuesto1`. |
 | 2026-10-19 → 2026-10-22 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, empresa de demo). El POS se operó a mano con una hoja de casos: 23 cuentas en 2 turnos y un corte. Traza de Extended Events y lectura con `monitor_lector` (`db_datareader`). La hoja, la traza, los respaldos y las capturas quedan FUERA del repo | **F1-090**: cuentas cerradas y abiertas, partidas, pagos, cancelaciones, turnos y corte (§2–§5); el cuadre contra el Monitor de ventas y el Corte X de SR (§2); qué lee el Monitor de ventas (§2); `db_datareader` alcanza (§1). **No** valida: cancelación de cuenta cobrada, reapertura, modificadores vendidos, venta a domicilio ni el reinicio de `numcheque` (no se pudieron ejercitar, §2–§3). |
 | 2026-09-23 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, login sysadmin). Metadatos (`sys.columns`, `sys.indexes`, `sys.foreign_keys`, `sys.sql_modules`) y conteos; las 17 filas de `conceptos` y los 3 almacenes de demo; ningún valor de negocio al repo | Tablas de inventario (F2-241, §9, §10, §12): insumos, insumosdetalle, gruposi, almacen, proveedores, acumuladoinsumos y sus triggers, movsinv, conceptos, costos, compras, comprasmovtos, traspasosalmacen, presentaciones; que las 5 consultas `sr_catalogo_*` de inventario y `sr_existencias.sql` compilan y corren (0/0/0/3/0 filas y 3 almacenes vacíos). **No** valida valores ni signos (tablas vacías) ni qué costo usa SR: eso es F2-192/F2-193. |
 | 2026-09-23 | 10 (exe 10.0.323, `versiondb` 10.021800) | La misma instalación local (`.\NATIONALSOFT`, login sysadmin). Metadatos (`sys.*`) y conteos agregados; ningún valor de negocio al repo | Tablas y columnas de catálogos: productos, productosdetalle, grupos, meseros, areasrestaurant, tiposervicio, clientes, estaciones y el señuelo `areas`; FKs reales; permisos por objeto de `diagnostico.sql`; que las 6 consultas `sr_catalogo_*.sql` compilan y devuelven 14/217/2/3/0/0 filas (F2-240, §6–§8, §11, §12). **No** valida el SENTIDO de las columnas de estado ni el cruce con cheques (sin FK): eso es F2-192. |

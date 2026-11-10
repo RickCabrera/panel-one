@@ -11,6 +11,7 @@ import { EscrituraCatalogos, IngestaCatalogos } from './escritura-catalogos';
 import { CanjeEnlace, EscrituraEnlaces } from './escritura-enlaces';
 import { EscrituraConteos } from './escritura-conteos';
 import { EscrituraExistencias, IngestaExistencias } from './escritura-existencias';
+import { IngestaFormasPago } from './escritura-formas-pago';
 import { IngestaCompras } from './escritura-compras';
 import { EscrituraFacturacion } from './escritura-facturacion';
 import { EscrituraGastos } from './escritura-gastos';
@@ -351,6 +352,14 @@ export class ScopedPrismaService {
    */
   catalogos(scope: EmpresaScope): EscrituraCatalogos {
     return new EscrituraCatalogos(this.#prisma, scope);
+  }
+
+  /**
+   * El catálogo de formas de pago que manda el agente (PAG-01): clavado a la EMPRESA y la
+   * SUCURSAL de la API key, bajo el candado de la empresa. Ver `escritura-formas-pago.ts`.
+   */
+  formasPagoDeAgente(agente: AgenteAutenticado): IngestaFormasPago {
+    return new IngestaFormasPago(this.#prisma, agente);
   }
 
   /**

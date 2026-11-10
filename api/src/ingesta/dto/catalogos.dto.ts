@@ -5,7 +5,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
-  IsEnum,
+  IsIn,
   IsInt,
   IsObject,
   IsOptional,
@@ -35,6 +35,26 @@ import { DINERO, ISO_CON_ZONA } from '../normalizar';
  */
 
 export const MAX_REGISTROS_POR_PAGINA = 1000;
+
+/**
+ * El catálogo de formas de pago de SR (PAG-01). Viaja por el mismo sobre de página y cierre que
+ * los once de `CatalogoSr`, pero NO es un catálogo espejo por sucursal: llena el catálogo POR
+ * EMPRESA `formas_pago_catalogo` (ver `formas-pago.ts`). Por eso no está en el enum de Prisma
+ * `CatalogoSr` ni entra al forzado manual (`catalogos.ts#CATALOGOS`).
+ */
+export const CATALOGO_FORMAS_PAGO = 'formas_pago';
+
+/** Lo que acepta el campo `catalogo` del sobre: los once espejos y `formas_pago`. */
+export const CATALOGOS_INGESTA = [...Object.values(CatalogoSr), CATALOGO_FORMAS_PAGO] as const;
+export type CatalogoIngesta = CatalogoSr | typeof CATALOGO_FORMAS_PAGO;
+
+const DOC_CATALOGO = {
+  enum: CATALOGOS_INGESTA,
+  enumName: 'CatalogoIngesta',
+  description:
+    'Uno de los once catálogos espejo (`CatalogoSr`), o `formas_pago` (PAG-01): el catálogo ' +
+    '`dbo.formasdepago` de SR, que llena el catálogo de formas de pago de la EMPRESA.',
+} as const;
 /** Cuánto puede venir adelantado el `capturadoAt` del agente respecto a nuestro reloj. */
 export const TOLERANCIA_FUTURO_MS = 5 * 60 * 1000;
 
@@ -198,11 +218,56 @@ export class RegistroInsumoDto extends RegistroCatalogoDto {
   unidadOrigenSrId?: string | null;
 }
 
+/**
+ * Una forma de pago de `dbo.formasdepago` de SR (PAG-01, catálogo `formas_pago`). Llena el
+ * catálogo de la EMPRESA `formas_pago_catalogo` por (empresa, `nombre`): ver `formas-pago.ts`.
+ */
+export class RegistroFormaPagoDto {
+  @ApiProperty({
+    example: 'EF',
+    description:
+      'El `idformadepago` de SR (1–64). Sólo para el log: la llave del catálogo es `nombre`.',
+  })
+  @IsString()
+  @Length(1, 64)
+  origenSrId!: string;
+
+  @ApiProperty({
+    example: 'EFECTIVO',
+    description:
+      'El texto con que la ingesta de cheques guarda `forma_raw` de los pagos (1–200): ' +
+      '`formasdepago.descripcion` sin espacios a los lados, o el `idformadepago` si la ' +
+      'descripción viene vacía. Match EXACTO con `forma_raw`: no se normaliza nada más.',
+  })
+  @IsString()
+  @Length(1, 200)
+  nombre!: string;
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    minimum: 1,
+    maximum: 4,
+    example: 1,
+    description:
+      '`formasdepago.tipo` de SR: 1 efectivo, 2 tarjeta, 3 vales, 4 otros. Nulo o ausente = la ' +
+      'instalación no tiene la columna (o trae otro valor): la forma NO se clasifica y sigue ' +
+      'contando como `otro` y saliendo en `sinCatalogo`. Cualquier otra cosa que no sea un ' +
+      'entero 1–4 o nulo = 400 para la página entera (el agente nunca la manda).',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  tipo?: number | null;
+}
+
 export const MODELOS_REGISTRO = [
   RegistroCatalogoDto,
   RegistroProductoDto,
   RegistroClienteDto,
   RegistroInsumoDto,
+  RegistroFormaPagoDto,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -210,9 +275,9 @@ export const MODELOS_REGISTRO = [
 // ---------------------------------------------------------------------------
 
 export class PaginaCatalogoDto {
-  @ApiProperty({ enum: CatalogoSr, enumName: 'CatalogoSr' })
-  @IsEnum(CatalogoSr)
-  catalogo!: CatalogoSr;
+  @ApiProperty(DOC_CATALOGO)
+  @IsIn(CATALOGOS_INGESTA)
+  catalogo!: CatalogoIngesta;
 
   @ApiProperty(DOC_SINC)
   @IsUUID('all')
@@ -232,10 +297,11 @@ export class PaginaCatalogoDto {
     },
     description:
       '`RegistroProductoDto` para productos, `RegistroClienteDto` para clientes, ' +
-      '`RegistroInsumoDto` para insumos (F2-120) y `RegistroCatalogoDto` para grupos, meseros, ' +
-      'áreas, canales, unidades, grupos_insumo, almacenes y proveedores. Cada registro se valida ' +
-      'aparte: uno inválido (o con un campo que su catálogo no tiene) se rechaza solo y los demás ' +
-      'se guardan.',
+      '`RegistroInsumoDto` para insumos (F2-120), `RegistroFormaPagoDto` para formas_pago ' +
+      '(PAG-01) y `RegistroCatalogoDto` para grupos, meseros, áreas, canales, unidades, ' +
+      'grupos_insumo, almacenes y proveedores. Cada registro se valida aparte: uno inválido (o con ' +
+      'un campo que su catálogo no tiene) se rechaza solo y los demás se guardan. Única excepción: ' +
+      'un `tipo` de formas_pago que no sea entero 1–4 o nulo es 400 para la página entera.',
   })
   @IsArray()
   @ArrayMinSize(1)
@@ -245,9 +311,9 @@ export class PaginaCatalogoDto {
 }
 
 export class CierreCatalogoDto {
-  @ApiProperty({ enum: CatalogoSr, enumName: 'CatalogoSr' })
-  @IsEnum(CatalogoSr)
-  catalogo!: CatalogoSr;
+  @ApiProperty(DOC_CATALOGO)
+  @IsIn(CATALOGOS_INGESTA)
+  catalogo!: CatalogoIngesta;
 
   @ApiProperty(DOC_SINC)
   @IsUUID('all')
@@ -308,8 +374,8 @@ export class RechazoRegistroDto {
 }
 
 export class ResultadoPaginaDto {
-  @ApiProperty({ enum: CatalogoSr, enumName: 'CatalogoSr' })
-  catalogo!: CatalogoSr;
+  @ApiProperty(DOC_CATALOGO)
+  catalogo!: CatalogoIngesta;
 
   @ApiProperty({ description: 'Registros en la página.' })
   recibidos!: number;
@@ -349,6 +415,28 @@ export class ResultadoPaginaDto {
 
   @ApiProperty({ type: [RechazoRegistroDto] })
   rechazados!: RechazoRegistroDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'Sólo formas_pago (PAG-01). Textos que ya tienen una fila `manual` en el catálogo de la ' +
+      'empresa: la sincronización nunca la pisa (cuentan también en `sinCambios`).',
+  })
+  manuales?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Sólo formas_pago (PAG-01). Textos que se dejaron como estaban porque su clasificación choca: ' +
+      'otra sucursal de la empresa ya lo dio de alta con otra forma, o el mismo POS trae ese texto ' +
+      'dos veces con tipos distintos. No se elige al azar; el API lo registra en su log.',
+  })
+  conflictos?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Sólo formas_pago (PAG-01). Textos sin `tipo` (la columna no existe en esa instalación): no ' +
+      'se clasifican y siguen saliendo en `sinCatalogo`.',
+  })
+  sinTipo?: number;
 }
 
 export class ResultadoCierreDto {
