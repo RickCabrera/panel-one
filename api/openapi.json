@@ -5852,7 +5852,8 @@
         "summary": "Clientes registrados en el POS (datos personales).",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/areas": {
@@ -6200,7 +6201,8 @@
         "summary": "Unidades de medida del inventario del POS.",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/grupos-insumo": {
@@ -6316,7 +6318,8 @@
         "summary": "Grupos de insumos del inventario del POS.",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/insumos": {
@@ -6432,7 +6435,8 @@
         "summary": "Insumos del inventario del POS, con su grupo y su unidad en la misma sucursal.",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/almacenes": {
@@ -6548,7 +6552,8 @@
         "summary": "Almacenes de cada sucursal en el POS.",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/proveedores": {
@@ -6664,7 +6669,8 @@
         "summary": "Proveedores registrados en el POS.",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/areas/mapeo": {
@@ -6743,7 +6749,8 @@
         "summary": "Áreas del espejo con su canal de negocio asignado (F2-233).",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/areas/{id}/canal": {
@@ -6830,7 +6837,8 @@
         "summary": "Asigna (o quita, con null) el canal de negocio de un área del POS (F2-233).",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/menu": {
@@ -6909,7 +6917,8 @@
         "summary": "Orquestador de menú (F2-145): productos activos cruzados entre sucursales, por categoría, con los precios distintos señalados.",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/sin-catalogo": {
@@ -7008,7 +7017,8 @@
         "summary": "Productos vendidos en el periodo que no están en el catálogo de su sucursal (F2-145).",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/meseros/rendimiento": {
@@ -7252,7 +7262,8 @@
         "summary": "Clientes (F2-232): la lista del periodo, con lo derivable de las cuentas.",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/clientes/{id}/ficha": {
@@ -7349,7 +7360,8 @@
         "summary": "Clientes (F2-232): la ficha de un cliente, con sus datos y su periodo.",
         "tags": [
           "catalogos"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/catalogos/productos/{id}": {
@@ -7760,7 +7772,8 @@
         "summary": "Existencias por artículo, sucursal y almacén, con su valor y su semáforo (F2-121).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/existencias/limites": {
@@ -7838,7 +7851,8 @@
         "summary": "Guarda el mínimo y el máximo de un artículo en su almacén (NUNCA escribe a SR).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/movimientos": {
@@ -7986,7 +8000,8 @@
         "summary": "Línea de tiempo de movimientos de inventario (F2-122), más reciente primero.",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/polizas/{id}": {
@@ -8062,7 +8077,8 @@
         "summary": "Detalle de una póliza de inventario con todas sus partidas (F2-122).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/kardex": {
@@ -8179,7 +8195,8 @@
         "summary": "Kardex de un artículo en un almacén: saldo corrido y cuadre contra la existencia.",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/conteos": {
@@ -8266,7 +8283,8 @@
         "summary": "Conteos físicos de la empresa (F2-123), los más recientes primero.",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       },
       "post": {
         "description": "El teórico se CONGELA al crear: la última foto de existencias del almacén (cantidad y costo promedio) y su corte. Una foto posterior no lo cambia. Un artículo del catálogo que no viene en la foto va \"sin teórico\", nunca 0. Almacén sin ninguna lectura = 409.",
@@ -8362,7 +8380,8 @@
         "summary": "Crea un conteo de un almacén (todos sus artículos o los de un grupo).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/conteos/{id}": {
@@ -8439,7 +8458,8 @@
         "summary": "Un conteo con sus renglones y el reporte de diferencias contra el teórico.",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/conteos/{id}/partidas": {
@@ -8546,7 +8566,8 @@
         "summary": "Guarda lo contado de un lote de renglones (todo o nada, idempotente).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/conteos/{id}/cerrar": {
@@ -8653,7 +8674,8 @@
         "summary": "Cierra el conteo: ya no admite captura y su reporte queda final.",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/conteos/{id}/cancelar": {
@@ -8759,7 +8781,8 @@
         "summary": "Cancela un conteo en captura (queda visible, sin reporte final).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/traspasos": {
@@ -8846,7 +8869,8 @@
         "summary": "Traspasos del panel (F2-124), los más recientes primero.",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       },
       "post": {
         "description": "Congela el costo promedio de la foto del almacén de origen (nulo si no viene). No valida contra la existencia. Queda \"pendiente de registrar en SR\": el traspaso se captura también en SoftRestaurant, y el panel lo concilia solo cuando la sincronización lo trae.",
@@ -8932,7 +8956,8 @@
         "summary": "Envía un traspaso (1.ª confirmación): de un almacén a otro de la misma empresa.",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/traspasos/sr": {
@@ -9031,7 +9056,8 @@
         "summary": "Traspasos LEÍDOS de SoftRestaurant en un rango (pólizas de traspaso de F2-122).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/traspasos/{id}": {
@@ -9108,7 +9134,8 @@
         "summary": "Un traspaso con sus renglones, su importe y sus movimientos espejo en SR.",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/traspasos/{id}/recibir": {
@@ -9214,7 +9241,8 @@
         "summary": "Confirma la recepción (2.ª confirmación). Sólo desde enviado.",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/traspasos/{id}/cancelar": {
@@ -9320,7 +9348,8 @@
         "summary": "Cancela un traspaso enviado que SR todavía no registra (queda visible).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/recetas": {
@@ -9399,7 +9428,8 @@
         "summary": "Recetas de SoftRestaurant por producto, con su costo (F2-125).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/consumo-teorico": {
@@ -9498,7 +9528,8 @@
         "summary": "Consumo teórico (ventas × receta) contra el real (pólizas), por insumo (F2-125).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/inventario/proyecciones": {
@@ -9599,7 +9630,8 @@
         "summary": "Proyección de demanda y sugerido de compra por artículo y almacén (F2-127).",
         "tags": [
           "inventario"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/finanzas/estado-resultados": {
@@ -9807,7 +9839,8 @@
         "summary": "Compras a proveedor LEÍDAS de SoftRestaurant en un rango (F2-126).",
         "tags": [
           "finanzas"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/finanzas/compras/{id}": {
@@ -9883,7 +9916,8 @@
         "summary": "Una compra con sus partidas (insumo, cantidad, costo, importe).",
         "tags": [
           "finanzas"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/finanzas/categorias-gasto": {
@@ -9951,7 +9985,8 @@
         "summary": "Categorías de gasto de la empresa (activas e inactivas).",
         "tags": [
           "finanzas"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       },
       "post": {
         "operationId": "FinanzasController_crearCategoria",
@@ -10036,7 +10071,8 @@
         "summary": "Crea una categoría de gasto (nombre único en la empresa).",
         "tags": [
           "finanzas"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/finanzas/categorias-gasto/{id}": {
@@ -10125,7 +10161,8 @@
         "summary": "Renombra o (des)activa una categoría. Inactiva = sin gastos nuevos.",
         "tags": [
           "finanzas"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/finanzas/gastos": {
@@ -10244,7 +10281,8 @@
         "summary": "Gastos de operación capturados en el panel, en un rango de días contables.",
         "tags": [
           "finanzas"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       },
       "post": {
         "operationId": "FinanzasController_crearGasto",
@@ -10319,7 +10357,8 @@
         "summary": "Registra un gasto de una sucursal. Dato del panel: nunca se escribe a SR.",
         "tags": [
           "finanzas"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/finanzas/gastos/{id}": {
@@ -10408,7 +10447,8 @@
         "summary": "Edita día, categoría, concepto o monto de un gasto vigente.",
         "tags": [
           "finanzas"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/finanzas/gastos/{id}/anular": {
@@ -10497,7 +10537,8 @@
         "summary": "Anula un gasto (baja lógica: se queda marcado y deja de sumar).",
         "tags": [
           "finanzas"
-        ]
+        ],
+        "x-solo-interno-mvp": true
       }
     },
     "/facturacion/tablero": {

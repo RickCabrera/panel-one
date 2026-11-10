@@ -10,6 +10,10 @@ import { AppModule } from '../app.module';
 import { TokensService } from '../auth/tokens.service';
 import { configurarApp } from '../configurar-app';
 
+// MVP: estas rutas están cerradas a los clientes (auth/mvp.ts). Aquí se prueba la vista en sí, con
+// los roles de cliente, así que se apaga el interruptor; lo cerrado se prueba en auth/mvp.e2e.spec.ts.
+jest.mock('../auth/mvp', () => ({ ...jest.requireActual('../auth/mvp'), OCULTAR_A_CLIENTES: false }));
+
 // E2E de Recetas y consumo teórico (F2-125) sobre la app REAL contra Postgres REAL, con las
 // fixtures sintéticas de F1-011. Todo entra por las ingestas del agente (catálogos, cheques,
 // recetas, pólizas, existencias) y se lee por el panel. Los valores esperados están ESCRITOS A

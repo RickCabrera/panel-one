@@ -27,6 +27,7 @@ import { RolUsuario } from '@prisma/client';
 
 import { Roles } from '../auth/decoradores';
 import { ErrorDto } from '../auth/dto/sesion.dto';
+import { SoloInterno } from '../auth/mvp';
 import type { RequestAutenticado } from '../auth/request-autenticado';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
@@ -88,6 +89,7 @@ export class FinanzasController {
   }
 
   @Get('compras')
+  @SoloInterno()
   @ApiOperation({
     summary: 'Compras a proveedor LEÍDAS de SoftRestaurant en un rango (F2-126).',
     description:
@@ -104,6 +106,7 @@ export class FinanzasController {
   }
 
   @Get('compras/:id')
+  @SoloInterno()
   @ApiOperation({ summary: 'Una compra con sus partidas (insumo, cantidad, costo, importe).' })
   @ApiOkResponse({ type: CompraDetalleDto })
   detalleCompra(
@@ -115,6 +118,7 @@ export class FinanzasController {
   }
 
   @Get('categorias-gasto')
+  @SoloInterno()
   @ApiOperation({ summary: 'Categorías de gasto de la empresa (activas e inactivas).' })
   @ApiOkResponse({ type: CategoriasGastoDto })
   categorias(
@@ -125,6 +129,7 @@ export class FinanzasController {
   }
 
   @Post('categorias-gasto')
+  @SoloInterno()
   @HttpCode(201)
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({ summary: 'Crea una categoría de gasto (nombre único en la empresa).' })
@@ -139,6 +144,7 @@ export class FinanzasController {
   }
 
   @Patch('categorias-gasto/:id')
+  @SoloInterno()
   @HttpCode(204)
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({ summary: 'Renombra o (des)activa una categoría. Inactiva = sin gastos nuevos.' })
@@ -154,6 +160,7 @@ export class FinanzasController {
   }
 
   @Get('gastos')
+  @SoloInterno()
   @ApiOperation({
     summary: 'Gastos de operación capturados en el panel, en un rango de días contables.',
     description:
@@ -169,6 +176,7 @@ export class FinanzasController {
   }
 
   @Post('gastos')
+  @SoloInterno()
   @HttpCode(201)
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({
@@ -185,6 +193,7 @@ export class FinanzasController {
   }
 
   @Patch('gastos/:id')
+  @SoloInterno()
   @HttpCode(204)
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({ summary: 'Edita día, categoría, concepto o monto de un gasto vigente.' })
@@ -201,6 +210,7 @@ export class FinanzasController {
   }
 
   @Post('gastos/:id/anular')
+  @SoloInterno()
   @HttpCode(204)
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({ summary: 'Anula un gasto (baja lógica: se queda marcado y deja de sumar).' })

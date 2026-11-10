@@ -1526,4 +1526,29 @@ describe('Contrato OpenAPI', () => {
       Object.keys((components?.schemas?.SaludDto as { properties: object }).properties).sort(),
     ).toEqual(['db', 'status']);
   });
+
+  it('MVP (9-nov-2026): las rutas cerradas a los clientes van marcadas, y sólo ésas', async () => {
+    const { paths } = await generarDocumento();
+    const marcadas = Object.entries(paths).flatMap(([ruta, ops]) =>
+      Object.entries(ops as Record<string, Record<string, unknown>>)
+        .filter(([, op]) => op?.['x-solo-interno-mvp'] === true)
+        .map(([metodo]) => `${metodo.toUpperCase()} ${ruta}`),
+    );
+    // Toda Inventario, compras y gastos, y de catálogos lo de Comensales, Áreas, el menú y los
+    // catálogos de insumos. Cada marcada responde 404 a los clientes (mvp.e2e.spec.ts).
+    expect(marcadas.filter((m) => m.includes(' /inventario/'))).toHaveLength(20);
+    expect(marcadas.filter((m) => m.includes(' /finanzas/'))).toHaveLength(9);
+    expect(marcadas.filter((m) => m.includes(' /catalogos/'))).toHaveLength(12);
+    // Lo que los clientes siguen viendo no se marca.
+    for (const abierta of [
+      'GET /finanzas/estado-resultados',
+      'GET /catalogos/productos',
+      'GET /catalogos/meseros',
+      'GET /catalogos/meseros/rendimiento',
+      'GET /catalogos/productos/{id}',
+      'GET /ventas/por-area',
+    ]) {
+      expect(marcadas).not.toContain(abierta);
+    }
+  });
 });
