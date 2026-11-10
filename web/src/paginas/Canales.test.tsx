@@ -296,10 +296,16 @@ describe('Ventas por canal (F2-144)', () => {
       // Sin controles de edición: el canal de cada área se cambia en Áreas y canales.
       expect(screen.queryByRole('combobox', { name: /^Canal de / })).not.toBeInTheDocument();
       const intro = screen.getByText(/^Cómo se reparte la venta/);
-      expect(within(intro).getByRole('link', { name: 'Áreas y canales' })).toHaveAttribute(
-        'href',
-        `/areas?empresa=${A}&periodo=mes-anterior`,
-      );
+      // MVP: «Áreas y canales» está oculta a los clientes (auth/mvp.ts); sólo el equipo interno
+      // recibe el enlace.
+      if (rol === 'admin_global') {
+        expect(within(intro).getByRole('link', { name: 'Áreas y canales' })).toHaveAttribute(
+          'href',
+          `/areas?empresa=${A}&periodo=mes-anterior`,
+        );
+      } else {
+        expect(within(intro).queryByRole('link', { name: 'Áreas y canales' })).toBeNull();
+      }
     },
   );
 });

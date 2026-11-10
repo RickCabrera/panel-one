@@ -2,6 +2,8 @@ import { Link, useSearchParams } from 'react-router';
 
 import { useFiltroAlcance } from '../alertas/consultas';
 import type { VentaPorArea } from '../api/tipos';
+import { useUsuario } from '../auth/contexto';
+import { veVistasOcultas } from '../auth/mvp';
 import { useMinuto } from '../consultas/useMinuto';
 import { pesos } from '../dinero/dinero';
 import { useAlcance } from '../filtros/alcance';
@@ -47,6 +49,8 @@ const textoRango = (r: Rango) => (r.desde === r.hasta ? r.desde : `${r.desde} a 
  * la vista no depende de cómo se decidan.
  */
 export function Canales() {
+  // MVP: «Áreas y canales» sólo lo ve el equipo interno; al cliente no se le enlaza.
+  const veAreas = veVistasOcultas(useUsuario().rol);
   const filtro = useFiltroAlcance();
   const { sucursal } = useAlcance();
   const { periodo, rango, hoy } = usePeriodo();
@@ -78,15 +82,20 @@ export function Canales() {
   return (
     <Vista titulo="Ventas por canal">
       <p className="mb-4 text-sm text-tinta-tenue">
-        Cómo se reparte la venta entre comedor, mostrador, domicilio y plataformas. El canal de cada
-        área del POS se decide en{' '}
-        <Link
-          to={{ pathname: '/areas', search: queryVista(parametros) }}
-          className="text-acento underline"
-        >
-          Áreas y canales
-        </Link>
-        ; lo que no se puede clasificar se muestra aparte, nunca repartido a ojo.
+        Cómo se reparte la venta entre comedor, mostrador, domicilio y plataformas.{' '}
+        {veAreas && (
+          <>
+            El canal de cada área del POS se decide en{' '}
+            <Link
+              to={{ pathname: '/areas', search: queryVista(parametros) }}
+              className="text-acento underline"
+            >
+              Áreas y canales
+            </Link>
+            .{' '}
+          </>
+        )}
+        Lo que no se puede clasificar se muestra aparte, nunca repartido a ojo.
       </p>
       {rango === null ? (
         <p className="text-sm text-tinta-tenue">

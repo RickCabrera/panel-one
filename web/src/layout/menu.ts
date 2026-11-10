@@ -30,7 +30,13 @@ import {
 } from 'lucide-react';
 
 import type { Rol } from '../api/tipos';
-import { ROLES_ADMIN } from '../auth/roles';
+import { OCULTAR_A_CLIENTES } from '../auth/mvp';
+import { ROLES_ADMIN, ROLES_INTERNOS } from '../auth/roles';
+
+/** MVP: lo que lleva esto sólo lo ve el equipo interno mientras `OCULTAR_A_CLIENTES` (auth/mvp.ts). */
+const SOLO_INTERNO: { roles?: readonly Rol[] } = OCULTAR_A_CLIENTES
+  ? { roles: ROLES_INTERNOS }
+  : {};
 
 /** Pestañas de Administración (`?tab=`), las mismas que `Administracion.tsx`. */
 export type PestanaAdmin = 'sucursales' | 'usuarios' | 'agentes' | 'alertas' | 'empresas';
@@ -170,9 +176,12 @@ export const SECCIONES: readonly SeccionMenu[] = [
       },
     ],
   },
+  // MVP (9-nov-2026): «Catálogos» pasó a «Áreas de consulta» y a los clientes sólo les quedan
+  // Productos y Meseros. Lo demás de esta sección y TODO Inventario y compras lleva
+  // `SOLO_INTERNO`: sólo lo ve el equipo interno (ver `auth/mvp.ts`).
   {
     id: 'catalogos',
-    titulo: 'Catálogos',
+    titulo: 'Áreas de consulta',
     entradas: [
       {
         id: 'catalogos.productos',
@@ -185,6 +194,7 @@ export const SECCIONES: readonly SeccionMenu[] = [
         texto: 'Orquestador de menú',
         icono: ListTree,
         destino: { ruta: '/menu' },
+        ...SOLO_INTERNO,
       },
       {
         id: 'catalogos.meseros',
@@ -199,12 +209,14 @@ export const SECCIONES: readonly SeccionMenu[] = [
         texto: 'Comensales',
         icono: Contact,
         destino: { ruta: '/clientes' },
+        ...SOLO_INTERNO,
       },
       {
         id: 'catalogos.areas',
         texto: 'Áreas y canales',
         icono: MapPinned,
         destino: { ruta: '/areas' },
+        ...SOLO_INTERNO,
       },
     ],
   },
@@ -217,48 +229,56 @@ export const SECCIONES: readonly SeccionMenu[] = [
         texto: 'Existencias',
         icono: Warehouse,
         destino: { ruta: '/existencias' },
+        ...SOLO_INTERNO,
       },
       {
         id: 'inventario.movimientos',
         texto: 'Movimientos y kardex',
         icono: History,
         destino: { ruta: '/movimientos' },
+        ...SOLO_INTERNO,
       },
       {
         id: 'inventario.conteos',
         texto: 'Conteos físicos',
         icono: ClipboardList,
         destino: { ruta: '/conteos' },
+        ...SOLO_INTERNO,
       },
       {
         id: 'inventario.recetas',
         texto: 'Recetas',
         icono: ChefHat,
         destino: { ruta: '/recetas' },
+        ...SOLO_INTERNO,
       },
       {
         id: 'inventario.proyecciones',
         texto: 'Proyecciones',
         icono: TrendingUp,
         destino: { ruta: '/proyecciones' },
+        ...SOLO_INTERNO,
       },
       {
         id: 'inventario.compras',
         texto: 'Compras',
         icono: ShoppingCart,
         destino: { ruta: '/compras' },
+        ...SOLO_INTERNO,
       },
       {
         id: 'inventario.gastos',
         texto: 'Gastos y utilidad',
         icono: Wallet,
         destino: { ruta: '/gastos' },
+        ...SOLO_INTERNO,
       },
       {
         id: 'inventario.traspasos',
         texto: 'Traspasos',
         icono: ArrowLeftRight,
         destino: { ruta: '/traspasos' },
+        ...SOLO_INTERNO,
       },
     ],
   },

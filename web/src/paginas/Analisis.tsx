@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
 
+import { useUsuario } from '../auth/contexto';
+import { veVistasOcultas } from '../auth/mvp';
 import { useMinuto } from '../consultas/useMinuto';
 import { formatearPesos } from '../dinero/dinero';
 import { useAlcance } from '../filtros/alcance';
@@ -53,6 +55,8 @@ function EncabezadoBloque({ children, csv }: { children?: ReactNode; csv?: React
  * filas. Por área y canal (F2-233) sale del mapeo área → canal de la vista Áreas y canales.
  */
 export function Analisis() {
+  // MVP: «Áreas y canales» está oculta a los clientes (auth/mvp.ts); a ellos no se les manda ahí.
+  const veAreas = veVistasOcultas(useUsuario().rol);
   const { empresa, sucursal, sucursalId, sucursales } = useAlcance();
   const { periodo, rango, hoy } = usePeriodo();
   const ahora = useMinuto();
@@ -206,8 +210,9 @@ export function Analisis() {
                       )
                     }
                   >
-                    Venta por el área del POS donde se atendió la cuenta y por canal de negocio. El
-                    canal de cada área se asigna en Catálogos → Áreas y canales.
+                    Venta por el área del POS donde se atendió la cuenta y por canal de negocio.
+                    {veAreas &&
+                      ' El canal de cada área se asigna en Áreas de consulta → Áreas y canales.'}
                   </EncabezadoBloque>
                   <BloqueAreas datos={datos} />
                 </>

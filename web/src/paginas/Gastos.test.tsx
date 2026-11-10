@@ -25,6 +25,10 @@ import {
 } from '../test/apiFalsa';
 import { MARCA_SOBRESTIMADA } from './Gastos';
 
+// MVP: esta vista está oculta a los clientes (auth/mvp.ts). Aquí se prueba la vista en sí, con
+// los roles de cliente, así que se apaga el interruptor; lo oculto se prueba en auth/mvp.test.tsx.
+vi.mock('../auth/mvp', () => ({ OCULTAR_A_CLIENTES: false, veVistasOcultas: () => true }));
+
 // F2-126 en el web, contra el router y la app reales: "Gastos y utilidad" (`/gastos`). Las cifras
 // están escritas a mano; que el servidor las calcule bien lo prueban los e2e del api. Aquí se
 // prueba lo que se pinta: lo nulo con su porqué (nunca $0.00), lo sobrestimado marcado, la gráfica,

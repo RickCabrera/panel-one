@@ -33,7 +33,8 @@ const FICHA: [string, string[]][] = [
     ],
   ],
   [
-    'Catálogos',
+    // MVP (9-nov-2026): «Catálogos» pasó a «Áreas de consulta».
+    'Áreas de consulta',
     [
       'Productos',
       'Orquestador de menú',
@@ -164,7 +165,12 @@ describe('seccionesPara (permiso, no "pendiente")', () => {
 
   it('el visor no ve la sección Administración; de las demás ve todo lo que no pide rol', () => {
     const visor = seccionesPara('visor');
-    expect(visor.map((s) => s.titulo)).toEqual(FICHA.slice(0, 4).map(([t]) => t));
+    // MVP: Inventario y compras queda entera para el equipo interno; al visor no le sale.
+    expect(visor.map((s) => s.titulo)).toEqual([
+      'Principal',
+      'Ventas y dirección',
+      'Áreas de consulta',
+    ]);
     // El filtro es por permiso, nada más: cada entrada sin `roles` le llega, en el mismo orden.
     expect(visor.flatMap((s) => s.entradas.map((e) => e.id))).toEqual(
       todas()
@@ -172,6 +178,43 @@ describe('seccionesPara (permiso, no "pendiente")', () => {
         .map((e) => e.id),
     );
   });
+});
+
+describe('MVP (9-nov-2026) · lo oculto a los clientes', () => {
+  const OCULTAS = [
+    'catalogos.orquestador',
+    'catalogos.clientes',
+    'catalogos.areas',
+    'inventario.existencias',
+    'inventario.movimientos',
+    'inventario.conteos',
+    'inventario.recetas',
+    'inventario.proyecciones',
+    'inventario.compras',
+    'inventario.gastos',
+    'inventario.traspasos',
+  ];
+
+  it('las vistas ocultas sólo las ve el equipo interno (admin_global)', () => {
+    for (const id of OCULTAS) expect([id, porId(id).roles]).toEqual([id, ['admin_global']]);
+  });
+
+  it.each(['admin_empresa', 'visor'] as const)(
+    '%s: en «Áreas de consulta» sólo Productos y Meseros, y sin Inventario y compras',
+    (rol) => {
+      const secciones = seccionesPara(rol);
+      expect(secciones.find((s) => s.id === 'catalogos')!.entradas.map((e) => e.texto)).toEqual([
+        'Productos',
+        'Meseros',
+      ]);
+      expect(secciones.find((s) => s.id === 'inventario')).toBeUndefined();
+      const ids = secciones.flatMap((s) => s.entradas.map((e) => e.id));
+      expect(ids.filter((id) => OCULTAS.includes(id))).toEqual([]);
+      // Tampoco en la hoja «Más» del celular.
+      const mas = seccionesMasPara(rol).flatMap((s) => s.entradas.map((e) => e.id));
+      expect(mas.filter((id) => OCULTAS.includes(id))).toEqual([]);
+    },
+  );
 });
 
 describe('searchDestino y entradaActiva', () => {
