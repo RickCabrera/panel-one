@@ -10,6 +10,13 @@ import { AppModule } from '../app.module';
 import { TokensService } from '../auth/tokens.service';
 import { configurarApp } from '../configurar-app';
 
+// MVP: aquí se usan rutas cerradas a los clientes (auth/mvp.ts) con roles de cliente, para probar la
+// ruta en sí; se apaga el interruptor. Lo cerrado se prueba en auth/mvp.e2e.spec.ts.
+jest.mock('../auth/mvp', () => ({
+  ...jest.requireActual('../auth/mvp'),
+  OCULTAR_A_CLIENTES: false,
+}));
+
 // E2E de Movimientos, pólizas y kardex (F2-122) sobre la app REAL contra Postgres REAL, con las
 // fixtures sintéticas de F1-011. Los saldos esperados están ESCRITOS A MANO: no se recalculan con
 // la fórmula del API. Ésta es la prueba independiente del kardex (el seed prueba conservación).

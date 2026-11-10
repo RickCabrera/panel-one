@@ -27,6 +27,7 @@ import { RolUsuario } from '@prisma/client';
 
 import { Roles } from '../auth/decoradores';
 import { ErrorDto } from '../auth/dto/sesion.dto';
+import { SoloInterno } from '../auth/mvp';
 import type { RequestAutenticado } from '../auth/request-autenticado';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
@@ -53,6 +54,8 @@ const DESC_503 = 'Otra operación tiene el conteo; reintentar.';
 @ApiUnauthorizedResponse({ type: ErrorDto, description: 'Sin token, token inválido o vencido.' })
 @ApiBadRequestResponse({ type: ErrorDto, description: 'Parámetros inválidos.' })
 @ApiNotFoundResponse({ type: ErrorDto, description: DESC_404 })
+// MVP: oculto a los clientes (auth/mvp.ts).
+@SoloInterno()
 @Controller('inventario/conteos')
 export class ConteosController {
   constructor(private readonly conteos: ConteosService) {}

@@ -13,6 +13,13 @@ import { Reloj } from '../comun/reloj';
 import { configurarApp } from '../configurar-app';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 
+// MVP: aquí se usan rutas cerradas a los clientes (auth/mvp.ts) con roles de cliente, para probar la
+// ruta en sí; se apaga el interruptor. Lo cerrado se prueba en auth/mvp.e2e.spec.ts.
+jest.mock('../auth/mvp', () => ({
+  ...jest.requireActual('../auth/mvp'),
+  OCULTAR_A_CLIENTES: false,
+}));
+
 // E2E de los traspasos (F2-124) sobre la app REAL contra Postgres REAL, con las fixtures
 // sintéticas de F1-011 y un reloj fijo que se mueve a mano. Lo esperado (importes, qué concilia y
 // qué no, cuándo abre la alerta) está ESCRITO A MANO, no recalculado con la regla del API.

@@ -17,6 +17,13 @@ import { AppModule } from '../app.module';
 import { TokensService } from '../auth/tokens.service';
 import { configurarApp } from '../configurar-app';
 
+// MVP: aquí se usan rutas cerradas a los clientes (auth/mvp.ts) con roles de cliente, para probar la
+// ruta en sí; se apaga el interruptor. Lo cerrado se prueba en auth/mvp.e2e.spec.ts.
+jest.mock('../auth/mvp', () => ({
+  ...jest.requireActual('../auth/mvp'),
+  OCULTAR_A_CLIENTES: false,
+}));
+
 // Clientes (F2-232) sobre el SEED (F2-201): ventas y catálogo de clientes sembrados por los
 // mismos generadores del seed de desarrollo, en las sucursales de FIXTURES de la empresa A (A1
 // en CDMX, A2 en Tijuana). Lo esperado sale A MANO del generador (`maestro.clienteClave` de

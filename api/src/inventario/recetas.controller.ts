@@ -10,6 +10,7 @@ import {
 } from '@nestjs/swagger';
 
 import { ErrorDto } from '../auth/dto/sesion.dto';
+import { SoloInterno } from '../auth/mvp';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
 import {
@@ -29,6 +30,8 @@ const DESC_404 =
 @ApiUnauthorizedResponse({ type: ErrorDto, description: 'Sin token, token inválido o vencido.' })
 @ApiBadRequestResponse({ type: ErrorDto, description: 'Parámetros inválidos.' })
 @ApiNotFoundResponse({ type: ErrorDto, description: DESC_404 })
+// MVP: oculto a los clientes (auth/mvp.ts).
+@SoloInterno()
 @Controller('inventario')
 export class RecetasController {
   constructor(private readonly recetas: RecetasService) {}

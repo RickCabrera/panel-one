@@ -26,6 +26,7 @@ import { RolUsuario, type CatalogoSr } from '@prisma/client';
 
 import { Roles } from '../auth/decoradores';
 import { ErrorDto } from '../auth/dto/sesion.dto';
+import { SoloInterno } from '../auth/mvp';
 import type { RequestAutenticado } from '../auth/request-autenticado';
 import { EmpresaScopeActual } from '../scope/empresa-scope.decorator';
 import type { EmpresaScope } from '../scope/empresa-scope';
@@ -119,6 +120,7 @@ export class CatalogosController {
   }
 
   @Get('clientes')
+  @SoloInterno()
   @ApiOperation({
     summary: 'Clientes registrados en el POS (datos personales).',
     description: `${DESC_LISTA} Vacío si la instalación no usa clientes.`,
@@ -159,6 +161,7 @@ export class CatalogosController {
   // --- inventario (F2-120) ---
 
   @Get('unidades')
+  @SoloInterno()
   @ApiOperation({ summary: 'Unidades de medida del inventario del POS.', description: DESC_LISTA })
   @ApiOkResponse({ type: PaginaCatalogoLecturaDto })
   unidades(
@@ -169,6 +172,7 @@ export class CatalogosController {
   }
 
   @Get('grupos-insumo')
+  @SoloInterno()
   @ApiOperation({ summary: 'Grupos de insumos del inventario del POS.', description: DESC_LISTA })
   @ApiOkResponse({ type: PaginaCatalogoLecturaDto })
   gruposInsumo(
@@ -179,6 +183,7 @@ export class CatalogosController {
   }
 
   @Get('insumos')
+  @SoloInterno()
   @ApiOperation({
     summary: 'Insumos del inventario del POS, con su grupo y su unidad en la misma sucursal.',
     description: `${DESC_LISTA} Sin costo: el costo con que se valúa va por almacén (existencias).`,
@@ -192,6 +197,7 @@ export class CatalogosController {
   }
 
   @Get('almacenes')
+  @SoloInterno()
   @ApiOperation({ summary: 'Almacenes de cada sucursal en el POS.', description: DESC_LISTA })
   @ApiOkResponse({ type: PaginaCatalogoLecturaDto })
   almacenes(
@@ -202,6 +208,7 @@ export class CatalogosController {
   }
 
   @Get('proveedores')
+  @SoloInterno()
   @ApiOperation({ summary: 'Proveedores registrados en el POS.', description: DESC_LISTA })
   @ApiOkResponse({ type: PaginaCatalogoLecturaDto })
   proveedores(
@@ -212,6 +219,7 @@ export class CatalogosController {
   }
 
   @Get('areas/mapeo')
+  @SoloInterno()
   @ApiOperation({
     summary: 'Áreas del espejo con su canal de negocio asignado (F2-233).',
     description:
@@ -227,6 +235,7 @@ export class CatalogosController {
   }
 
   @Put('areas/:id/canal')
+  @SoloInterno()
   @Roles(RolUsuario.admin_global, RolUsuario.admin_empresa)
   @ApiOperation({
     summary: 'Asigna (o quita, con null) el canal de negocio de un área del POS (F2-233).',
@@ -247,6 +256,7 @@ export class CatalogosController {
   }
 
   @Get('menu')
+  @SoloInterno()
   @ApiOperation({
     summary:
       'Orquestador de menú (F2-145): productos activos cruzados entre sucursales, por categoría, ' +
@@ -262,6 +272,7 @@ export class CatalogosController {
   }
 
   @Get('sin-catalogo')
+  @SoloInterno()
   @ApiOperation({
     summary:
       'Productos vendidos en el periodo que no están en el catálogo de su sucursal (F2-145).',
@@ -309,6 +320,7 @@ export class CatalogosController {
   }
 
   @Get('clientes/resumen')
+  @SoloInterno()
   @ApiOperation({
     summary: 'Clientes (F2-232): la lista del periodo, con lo derivable de las cuentas.',
     description:
@@ -336,6 +348,7 @@ export class CatalogosController {
   }
 
   @Get('clientes/:id/ficha')
+  @SoloInterno()
   @ApiOperation({
     summary: 'Clientes (F2-232): la ficha de un cliente, con sus datos y su periodo.',
     description:

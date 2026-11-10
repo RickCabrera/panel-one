@@ -19,6 +19,13 @@ import { configurarApp } from '../configurar-app';
 import type { PrismaService } from '../prisma/prisma.service';
 import { ScopedPrismaService } from '../scope/scoped-prisma.service';
 
+// MVP: aquí se usan rutas cerradas a los clientes (auth/mvp.ts) con roles de cliente, para probar la
+// ruta en sí; se apaga el interruptor. Lo cerrado se prueba en auth/mvp.e2e.spec.ts.
+jest.mock('../auth/mvp', () => ({
+  ...jest.requireActual('../auth/mvp'),
+  OCULTAR_A_CLIENTES: false,
+}));
+
 // E2E de F2-100 (datos fiscales y CSD) sobre la app REAL contra Postgres REAL, con el PAC FALSO
 // (`PAC_IMPL=falso`, el default en test) y CSD SINTÉTICOS armados en memoria. Cubre el AC
 // nocturno: alta de perfil y carga de CSD; "el .key y su contraseña nunca tocan la base ni un
