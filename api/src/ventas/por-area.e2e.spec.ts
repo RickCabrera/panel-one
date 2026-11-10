@@ -10,9 +10,12 @@ import { AppModule } from '../app.module';
 import { TokensService } from '../auth/tokens.service';
 import { configurarApp } from '../configurar-app';
 
-// MVP: estas rutas están cerradas a los clientes (auth/mvp.ts). Aquí se prueba la vista en sí, con
-// los roles de cliente, así que se apaga el interruptor; lo cerrado se prueba en auth/mvp.e2e.spec.ts.
-jest.mock('../auth/mvp', () => ({ ...jest.requireActual('../auth/mvp'), OCULTAR_A_CLIENTES: false }));
+// MVP: aquí se usan rutas cerradas a los clientes (auth/mvp.ts) con roles de cliente, para probar la
+// ruta en sí; se apaga el interruptor. Lo cerrado se prueba en auth/mvp.e2e.spec.ts.
+jest.mock('../auth/mvp', () => ({
+  ...jest.requireActual('../auth/mvp'),
+  OCULTAR_A_CLIENTES: false,
+}));
 
 // E2E de Áreas y canales (F2-233) sobre la app REAL contra Postgres REAL, con las fixtures
 // sintéticas de F1-011 (A1 y A2 de la empresa A, B1 de la B; zona CDMX). Catálogo, mapeo y

@@ -21,7 +21,8 @@ import type { RequestAutenticado } from './request-autenticado';
  * nunca llega aquí: se resuelve con el scope en el WHERE y termina en 404.
  *
  * También aplica `@SoloInterno()` (MVP, ver `mvp.ts`): a quien no es del equipo interno le
- * responde 404 ANTES de mirar `@Roles`, para que ni un 403 confirme que la ruta existe.
+ * responde 404 —el mismo cuerpo que una ruta que no existe— ANTES de mirar `@Roles`, para que
+ * ni un 403 confirme que la ruta existe.
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -33,12 +34,13 @@ export class RolesGuard implements CanActivate {
       ctx.getClass(),
     ]);
     if (soloInterno && OCULTAR_A_CLIENTES) {
-      const { usuario } = ctx.switchToHttp().getRequest<RequestAutenticado>();
-      if (!usuario) {
+      const req = ctx.switchToHttp().getRequest<RequestAutenticado>();
+      if (!req.usuario) {
         throw new UnauthorizedException('No autenticado');
       }
-      if (!ROLES_INTERNOS.includes(usuario.rol)) {
-        throw new NotFoundException('Recurso no encontrado');
+      if (!ROLES_INTERNOS.includes(req.usuario.rol)) {
+        // El mismo cuerpo que una ruta inexistente, como `SoloPlataformaGuard`.
+        throw new NotFoundException(`Cannot ${req.method} ${req.originalUrl}`);
       }
     }
     const roles = this.reflector.getAllAndOverride<RolUsuario[] | undefined>(ROLES, [

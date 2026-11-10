@@ -22,7 +22,8 @@ export const SOLO_INTERNO = 'auth:solo-interno';
 
 /**
  * La ruta (o el controlador entero) es del equipo interno mientras dure el MVP. A cualquier otro
- * rol le responde 404, no 403: igual que el web («No encontrada»), no se confirma que exista. Lo
+ * rol le responde 404 con el cuerpo de una ruta inexistente, no 403: igual que el web («No
+ * encontrada»), no se confirma que exista. Lo
  * aplica el `RolesGuard` global; en el contrato queda marcado como `x-solo-interno-mvp`.
  */
 export const SoloInterno = () =>

@@ -110,9 +110,12 @@ describe('MVP · rutas cerradas a los clientes (e2e)', () => {
     const resultado: string[] = [];
     for (const [metodo, ruta] of CERRADAS) {
       const res = await llamar(u, metodo, ruta);
-      resultado.push(`${metodo.toUpperCase()} ${ruta} → ${res.status}`);
+      // El cuerpo de una ruta que no existe (como /plataforma): nada delata el cierre.
+      const cuerpo = (res.body as { message?: string }).message ?? '';
+      const comoInexistente = cuerpo.startsWith(`Cannot ${metodo.toUpperCase()} ${ruta}`);
+      resultado.push(`${metodo.toUpperCase()} ${ruta} → ${res.status} ${comoInexistente}`);
     }
-    expect(resultado).toEqual(CERRADAS.map(([m, r]) => `${m.toUpperCase()} ${r} → 404`));
+    expect(resultado).toEqual(CERRADAS.map(([m, r]) => `${m.toUpperCase()} ${r} → 404 true`));
   });
 
   it('sin token sigue siendo 401 (el cierre no adelanta nada a un anónimo)', async () => {

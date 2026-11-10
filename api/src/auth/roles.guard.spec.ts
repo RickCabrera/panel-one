@@ -37,7 +37,11 @@ const ctx = (
     getHandler: () => (clase.prototype as Record<string, unknown>)[metodo],
     getClass: () => clase,
     switchToHttp: () => ({
-      getRequest: () => (rol ? { usuario: { id: 'u', rol, empresaId: null } } : {}),
+      getRequest: () => ({
+        method: 'GET',
+        originalUrl: '/ruta',
+        ...(rol ? { usuario: { id: 'u', rol, empresaId: null } } : {}),
+      }),
     }),
   }) as unknown as ExecutionContext;
 
@@ -46,6 +50,8 @@ describe('RolesGuard · @SoloInterno (interruptor prendido)', () => {
 
   it.each([RolUsuario.admin_empresa, RolUsuario.visor])('%s: 404, nunca 403', (rol) => {
     expect(() => guard.canActivate(ctx(Controlador, 'cerrada', rol))).toThrow(NotFoundException);
+    // El cuerpo de una ruta que no existe, no uno propio que delate el cierre.
+    expect(() => guard.canActivate(ctx(Controlador, 'cerrada', rol))).toThrow('Cannot GET /ruta');
     expect(() => guard.canActivate(ctx(ControladorCerrado, 'cualquiera', rol))).toThrow(
       NotFoundException,
     );

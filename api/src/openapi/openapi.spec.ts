@@ -1535,10 +1535,52 @@ describe('Contrato OpenAPI', () => {
         .map(([metodo]) => `${metodo.toUpperCase()} ${ruta}`),
     );
     // Toda Inventario, compras y gastos, y de catálogos lo de Comensales, Áreas, el menú y los
-    // catálogos de insumos. Cada marcada responde 404 a los clientes (mvp.e2e.spec.ts).
-    expect(marcadas.filter((m) => m.includes(' /inventario/'))).toHaveLength(20);
-    expect(marcadas.filter((m) => m.includes(' /finanzas/'))).toHaveLength(9);
-    expect(marcadas.filter((m) => m.includes(' /catalogos/'))).toHaveLength(12);
+    // catálogos de insumos (41). Cada marcada responde 404 a los clientes (mvp.e2e.spec.ts).
+    expect(marcadas.sort()).toEqual(
+      [
+        'GET /catalogos/almacenes',
+        'GET /catalogos/areas/mapeo',
+        'GET /catalogos/clientes',
+        'GET /catalogos/clientes/resumen',
+        'GET /catalogos/clientes/{id}/ficha',
+        'GET /catalogos/grupos-insumo',
+        'GET /catalogos/insumos',
+        'GET /catalogos/menu',
+        'GET /catalogos/proveedores',
+        'GET /catalogos/sin-catalogo',
+        'GET /catalogos/unidades',
+        'PUT /catalogos/areas/{id}/canal',
+        'GET /finanzas/categorias-gasto',
+        'GET /finanzas/compras',
+        'GET /finanzas/compras/{id}',
+        'GET /finanzas/gastos',
+        'PATCH /finanzas/categorias-gasto/{id}',
+        'PATCH /finanzas/gastos/{id}',
+        'POST /finanzas/categorias-gasto',
+        'POST /finanzas/gastos',
+        'POST /finanzas/gastos/{id}/anular',
+        'GET /inventario/conteos',
+        'GET /inventario/conteos/{id}',
+        'GET /inventario/consumo-teorico',
+        'GET /inventario/existencias',
+        'GET /inventario/kardex',
+        'GET /inventario/movimientos',
+        'GET /inventario/polizas/{id}',
+        'GET /inventario/proyecciones',
+        'GET /inventario/recetas',
+        'GET /inventario/traspasos',
+        'GET /inventario/traspasos/sr',
+        'GET /inventario/traspasos/{id}',
+        'POST /inventario/conteos',
+        'POST /inventario/conteos/{id}/cancelar',
+        'POST /inventario/conteos/{id}/cerrar',
+        'POST /inventario/traspasos',
+        'POST /inventario/traspasos/{id}/cancelar',
+        'POST /inventario/traspasos/{id}/recibir',
+        'PUT /inventario/conteos/{id}/partidas',
+        'PUT /inventario/existencias/limites',
+      ].sort(),
+    );
     // Lo que los clientes siguen viendo no se marca.
     for (const abierta of [
       'GET /finanzas/estado-resultados',
