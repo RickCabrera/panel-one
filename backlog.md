@@ -3158,6 +3158,33 @@ guardia del Caddyfile y `check:landing` (rutas relativas) cubren `/landing`.
   mesas, turnos, tickets, meseros, plataforma) y de Clásico (inicio, 1440, claro) revisadas;
   `docs/marca/README.md` con los dos estilos, los tokens nuevos y las reglas del vidrio.
 
+## PAG-01 · Formas de pago clasificadas desde SR
+
+- [ ] **PAG-01 · Formas de pago clasificadas desde SR** — pedida por Ricardo el 10-nov-2026
+  (fuera de la cola; rama `feat/pag-01-formas-pago`). /agent + /api + /docs. El catálogo
+  `formas_pago_catalogo(empresa_id, forma_raw, forma)` está vacío en producción y la dona de
+  Inicio, el «Cobrado por forma de pago» y el «Declarado vs cobrado» de Turnos meten todo en
+  `otro` (EFECTIVO $4,485 y VISA $2,262 salían como «Otro»). SR ya clasifica cada forma en
+  `formasdepago.tipo` (1 efectivo, 2 tarjeta, 3 vales, 4 otros; `docs/esquema-sr.md` §4): el
+  agente lee `dbo.formasdepago` (`WITH (NOLOCK)`, timeout corto; sin `tipo` en una instalación no
+  truena: manda sin tipo y lo deja en el log) y lo manda como el catálogo `formas_pago` de
+  `POST /ingesta/catalogos`, con la frecuencia de los demás catálogos. El API hace upsert por
+  `(empresa_id, forma_raw)` con `forma_raw` = la descripción exacta (la de los pagos): 1 →
+  `efectivo`, 2 → `tarjeta`, 3 y 4 → `otro` (vales y crédito no son efectivo ni tarjeta);
+  `transferencia` nunca sola. Columna nueva `origen` (`pos` | `manual`, migración): una fila
+  `manual` NUNCA la pisa la sincronización; mismo texto con tipos distintos en dos sucursales de la
+  misma empresa = se deja como está, se registra y se documenta. `tipo` entero 1–4 o nulo; lo
+  demás, 400. Sin pantalla nueva: el aviso «sin catálogo…» sigue para lo que de verdad no esté
+  mapeado. Docs: §4 (cómo se lee y se usa `tipo`) y los hallazgos del 10-nov-2026 en la
+  instalación real (modificadores «>» en pantalla, §3; un centavo de diferencia en los impuestos,
+  §2).
+  **Listo cuando:** CI verde (api, web y agent); con el catálogo de fábrica de SR, el upsert crea
+  las filas `pos` con su forma y la cuenta ingerida ANTES del catálogo sale como efectivo y tarjeta
+  sin reingerir (e2e); el mismo catálogo tres veces deja la base igual; una fila `manual` no se
+  toca; el catálogo de una empresa no toca el de otra; un `tipo` fuera de 1–4 da 400; el agente
+  manda `formas_pago` con su tipo y, sin la columna, cae a la consulta sin tipo con aviso (tests);
+  `api/openapi.json` y `docs/esquema-sr.md` actualizados en el mismo PR.
+
 ## Decisiones abiertas para Ricardo
 
 No son código hasta que se decidan. Cada una dice dónde está documentada; al decidir, se

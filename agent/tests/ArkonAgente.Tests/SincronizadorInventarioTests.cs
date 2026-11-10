@@ -533,20 +533,23 @@ public class SincronizadorInventarioTests : IDisposable
 }
 
 /// <summary>
-/// Una <see cref="SqlException"/> de timeout (Number −2) armada por reflexión: el tipo no tiene
+/// Una <see cref="SqlException"/> (de timeout, Number −2, o con el <c>Number</c> que se pida) armada por reflexión: el tipo no tiene
 /// constructor público. SIMULADA: sirve para probar el camino <c>SqlException</c> →
 /// <c>ClasificarError</c>, no que SQL Server corte la consulta.
 /// </summary>
 internal static class SqlExceptionFalsa
 {
-    public static SqlException Timeout()
+    public static SqlException Timeout() => Con(-2, "Execution Timeout Expired (simulado).");
+
+    /// <summary>Una con ese <c>Number</c> (p. ej. 207, "Invalid column name"; PAG-01).</summary>
+    public static SqlException Con(int numero, string mensaje)
     {
         const BindingFlags Todo = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static;
         var ctorError = typeof(SqlError).GetConstructors(Todo).OrderByDescending(c => c.GetParameters().Length).First();
         var argumentos = ctorError.GetParameters().Select(p => p.Name switch
         {
-            "infoNumber" => (object?)(-2),
-            "errorMessage" => "Execution Timeout Expired (simulado).",
+            "infoNumber" => (object?)numero,
+            "errorMessage" => mensaje,
             "server" or "procedure" => "",
             _ => p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null,
         }).ToArray();

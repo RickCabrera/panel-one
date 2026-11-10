@@ -1090,7 +1090,7 @@
     },
     "/ingesta/catalogos": {
       "post": {
-        "description": "Idempotente: la misma página tres veces deja exactamente los mismos datos (ni ids, ni `updatedAt`, ni `vistoAt` cambian). Llave: (sucursal de la API key, `origenSrId`). Cada registro se valida aparte: uno inválido va a `rechazados` y los demás se guardan; si su fila ya existía se marca vista sin tocar su contenido. Un registro traído por una sincronización más nueva, o una página anterior a la última sincronización completa aplicada, sale en `obsoletos` y no revierte nada. Las páginas de una sincronización COMPLETA terminan con `POST /ingesta/catalogos/cierre`; sin cierre es incremental y no da de baja nada. El agente no intercala dos sincronizaciones del mismo catálogo. Registra el contacto del agente, como `/ingesta/eventos`.",
+        "description": "Idempotente: la misma página tres veces deja exactamente los mismos datos (ni ids, ni `updatedAt`, ni `vistoAt` cambian). Llave: (sucursal de la API key, `origenSrId`). Cada registro se valida aparte: uno inválido va a `rechazados` y los demás se guardan; si su fila ya existía se marca vista sin tocar su contenido. Un registro traído por una sincronización más nueva, o una página anterior a la última sincronización completa aplicada, sale en `obsoletos` y no revierte nada. Las páginas de una sincronización COMPLETA terminan con `POST /ingesta/catalogos/cierre`; sin cierre es incremental y no da de baja nada. El agente no intercala dos sincronizaciones del mismo catálogo. Registra el contacto del agente, como `/ingesta/eventos`.\n\n**`formas_pago` (PAG-01)** no es un espejo por sucursal: llena el catálogo de formas de pago de la EMPRESA (`forma_raw` → `efectivo`/`tarjeta`/`otro`) con el `tipo` de SR, por texto exacto. Una fila clasificada a mano (`manual`) nunca se pisa; un texto que otra sucursal ya clasificó distinto se deja como está (`conflictos`); uno sin `tipo` no se clasifica (`sinTipo`). Idempotente igual. Ni `vistoAt`, ni `obsoletos`: nada se da de baja.",
         "operationId": "CatalogosIngestaController_pagina",
         "parameters": [],
         "requestBody": {
@@ -1115,7 +1115,7 @@
             }
           },
           "400": {
-            "description": "Sobre inválido: catálogo desconocido, `sincronizacionId` no es uuid, fecha sin zona o más de 5 min en el futuro, `registros` vacío, con más de 1000 o con no-objetos.",
+            "description": "Sobre inválido: catálogo desconocido, `sincronizacionId` no es uuid, fecha sin zona o más de 5 min en el futuro, `registros` vacío, con más de 1000 o con no-objetos. En `formas_pago`, también un `tipo` que no sea entero 1–4 o nulo.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1163,7 +1163,7 @@
             "agente": []
           }
         ],
-        "summary": "Recibe una página de un catálogo del POS (grupos, productos, meseros, clientes, áreas, canales).",
+        "summary": "Recibe una página de un catálogo del POS (grupos, productos, meseros, clientes, áreas, canales, inventario, o las formas de pago).",
         "tags": [
           "agente"
         ]
@@ -1171,7 +1171,7 @@
     },
     "/ingesta/catalogos/cierre": {
       "post": {
-        "description": "Marca `activo=false` (nunca borra; `vistoAt` se queda) a las filas del catálogo que no vio esta sincronización ni una más nueva. Antes cuadra: filas vistas por este `sincronizacionId` + `rechazados` >= `total`; si no, 409 y no se da de baja nada (faltan páginas). `total = 0` da de baja todo el catálogo (el POS no tiene ninguno). Idempotente: reenviar el último cierre aplicado no escribe; uno más viejo que el último aplicado responde `aplicado=false`.",
+        "description": "Marca `activo=false` (nunca borra; `vistoAt` se queda) a las filas del catálogo que no vio esta sincronización ni una más nueva. Antes cuadra: filas vistas por este `sincronizacionId` + `rechazados` >= `total`; si no, 409 y no se da de baja nada (faltan páginas). `total = 0` da de baja todo el catálogo (el POS no tiene ninguno). Idempotente: reenviar el último cierre aplicado no escribe; uno más viejo que el último aplicado responde `aplicado=false`. En `formas_pago` (PAG-01) no da de baja nada (el catálogo es de la empresa): responde `aplicado=true`, `desactivados=0` y en `activos` las filas del catálogo de la empresa.",
         "operationId": "CatalogosIngestaController_cierre",
         "parameters": [],
         "requestBody": {
@@ -16995,7 +16995,34 @@
           "nombre"
         ]
       },
-      "CatalogoSr": {
+      "RegistroFormaPagoDto": {
+        "type": "object",
+        "properties": {
+          "origenSrId": {
+            "type": "string",
+            "example": "EF",
+            "description": "El `idformadepago` de SR (1–64). Sólo para el log: la llave del catálogo es `nombre`."
+          },
+          "nombre": {
+            "type": "string",
+            "example": "EFECTIVO",
+            "description": "El texto con que la ingesta de cheques guarda `forma_raw` de los pagos (1–200): `formasdepago.descripcion` sin espacios a los lados, o el `idformadepago` si la descripción viene vacía. Match EXACTO con `forma_raw`: no se normaliza nada más."
+          },
+          "tipo": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 4,
+            "example": 1,
+            "description": "`formasdepago.tipo` de SR: 1 efectivo, 2 tarjeta, 3 vales, 4 otros. Nulo o ausente = la instalación no tiene la columna (o trae otro valor): la forma NO se clasifica y sigue contando como `otro` y saliendo en `sinCatalogo`. Cualquier otra cosa que no sea un entero 1–4 o nulo = 400 para la página entera (el agente nunca la manda)."
+          }
+        },
+        "required": [
+          "origenSrId",
+          "nombre"
+        ]
+      },
+      "CatalogoIngesta": {
         "type": "string",
         "enum": [
           "grupos",
@@ -17008,16 +17035,19 @@
           "grupos_insumo",
           "insumos",
           "almacenes",
-          "proveedores"
-        ]
+          "proveedores",
+          "formas_pago"
+        ],
+        "description": "Uno de los once catálogos espejo (`CatalogoSr`), o `formas_pago` (PAG-01): el catálogo `dbo.formasdepago` de SR, que llena el catálogo de formas de pago de la EMPRESA."
       },
       "PaginaCatalogoDto": {
         "type": "object",
         "properties": {
           "catalogo": {
+            "description": "Uno de los once catálogos espejo (`CatalogoSr`), o `formas_pago` (PAG-01): el catálogo `dbo.formasdepago` de SR, que llena el catálogo de formas de pago de la EMPRESA.",
             "allOf": [
               {
-                "$ref": "#/components/schemas/CatalogoSr"
+                "$ref": "#/components/schemas/CatalogoIngesta"
               }
             ]
           },
@@ -17050,10 +17080,13 @@
                 },
                 {
                   "$ref": "#/components/schemas/RegistroInsumoDto"
+                },
+                {
+                  "$ref": "#/components/schemas/RegistroFormaPagoDto"
                 }
               ]
             },
-            "description": "`RegistroProductoDto` para productos, `RegistroClienteDto` para clientes, `RegistroInsumoDto` para insumos (F2-120) y `RegistroCatalogoDto` para grupos, meseros, áreas, canales, unidades, grupos_insumo, almacenes y proveedores. Cada registro se valida aparte: uno inválido (o con un campo que su catálogo no tiene) se rechaza solo y los demás se guardan."
+            "description": "`RegistroProductoDto` para productos, `RegistroClienteDto` para clientes, `RegistroInsumoDto` para insumos (F2-120), `RegistroFormaPagoDto` para formas_pago (PAG-01) y `RegistroCatalogoDto` para grupos, meseros, áreas, canales, unidades, grupos_insumo, almacenes y proveedores. Cada registro se valida aparte: uno inválido (o con un campo que su catálogo no tiene) se rechaza solo y los demás se guardan. Única excepción: un `tipo` de formas_pago que no sea entero 1–4 o nulo es 400 para la página entera."
           }
         },
         "required": [
@@ -17097,9 +17130,10 @@
         "type": "object",
         "properties": {
           "catalogo": {
+            "description": "Uno de los once catálogos espejo (`CatalogoSr`), o `formas_pago` (PAG-01): el catálogo `dbo.formasdepago` de SR, que llena el catálogo de formas de pago de la EMPRESA.",
             "allOf": [
               {
-                "$ref": "#/components/schemas/CatalogoSr"
+                "$ref": "#/components/schemas/CatalogoIngesta"
               }
             ]
           },
@@ -17136,6 +17170,18 @@
             "items": {
               "$ref": "#/components/schemas/RechazoRegistroDto"
             }
+          },
+          "manuales": {
+            "type": "number",
+            "description": "Sólo formas_pago (PAG-01). Textos que ya tienen una fila `manual` en el catálogo de la empresa: la sincronización nunca la pisa (cuentan también en `sinCambios`)."
+          },
+          "conflictos": {
+            "type": "number",
+            "description": "Sólo formas_pago (PAG-01). Textos que se dejaron como estaban porque su clasificación choca: otra sucursal de la empresa ya lo dio de alta con otra forma, o el mismo POS trae ese texto dos veces con tipos distintos. No se elige al azar; el API lo registra en su log."
+          },
+          "sinTipo": {
+            "type": "number",
+            "description": "Sólo formas_pago (PAG-01). Textos sin `tipo` (la columna no existe en esa instalación): no se clasifican y siguen saliendo en `sinCatalogo`."
           }
         },
         "required": [
@@ -17154,9 +17200,10 @@
         "type": "object",
         "properties": {
           "catalogo": {
+            "description": "Uno de los once catálogos espejo (`CatalogoSr`), o `formas_pago` (PAG-01): el catálogo `dbo.formasdepago` de SR, que llena el catálogo de formas de pago de la EMPRESA.",
             "allOf": [
               {
-                "$ref": "#/components/schemas/CatalogoSr"
+                "$ref": "#/components/schemas/CatalogoIngesta"
               }
             ]
           },
@@ -22305,6 +22352,22 @@
           "etiquetas",
           "minimo",
           "maximo"
+        ]
+      },
+      "CatalogoSr": {
+        "type": "string",
+        "enum": [
+          "grupos",
+          "productos",
+          "meseros",
+          "clientes",
+          "areas",
+          "canales",
+          "unidades",
+          "grupos_insumo",
+          "insumos",
+          "almacenes",
+          "proveedores"
         ]
       },
       "EstadoCatalogoDto": {

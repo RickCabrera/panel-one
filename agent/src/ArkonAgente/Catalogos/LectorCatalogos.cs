@@ -85,13 +85,43 @@ internal sealed class LectorCatalogosSr(ConexionSoftRestaurant conexion, ISoftRe
         }
     }
 
-    public async Task<LecturaCatalogo> LeerAsync(CatalogoPanel catalogo, CancellationToken cancelacion)
+    /// <summary>"Invalid column name": la consulta nombra una columna que esta base no tiene.</summary>
+    internal const int ErrorColumnaInexistente = 207;
+
+    internal const string AvisoSinTipo =
+        "La tabla formasdepago de esta instalación no tiene la columna 'tipo': las formas de pago se mandan " +
+        "sin tipo y el panel no las clasifica: siguen contando como 'otro' (docs/esquema-sr.md §4).";
+
+    public Task<LecturaCatalogo> LeerAsync(CatalogoPanel catalogo, CancellationToken cancelacion) =>
+        LeerConRespaldoAsync(catalogo, reader, consulta => LeerConAsync(catalogo, consulta, cancelacion));
+
+    /// <summary>
+    /// Lee con la consulta del reader. Sólo para las formas de pago (PAG-01): si SQL Server la rechaza
+    /// porque la base no tiene <c>formasdepago.tipo</c> (error 207), se lee con
+    /// <see cref="ISoftRestaurantReader.ConsultaFormasPagoSinTipo"/> y el aviso va al log. Cualquier
+    /// otro error sigue siendo falla del catálogo (nunca "0 filas"). Separado para probarlo sin SQL Server.
+    /// </summary>
+    internal static async Task<LecturaCatalogo> LeerConRespaldoAsync(
+        CatalogoPanel catalogo, ISoftRestaurantReader reader, Func<string, Task<LecturaCatalogo>> leer)
+    {
+        try
+        {
+            return await leer(reader.ConsultaCatalogo(catalogo));
+        }
+        catch (SqlException ex) when (catalogo == CatalogoPanel.FormasPago && ex.Number == ErrorColumnaInexistente)
+        {
+            var lectura = await leer(reader.ConsultaFormasPagoSinTipo);
+            return lectura with { Leido = lectura.Leido with { Avisos = [AvisoSinTipo, .. lectura.Leido.Avisos] } };
+        }
+    }
+
+    private async Task<LecturaCatalogo> LeerConAsync(CatalogoPanel catalogo, string consulta, CancellationToken cancelacion)
     {
         try
         {
             await using var sql = conexion.CrearConexion();
             await sql.OpenAsync(cancelacion);
-            await using var comando = ConexionSoftRestaurant.CrearComando(sql, reader.ConsultaCatalogo(catalogo));
+            await using var comando = ConexionSoftRestaurant.CrearComando(sql, consulta);
             var inicio = Stopwatch.GetTimestamp();
             await using var lector = await comando.ExecuteReaderAsync(cancelacion);
             var leido = MapeoCatalogos.Mapear(catalogo, lector);

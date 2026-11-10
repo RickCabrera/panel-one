@@ -105,6 +105,8 @@ model Sucursal {
   // Turnos (cortes) de SR, espejo por sucursal.
   turnos              Turno[]
   alertas             Alerta[]
+  // PAG-01: las filas de `formas_pago_catalogo` que dio de alta el POS de esta sucursal.
+  formasPagoOrigen    FormaPagoCatalogo[]
 
   // Catálogos espejo (F2-230).
   gruposProducto           GrupoProducto[]
@@ -567,19 +569,40 @@ model Turno {
 // match EXACTO del texto, sin normalizar mayúsculas ni espacios: normalizar es
 // adivinar (docs/esquema-sr.md §4). Sin CRUD todavía: F1-060 no lo incluyó (su texto
 // en el backlog no lo pide) y queda como decisión abierta para Ricardo.
+//
+// PAG-01: el agente lo llena solo desde `dbo.formasdepago.tipo` de SR (catálogo
+// `formas_pago` de `POST /ingesta/catalogos`). `origen` dice quién decidió la fila:
+// `pos` = la sincronización (y `sucursal_origen_id` = la sucursal cuyo POS la dio de
+// alta, `tipo_sr` = el `tipo` que mandó); `manual` = una persona (alta directa en la base
+// o, cuando exista, el CRUD). Una fila `manual` NUNCA la toca la sincronización. El
+// default es `manual`: toda fila que no escribe la sincronización es decisión de alguien.
 model FormaPagoCatalogo {
-  id        String    @id @default(uuid()) @db.Uuid
-  empresaId String    @map("empresa_id") @db.Uuid
-  formaRaw  String    @map("forma_raw")
-  forma     FormaPago
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id               String          @id @default(uuid()) @db.Uuid
+  empresaId        String          @map("empresa_id") @db.Uuid
+  formaRaw         String          @map("forma_raw")
+  forma            FormaPago
+  origen           OrigenFormaPago @default(manual)
+  // El `formasdepago.tipo` de SR (1 efectivo, 2 tarjeta, 3 vales, 4 otros) con que la
+  // sincronización decidió `forma`. Nulo en las filas `manual`.
+  tipoSr           Int?            @map("tipo_sr") @db.SmallInt
+  sucursalOrigenId String?         @map("sucursal_origen_id") @db.Uuid
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  empresa        Empresa   @relation(fields: [empresaId], references: [id], onDelete: Restrict)
+  sucursalOrigen Sucursal? @relation(fields: [sucursalOrigenId], references: [id], onDelete: Restrict)
 
   // Empieza por empresa_id: también es el índice por empresa de esta tabla.
   @@unique([empresaId, formaRaw], map: "formas_pago_catalogo_empresa_id_forma_raw_key")
   @@map("formas_pago_catalogo")
+}
+
+// Quién decidió una fila de `formas_pago_catalogo` (PAG-01).
+enum OrigenFormaPago {
+  pos
+  manual
+
+  @@map("origen_forma_pago")
 }
 
 // Bandeja del correo FALSO (F2-202, `CORREO_IMPL=falso`): cada `enviar()` deja aquí

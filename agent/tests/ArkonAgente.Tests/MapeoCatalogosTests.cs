@@ -62,6 +62,18 @@ internal static class FixturesSr
             [("id", typeof(string)), ("nombre", typeof(string)), ("estatus", typeof(decimal))],
             filas.Select(f => new object?[] { f.Id, f.Nombre, f.Estatus }));
 
+    /// <summary>
+    /// <c>formasdepago</c> (PAG-01). El tipo de SQL de <c>tipo</c> no se ha visto: aquí va como
+    /// <c>int</c>; el mapeo acepta cualquier número (los tests prueban también smallint y numeric).
+    /// </summary>
+    public static DataTable FormasPago(params (string? Id, string? Nombre, int? Tipo)[] filas) =>
+        FormasPagoCon(typeof(int), filas.Select(f => (f.Id, f.Nombre, (object?)f.Tipo)).ToArray());
+
+    public static DataTable FormasPagoCon(Type tipoColumna, params (string? Id, string? Nombre, object? Tipo)[] filas) =>
+        Tabla(
+            [("id", typeof(string)), ("nombre", typeof(string)), ("tipo", tipoColumna)],
+            filas.Select(f => new object?[] { f.Id, f.Nombre, f.Tipo }));
+
     public static DataTable Vacia(CatalogoPanel catalogo) => catalogo switch
     {
         CatalogoPanel.Grupos => Grupos(),
@@ -75,6 +87,7 @@ internal static class FixturesSr
         CatalogoPanel.Insumos => Insumos(),
         CatalogoPanel.Almacenes => Almacenes(),
         CatalogoPanel.Proveedores => Proveedores(),
+        CatalogoPanel.FormasPago => FormasPago(),
         _ => throw new ArgumentOutOfRangeException(nameof(catalogo)),
     };
 
@@ -116,6 +129,7 @@ public class MapeoCatalogosTests
     [InlineData("insumos")]
     [InlineData("almacenes")]
     [InlineData("proveedores")]
+    [InlineData("formas_pago")]
     public void Catalogo_vacio_da_cero_registros_sin_avisos(string texto)
     {
         var catalogo = CatalogosPanel.Parsear(texto);
@@ -300,13 +314,80 @@ public class MapeoCatalogosTests
     [Fact]
     public void Texto_de_los_catalogos_es_el_enum_del_contrato()
     {
-        // Los once del enum CatalogoSr del contrato (F2-230 + F2-120), en orden de lectura.
+        // Los once del enum CatalogoSr del contrato (F2-230 + F2-120) y formas_pago (PAG-01): el
+        // enum CatalogoIngesta del sobre, en orden de lectura.
         Assert.Equal(
             ["grupos", "productos", "meseros", "areas", "canales", "clientes",
-             "unidades", "grupos_insumo", "insumos", "almacenes", "proveedores"],
+             "unidades", "grupos_insumo", "insumos", "almacenes", "proveedores", "formas_pago"],
             CatalogosPanel.Todos.Select(c => c.Texto()));
         Assert.Equal(Enum.GetValues<CatalogoPanel>().Length, CatalogosPanel.Todos.Count);
         Assert.All(CatalogosPanel.Todos, c => Assert.Equal(c, CatalogosPanel.Parsear(c.Texto())));
         Assert.Throws<InvalidDataException>(() => CatalogosPanel.Parsear("recetas"));
+    }
+
+    [Fact]
+    public void Formas_de_pago_mandan_id_el_texto_de_forma_raw_y_el_tipo_de_SR()
+    {
+        // Los nombres DE FÁBRICA de SR 10 (docs/esquema-sr.md §4), no de un cliente.
+        var leido = Mapear(CatalogoPanel.FormasPago, FixturesSr.FormasPago(
+            ("EF", "EFECTIVO", 1), ("VISA", "VISA", 2), ("VAL", "VALES", 3), ("CR", "CREDITO", 4)));
+
+        Assert.Equal(4, leido.Total);
+        Assert.Empty(leido.Avisos);
+        Assert.Equal(
+            ["""{"origenSrId":"EF","nombre":"EFECTIVO","tipo":1}""", """{"origenSrId":"VISA","nombre":"VISA","tipo":2}""",
+             """{"origenSrId":"VAL","nombre":"VALES","tipo":3}""", """{"origenSrId":"CR","nombre":"CREDITO","tipo":4}"""],
+            leido.Registros.Select(r => r.Json));
+        Assert.Equal(["EF", "VISA", "VAL", "CR"], leido.Registros.Select(r => r.OrigenSrId));
+    }
+
+    [Fact]
+    public void El_nombre_de_una_forma_de_pago_es_el_mismo_texto_que_la_ingesta_de_cheques_guarda_en_forma_raw()
+    {
+        // MapeoCheques recorta la descripción a los DOS lados y, si viene vacía, usa el idformadepago:
+        // el panel clasifica por match exacto, así que el catálogo tiene que dar el mismo texto.
+        var leido = Mapear(CatalogoPanel.FormasPago, FixturesSr.FormasPago(
+            ("EF   ", "  EFECTIVO  ", 1), ("TPY", "   ", 4), ("MC", null, 2), ("Dll", "Dólares", 1)));
+
+        Assert.Equal(
+            [("EF", "EFECTIVO"), ("TPY", "TPY"), ("MC", "MC"), ("Dll", "Dólares")],
+            leido.Registros.Select(r => (Json(r).GetProperty("origenSrId").GetString(), Json(r).GetProperty("nombre").GetString())));
+    }
+
+    [Theory]
+    [InlineData(typeof(short))]
+    [InlineData(typeof(byte))]
+    [InlineData(typeof(decimal))]
+    [InlineData(typeof(long))]
+    public void El_tipo_de_forma_de_pago_se_lee_de_cualquier_columna_numerica(Type columna)
+    {
+        var leido = Mapear(CatalogoPanel.FormasPago, FixturesSr.FormasPagoCon(
+            columna, ("EF", "EFECTIVO", Convert.ChangeType(1, columna)), ("VISA", "VISA", Convert.ChangeType(2, columna))));
+
+        Assert.Equal([1, 2], leido.Registros.Select(r => Json(r).GetProperty("tipo").GetInt32()));
+        Assert.Empty(leido.Avisos);
+    }
+
+    [Fact]
+    public void Una_forma_sin_tipo_o_con_un_tipo_que_no_es_1_a_4_viaja_con_tipo_nulo_y_el_rarito_con_aviso()
+    {
+        var leido = Mapear(CatalogoPanel.FormasPago, FixturesSr.FormasPagoCon(
+            typeof(decimal), ("EF", "EFECTIVO", null), ("X", "RARA", 7m), ("Y", "MEDIA", 1.5m), ("Z", "CERO", 0m)));
+
+        Assert.All(leido.Registros, r => Assert.Equal(JsonValueKind.Null, Json(r).GetProperty("tipo").ValueKind));
+        Assert.All(leido.Registros, r => Assert.Equal(["origenSrId", "nombre", "tipo"], Campos(r)));
+        Assert.Equal(3, leido.Avisos.Count);
+        Assert.All(leido.Avisos, a => Assert.Contains("no es 1, 2, 3 ni 4", a));
+        Assert.DoesNotContain(leido.Avisos, a => a.Contains("RARA")); // el aviso da la clave, no el texto
+    }
+
+    [Fact]
+    public void Una_forma_sin_clave_ni_descripcion_no_se_manda()
+    {
+        var leido = Mapear(CatalogoPanel.FormasPago, FixturesSr.FormasPago((null, null, 1), ("EF", "EFECTIVO", 1)));
+
+        Assert.Single(leido.Registros);
+        Assert.Equal(2, leido.FilasSql);
+        Assert.Single(leido.Avisos);
     }
 }

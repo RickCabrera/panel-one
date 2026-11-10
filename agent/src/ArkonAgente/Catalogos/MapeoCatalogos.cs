@@ -7,8 +7,9 @@ using System.Text.Json;
 namespace ArkonAgente.Catalogos;
 
 /// <summary>
-/// Los ONCE catálogos del contrato de F2-230: los seis de venta (F2-240) y los cinco de
-/// inventario de F2-120 (F2-241). Con los once se atiende por completo un forzado del panel.
+/// Los catálogos que el agente manda por el contrato de F2-230: los ONCE espejos (los seis de venta
+/// de F2-240 y los cinco de inventario de F2-120/F2-241) y las formas de pago (PAG-01), que llenan
+/// el catálogo de formas de pago de la EMPRESA en el panel. Un forzado del panel lee los doce.
 /// </summary>
 internal enum CatalogoPanel
 {
@@ -23,6 +24,7 @@ internal enum CatalogoPanel
     Insumos,
     Almacenes,
     Proveedores,
+    FormasPago,
 }
 
 internal static class CatalogosPanel
@@ -36,10 +38,10 @@ internal static class CatalogosPanel
         CatalogoPanel.Grupos, CatalogoPanel.Productos, CatalogoPanel.Meseros,
         CatalogoPanel.Areas, CatalogoPanel.Canales, CatalogoPanel.Clientes,
         CatalogoPanel.Unidades, CatalogoPanel.GruposInsumo, CatalogoPanel.Insumos,
-        CatalogoPanel.Almacenes, CatalogoPanel.Proveedores,
+        CatalogoPanel.Almacenes, CatalogoPanel.Proveedores, CatalogoPanel.FormasPago,
     ];
 
-    /// <summary>El valor del enum <c>CatalogoSr</c> del contrato.</summary>
+    /// <summary>El valor del enum <c>CatalogoIngesta</c> del contrato (<c>CatalogoSr</c> + <c>formas_pago</c>).</summary>
     public static string Texto(this CatalogoPanel catalogo) => catalogo switch
     {
         CatalogoPanel.Grupos => "grupos",
@@ -53,6 +55,7 @@ internal static class CatalogosPanel
         CatalogoPanel.Insumos => "insumos",
         CatalogoPanel.Almacenes => "almacenes",
         CatalogoPanel.Proveedores => "proveedores",
+        CatalogoPanel.FormasPago => "formas_pago",
         _ => throw new ArgumentOutOfRangeException(nameof(catalogo), catalogo, null),
     };
 
@@ -130,6 +133,10 @@ internal static class MapeoCatalogos
         else if (catalogo == CatalogoPanel.Unidades)
         {
             registros = MapearUnidades(lector, columnas, ref filas);
+        }
+        else if (catalogo == CatalogoPanel.FormasPago)
+        {
+            registros = MapearFormasPago(lector, columnas, avisos, ref filas);
         }
         else
         {
@@ -352,6 +359,83 @@ internal static class MapeoCatalogos
         }
 
         return registros;
+    }
+
+    /// <summary>
+    /// Una fila por forma de <c>dbo.formasdepago</c> (PAG-01): <c>{ origenSrId, nombre, tipo }</c>.
+    /// <c>nombre</c> es EXACTAMENTE el texto con que la ingesta de cheques guarda <c>forma_raw</c>
+    /// (<c>MapeoCheques</c>: la descripción sin espacios a los lados, o el
+    /// <c>idformadepago</c> si viene vacía): el panel clasifica por match exacto de ese texto, y otro
+    /// recorte dejaría sin clasificar los pagos. <c>tipo</c> va SIEMPRE: entero 1–4, o nulo si la
+    /// instalación no trae la columna o trae otro valor (con aviso). El mapeo a nuestro ENUM lo hace
+    /// el API. Una forma sin descripción ni clave no se manda (con aviso): no hay texto que cruzar.
+    /// </summary>
+    private static List<RegistroCatalogo> MapearFormasPago(
+        IDataReader lector, Columnas columnas, List<string> avisos, ref int filas)
+    {
+        var registros = new List<RegistroCatalogo>();
+        while (lector.Read())
+        {
+            filas++;
+            var id = TextoForma(columnas.Texto(lector, "id"));
+            var nombre = TextoForma(columnas.Texto(lector, "nombre")) ?? id;
+            if (id is null || nombre is null)
+            {
+                const string sinTexto = "Una forma de pago sin idformadepago ni descripción no se manda: no hay texto que clasificar.";
+                if (!avisos.Contains(sinTexto))
+                {
+                    avisos.Add(sinTexto);
+                }
+
+                continue;
+            }
+
+            var tipo = TipoForma(columnas.Valor(lector, "tipo"), id, avisos);
+            using var memoria = new MemoryStream();
+            using (var w = new Utf8JsonWriter(memoria, OpcionesEscritura))
+            {
+                w.WriteStartObject();
+                w.WriteString("origenSrId", id);
+                w.WriteString("nombre", nombre);
+                if (tipo is { } t)
+                {
+                    w.WriteNumber("tipo", t);
+                }
+                else
+                {
+                    w.WriteNull("tipo");
+                }
+
+                w.WriteEndObject();
+            }
+
+            registros.Add(new RegistroCatalogo(id, Encoding.UTF8.GetString(memoria.ToArray())));
+        }
+
+        return registros;
+    }
+
+    /// <summary>El mismo recorte que <c>MapeoCheques.Limpio</c> para <c>forma_raw</c>: espacios a los dos lados; vacío = nulo.</summary>
+    private static string? TextoForma(string? texto) =>
+        string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
+
+    /// <summary><c>formasdepago.tipo</c>: 1 efectivo, 2 tarjeta, 3 vales, 4 otros (§4). Otro valor = nulo, con aviso.</summary>
+    private static int? TipoForma(object? valor, string id, List<string> avisos)
+    {
+        if (valor is null)
+        {
+            return null;
+        }
+
+        var numero = valor is bool b ? (b ? 1m : 0m) : Convert.ToDecimal(valor, CultureInfo.InvariantCulture);
+        if (numero >= 1m && numero <= 4m && numero == decimal.Truncate(numero))
+        {
+            return (int)numero;
+        }
+
+        avisos.Add(
+            $"La forma de pago {id} trae un tipo que no es 1, 2, 3 ni 4: se manda sin tipo y el panel no la clasifica.");
+        return null;
     }
 
     private static RegistroCatalogo Registro(

@@ -24,9 +24,13 @@ internal sealed class LectorFalso : ILectorCatalogos
         [CatalogoPanel.Insumos] = () => FixturesSr.Insumos(("I001", "Leche entera", "GI1", "kg", 1)),
         [CatalogoPanel.Almacenes] = () => FixturesSr.Almacenes(("1", "Almacén general"), ("2", "Barra")),
         [CatalogoPanel.Proveedores] = () => FixturesSr.Proveedores(),
+        [CatalogoPanel.FormasPago] = () => FixturesSr.FormasPago(("EF", "EFECTIVO", 1), ("VISA", "VISA", 2)),
     };
 
     public HashSet<CatalogoPanel> Fallan { get; } = [];
+
+    /// <summary>Avisos que el lector "real" agrega (p. ej. el de la columna <c>tipo</c> que falta, PAG-01).</summary>
+    public Dictionary<CatalogoPanel, List<string>> Avisos { get; } = [];
 
     public PermisosLectura Permisos { get; set; } = new(true, null);
 
@@ -52,7 +56,13 @@ internal sealed class LectorFalso : ILectorCatalogos
             throw new TimeoutException("la consulta tardó demasiado (simulado)");
         }
 
-        return Task.FromResult(new LecturaCatalogo(MapeoCatalogos.Mapear(catalogo, Tablas[catalogo]().CreateDataReader()), 7));
+        var leido = MapeoCatalogos.Mapear(catalogo, Tablas[catalogo]().CreateDataReader());
+        if (Avisos.TryGetValue(catalogo, out var extra))
+        {
+            leido = leido with { Avisos = [.. extra, .. leido.Avisos] };
+        }
+
+        return Task.FromResult(new LecturaCatalogo(leido, 7));
     }
 }
 
@@ -106,7 +116,7 @@ public class SincronizadorCatalogosTests : IDisposable
         _reloj.Avanzar(new DateTimeOffset(_reloj.Ahora.UtcDateTime.Date.AddDays(1).AddHours(hora), TimeSpan.Zero) - _reloj.Ahora);
 
     [Fact]
-    public async Task La_primera_vez_lee_y_manda_los_once_catalogos_y_el_log_dice_filas_y_tiempo()
+    public async Task La_primera_vez_lee_y_manda_los_doce_catalogos_y_el_log_dice_filas_y_tiempo()
     {
         await CicloYVaciar();
 
@@ -117,6 +127,7 @@ public class SincronizadorCatalogosTests : IDisposable
             {
                 ["grupos"] = 2, ["productos"] = 2, ["meseros"] = 1, ["areas"] = 1, ["canales"] = 0, ["clientes"] = 0,
                 ["unidades"] = 2, ["grupos_insumo"] = 1, ["insumos"] = 1, ["almacenes"] = 2, ["proveedores"] = 0,
+                ["formas_pago"] = 2,
             },
             cierres);
         // Un catálogo vacío en el POS sólo manda el cierre con total = 0 (sin página vacía).
@@ -145,8 +156,8 @@ public class SincronizadorCatalogosTests : IDisposable
         Assert.All(CatalogosPanel.Todos, c => Assert.Equal(2, _lector.LecturasDe(c))); // sí volvió a leer
         Assert.Equal(0, _cola.ContarPendientes()); // pero no encoló nada
         Assert.Equal(enviosAntes, _api.Envios.Count);
-        Assert.Equal(11, _log.De(LogLevel.Information).Count(m => m.Contains("sin cambios, no se encola nada")));
-        Assert.Contains(_log.De(LogLevel.Information), m => m.Contains("corrida diaria terminada") && m.Contains("11 sin cambios"));
+        Assert.Equal(12, _log.De(LogLevel.Information).Count(m => m.Contains("sin cambios, no se encola nada")));
+        Assert.Contains(_log.De(LogLevel.Information), m => m.Contains("corrida diaria terminada") && m.Contains("12 sin cambios"));
     }
 
     [Fact]
@@ -195,7 +206,7 @@ public class SincronizadorCatalogosTests : IDisposable
         await CicloYVaciar();
 
         var forzados = _api.Envios.Skip(enviosAntes).ToList();
-        Assert.Equal(11, forzados.Count(p => p.EsCierre)); // los once, inventario incluido (F2-241)
+        Assert.Equal(12, forzados.Count(p => p.EsCierre)); // los doce: inventario (F2-241) y formas de pago (PAG-01)
         Assert.Contains(_log.De(LogLevel.Information), m => m.Contains("corrida forzada desde el panel"));
 
         // Si el panel lo sigue viendo pendiente (p. ej. un catálogo que falló), no se cicla.
@@ -209,7 +220,7 @@ public class SincronizadorCatalogosTests : IDisposable
         _api.Solicitud = ("2026-09-21T13:00:00.000Z", true);
         _reloj.Avanzar(TimeSpan.FromMinutes(2));
         await Ciclos();
-        Assert.Equal(lecturas + 11, _lector.Total);
+        Assert.Equal(lecturas + 12, _lector.Total);
     }
 
     [Fact]
@@ -282,7 +293,7 @@ public class SincronizadorCatalogosTests : IDisposable
 
         _lector.Permisos = new PermisosLectura(true, null);
         await Ciclos(12);
-        Assert.Equal(11, _lector.Total);
+        Assert.Equal(12, _lector.Total);
     }
 
     [Fact]
@@ -297,5 +308,95 @@ public class SincronizadorCatalogosTests : IDisposable
         Assert.Equal(2, cierre.Cuerpo!.Value.GetProperty("total").GetInt32());
         var pagina = _api.Envios.Single(p => p.EsPagina && p.Catalogo == "productos");
         Assert.Equal(2, pagina.Cuerpo!.Value.GetProperty("registros").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Las_formas_de_pago_viajan_como_catalogo_formas_pago_con_su_tipo()
+    {
+        await CicloYVaciar();
+
+        var pagina = _api.Envios.Single(p => p.EsPagina && p.Catalogo == "formas_pago").Cuerpo!.Value;
+        var registros = pagina.GetProperty("registros").EnumerateArray()
+            .Select(r => (r.GetProperty("nombre").GetString(), r.GetProperty("tipo").GetInt32())).ToList();
+        Assert.Equal([("EFECTIVO", 1), ("VISA", 2)], registros);
+        Assert.Contains(_api.Envios, p => p.EsCierre && p.Catalogo == "formas_pago");
+    }
+
+    [Fact]
+    public async Task Sin_la_columna_tipo_las_formas_de_pago_se_mandan_sin_tipo_y_queda_en_el_log()
+    {
+        _lector.Tablas[CatalogoPanel.FormasPago] = () => FixturesSr.FormasPago(("EF", "EFECTIVO", null));
+        _lector.Avisos[CatalogoPanel.FormasPago] = [LectorCatalogosSr.AvisoSinTipo];
+
+        await CicloYVaciar();
+
+        var registro = _api.Envios.Single(p => p.EsPagina && p.Catalogo == "formas_pago").Cuerpo!.Value
+            .GetProperty("registros")[0];
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, registro.GetProperty("tipo").ValueKind);
+        Assert.Contains(_log.De(LogLevel.Warning), m => m.Contains("'formas_pago'") && m.Contains("no tiene la columna 'tipo'"));
+        Assert.Empty(_log.De(LogLevel.Error));
+    }
+}
+
+/// <summary>PAG-01: el respaldo de las formas de pago cuando la base no tiene <c>formasdepago.tipo</c>.</summary>
+public class LectorFormasPagoTests
+{
+    private static readonly ISoftRestaurantReader Reader = new SrV11Reader(new VersionSr("10.021800", 10));
+
+    private static Task<LecturaCatalogo> Leer(CatalogoPanel catalogo, string consulta) =>
+        Task.FromResult(new LecturaCatalogo(
+            MapeoCatalogos.Mapear(catalogo, FixturesSr.FormasPago(("EF", consulta, null)).CreateDataReader()), 3));
+
+    [Fact]
+    public async Task Con_la_columna_tipo_usa_la_consulta_normal()
+    {
+        var consultas = new List<string>();
+        var lectura = await LectorCatalogosSr.LeerConRespaldoAsync(CatalogoPanel.FormasPago, Reader, c =>
+        {
+            consultas.Add(c);
+            return Leer(CatalogoPanel.FormasPago, c);
+        });
+
+        Assert.Equal(["sr_catalogo_formas_pago"], consultas);
+        Assert.Empty(lectura.Leido.Avisos);
+    }
+
+    [Fact]
+    public async Task Un_error_207_de_columna_inexistente_lee_sin_tipo_y_avisa()
+    {
+        var consultas = new List<string>();
+        var lectura = await LectorCatalogosSr.LeerConRespaldoAsync(CatalogoPanel.FormasPago, Reader, c =>
+        {
+            consultas.Add(c);
+            return c == "sr_catalogo_formas_pago"
+                ? throw SqlExceptionFalsa.Con(207, "Invalid column name 'tipo'. (simulado)")
+                : Leer(CatalogoPanel.FormasPago, c);
+        });
+
+        Assert.Equal(["sr_catalogo_formas_pago", "sr_catalogo_formas_pago_sin_tipo"], consultas);
+        Assert.Equal([LectorCatalogosSr.AvisoSinTipo], lectura.Leido.Avisos);
+        var registro = System.Text.Json.JsonDocument.Parse(Assert.Single(lectura.Leido.Registros).Json).RootElement;
+        Assert.Equal("sr_catalogo_formas_pago_sin_tipo", registro.GetProperty("nombre").GetString()); // leyó la de respaldo
+    }
+
+    [Fact]
+    public async Task Otro_error_de_SQL_sigue_siendo_falla_del_catalogo()
+    {
+        await Assert.ThrowsAsync<Microsoft.Data.SqlClient.SqlException>(() =>
+            LectorCatalogosSr.LeerConRespaldoAsync(CatalogoPanel.FormasPago, Reader,
+                _ => throw SqlExceptionFalsa.Timeout()));
+    }
+
+    [Fact]
+    public async Task El_respaldo_es_solo_de_las_formas_de_pago()
+    {
+        var consultas = new List<string>();
+        await Assert.ThrowsAsync<Microsoft.Data.SqlClient.SqlException>(() =>
+            LectorCatalogosSr.LeerConRespaldoAsync(CatalogoPanel.Meseros, Reader, c =>
+            {
+                consultas.Add(c);
+                throw SqlExceptionFalsa.Con(207, "Invalid column name 'visible'. (simulado)");
+            }));
+        Assert.Equal(["sr_catalogo_meseros"], consultas);
     }
 }

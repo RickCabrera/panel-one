@@ -41,7 +41,8 @@ export class CatalogosIngestaController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Recibe una página de un catálogo del POS (grupos, productos, meseros, clientes, áreas, canales).',
+      'Recibe una página de un catálogo del POS (grupos, productos, meseros, clientes, áreas, ' +
+      'canales, inventario, o las formas de pago).',
     description:
       'Idempotente: la misma página tres veces deja exactamente los mismos datos (ni ids, ni ' +
       '`updatedAt`, ni `vistoAt` cambian). Llave: (sucursal de la API key, `origenSrId`). Cada ' +
@@ -51,14 +52,20 @@ export class CatalogosIngestaController {
       'aplicada, sale en `obsoletos` y no revierte nada. Las páginas de una sincronización ' +
       'COMPLETA terminan con `POST /ingesta/catalogos/cierre`; sin cierre es incremental y no da ' +
       'de baja nada. El agente no intercala dos sincronizaciones del mismo catálogo. Registra el ' +
-      'contacto del agente, como `/ingesta/eventos`.',
+      'contacto del agente, como `/ingesta/eventos`.\n\n' +
+      '**`formas_pago` (PAG-01)** no es un espejo por sucursal: llena el catálogo de formas de pago ' +
+      'de la EMPRESA (`forma_raw` → `efectivo`/`tarjeta`/`otro`) con el `tipo` de SR, por texto ' +
+      'exacto. Una fila clasificada a mano (`manual`) nunca se pisa; un texto que otra sucursal ya ' +
+      'clasificó distinto se deja como está (`conflictos`); uno sin `tipo` no se clasifica ' +
+      '(`sinTipo`). Idempotente igual. Ni `vistoAt`, ni `obsoletos`: nada se da de baja.',
   })
   @ApiOkResponse({ type: ResultadoPaginaDto })
   @ApiBadRequestResponse({
     type: ErrorDto,
     description:
       'Sobre inválido: catálogo desconocido, `sincronizacionId` no es uuid, fecha sin zona o más de ' +
-      '5 min en el futuro, `registros` vacío, con más de 1000 o con no-objetos.',
+      '5 min en el futuro, `registros` vacío, con más de 1000 o con no-objetos. En `formas_pago`, ' +
+      'también un `tipo` que no sea entero 1–4 o nulo.',
   })
   @ApiServiceUnavailableResponse({ type: ErrorDto, description: DESC_503 })
   @ApiInternalServerErrorResponse({ type: ErrorDto, description: DESC_500 })
@@ -79,7 +86,9 @@ export class CatalogosIngestaController {
       '`sincronizacionId` + `rechazados` >= `total`; si no, 409 y no se da de baja nada (faltan ' +
       'páginas). `total = 0` da de baja todo el catálogo (el POS no tiene ninguno). Idempotente: ' +
       'reenviar el último cierre aplicado no escribe; uno más viejo que el último aplicado ' +
-      'responde `aplicado=false`.',
+      'responde `aplicado=false`. En `formas_pago` (PAG-01) no da de baja nada (el catálogo es de ' +
+      'la empresa): responde `aplicado=true`, `desactivados=0` y en `activos` las filas del ' +
+      'catálogo de la empresa.',
   })
   @ApiOkResponse({ type: ResultadoCierreDto })
   @ApiBadRequestResponse({

@@ -30,6 +30,12 @@ internal interface ISoftRestaurantReader
     /// </summary>
     string ConsultaCatalogo(CatalogoPanel catalogo);
 
+    /// <summary>
+    /// La consulta de respaldo de las formas de pago (PAG-01) para una base cuya
+    /// <c>dbo.formasdepago</c> no tiene la columna <c>tipo</c>: mismas columnas, con <c>tipo</c> nulo.
+    /// </summary>
+    string ConsultaFormasPagoSinTipo { get; }
+
     /// <summary>La consulta embebida que lee las existencias por almacén en ESTA versión (F2-241).</summary>
     string ConsultaExistencias { get; }
 
@@ -71,6 +77,12 @@ internal sealed class SrV11Reader(VersionSr version) : ISoftRestaurantReader
     /// como el resto de este reader. docs/esquema-sr.md §6–§8.
     /// </summary>
     public string ConsultaCatalogo(CatalogoPanel catalogo) => "sr_catalogo_" + catalogo.Texto();
+
+    /// <summary>
+    /// ✅ La 10 SÍ tiene <c>formasdepago.tipo</c> (F1-090); el respaldo es para una instalación que no
+    /// la tenga (⚠️ no visto). docs/esquema-sr.md §4.
+    /// </summary>
+    public string ConsultaFormasPagoSinTipo => "sr_catalogo_formas_pago_sin_tipo";
 
     /// <summary>
     /// ✅ Tablas y triggers vistos en SR 10 (2026-09-23, sólo metadatos; sin movimientos en la
