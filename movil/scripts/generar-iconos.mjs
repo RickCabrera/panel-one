@@ -1,4 +1,4 @@
-// Genera los íconos y el splash de Android desde el isotipo de la marca (docs/marca/*.svg, UI-02).
+// Genera los íconos y el splash de Android y de iOS desde el isotipo de la marca (docs/marca/*.svg, UI-02).
 //
 //   node scripts/generar-iconos.mjs        (o `npm run iconos`)
 //
@@ -13,6 +13,10 @@
 //   mipmap-*/ic_launcher_foreground.png  primer plano del ícono adaptativo (Android 8+): el ojo sobre
 //                                        transparente, dentro de la zona segura de 66/108
 //   drawable*/splash.png                 splash de Android < 12: negro con el ojo al centro
+// iOS (ios/App/App/Assets.xcassets):
+//   AppIcon.appiconset/AppIcon-512@2x.png  1024×1024, cuadrado a sangre (iOS pone las esquinas) y
+//                                          SIN canal alfa: App Store Connect rechaza íconos con alfa
+//   Splash.imageset/splash-2732x2732*.png  negro con el ojo al centro (LaunchScreen.storyboard)
 // El fondo del ícono adaptativo es el color @color/ic_launcher_background (#000000), no un PNG.
 // UI-06: el ícono es el logo negro que mandó Ricardo (`isotipo-app-negro.svg`: el ojo arena sobre
 // un cuadrado redondeado negro), el del estilo «Noche» que el panel trae por defecto.
@@ -20,6 +24,7 @@ import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { crc32, deflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const NEGRO = '#000000';
@@ -107,6 +112,80 @@ const splash = {
 };
 for (const [carpeta, [w, h]] of Object.entries(splash)) {
   await png(join(res, `${carpeta}/splash.png`), w, h, { fondo: NEGRO, svg: ojo, alto: 0.3 });
+}
+
+// ---- iOS ----
+const assets = join(raiz, 'ios/App/App/Assets.xcassets');
+
+/** PNG RGB de 8 bits (tipo de color 2, sin alfa) a partir de píxeles RGBA. */
+function pngSinAlfa(w, h, rgba) {
+  const filas = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) {
+    const o = y * (w * 3 + 1); // byte de filtro 0 al inicio de cada fila
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      filas[o + 1 + x * 3] = rgba[i];
+      filas[o + 2 + x * 3] = rgba[i + 1];
+      filas[o + 3 + x * 3] = rgba[i + 2];
+    }
+  }
+  const trozo = (tipo, datos) => {
+    const largo = Buffer.alloc(4);
+    largo.writeUInt32BE(datos.length);
+    const cuerpo = Buffer.concat([Buffer.from(tipo, 'ascii'), datos]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(cuerpo));
+    return Buffer.concat([largo, cuerpo, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; // bits por canal
+  ihdr[9] = 2; // RGB
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    trozo('IHDR', ihdr),
+    trozo('IDAT', deflateSync(filas, { level: 9 })),
+    trozo('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+// Ícono: el ojo al 56 % sobre negro a sangre (como el redondo de Android; iOS recorta su squircle).
+// Se dibuja en un <canvas> sobre negro opaco y se leen los píxeles para escribir el PNG sin alfa.
+{
+  const lado = 1024;
+  await pagina.setViewportSize({ width: 64, height: 64 });
+  await pagina.setContent('<!doctype html><html><body></body></html>');
+  const rgba = await pagina.evaluate(
+    async ({ svg, lado, fondo, alto }) => {
+      const img = new Image();
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = c.height = lado;
+      const g = c.getContext('2d');
+      g.fillStyle = fondo;
+      g.fillRect(0, 0, lado, lado);
+      const h = lado * alto;
+      const w = (h * img.naturalWidth) / img.naturalHeight;
+      g.drawImage(img, (lado - w) / 2, (lado - h) / 2, w, h);
+      return Array.from(g.getImageData(0, 0, lado, lado).data);
+    },
+    { svg: ojo, lado, fondo: NEGRO, alto: 0.56 },
+  );
+  const ruta = join(assets, 'AppIcon.appiconset/AppIcon-512@2x.png');
+  await writeFile(ruta, pngSinAlfa(lado, lado, Uint8Array.from(rgba)));
+  console.log(`${ruta.slice(raiz.length + 1)}  ${lado}x${lado} (sin alfa)`);
+}
+
+// Splash de iOS: el storyboard lo pinta con aspectFill, así que el ojo va chico al centro para que
+// sobreviva al recorte en cualquier iPhone. Los tres archivos de la plantilla (1x, 2x, 3x) son iguales.
+for (const nombre of ['splash-2732x2732.png', 'splash-2732x2732-1.png', 'splash-2732x2732-2.png']) {
+  await png(join(assets, `Splash.imageset/${nombre}`), 2732, 2732, {
+    fondo: NEGRO,
+    svg: ojo,
+    alto: 0.12,
+  });
 }
 
 await navegador.close();

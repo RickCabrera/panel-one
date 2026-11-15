@@ -10,12 +10,14 @@
   },
   "scripts": {
     "sync": "cap sync android",
+    "sync:ios": "cap sync ios",
     "iconos": "node scripts/generar-iconos.mjs",
     "test": "node --test \"test/*.test.mjs\""
   },
   "dependencies": {
     "@capacitor/android": "8.6.0",
-    "@capacitor/core": "8.6.0"
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0"
   },
   "devDependencies": {
     "@capacitor/cli": "8.6.0",

@@ -33,6 +33,8 @@ api/openapi.json
 # App Android (MOV-01): el proyecto nativo lo genera `npx cap add android` y lo formatea
 # Android Studio; los node_modules de /movil tampoco son nuestros.
 movil/android/
+# App de iPhone: el proyecto Xcode lo genera `npx cap add ios` y lo formatea Xcode.
+movil/ios/
 movil/node_modules/
 # La pantalla de respaldo lleva el isotipo en línea (un path de 33 KB en una sola línea).
 movil/www/index.html

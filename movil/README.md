@@ -1,4 +1,4 @@
-# Yo Controlo · App móvil (Android hoy, iPhone después)
+# Yo Controlo · App móvil (Android e iPhone)
 
 La app es **el mismo panel web**, abierto dentro de una app nativa hecha con
 [Capacitor](https://capacitorjs.com) 8. No empaqueta el build de `/web`: su WebView carga el
@@ -117,25 +117,80 @@ Además de la llave:
   (política de *webview spam*): conviene llegar con algo nativo (push FCM, por ejemplo).
 - `targetSdkVersion` al día (hoy 36, el de la plantilla de Capacitor 8).
 
-## Pasar a iPhone (más adelante)
+## iPhone (`movil/ios`)
 
-En una Mac con Xcode:
+Mismo visor del panel, con el mismo `capacitor.config.ts` (`server.url`, `allowNavigation`,
+`errorPath`). Lo propio de iOS:
 
-```bash
-cd movil
-npm install --save-exact @capacitor/ios@<la misma versión que @capacitor/android>
-npx cap add ios        # crea movil/ios (se versiona, como android/)
-npx cap open ios       # firma con la cuenta de Apple Developer y corre en un iPhone
-```
+- **Atrás:** no hay botón; deslizar desde el borde izquierdo regresa en el historial del panel
+  (`allowsBackForwardNavigationGestures`, en `ios/App/App/VistaPanel.swift`, lo único nativo propio).
+- **Pantalla completa con notch / isla:** `ios.contentInset: 'never'`; el panel ya trae
+  `viewport-fit=cover` y deja los márgenes con `env(safe-area-inset-*)`.
+- **Sólo iPhone** (`TARGETED_DEVICE_FAMILY = 1`): así App Store no pide capturas ni revisión de
+  iPad. En un iPad corre en modo iPhone.
+- **Ícono y splash** generados con `npm run iconos` (el ícono de 1024 va sin canal alfa, como lo
+  exige App Store Connect). `ITSAppUsesNonExemptEncryption = false` (sólo HTTPS del sistema: no hay
+  trámite de exportación). `PrivacyInfo.xcprivacy`: sin rastreo.
+- Descargas del panel (`blob:`): igual que en Android, todavía no (MOV-02).
 
-`capacitor.config.ts` ya sirve tal cual (misma `server.url`, `errorPath` y `allowNavigation`).
-Lo propio de iOS: el botón Atrás no existe (el gesto de deslizar lo da `WKWebView` con
-`allowsBackForwardNavigationGestures`), la distribución es por TestFlight / App Store (no hay
-sideload) y Apple también revisa la "funcionalidad mínima" de las apps que envuelven un sitio.
+**CI:** `.github/workflows/ios.yml` compila en una Mac de GitHub (Xcode 26) para simulador y el
+archivo de iPhone sin firma, y revisa el `Info.plist`. No firma ni sube nada: no hay secretos de
+Apple en el repo. El artifact `ios-simulador` trae el `.app` para probarlo en el simulador.
+
+### iPhone: subir a App Store (lo hace quien tiene la cuenta de Apple Developer)
+
+Requisitos: una Mac con **Xcode 26** o más nuevo, Node 22, y la cuenta de Apple Developer
+(99 USD/año) con su sesión iniciada en *Xcode › Settings › Accounts*.
+
+1. **Dar de alta la app** en [App Store Connect](https://appstoreconnect.apple.com) › *Apps* › **+** ›
+   *Nueva app*: plataforma iOS, nombre **Yo Controlo**, idioma principal Español (México),
+   **bundle ID `mx.yocontrolo.app`** (si no aparece en la lista, créalo antes en
+   *developer.apple.com › Certificates, IDs & Profiles › Identifiers*), SKU `yocontrolo`.
+2. **Preparar el proyecto:**
+
+   ```bash
+   git clone https://github.com/RickCabrera/panel-one.git
+   cd panel-one/movil
+   npm ci
+   npx cap sync ios        # copia la pantalla de respaldo y escribe capacitor.config.json
+   npx cap open ios        # abre ios/App/App.xcodeproj en Xcode
+   ```
+
+3. **Firma:** en Xcode, proyecto **App** › target **App** › *Signing & Capabilities*: dejar
+   *Automatically manage signing* y elegir el **Team** de la cuenta. El bundle ID ya es
+   `mx.yocontrolo.app`.
+4. **Versión:** en *General › Identity*, **Version** `1.0` y **Build** `1`. Cada vez que se suba
+   otra versión, el **Build** tiene que crecer (2, 3, …); si cambia lo que ve el usuario, subir
+   también Version (1.1, …).
+5. **Archivar y subir:** arriba elegir el destino **Any iOS Device (arm64)** › menú *Product ›
+   Archive*. Al terminar se abre el Organizer: **Distribute App › App Store Connect › Upload**
+   (dejar las opciones por defecto). En 10–30 min el build aparece en App Store Connect › la app ›
+   *TestFlight*.
+6. **Probar en TestFlight** (recomendado): agregarse como probador interno e instalar desde la app
+   TestFlight en un iPhone. Revisar login, navegación, deslizar para regresar, modo avión
+   (debe salir «Sin conexión» con Reintentar).
+7. **Ficha y envío a revisión** (App Store Connect › la app › *Distribución*):
+   - Capturas de iPhone de 6.9" (1320×2868, p. ej. desde el simulador del iPhone 17 Pro Max con
+     ⌘S), descripción, palabras clave, URL de soporte y **URL de política de privacidad** (pública,
+     obligatoria).
+   - *Privacidad de la app*: el panel recaba correo electrónico y datos de la cuenta para el
+     funcionamiento de la app, vinculados al usuario, sin rastreo.
+   - *Información para la revisión de la app*: **una cuenta de prueba** (usuario y contraseña con
+     datos de demostración, sin datos reales de clientes) y una nota de qué es la app; sin eso
+     Apple la rechaza porque no puede pasar del login.
+   - Clasificación por edad (cuestionario: todo «No»), precio Gratis, disponibilidad México.
+   - Elegir el build subido y **Enviar a revisión**.
+
+Riesgo conocido: Apple puede rechazar apps que sólo envuelven un sitio web (guía 4.2,
+«funcionalidad mínima»). Ayuda explicar en la nota de revisión que es la app de clientes de un
+servicio (panel de su restaurante, con cuenta) y no un sitio público; si aun así la rechazan, lo
+que suele bastar es sumar algo nativo (notificaciones push, Face ID para entrar).
+
+Para correrla en el simulador sin cuenta: `npx cap open ios`, elegir un iPhone simulado y ▶︎.
 
 ## Desarrollo
 
-Requisitos: Node 22, JDK 21 y el SDK de Android (Android Studio). Todo desde `movil/`:
+Requisitos: Node 22, JDK 21 y el SDK de Android (Android Studio); para iOS, una Mac con Xcode 26. Todo desde `movil/`:
 
 ```bash
 npm ci
@@ -153,5 +208,7 @@ npx cap open android      # (opcional) abre Android Studio
   `android/app/src/main/res`.
 - **versionCode** = `YC_VERSION_CODE` (en el CI, el número de corrida de `apk.yml`); versionName
   `1.0.<versionCode>`.
+- iOS: `npx cap sync ios` y `npx cap open ios`. `ios/` también se versiona (lo generado por
+  `cap sync`, `App/App/public` y `capacitor.config.json`, no).
 - `android/` se versiona (es lo normal con Capacitor y es donde viven los recursos y el
   `MainActivity`); lo que genera `cap sync` (`assets/public`, `capacitor.config.json`) no.

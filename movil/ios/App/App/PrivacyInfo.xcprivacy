@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Manifiesto de privacidad de la app (Apple lo pide desde 2024). El código propio de la app no usa
+  APIs de "razón requerida" ni rastrea al usuario; Capacitor trae el suyo dentro de su paquete.
+  Lo que el panel maneja (correo y sesión del usuario) se declara en App Store Connect, en
+  "Privacidad de la app" (ver movil/README.md).
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>
