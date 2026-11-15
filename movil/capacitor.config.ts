@@ -34,6 +34,16 @@ const config: CapacitorConfig = {
     allowMixedContent: false,
     webContentsDebuggingEnabled: false,
   },
+  ios: {
+    // El panel ya trae viewport-fit=cover y respeta env(safe-area-inset-*) (notch, isla, barra de
+    // inicio): el WebView ocupa toda la pantalla y el panel deja los márgenes, igual que en Safari.
+    contentInset: 'never',
+    // Mantener presionada una liga no abre la vista previa de Safari (sacaría al usuario del panel).
+    allowsLinkPreview: false,
+    // Un build de App Store no se inspecciona desde el Safari de una Mac.
+    webContentsDebuggingEnabled: false,
+    // El gesto de «atrás» (deslizar desde el borde izquierdo) lo activa VistaPanel.swift.
+  },
   plugins: {
     // SystemBars viene en @capacitor/android 8 (no es un plugin extra). DARK = íconos claros
     // sobre la barra morada; `native` respeta el viewport del panel (sin viewport-fit=cover el

@@ -1,0 +1,155 @@
+name: App iPhone (iOS)
+
+# Arma la app de iPhone de Yo Controlo (movil/ios, Capacitor) en una Mac del runner y la revisa.
+# NO firma ni sube nada a Apple: eso lo hace quien tiene la cuenta de Apple Developer, desde Xcode
+# (ver movil/README.md › «iPhone: subir a App Store»). Por eso este workflow no usa secretos y corre
+# con permisos de SOLO LECTURA, también en PRs.
+#
+# Qué comprueba:
+# - las pruebas de movil/ y que capacitor.config.json (el que va dentro de la app) apunta al panel;
+# - que el proyecto compila para el simulador y que el ARCHIVO para iPhone (lo que se sube a App
+#   Store, aquí sin firma) también compila;
+# - el Info.plist del .app: bundle id, nombre, versión, sólo iPhone, arm64, exención de cifrado;
+# - que el ícono de 1024 no tiene canal alfa (App Store Connect lo rechaza).
+#
+# Deja como artifact el .app del SIMULADOR, para abrirlo en una Mac sin firmar nada
+# (`xcrun simctl install booted YoControlo.app`).
+on:
+  pull_request:
+    paths:
+      - 'movil/**'
+      - '.github/workflows/ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'movil/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  YC_URL_PANEL: ${{ vars.YC_URL_PANEL || 'https://web-production-730b5.up.railway.app' }}
+
+jobs:
+  armar:
+    name: Compilar y revisar la app de iPhone
+    # macOS 26 trae Xcode 26 (SDK de iOS 26): App Store Connect sólo acepta builds hechos con él.
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      # CFBundleVersion = número de corrida de este workflow (siempre crece).
+      YC_BUILD: ${{ github.run_number }}
+    defaults:
+      run:
+        working-directory: movil
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: movil/package-lock.json
+
+      - run: xcodebuild -version && xcrun --sdk iphoneos --show-sdk-version
+      - run: npm ci
+      - run: npm test
+
+      # Copia www/ y escribe capacitor.config.json (con server.url) dentro del proyecto iOS.
+      - run: npx cap sync ios
+
+      - name: La app apunta al panel esperado
+        run: |
+          node -e '
+            const c = require("./ios/App/App/capacitor.config.json");
+            const { resolverUrlPanel } = require("./url-panel.cjs");
+            const esperado = resolverUrlPanel(process.env.YC_URL_PANEL);
+            const host = new URL(esperado).host;
+            const ok = c.appId === "mx.yocontrolo.app" && c.appName === "Yo Controlo" &&
+              c.server.url === esperado && c.server.cleartext === false &&
+              JSON.stringify(c.server.allowNavigation) === JSON.stringify([host]) &&
+              c.ios && c.ios.webContentsDebuggingEnabled === false;
+            console.log(JSON.stringify({ server: c.server, ios: c.ios }, null, 2));
+            if (!ok) { console.error("::error::capacitor.config.json no es el esperado"); process.exit(1); }
+          '
+
+      - name: El ícono de App Store no tiene canal alfa
+        run: |
+          icono=ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
+          sips -g pixelWidth -g pixelHeight -g hasAlpha "$icono"
+          sips -g hasAlpha "$icono" | grep -q 'hasAlpha: no' \
+            || { echo "::error::$icono tiene canal alfa: App Store Connect lo rechaza"; exit 1; }
+          sips -g pixelWidth "$icono" | grep -q 'pixelWidth: 1024' \
+            || { echo "::error::$icono no mide 1024x1024"; exit 1; }
+
+      - name: Compilar para el simulador
+        working-directory: movil/ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd-sim" \
+            CURRENT_PROJECT_VERSION="$YC_BUILD" CODE_SIGNING_ALLOWED=NO \
+            build | tail -n 40
+
+      - name: Archivar para iPhone (sin firma)
+        working-directory: movil/ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/YoControlo.xcarchive" \
+            CURRENT_PROJECT_VERSION="$YC_BUILD" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            archive | tail -n 40
+
+      - name: Revisar el Info.plist de la app (bundle id, nombre, versión, iPhone, arm64, cifrado)
+        run: |
+          app="$RUNNER_TEMP/YoControlo.xcarchive/Products/Applications/App.app"
+          test -d "$app" || { echo "::error::el archivo no trae App.app"; exit 1; }
+          plist="$app/Info.plist"
+          v() { /usr/libexec/PlistBuddy -c "Print :$1" "$plist" 2>/dev/null; }
+          printf 'id=%s nombre=%s versión=%s build=%s familia=%s cifrado=%s mínimo=%s\n' \
+            "$(v CFBundleIdentifier)" "$(v CFBundleDisplayName)" "$(v CFBundleShortVersionString)" \
+            "$(v CFBundleVersion)" "$(v UIDeviceFamily | tr -d ' \n')" \
+            "$(v ITSAppUsesNonExemptEncryption)" "$(v MinimumOSVersion)"
+          falla() { echo "::error::$1"; exit 1; }
+          [ "$(v CFBundleIdentifier)" = mx.yocontrolo.app ] || falla "bundle id inesperado"
+          [ "$(v CFBundleDisplayName)" = "Yo Controlo" ] || falla "el nombre visible no es 'Yo Controlo'"
+          [ "$(v CFBundleVersion)" = "$YC_BUILD" ] || falla "CFBundleVersion no es $YC_BUILD"
+          [ "$(v UIDeviceFamily | tr -d ' \n')" = "Array{1}" ] || falla "la app no es sólo de iPhone"
+          [ "$(v ITSAppUsesNonExemptEncryption)" = false ] || falla "falta ITSAppUsesNonExemptEncryption=false"
+          v UIRequiredDeviceCapabilities | grep -q arm64 || falla "UIRequiredDeviceCapabilities debe ser arm64"
+          if v UIRequiredDeviceCapabilities | grep -q armv7; then falla "armv7 ya no existe en iOS 15+"; fi
+          test -f "$app/PrivacyInfo.xcprivacy" || falla "falta PrivacyInfo.xcprivacy"
+          test -f "$app/capacitor.config.json" || falla "falta capacitor.config.json"
+          test -f "$app/public/index.html" || falla "falta la pantalla Sin conexión (public/index.html)"
+          test -f "$app/Assets.car" || falla "falta el catálogo de íconos (Assets.car)"
+          lipo -info "$app/App"
+          du -sh "$app"
+
+      - name: Empaquetar el .app del simulador
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/salida"
+          cp -R "$RUNNER_TEMP/dd-sim/Build/Products/Release-iphonesimulator/App.app" \
+            "$GITHUB_WORKSPACE/salida/YoControlo.app"
+          cd "$GITHUB_WORKSPACE/salida"
+          ditto -c -k --keepParent YoControlo.app YoControlo-simulador.zip
+          rm -rf YoControlo.app
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulador
+          path: salida/YoControlo-simulador.zip
+          retention-days: 7
