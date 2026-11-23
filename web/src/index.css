@@ -198,6 +198,28 @@
   scrollbar-color: var(--linea-fuerte) transparent;
 }
 
+/*
+ * iPhone (Safari y el WebView de la app): iOS hace zoom automático al enfocar un campo con
+ * letra de menos de 16 px, y ese zoom NO se deshace al salir del campo ni al navegar dentro de
+ * la SPA. Con los campos en `text-sm` (13 px), entrar al Login dejaba todo el panel ampliado
+ * ~1.23× y cortado por los lados en cada pantalla. En iOS los campos van a 16 px como mínimo.
+ * Va sin capa a propósito: le gana a `text-sm` (que vive en `@layer utilities`) sin `!important`.
+ * `-webkit-touch-callout` sólo lo soporta iOS: Android y escritorio no cambian.
+ */
+@supports (-webkit-touch-callout: none) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+html {
+  /* iOS no agranda el texto por su cuenta al girar el teléfono a horizontal. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
